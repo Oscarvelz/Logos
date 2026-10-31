@@ -5,7 +5,7 @@ import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
-import { listen, loadText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, endSession, sentenceProgress } from '../player/listen.ts'
+import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, endSession, sentenceProgress } from '../player/listen.ts'
 import { engine } from '../engine/engine.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, VoicePicker } from '../components/chrome.tsx'
@@ -36,6 +36,13 @@ export function ListenPage() {
   }, [text])
   const lang: Lang = st.langMode === 'auto' ? detected.lang : st.langMode
   const currentVoice = voiceById(s.active && !editing ? s.voices[s.current] : (st.voiceOverride ?? st.defaultVoice[lang]))
+
+  // Begin preparing the audio as soon as text is pasted or typed (after a short pause in typing).
+  useEffect(() => {
+    if (!text.trim()) return
+    const t = setTimeout(() => prepareText(text), 1200)
+    return () => clearTimeout(t)
+  }, [text, st.voiceOverride, st.defaultVoice, st.langMode])
 
   const start = () => {
     if (!text.trim()) { toast('Paste or type something to listen to'); return }
@@ -156,6 +163,12 @@ export function ListenPage() {
               <span className="bar"><i style={{ width: `${s.cushion.need > 0 ? Math.min(100, Math.round((s.cushion.have / s.cushion.need) * 100)) : 3}%` }} /></span>
             </div>
           )}
+          {!s.playing && !s.cushion && s.active && s.text === text && s.segments.length > 0 && (() => {
+            const ready = s.rendered.filter(Boolean).length
+            return ready < s.segments.length ? (
+              <div className="engine-note"><span>Preparing the audio in the background · {ready} of {s.segments.length} sentences ready</span><span className="bar"><i style={{ width: `${Math.round((ready / s.segments.length) * 100)}%` }} /></span></div>
+            ) : <div className="engine-note"><span>All audio ready · it will read without stopping</span></div>
+          })()}
           <EngineNote />
           {s.error && <div className="error-note">{s.error}</div>}
           {e.status === 'error' && <div className="error-note">Neural engine: {e.error}</div>}

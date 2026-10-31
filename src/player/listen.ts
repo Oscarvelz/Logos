@@ -109,6 +109,17 @@ export function loadText(text: string) {
   })
 }
 
+/** Start preparing audio for text as soon as it is pasted (before play is pressed). */
+export function prepareText(text: string) {
+  const s = listen.get()
+  if (s.playing || s.text === text || !text.trim()) return
+  loadText(text)
+  if (!listen.get().active) return
+  const go = () => prefetch(0)
+  if (engine.get().status === 'ready') go()
+  else ensureModel().then(() => { if (listen.get().text === text && !listen.get().playing) go() }).catch(() => {})
+}
+
 /** Re-resolve voices (after a voice change) and restart the current sentence if playing. */
 export function refreshVoices() {
   const s = listen.get()
