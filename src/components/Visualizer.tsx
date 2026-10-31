@@ -21,9 +21,17 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     const themeObs = new MutationObserver(() => { colors = [accent(), accent2()] })
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
-    const draw = () => {
+    // 30 fps is plenty for bars; when idle and settled, stop drawing entirely so
+    // the CPU goes to the voice engine and scrolling.
+    let last = 0
+    let idleFrames = 0
+    const draw = (now = performance.now()) => {
       raf = requestAnimationFrame(draw)
-      t += 1 / 60
+      if (now - last < 32) return
+      t += (now - last > 200 ? 33 : now - last) / 1000
+      last = now
+      const st0 = listen.get()
+      if (!st0.playing && !st0.buffering) { if (++idleFrames > 45) return } else idleFrames = 0
       const dpr = Math.min(2, devicePixelRatio || 1)
       const w = canvas.clientWidth
       const h = canvas.clientHeight

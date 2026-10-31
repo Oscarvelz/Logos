@@ -199,29 +199,32 @@ function Reader({ onEdit }: { onEdit: () => void }) {
       if (r.top < b.top + 40 || r.bottom > b.bottom - 60) box.current.scrollTo({ top: box.current.scrollTop + r.top - b.top - b.height / 3, behavior: 'smooth' })
     }
   }, [s.current])
-  const paras: (typeof s.segments)[] = []
-  let curr: typeof s.segments = []
-  for (const g of s.segments) { curr.push(g); if (g.paraEnd) { paras.push(curr); curr = [] } }
-  if (curr.length) paras.push(curr)
+  const paras = useMemo(() => {
+    const out: (typeof s.segments)[] = []
+    let curr: typeof s.segments = []
+    for (const g of s.segments) { curr.push(g); if (g.paraEnd) { out.push(curr); curr = [] } }
+    if (curr.length) out.push(curr)
+    return out
+  }, [s.segments])
+  // Only the sentence list re-renders when the playhead moves, never on background render progress.
+  const body = useMemo(() => paras.map((p, pi) => (
+    <p key={pi} lang={p[0]?.lang}>
+      {p.map((g) => (
+        <span key={g.index}>
+          <span data-i={g.index} role="button" tabIndex={0}
+            className={`sent ${st.highlight && g.index === s.current ? 'now' : ''} ${g.index < s.current ? 'past' : ''}`}
+            onClick={() => seek(g.index)} onKeyDown={(ev) => { if (ev.key === 'Enter') seek(g.index) }}>{g.text.replace(/\*\*|__|`/g, '')}</span>{' '}
+        </span>
+      ))}
+    </p>
+  )), [paras, s.current, st.highlight])
   return (
     <>
       <div className="reader-head">
         <span className="muted small grow">Tap any sentence to jump there</span>
         <button className="btn sm ghost" onClick={onEdit}><PenLine size={16} /> Edit</button>
       </div>
-      <div className="reader" ref={box}>
-        {paras.map((p, pi) => (
-          <p key={pi} lang={p[0]?.lang}>
-            {p.map((g) => (
-              <span key={g.index}>
-                <span data-i={g.index} role="button" tabIndex={0}
-                  className={`sent ${st.highlight && g.index === s.current ? 'now' : ''} ${g.index < s.current ? 'past' : ''}`}
-                  onClick={() => seek(g.index)} onKeyDown={(ev) => { if (ev.key === 'Enter') seek(g.index) }}>{g.text}</span>{' '}
-              </span>
-            ))}
-          </p>
-        ))}
-      </div>
+      <div className="reader" ref={box}>{body}</div>
     </>
   )
 }

@@ -58,7 +58,7 @@ async function handleLoad(msg: Extract<WorkerRequest, { type: 'load' }>) {
       // WASM binary Vite bundled next to this chunk (same origin, works offline).
       onnx.wasm.wasmPaths = undefined
       const cores = (self.navigator?.hardwareConcurrency ?? 2)
-      onnx.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(4, cores - 1)) : 1
+      onnx.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(4, cores - 2)) /* leave cores free so scrolling stays smooth */ : 1
     }
     env.allowLocalModels = false
     env.useBrowserCache = true

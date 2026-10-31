@@ -18,8 +18,10 @@ const ABBREV = new Set([
   'sra', 'srta', 'dra', 'ud', 'uds', 'pág', 'pag', 'núm', 'num', 'av', 'avda', 'lic', 'ing', 'arq', 'cap', 'art', 'aprox', 'p.ej', 'ej', 'tel',
 ])
 
-const MAX_CHARS = 260
-const FIRST_MAX = 110 // a short first chunk = faster time-to-first-audio
+const MAX_CHARS = 220
+// Chunk ramp: the first chunks are short so audio starts fast and the engine
+// can build a buffer before the longer chunks arrive (no stall at sentence 2).
+const RAMP = [80, 120, 160, 200]
 
 /** Split text into speakable segments with offsets. */
 export function segmentText(source: string, langMode: Lang | 'auto' = 'auto'): Segment[] {
@@ -35,7 +37,7 @@ export function segmentText(source: string, langMode: Lang | 'auto' = 'auto'): S
     const paraLang: Lang = langMode !== 'auto' ? langMode : pd.confidence >= 0.25 ? pd.lang : docLang
     const sentences = splitSentences(para)
     sentences.forEach((s, i) => {
-      for (const piece of capLength(para, s, out.length === 0 ? FIRST_MAX : MAX_CHARS)) {
+      for (const piece of capLength(para, s, RAMP[out.length] ?? MAX_CHARS)) {
         out.push({ text: para.slice(piece.start, piece.end).replace(/\s+/g, ' ').trim(), start: base + piece.start, end: base + piece.end, paraEnd: false, paraLang })
       }
       if (i === sentences.length - 1 && out.length) out[out.length - 1].paraEnd = true
@@ -58,7 +60,7 @@ type Span = { start: number; end: number }
 function splitSentences(p: string): Span[] {
   const spans: Span[] = []
   let start = 0
-  const re = /([.!?…。]+)(["'”’»)\]]*)(\s+|$)/g
+  const re = /([.!?…。]+)(["'”’»)\]*_]*)(\s+|$)/g
   let m: RegExpExecArray | null
   while ((m = re.exec(p))) {
     const endPunct = m.index + m[1].length + m[2].length
@@ -67,6 +69,8 @@ function splitSentences(p: string): Span[] {
     // Skip abbreviations, single initials ("J. R. R."), and decimals.
     if (m[1] === '.' && (ABBREV.has(lastWord) || /^\p{L}$/u.test(lastWord))) continue
     if (m[1] === '.' && /\d$/.test(before) && /^\d/.test(p.slice(m.index + 1))) continue
+    // A bare list number ("2.") belongs to the sentence that follows it.
+    if (/^\s*\(?[\dIVXivx]{1,3}[.)]?$/.test(p.slice(start, endPunct))) continue
     // A following lowercase letter usually means it was not a sentence end.
     const next = p.slice(m.index + m[0].length)
     if (!/[!?]/.test(m[1]) && /^[a-zà-ÿ]/.test(next)) continue
@@ -147,4 +151,18 @@ export function formatDuration(sec: number): string {
   const m = Math.floor((s % 3600) / 60)
   const r = s % 60
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`
+}
+
+/** Text as it should be spoken: drops markdown and list symbols the voice would read out. */
+export function speakable(text: string): string {
+  return text
+    .replace(/\*\*|__|~~|`+/g, '')
+    .replace(/(^|\s)[*_](?=\S)|(?<=\S)[*_](?=\s|$|[.,;:!?])/g, '$1')
+    .replace(/(^|\s)#{1,6}\s+/g, '$1')
+    .replace(/(^|\s)>\s+/g, '$1')
+    .replace(/(^|\s)[•▪◦]\s+/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/https?:\/\/\S+/g, 'link')
+    .replace(/\s+/g, ' ')
+    .trim()
 }

@@ -3,7 +3,7 @@
 // Media Session controls, and a device-voice bridge while Kokoro downloads.
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
-import { segmentText, type Segment } from '../lib/text.ts'
+import { segmentText, speakable, type Segment } from '../lib/text.ts'
 import { voiceById, type Lang } from '../lib/voices.ts'
 import { encodeWav, envelope, silence, trimSilence, concat } from '../lib/audio.ts'
 import { engine, ensureModel, synthesize, promote } from '../engine/engine.ts'
@@ -140,7 +140,7 @@ function render(i: number, priority: number): Promise<Rendered> {
   const ctrl = new AbortController()
   const mySession = session
   const promise = (async () => {
-    const res = await synthesize(seg.text, voice, 1, { priority, signal: ctrl.signal })
+    const res = await synthesize(speakable(seg.text) || seg.text, voice, 1, { priority, signal: ctrl.signal })
     const trimmed = trimSilence(res.samples, res.sampleRate)
     const pauseMs = settings.get().sentencePauseMs * (seg.paraEnd ? 2.2 : 1)
     const full = concat([trimmed, silence(pauseMs, res.sampleRate)])
@@ -199,7 +199,8 @@ async function playIndex(i: number) {
   if (i < 0 || i >= s.segments.length) return
   const my = ++token
   quietPause()
-  listen.set({ current: i, playing: true, mode: 'kokoro', finished: false, error: null, buffering: !cache.has(i) })
+  const stalled = !cache.has(i)
+  listen.set({ current: i, playing: true, mode: 'kokoro', finished: false, error: null, buffering: stalled })
   updateMediaSession()
   if (!kokoroUsable()) ensureModel().catch((e) => { if (my === token) listen.set({ playing: false, buffering: false, error: (e as Error).message }) })
   prefetch(i)
@@ -212,6 +213,12 @@ async function playIndex(i: number) {
     return
   }
   if (my !== token || listen.get().current !== i || !listen.get().playing) return
+  // We stalled and the engine is slower than real time: build a small cushion
+  // (the next sentence) before resuming, so it pauses once instead of every sentence.
+  if (stalled && (engine.get().lastRtf ?? 0) > 0.95 && i + 1 < listen.get().segments.length) {
+    try { await render(i + 1, PLAYHEAD_PRIORITY - 1) } catch { /* play what we have */ }
+    if (my !== token || listen.get().current !== i || !listen.get().playing) return
+  }
   const a = el()
   a.src = r.url
   a.playbackRate = settings.get().listenSpeed
