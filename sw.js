@@ -1,7 +1,7 @@
 // Logos service worker — offline app shell + cross-origin isolation headers.
 // Adapted from BetterTTS by SysAdminDoc (MIT). Model files are cached by
 // Transformers.js itself (Cache Storage: transformers-cache / kokoro-voices).
-const CACHE_NAME = 'logos-shell-1793488390286'
+const CACHE_NAME = 'logos-shell-1793489578609'
 const ORT_CACHE = 'logos-ort' // .wasm assets survive deploys: the 21 MB runtime is content-hashed and rarely changes
 const SCOPE = new URL('./', self.location).href
 
