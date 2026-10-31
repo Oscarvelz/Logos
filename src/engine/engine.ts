@@ -51,6 +51,9 @@ const ls = {
   set: (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* blocked */ } },
   del: (k: string) => { try { localStorage.removeItem(k) } catch { /* blocked */ } },
 }
+// 1.1.0 moved to ONNX Runtime 1.31 (the runtime BetterTTS ships), whose WebGPU
+// works on phones where the old one failed, so forget failures recorded before.
+if (ls.get('logos.mig110') !== '1') { ls.set('logos.mig110', '1'); ls.del(GPU_BROKEN_KEY) }
 export const gpuBroken = () => ls.get(GPU_BROKEN_KEY) === '1'
 function markGpuBroken() { ls.set(GPU_BROKEN_KEY, '1') }
 let crashedLastTime: boolean | null = null
@@ -131,6 +134,7 @@ function onMessage(msg: WorkerResponse) {
       break
     case 'generated':
     case 'generateError': {
+      ls.del(LOADING_KEY)
       const job = inFlight
       inFlight = null
       if (msg.type === 'generateError' && job && job.id === msg.id && engine.get().device === 'webgpu' && !retriedOnWasm) {
@@ -192,10 +196,12 @@ export async function probeWebGpu(): Promise<boolean> {
 
 /** Auto = WebGPU on capable desktops/tablets in desktop mode; WASM (q8, 92 MB) on phones. */
 export async function resolveEngine(choice: EngineChoice = settings.get().engine): Promise<{ device: Device; dtype: Dtype }> {
-  if (choice === 'wasm' || isMobileDevice() || gpuBroken()) return { device: 'wasm', dtype: 'q8' }
+  if (choice === 'wasm' || gpuBroken()) return { device: 'wasm', dtype: 'q8' }
   const gpu = await probeWebGpu()
   if (choice === 'webgpu') return gpu ? { device: 'webgpu', dtype: 'fp32' } : { device: 'wasm', dtype: 'q8' }
-  return gpu && !isMobileDevice() ? { device: 'webgpu', dtype: 'fp32' } : { device: 'wasm', dtype: 'q8' }
+  // Like BetterTTS: use the GPU whenever the browser offers one (phones too); a
+  // failed smoke test or crash drops this device to WASM for good.
+  return gpu ? { device: 'webgpu', dtype: 'fp32' } : { device: 'wasm', dtype: 'q8' }
 }
 
 export async function isModelCached(): Promise<boolean> {
@@ -253,6 +259,8 @@ function pump() {
   const job = queue.shift()
   if (!job) return
   inFlight = job
+  // If the GPU takes the whole tab down mid-sentence, the next visit sees this and uses WASM.
+  if (engine.get().device === 'webgpu') ls.set(LOADING_KEY, JSON.stringify({ device: 'webgpu', t: Date.now() }))
   const v = voiceById(job.voice)
   getWorker().postMessage({
     type: 'generate', id: job.id, text: job.text, voice: job.voice,
@@ -326,9 +334,9 @@ function keepStorage() {
   } catch { /* unsupported */ }
 }
 
-/** Phones never use the full-precision (WebGPU) model: free the space it takes. */
+/** When WebGPU failed on this device, free the space the full-precision model takes. */
 export async function purgeUnusedModels() {
-  if (!isMobileDevice()) return
+  if (!gpuBroken()) return
   try {
     const cache = await caches.open('transformers-cache')
     for (const k of await cache.keys()) {

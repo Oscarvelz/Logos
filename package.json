@@ -1,7 +1,7 @@
 {
   "name": "logos",
   "private": true,
-  "version": "1.0.6",
+  "version": "1.1.0",
   "description": "Voz \u2014 a fast, private, phone-first text-to-speech PWA. Based on BetterTTS by SysAdminDoc (MIT).",
   "type": "module",
   "scripts": {
@@ -14,12 +14,13 @@
     "@breezystack/lamejs": "^1.2.7",
     "@fontsource-variable/manrope": "^5.3.0",
     "@fontsource/instrument-serif": "^5.3.0",
-    "@huggingface/transformers": "^3.7.0",
+    "@huggingface/transformers": "^4.2.0",
     "ephone": "^1.0.2",
     "kokoro-js": "^1.2.1",
     "lucide-react": "^1.66.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "onnxruntime-web": "^1.27.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
@@ -27,5 +28,10 @@
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.9.0",
     "vite": "^7.1.0"
+  },
+  "overrides": {
+    "kokoro-js": {
+      "@huggingface/transformers": "$@huggingface/transformers"
+    }
   }
 }

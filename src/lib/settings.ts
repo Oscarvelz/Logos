@@ -50,17 +50,9 @@ function load(): Settings {
   }
 }
 
-const isPhone = () => {
-  try {
-    const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData
-    return uaData?.mobile ?? /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)
-  } catch { return false }
-}
-
 const initial = load()
 // WebGPU is not offered on phones any more (it crashed or failed there).
-let migrateEngine = initial.engine === 'webgpu' && isPhone()
-if (migrateEngine) initial.engine = 'auto'
+let migrateEngine = false
 // 1.0.5: the built-in device voice is off by default (Oscar finds it ugly).
 try {
   if (localStorage.getItem('logos.mig105') !== '1') {
