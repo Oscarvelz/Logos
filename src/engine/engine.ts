@@ -100,9 +100,23 @@ function getWorker(): Worker {
   worker = new Worker(new URL('./tts.worker.ts', import.meta.url), { type: 'module' })
   worker.addEventListener('message', (e: MessageEvent<WorkerResponse>) => onMessage(e.data))
   worker.addEventListener('error', (e) => {
+    e.preventDefault?.()
     const message = e.message || 'The speech engine crashed.'
     ls.del(LOADING_KEY)
+    const usedGpu = requestedDevice === 'webgpu' || engine.get().device === 'webgpu'
+    worker?.terminate()
     worker = null
+    if (usedGpu && !retriedOnWasm) {
+      // The GPU took the engine down (some phones run out of graphics memory with
+      // the 326 MB model): switch this device to WASM for good and carry on.
+      console.warn('[logos] WebGPU engine crashed, switching to WASM:', message)
+      retriedOnWasm = true
+      markGpuBroken()
+      if (inFlight) { queue.unshift(inFlight); inFlight = null }
+      engine.set({ status: 'idle', device: null, dtype: null, error: null })
+      void startLoad()
+      return
+    }
     engine.set({ status: 'error', error: message })
     loadWaiters.forEach((w) => w.reject(new Error(message)))
     loadWaiters = []
