@@ -50,10 +50,22 @@ function load(): Settings {
   }
 }
 
-export const settings = createStore<Settings>(load())
+const isPhone = () => {
+  try {
+    const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData
+    return uaData?.mobile ?? /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)
+  } catch { return false }
+}
+
+const initial = load()
+// WebGPU is not offered on phones any more (it crashed or failed there).
+const migrateEngine = initial.engine === 'webgpu' && isPhone()
+if (migrateEngine) initial.engine = 'auto'
+export const settings = createStore<Settings>(initial)
 settings.subscribe(() => {
   try { localStorage.setItem(KEY, JSON.stringify(settings.get())) } catch { /* storage blocked */ }
 })
+if (migrateEngine) { try { localStorage.setItem(KEY, JSON.stringify(settings.get())) } catch { /* storage blocked */ } }
 
 export function toggleFavorite(id: string) {
   settings.set((s) => ({ favorites: s.favorites.includes(id) ? s.favorites.filter((f) => f !== id) : [...s.favorites, id] }))

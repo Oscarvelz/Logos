@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { Cpu, Download, HardDrive, Loader2, Trash2, Zap } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, applyTheme, type EngineChoice, type Theme } from '../lib/settings.ts'
-import { engine, ensureModel, deleteModel, resetEngine, cacheUsage, probeWebGpu, resolveEngine, isModelCached, MODEL_SIZE_MB } from '../engine/engine.ts'
+import { engine, ensureModel, deleteModel, resetEngine, cacheUsage, probeWebGpu, resolveEngine, isModelCached, isMobileDevice, gpuBroken, MODEL_SIZE_MB } from '../engine/engine.ts'
 import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 
-const VERSION = '1.0.0'
+const VERSION = '1.0.4'
 
 export function SettingsPage() {
   const st = useStore(settings)
@@ -75,8 +75,12 @@ export function SettingsPage() {
 
       <div className="list" style={{ marginTop: 12 }}>
         <div className="list-row col">
-          <div><div className="t">Engine</div><div className="d">Auto picks WASM (92 MB, fast to fetch) on phones and WebGPU on capable desktops. WebGPU uses the full-precision model (326 MB) and is fastest on strong GPUs.{e.webgpu === false ? ' WebGPU is not available in this browser.' : ''}</div></div>
-          <Seg value={st.engine} label="Engine" onChange={changeEngine} options={[{ value: 'auto', label: 'Auto' }, { value: 'webgpu', label: 'WebGPU' }, { value: 'wasm', label: 'WASM' }]} />
+          {isMobileDevice() ? (
+            <div><div className="t">Engine</div><div className="d">On phones Logos always uses the WASM engine (92 MB). WebGPU and the 326 MB model failed or crashed on phone GPUs, so it is off here.</div></div>
+          ) : (<>
+            <div><div className="t">Engine</div><div className="d">Auto picks WebGPU on capable computers and WASM otherwise. WebGPU uses the full-precision model (326 MB) and is fastest on strong GPUs.{e.webgpu === false ? ' WebGPU is not available in this browser.' : ''}{gpuBroken() ? ' WebGPU failed on this device, so Logos uses WASM.' : ''}</div></div>
+            <Seg value={st.engine} label="Engine" onChange={changeEngine} options={[{ value: 'auto', label: 'Auto' }, { value: 'webgpu', label: 'WebGPU' }, { value: 'wasm', label: 'WASM' }]} />
+          </>)}
         </div>
         <div className="list-row">
           <HardDrive size={20} className="muted" />

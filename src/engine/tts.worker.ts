@@ -71,8 +71,12 @@ async function handleLoad(msg: Extract<WorkerRequest, { type: 'load' }>) {
     let dtype = msg.dtype
     try {
       tts = await load(device, dtype)
+      // Many phone GPUs load the model but fail on the first real run
+      // ("createBuffer … too large"); find out now, not when you press play.
+      if (device === 'webgpu') await tts.generate('Hi.', { voice: 'af_heart' as never })
     } catch (err) {
       if (device !== 'webgpu') throw err
+      tts = null
       device = 'wasm'; dtype = 'q8'
       tts = await load(device, dtype)
     }

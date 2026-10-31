@@ -169,10 +169,10 @@ function render(i: number, priority: number): Promise<Rendered> {
   return promise
 }
 
-// Render the whole text ahead in the background (capped for very long texts),
-// so the buffer keeps growing while you listen or pause.
+// Keep a few sentences ready ahead of the playhead. Rendering the whole text
+// ahead (1.0.3) only queued minutes of work before anything could play.
 function lookahead() {
-  return 80
+  return 4
 }
 
 function prefetch(from: number) {
@@ -247,7 +247,8 @@ async function buildCushion(i: number, my: number): Promise<boolean> {
   const rtf = deviceRtf() * settings.get().listenSpeed
   if (rtf <= 0.9) return true
   const restSec = estimateSeconds(s0.segments.slice(i).map((g) => g.text).join(' '))
-  const need = Math.min(90, rtf <= 1 ? 4 : (1 - 1 / rtf) * restSec * 1.1 + 3)
+  // Never hold playback for long: at most ~6 s of audio before it speaks.
+  const need = Math.min(6, rtf <= 1 ? 3 : (1 - 1 / rtf) * restSec * 1.1 + 2)
   let have = 0
   let j = i
   const still = () => my === token && listen.get().current === i && listen.get().playing
