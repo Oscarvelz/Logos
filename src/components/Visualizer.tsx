@@ -1,0 +1,74 @@
+import { useEffect, useRef } from 'react'
+import { levels, listen } from '../player/listen.ts'
+
+/**
+ * Mirrored-bar visualizer. Reads the real loudness envelope of the sentence
+ * being played (computed from the synthesized PCM, so it keeps working when the
+ * page is backgrounded and needs no AudioContext), with a gentle idle shimmer.
+ */
+export function Visualizer({ bars = 48 }: { bars?: number }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = ref.current!
+    const ctx = canvas.getContext('2d')!
+    const target = new Float32Array(bars)
+    const shown = new Float32Array(bars)
+    let raf = 0
+    let t = 0
+    const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e9bd72'
+    const accent2 = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#f3d39c'
+    let colors = [accent(), accent2()]
+    const themeObs = new MutationObserver(() => { colors = [accent(), accent2()] })
+    themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+
+    const draw = () => {
+      raf = requestAnimationFrame(draw)
+      t += 1 / 60
+      const dpr = Math.min(2, devicePixelRatio || 1)
+      const w = canvas.clientWidth
+      const h = canvas.clientHeight
+      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+        canvas.width = Math.round(w * dpr)
+        canvas.height = Math.round(h * dpr)
+      }
+      const s = listen.get()
+      const live = levels(bars, target)
+      if (!live) {
+        for (let i = 0; i < bars; i++) {
+          if (s.playing && s.mode === 'device') {
+            target[i] = 0.25 + 0.55 * Math.abs(Math.sin(t * 5.3 + i * 0.7) * Math.sin(t * 2.1 + i * 0.31))
+          } else if (s.buffering) {
+            const d = Math.abs(i - ((t * 30) % (bars + 10)) + 5)
+            target[i] = 0.08 + 0.5 * Math.max(0, 1 - d / 6)
+          } else {
+            target[i] = 0.05 + 0.04 * Math.sin(t * 1.6 + i * 0.4)
+          }
+        }
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.clearRect(0, 0, w, h)
+      const gap = w / bars
+      const bw = Math.max(2, gap * 0.52)
+      const grad = ctx.createLinearGradient(0, 0, w, 0)
+      grad.addColorStop(0, colors[0] + '33')
+      grad.addColorStop(0.5, colors[1])
+      grad.addColorStop(1, colors[0] + '33')
+      ctx.fillStyle = grad
+      for (let i = 0; i < bars; i++) {
+        // ease toward target; the centre bar is "now"
+        shown[i] += (target[i] - shown[i]) * (live ? 0.45 : 0.12)
+        const center = 1 - Math.abs(i - bars / 2) / (bars / 2)
+        const amp = Math.max(0.04, shown[i]) * (0.55 + 0.45 * center)
+        const bh = Math.max(3, amp * (h - 6))
+        const x = i * gap + (gap - bw) / 2
+        const y = (h - bh) / 2
+        ctx.beginPath()
+        ctx.roundRect(x, y, bw, bh, bw / 2)
+        ctx.fill()
+      }
+    }
+    draw()
+    return () => { cancelAnimationFrame(raf); themeObs.disconnect() }
+  }, [bars])
+  return <canvas ref={ref} className="viz" aria-hidden />
+}
