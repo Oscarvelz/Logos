@@ -147,6 +147,12 @@ export function ListenPage() {
           {s.mode === 'device' && s.playing && (
             <div className="engine-note"><span>Using your device voice while the neural voice downloads. It switches over automatically.</span></div>
           )}
+          {s.cushion && (
+            <div className="engine-note">
+              <span>Getting ahead so it can read without stopping · {Math.round(s.cushion.have)} of {Math.round(s.cushion.need)} s ready</span>
+              <span className="bar"><i style={{ width: `${Math.min(100, Math.round((s.cushion.have / s.cushion.need) * 100))}%` }} /></span>
+            </div>
+          )}
           <EngineNote />
           {s.error && <div className="error-note">{s.error}</div>}
           {e.status === 'error' && <div className="error-note">Neural engine: {e.error}</div>}

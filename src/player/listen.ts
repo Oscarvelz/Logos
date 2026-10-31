@@ -3,7 +3,7 @@
 // Media Session controls, and a device-voice bridge while Kokoro downloads.
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
-import { segmentText, speakable, type Segment } from '../lib/text.ts'
+import { segmentText, speakable, estimateSeconds, type Segment } from '../lib/text.ts'
 import { voiceById, type Lang } from '../lib/voices.ts'
 import { encodeWav, envelope, silence, trimSilence, concat } from '../lib/audio.ts'
 import { engine, ensureModel, synthesize, promote } from '../engine/engine.ts'
@@ -24,11 +24,13 @@ export type ListenState = {
   rendered: boolean[]
   error: string | null
   finished: boolean
+  /** while building a head start after a stall: seconds of audio ready vs. needed */
+  cushion: { have: number; need: number } | null
 }
 
 export const listen = createStore<ListenState>({
   active: false, text: '', segments: [], voices: [], current: 0, playing: false,
-  buffering: false, mode: null, rendered: [], error: null, finished: false,
+  buffering: false, mode: null, rendered: [], error: null, finished: false, cushion: null,
 })
 
 const LISTEN_PRIORITY = 1000
@@ -40,6 +42,10 @@ let token = 0
 // 'pause' events are dispatched asynchronously, so count the pauses we cause
 // ourselves and ignore exactly that many; anything else is a system pause.
 let internalPauses = 0
+// Measured speed of the voice engine on this device (render time per second of audio).
+let synthMs = 0
+let synthSec = 0
+const deviceRtf = () => (synthSec > 3 ? synthMs / 1000 / synthSec : engine.get().lastRtf ?? 0)
 
 function quietPause() {
   if (!audio || audio.paused) return
@@ -99,7 +105,7 @@ export function loadText(text: string) {
   const segments = segmentText(text, settings.get().langMode)
   listen.set({
     active: segments.length > 0, text, segments, voices: segments.map((s) => voiceFor(s.lang)),
-    current: 0, playing: false, buffering: false, mode: null, rendered: segments.map(() => false), error: null, finished: false,
+    current: 0, playing: false, buffering: false, mode: null, rendered: segments.map(() => false), error: null, finished: false, cushion: null,
   })
 }
 
@@ -141,6 +147,8 @@ function render(i: number, priority: number): Promise<Rendered> {
   const mySession = session
   const promise = (async () => {
     const res = await synthesize(speakable(seg.text) || seg.text, voice, 1, { priority, signal: ctrl.signal })
+    synthMs += res.ms
+    synthSec += res.samples.length / res.sampleRate
     const trimmed = trimSilence(res.samples, res.sampleRate)
     const pauseMs = settings.get().sentencePauseMs * (seg.paraEnd ? 2.2 : 1)
     const full = concat([trimmed, silence(pauseMs, res.sampleRate)])
@@ -161,8 +169,10 @@ function render(i: number, priority: number): Promise<Rendered> {
   return promise
 }
 
+// Render the whole text ahead in the background (capped for very long texts),
+// so the buffer keeps growing while you listen or pause.
 function lookahead() {
-  return document.visibilityState === 'hidden' ? 6 : 3
+  return 80
 }
 
 function prefetch(from: number) {
@@ -213,11 +223,12 @@ async function playIndex(i: number) {
     return
   }
   if (my !== token || listen.get().current !== i || !listen.get().playing) return
-  // We stalled and the engine is slower than real time: build a small cushion
-  // (the next sentence) before resuming, so it pauses once instead of every sentence.
-  if (stalled && (engine.get().lastRtf ?? 0) > 0.95 && i + 1 < listen.get().segments.length) {
-    try { await render(i + 1, PLAYHEAD_PRIORITY - 1) } catch { /* play what we have */ }
-    if (my !== token || listen.get().current !== i || !listen.get().playing) return
+  // We ran dry. If this phone renders slower than it speaks, build a head start
+  // big enough to play the rest without stopping (capped), instead of a pause
+  // after every sentence.
+  if (stalled) {
+    const ok = await buildCushion(i, my)
+    if (!ok) return
   }
   const a = el()
   a.src = r.url
@@ -229,6 +240,25 @@ async function playIndex(i: number) {
     if (my !== token) return
     listen.set({ playing: false, error: (err as Error).name === 'NotAllowedError' ? 'Tap play to start audio.' : (err as Error).message })
   }
+}
+
+async function buildCushion(i: number, my: number): Promise<boolean> {
+  const s0 = listen.get()
+  const rtf = deviceRtf() * settings.get().listenSpeed
+  if (rtf <= 0.9) return true
+  const restSec = estimateSeconds(s0.segments.slice(i).map((g) => g.text).join(' '))
+  const need = Math.min(90, rtf <= 1 ? 4 : (1 - 1 / rtf) * restSec * 1.1 + 3)
+  let have = 0
+  let j = i
+  const still = () => my === token && listen.get().current === i && listen.get().playing
+  while (j < s0.segments.length && have < need) {
+    listen.set({ cushion: { have, need } })
+    try { have += (await render(j, PLAYHEAD_PRIORITY - (j - i))).duration } catch { break }
+    if (!still()) { listen.set({ cushion: null }); return false }
+    j++
+  }
+  listen.set({ cushion: null })
+  return still()
 }
 
 function advance() {
@@ -326,7 +356,7 @@ export function stop() {
     audio.load()
   }
   const s = listen.get()
-  if (s.playing || s.mode) listen.set({ playing: false, buffering: false, mode: null })
+  if (s.playing || s.mode || s.cushion) listen.set({ playing: false, buffering: false, mode: null, cushion: null })
   updateMediaSession()
 }
 
