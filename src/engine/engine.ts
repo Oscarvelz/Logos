@@ -20,11 +20,13 @@ export type EngineState = {
   webgpu: boolean | null
   lastRtf: number | null
   loadMs: number | null
+  /** while loading: 'download' = fetching from the internet, 'warm' = model is on the phone, starting it up */
+  phase: 'download' | 'warm' | null
 }
 
 export const engine = createStore<EngineState>({
   status: 'idle', progress: 0, loaded: 0, total: 0, device: null, dtype: null,
-  error: null, cached: false, webgpu: null, lastRtf: null, loadMs: null,
+  error: null, cached: false, webgpu: null, lastRtf: null, loadMs: null, phase: null,
 })
 
 const MODEL_FILES: Record<Dtype, string> = {
@@ -76,7 +78,8 @@ function onMessage(msg: WorkerResponse) {
       onProgress(msg.info)
       break
     case 'loaded':
-      engine.set({ status: 'ready', progress: 1, device: msg.device, dtype: msg.dtype, error: null, cached: true, loadMs: msg.ms })
+      engine.set({ status: 'ready', progress: 1, device: msg.device, dtype: msg.dtype, error: null, cached: true, loadMs: msg.ms, phase: null })
+      keepStorage()
       loadWaiters.forEach((w) => w.resolve())
       loadWaiters = []
       pump()
@@ -115,7 +118,8 @@ function onProgress(info: ProgressInfo) {
   let loaded = 0
   let total = 0
   files.forEach((f) => { loaded += f.loaded; total += f.total })
-  engine.set({ loaded, total, progress: total > 0 ? Math.min(1, loaded / total) : 0 })
+  const progress = total > 0 ? Math.min(1, loaded / total) : 0
+  engine.set({ loaded, total, progress, ...(progress >= 0.999 && engine.get().phase === 'download' ? { phase: 'warm' as const } : {}) })
 }
 
 export function isMobileDevice(): boolean {
@@ -166,7 +170,11 @@ export function ensureModel(): Promise<void> {
 
 async function startLoad() {
   files.clear()
-  engine.set({ status: 'loading', progress: 0, loaded: 0, total: 0, error: null })
+  engine.set({ status: 'loading', progress: 0, loaded: 0, total: 0, error: null, phase: null })
+  // Transformers.js reports "progress" even when it reads the model from the
+  // phone's cache, so check first and show "Starting voice" instead of a download.
+  const onPhone = await isModelCached()
+  engine.set({ phase: onPhone ? 'warm' : 'download' })
   const { device, dtype } = await resolveEngine()
   getWorker().postMessage({ type: 'load', device, dtype } satisfies WorkerRequest)
 }
@@ -256,4 +264,11 @@ export async function cacheUsage(): Promise<{ model: number; voices: number; quo
     navigator.storage?.estimate?.() ?? Promise.resolve({ quota: 0, usage: 0 }),
   ])
   return { model, voices, quota: est.quota ?? 0, usage: est.usage ?? 0 }
+}
+
+/** Ask the browser to keep the 92 MB model (Android may otherwise evict it under storage pressure). */
+function keepStorage() {
+  try {
+    void navigator.storage?.persisted?.().then((p) => { if (!p) void navigator.storage.persist?.() })
+  } catch { /* unsupported */ }
 }

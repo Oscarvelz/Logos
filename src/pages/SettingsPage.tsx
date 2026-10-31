@@ -47,14 +47,14 @@ export function SettingsPage() {
       <div className="card engine-card stack">
         <div className="row between">
           <div>
-            <div className="big">{e.status === 'ready' ? 'Ready' : e.status === 'loading' ? 'Downloading' : e.status === 'error' ? 'Needs attention' : e.cached ? 'Downloaded' : 'Not downloaded'}</div>
+            <div className="big">{e.status === 'ready' ? 'Ready' : e.status === 'loading' ? (e.phase === 'download' ? 'Downloading' : 'Starting') : e.status === 'error' ? 'Needs attention' : e.cached ? 'Downloaded' : 'Not downloaded'}</div>
             <div className="muted small" style={{ marginTop: 4 }}>
               {e.status === 'ready' ? `Kokoro-82M on ${e.device === 'webgpu' ? 'WebGPU' : 'WASM'} (${e.dtype})${e.lastRtf ? ` · ${(1 / e.lastRtf).toFixed(1)}× real-time` : ''}` : `Will use ${plannedLabel}`}
             </div>
           </div>
           <div style={{ color: 'var(--accent)' }}>{e.device === 'webgpu' ? <Zap size={30} /> : <Cpu size={30} />}</div>
         </div>
-        {e.status === 'loading' && (
+        {e.status === 'loading' && e.phase === 'download' && (
           <div>
             <div className="meter"><i style={{ width: `${Math.round(e.progress * 100)}%` }} /></div>
             <div className="row between small muted mono" style={{ marginTop: 6 }}><span>{formatBytes(e.loaded)} of {e.total ? formatBytes(e.total) : '…'}</span><span>{Math.round(e.progress * 100)}%</span></div>

@@ -57,6 +57,14 @@ export function StatusPill({ compact }: { compact?: boolean }) {
       </button>
     )
   }
+  if (e.status === 'loading' && e.phase !== 'download') {
+    return (
+      <button className="status-pill" onClick={() => navigate('settings')} title="Starting the neural voice">
+        <Loader2 size={16} className="spin" style={{ marginLeft: 4 }} />
+        <span>{compact ? 'Starting' : 'Starting voice'}</span>
+      </button>
+    )
+  }
   if (e.status === 'loading') {
     return (
       <button className="status-pill" onClick={() => navigate('settings')} title="Downloading neural voice">
@@ -144,8 +152,10 @@ export function EngineNote() {
   return (
     <div className="engine-note">
       <Loader2 size={16} className="spin" color="var(--accent)" />
-      <span>Downloading neural voice{e.total ? ` · ${formatBytes(e.loaded)} of ${formatBytes(e.total)}` : '…'}</span>
-      <span className="bar"><i style={{ width: `${Math.round(e.progress * 100)}%` }} /></span>
+      {e.phase === 'download'
+        ? <><span>Downloading neural voice{e.total ? ` · ${formatBytes(e.loaded)} of ${formatBytes(e.total)}` : '…'}</span>
+            <span className="bar"><i style={{ width: `${Math.round(e.progress * 100)}%` }} /></span></>
+        : <span>Starting the neural voice · already saved on this device</span>}
     </div>
   )
 }
