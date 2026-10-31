@@ -35,7 +35,7 @@ const DEFAULTS: Settings = {
   format: 'mp3',
   sentencePauseMs: 220,
   autoDownload: true,
-  deviceFallback: true,
+  deviceFallback: false,
   highlight: true,
 }
 
@@ -59,8 +59,15 @@ const isPhone = () => {
 
 const initial = load()
 // WebGPU is not offered on phones any more (it crashed or failed there).
-const migrateEngine = initial.engine === 'webgpu' && isPhone()
+let migrateEngine = initial.engine === 'webgpu' && isPhone()
 if (migrateEngine) initial.engine = 'auto'
+// 1.0.5: the built-in device voice is off by default (Oscar finds it ugly).
+try {
+  if (localStorage.getItem('logos.mig105') !== '1') {
+    localStorage.setItem('logos.mig105', '1')
+    if (initial.deviceFallback) { initial.deviceFallback = false; migrateEngine = true }
+  }
+} catch { /* storage blocked */ }
 export const settings = createStore<Settings>(initial)
 settings.subscribe(() => {
   try { localStorage.setItem(KEY, JSON.stringify(settings.get())) } catch { /* storage blocked */ }

@@ -149,8 +149,11 @@ export function ListenPage() {
           )}
           {s.cushion && (
             <div className="engine-note">
-              <span>Getting ahead so it can read without stopping · {Math.round(s.cushion.have)} of {Math.round(s.cushion.need)} s ready</span>
-              <span className="bar"><i style={{ width: `${Math.min(100, Math.round((s.cushion.have / s.cushion.need) * 100))}%` }} /></span>
+              <span>
+                Preparing the audio so it reads to the end without stopping · {s.cushion.done} of {s.cushion.total} sentences
+                {s.cushion.eta != null ? ` · about ${formatWait(s.cushion.eta)} left` : ' · measuring this phone’s speed'}. Playback starts on its own.
+              </span>
+              <span className="bar"><i style={{ width: `${s.cushion.need > 0 ? Math.min(100, Math.round((s.cushion.have / s.cushion.need) * 100)) : 3}%` }} /></span>
             </div>
           )}
           <EngineNote />
@@ -237,4 +240,10 @@ function Reader({ onEdit }: { onEdit: () => void }) {
 
 function fmtSpeed(v: number) {
   return `${Number(v.toFixed(2))}×`
+}
+
+function formatWait(sec: number): string {
+  if (sec < 60) return `${Math.max(5, Math.round(sec / 5) * 5)} s`
+  const m = Math.round(sec / 60)
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`
 }

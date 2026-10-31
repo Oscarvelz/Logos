@@ -24,8 +24,8 @@ export type ListenState = {
   rendered: boolean[]
   error: string | null
   finished: boolean
-  /** while building a head start after a stall: seconds of audio ready vs. needed */
-  cushion: { have: number; need: number } | null
+  /** while preparing audio before playback: seconds ready vs. needed, and estimated seconds left */
+  cushion: { have: number; need: number; eta: number | null; done: number; total: number } | null
 }
 
 export const listen = createStore<ListenState>({
@@ -169,10 +169,10 @@ function render(i: number, priority: number): Promise<Rendered> {
   return promise
 }
 
-// Keep a few sentences ready ahead of the playhead. Rendering the whole text
-// ahead (1.0.3) only queued minutes of work before anything could play.
+// Prepare the whole text in the background (sentence by sentence, in a worker),
+// so audio keeps piling up while you listen, pause, or wait.
 function lookahead() {
-  return 4
+  return 5000
 }
 
 function prefetch(from: number) {
@@ -226,7 +226,7 @@ async function playIndex(i: number) {
   // We ran dry. If this phone renders slower than it speaks, build a head start
   // big enough to play the rest without stopping (capped), instead of a pause
   // after every sentence.
-  if (stalled) {
+  if (stalled || !allReadyFrom(i)) {
     const ok = await buildCushion(i, my)
     if (!ok) return
   }
@@ -242,24 +242,65 @@ async function playIndex(i: number) {
   }
 }
 
+// Preload mode: hold playback until enough audio is ready that it can read to
+// the END without stopping, however long that takes on this phone. The amount
+// is recomputed from the measured speed after every sentence.
+function allReadyFrom(i: number) {
+  const n = listen.get().segments.length
+  for (let k = i; k < n; k++) if (!cache.has(k)) return false
+  return true
+}
+
 async function buildCushion(i: number, my: number): Promise<boolean> {
   const s0 = listen.get()
-  const rtf = deviceRtf() * settings.get().listenSpeed
-  if (rtf <= 0.9) return true
-  const restSec = estimateSeconds(s0.segments.slice(i).map((g) => g.text).join(' '))
-  // Never hold playback for long: at most ~6 s of audio before it speaks.
-  const need = Math.min(6, rtf <= 1 ? 3 : (1 - 1 / rtf) * restSec * 1.1 + 2)
-  let have = 0
-  let j = i
+  const segs = s0.segments
   const still = () => my === token && listen.get().current === i && listen.get().playing
-  while (j < s0.segments.length && have < need) {
-    listen.set({ cushion: { have, need } })
-    try { have += (await render(j, PLAYHEAD_PRIORITY - (j - i))).duration } catch { break }
-    if (!still()) { listen.set({ cushion: null }); return false }
-    j++
+  const total = segs.length - i
+  const estOf = (k: number) => estimateSeconds(speakable(segs[k].text) || segs[k].text, 1)
+  let have = 0 // seconds of audio ready from the playhead on
+  let estReady = 0 // word-based estimate of the same sentences (to calibrate)
+  let j = i
+  const wake = await keepAwake()
+  try {
+    for (;;) {
+      if (j >= segs.length) break
+      const r = deviceRtf() // render seconds per second of audio
+      if (r > 0) {
+        const rate = settings.get().listenSpeed
+        const calib = estReady > 2 ? have / estReady : 1
+        let rest = 0
+        for (let k = j; k < segs.length; k++) rest += estOf(k)
+        rest *= calib
+        // To never stop: ready audio A must cover R·(r·rate − 1) plus one sentence of slack (10% margin).
+        const k = Math.max(0, 1.1 * (r * rate - 1))
+        const slack = 3
+        const deficit = (rest * k + slack - have) / (1 + k)
+        if (deficit <= 0) break
+        listen.set({ cushion: { have, need: have + deficit, eta: deficit * r, done: j - i, total } })
+      } else {
+        listen.set({ cushion: { have, need: 0, eta: null, done: j - i, total } })
+      }
+      try {
+        const out = await render(j, PLAYHEAD_PRIORITY - (j - i))
+        have += out.duration
+        estReady += estOf(j)
+      } catch { break }
+      if (!still()) return false
+      j++
+    }
+    return still()
+  } finally {
+    listen.set({ cushion: null })
+    wake?.release().catch(() => {})
   }
-  listen.set({ cushion: null })
-  return still()
+}
+
+// Keep the screen on while preparing: Android slows or freezes background work.
+async function keepAwake(): Promise<{ release(): Promise<void> } | null> {
+  try {
+    const wl = (navigator as Navigator & { wakeLock?: { request(t: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock
+    return wl ? await wl.request('screen') : null
+  } catch { return null }
 }
 
 function advance() {
