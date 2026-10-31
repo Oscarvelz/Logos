@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="38%" cy="28%" r="85%">
+      <stop offset="0" stop-color="#23202b"/>
+      <stop offset=".55" stop-color="#121118"/>
+      <stop offset="1" stop-color="#08080c"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbe3b0"/>
+      <stop offset=".45" stop-color="#e9bd72"/>
+      <stop offset="1" stop-color="#b9843a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="52%" r="50%">
+      <stop offset="0" stop-color="#e9bd72" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#e9bd72" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <circle cx="256" cy="268" r="200" fill="url(#glow)"/>
+  <!-- concentric arcs: the word going out -->
+  <g fill="none" stroke="url(#gold)" stroke-linecap="round">
+    <path d="M 364 156 A 146 146 0 0 1 364 380" stroke-width="7" opacity=".55"/>
+    <path d="M 398 118 A 190 190 0 0 1 398 418" stroke-width="5" opacity=".28"/>
+  </g>
+  <!-- lambda -->
+  <g fill="url(#gold)" transform="translate(-26 -6)">
+    <!-- main stroke with top hook -->
+    <path d="M 150 124 C 176 104 214 104 232 136 L 340 360 C 348 377 358 384 374 380 L 380 396 C 348 414 318 404 302 372 L 198 156 C 188 136 172 130 156 138 Z"/>
+    <!-- left leg -->
+    <path d="M 238 232 L 256 266 L 186 398 C 182 406 174 408 166 404 L 160 400 C 156 396 156 390 160 384 Z"/>
+  </g>
+</svg>
