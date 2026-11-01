@@ -10,7 +10,74 @@ import { engine, ensureModel, synthesize, promote } from '../engine/engine.ts'
 import { speakDevice, cancelDevice, deviceSpeechAvailable } from '../engine/device-voice.ts'
 import { stopClipPlayer, onClipPlay } from './clip.ts'
 
-type Rendered = { url: string; env: Float32Array; duration: number; voice: string }
+type Rendered = { blob: Blob; env: Float32Array; duration: number; voice: string }
+
+// ── Continuous playback ──
+// Android only treats a page as a media player (notification, lock screen,
+// keeps running in the background) when the audio is longer than a few
+// seconds. Sentences are short, so the ready sentences from the playhead on
+// are joined into ONE audio file (a "track") and played as a whole; the
+// current sentence is followed from the playback time.
+type Track = { url: string; start: number; end: number; offs: number[] }
+let track: Track | null = null
+
+function wavHeader(dataBytes: number, sampleRate: number): ArrayBuffer {
+  const buf = new ArrayBuffer(44)
+  const v = new DataView(buf)
+  const w = (o: number, t: string) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)) }
+  w(0, 'RIFF'); v.setUint32(4, 36 + dataBytes, true); w(8, 'WAVE')
+  w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true)
+  v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true)
+  w(36, 'data'); v.setUint32(40, dataBytes, true)
+  return buf
+}
+
+/** Join the ready sentences from `i` on into one track. */
+function buildTrack(i: number): Track {
+  dropTrack()
+  const parts: Blob[] = []
+  const offs: number[] = []
+  let t = 0
+  let bytes = 0
+  let j = i
+  while (cache.has(j)) {
+    const r = cache.get(j)!
+    offs.push(t)
+    t += r.duration
+    const body = r.blob.slice(44)
+    bytes += body.size
+    parts.push(body)
+    j++
+  }
+  const sr = 24000
+  track = { url: URL.createObjectURL(new Blob([wavHeader(bytes, sr), ...parts], { type: 'audio/wav' })), start: i, end: j, offs: [...offs, t] }
+  return track
+}
+function dropTrack() {
+  if (track) { URL.revokeObjectURL(track.url); track = null }
+}
+const onTrack = () => Boolean(track && audio && audio.src === track.url)
+/** Seconds into the current sentence. */
+function localTime(): number {
+  if (!track || !audio) return 0
+  const s = listen.get()
+  const k = s.current - track.start
+  return k >= 0 && k < track.offs.length ? Math.max(0, audio.currentTime - track.offs[k]) : 0
+}
+/** Follow the playback time: update the current sentence when it changes. */
+function syncCurrent() {
+  if (!onTrack() || !audio || audio.paused || audio.seeking) return
+  const t = audio.currentTime
+  const offs = track!.offs
+  let k = 0
+  while (k + 1 < offs.length - 1 && offs[k + 1] <= t + 0.01) k++
+  const idx = track!.start + k
+  const s = listen.get()
+  if (idx !== s.current && s.mode === 'neural') {
+    listen.set({ current: idx })
+    updateMediaSession()
+  }
+}
 
 export type ListenState = {
   active: boolean
@@ -56,8 +123,10 @@ const deviceRtf = () => (synthSec > 3 ? synthMs / 1000 / synthSec : engine.get()
 let keepAliveUrl: string | null = null
 function keepAliveSrc(): string {
   if (keepAliveUrl) return keepAliveUrl
-  const sr = 24000
-  const x = new Float32Array(sr * 2)
+  // 30 s long: Android shows the media notification (and keeps the app
+  // running) only for audio longer than a few seconds.
+  const sr = 8000
+  const x = new Float32Array(sr * 30)
   // ~-80 dB noise: silent to the ear, but not digital silence (which some
   // browsers treat as "not playing").
   for (let i = 0; i < x.length; i++) x[i] = (Math.random() * 2 - 1) * 1e-4
@@ -86,6 +155,7 @@ function el(): HTMLAudioElement {
   audio.addEventListener('ended', () => {
     const s = listen.get()
     if (s.mode !== 'neural' || !s.playing) return
+    if (track && audio?.src === track.url && s.current !== track.end - 1) listen.set({ current: track.end - 1 })
     advance()
   })
   audio.addEventListener('pause', () => {
@@ -104,7 +174,7 @@ function el(): HTMLAudioElement {
     if (!s.playing && s.mode === 'neural') listen.set({ playing: true })
     updateMediaSession()
   })
-  audio.addEventListener('timeupdate', updatePosition)
+  audio.addEventListener('timeupdate', () => { syncCurrent(); updatePosition() })
   return audio
 }
 
@@ -118,7 +188,7 @@ function voiceFor(lang: Lang): string {
 function resetCache() {
   pending.forEach((p) => p.ctrl.abort())
   pending = new Map()
-  cache.forEach((r) => URL.revokeObjectURL(r.url))
+  dropTrack()
   cache = new Map()
 }
 
@@ -189,12 +259,12 @@ function render(i: number, priority: number): Promise<Rendered> {
     const pauseMs = settings.get().sentencePauseMs * (seg.paraEnd ? 2.2 : 1)
     const full = concat([trimmed, silence(pauseMs, res.sampleRate)])
     const r: Rendered = {
-      url: URL.createObjectURL(encodeWav(full, res.sampleRate)),
+      blob: encodeWav(full, res.sampleRate),
       env: envelope(full, res.sampleRate, 60),
       duration: full.length / res.sampleRate,
       voice,
     }
-    if (mySession !== session) { URL.revokeObjectURL(r.url); throw new DOMException('stale', 'AbortError') }
+    if (mySession !== session) throw new DOMException('stale', 'AbortError')
     cache.set(i, r)
     pending.delete(i)
     listen.set((st) => { const rendered = st.rendered.slice(); rendered[i] = true; return { rendered } })
@@ -247,6 +317,7 @@ async function playIndex(i: number, startFrac = 0) {
   const stalled = !cache.has(i)
   if (stalled) keepAlive()
   else quietPause()
+  dropTrack()
   listen.set({ current: i, playing: true, mode: 'neural', finished: false, error: null, buffering: stalled })
   updateMediaSession()
   if (!neuralUsable()) ensureModel().catch((e) => { if (my === token) listen.set({ playing: false, buffering: false, error: (e as Error).message }) })
@@ -270,7 +341,8 @@ async function playIndex(i: number, startFrac = 0) {
   }
   const a = el()
   a.loop = false
-  a.src = r.url
+  const tr = buildTrack(i)
+  a.src = tr.url
   if (startFrac > 0) await setTimeWhenReady(a, startFrac * r.duration)
   if (my !== token) return
   a.playbackRate = settings.get().listenSpeed
@@ -406,7 +478,7 @@ export function pause() {
 export function resume() {
   const s = listen.get()
   if (s.playing) return
-  if (s.mode === 'neural' && audio?.src && !s.finished && cache.get(s.current)?.url === audio.src && !audio.ended) {
+  if (s.mode === 'neural' && audio?.src && !s.finished && onTrack() && s.current >= track!.start && s.current < track!.end && !audio.ended) {
     stopClipPlayer()
     listen.set({ playing: true })
     audio.playbackRate = settings.get().listenSpeed
@@ -440,9 +512,10 @@ export function seekFraction(f: number) {
   const idx = Math.floor(pos)
   const frac = pos - idx
   const r = cache.get(idx)
-  if (s.mode === 'neural' && audio && r && audio.src === r.url && idx === s.current) {
-    // Same sentence: just move the playhead.
-    audio.currentTime = frac * r.duration
+  if (s.mode === 'neural' && audio && r && onTrack() && idx >= track!.start && idx < track!.end) {
+    // Already in the playing track: just move the playhead.
+    audio.currentTime = track!.offs[idx - track!.start] + frac * r.duration
+    if (idx !== s.current) { listen.set({ current: idx }); updateMediaSession() }
     if (s.finished) listen.set({ finished: false })
     updatePosition()
     return
@@ -455,7 +528,8 @@ export function seekFraction(f: number) {
   if (r) {
     const a = el()
     quietPause()
-    a.src = r.url
+    a.loop = false
+    a.src = buildTrack(idx).url
     void setTimeWhenReady(a, frac * r.duration)
   } else if (neuralUsable()) prefetch(idx)
   updateMediaSession()
@@ -468,7 +542,7 @@ export function next() {
 
 export function prev() {
   const s = listen.get()
-  if (s.mode === 'neural' && audio && audio.currentTime > 2.5) seek(s.current)
+  if (s.mode === 'neural' && audio && localTime() > 2.5) seek(s.current)
   else seek(s.current - 1)
 }
 
@@ -500,13 +574,14 @@ export function setRate(rate: number) {
 
 /** Visualizer feed: `count` levels around the playhead (0..1). */
 export function levels(count: number, out: Float32Array): boolean {
+  syncCurrent()
   const s = listen.get()
   if (!s.playing || s.mode !== 'neural' || !audio) return false
   const r = cache.get(s.current)
-  if (!r || audio.src !== r.url) return false
+  if (!r || !onTrack()) return false
   // Phones update audio.currentTime only a few times a second, which made the
   // bars step and lag; run a smooth clock between those updates instead.
-  const f = smoothTime(audio) * 60
+  const f = (smoothTime(audio) - (track!.offs[s.current - track!.start] ?? 0)) * 60
   const base = Math.floor(f)
   const frac = f - base
   const env = r.env
@@ -541,7 +616,7 @@ export function sentenceProgress(): number {
   const s = listen.get()
   if (s.mode !== 'neural' || !audio) return 0
   const r = cache.get(s.current)
-  return r && audio.src === r.url ? Math.min(1, audio.currentTime / r.duration) : 0
+  return r && onTrack() ? Math.min(1, localTime() / r.duration) : 0
 }
 
 // ── Media Session ──
@@ -592,9 +667,10 @@ onClipPlay(() => { if (listen.get().playing) pause() })
 
 /** What the off-thread visualizer needs: the playing sentence's envelope and the raw playhead. */
 export function vizSnapshot(): { key: string; env: Float32Array | null; time: number; rate: number; running: boolean } {
+  syncCurrent()
   const s = listen.get()
   if (!s.playing || s.mode !== 'neural' || !audio) return { key: '', env: null, time: 0, rate: 1, running: false }
   const r = cache.get(s.current)
-  if (!r || audio.src !== r.url) return { key: '', env: null, time: 0, rate: 1, running: false }
-  return { key: r.url, env: r.env, time: audio.currentTime, rate: audio.playbackRate || 1, running: !audio.paused }
+  if (!r || !onTrack()) return { key: '', env: null, time: 0, rate: 1, running: false }
+  return { key: `${track!.url}#${s.current}`, env: r.env, time: localTime(), rate: audio.playbackRate || 1, running: !audio.paused }
 }
