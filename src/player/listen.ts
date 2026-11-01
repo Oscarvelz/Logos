@@ -47,6 +47,31 @@ let synthMs = 0
 let synthSec = 0
 const deviceRtf = () => (synthSec > 3 ? synthMs / 1000 / synthSec : engine.get().lastRtf ?? 0)
 
+// ── Background keep-alive ──
+// Android freezes a page that is in the background and not playing sound, which
+// stopped the voice engine while you waited in another app. While audio is being
+// prepared, Logos plays an inaudible track on the same <audio> element: the page
+// counts as playing media (lock-screen controls included), keeps rendering, and
+// switches straight to the speech when it's ready, no tap needed.
+let keepAliveUrl: string | null = null
+function keepAliveSrc(): string {
+  if (keepAliveUrl) return keepAliveUrl
+  const sr = 24000
+  const x = new Float32Array(sr * 2)
+  // ~-80 dB noise: silent to the ear, but not digital silence (which some
+  // browsers treat as "not playing").
+  for (let i = 0; i < x.length; i++) x[i] = (Math.random() * 2 - 1) * 1e-4
+  keepAliveUrl = URL.createObjectURL(encodeWav(x, sr))
+  return keepAliveUrl
+}
+function keepAlive() {
+  const a = el()
+  if (a.src === keepAliveSrc() && !a.paused) return
+  a.loop = true
+  a.src = keepAliveSrc()
+  a.play().catch(() => { /* not allowed yet: rendering still runs while visible */ })
+}
+
 function quietPause() {
   if (!audio || audio.paused) return
   internalPauses++
@@ -219,8 +244,9 @@ async function playIndex(i: number, startFrac = 0) {
   const s = listen.get()
   if (i < 0 || i >= s.segments.length) return
   const my = ++token
-  quietPause()
   const stalled = !cache.has(i)
+  if (stalled) keepAlive()
+  else quietPause()
   listen.set({ current: i, playing: true, mode: 'kokoro', finished: false, error: null, buffering: stalled })
   updateMediaSession()
   if (!kokoroUsable()) ensureModel().catch((e) => { if (my === token) listen.set({ playing: false, buffering: false, error: (e as Error).message }) })
@@ -243,6 +269,7 @@ async function playIndex(i: number, startFrac = 0) {
     if (!ok) return
   }
   const a = el()
+  a.loop = false
   a.src = r.url
   if (startFrac > 0) await setTimeWhenReady(a, startFrac * r.duration)
   if (my !== token) return
