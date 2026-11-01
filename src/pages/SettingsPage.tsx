@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { Cpu, Download, HardDrive, Loader2, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, applyTheme, type Theme } from '../lib/settings.ts'
-import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, pocketCacheBytes } from '../engine/engine.ts'
+import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHONON_SIZE_MB, modelCacheBytes } from '../engine/engine.ts'
 import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 
-const VERSION = '1.3.2'
+const VERSION = '1.4.0'
 
 export function SettingsPage() {
   const st = useStore(settings)
@@ -15,7 +15,7 @@ export function SettingsPage() {
   const [usage, setUsage] = useState<{ quota: number; usage: number } | null>(null)
   const [persisted, setPersisted] = useState<boolean | null>(null)
   const [modelBytes, setModelBytes] = useState(0)
-  const refresh = () => { void storageEstimate().then(setUsage); void pocketCacheBytes().then(setModelBytes) }
+  const refresh = () => { void storageEstimate().then(setUsage); void modelCacheBytes().then(setModelBytes) }
   useEffect(() => {
     refresh()
     void navigator.storage?.persisted?.().then(setPersisted)
@@ -41,8 +41,10 @@ export function SettingsPage() {
               {warming
                 ? 'On this device · loading into memory in the background'
                 : e.status === 'ready'
-                  ? `PocketTTS by Kyutai · ${e.lang === 'es' ? 'Spanish' : 'English'}${e.lastRtf ? ` · ${(1 / e.lastRtf).toFixed(1)}× real-time` : ''}`
-                  : `PocketTTS by Kyutai · ~${POCKET_SIZE_MB} MB per language, then offline`}
+                  ? `${e.kind === 'phonon' ? 'Phonon by Gradium' : 'PocketTTS by Kyutai'} · ${e.lang === 'es' ? 'Spanish' : 'English'}${e.lastRtf ? ` · ${(1 / e.lastRtf).toFixed(1)}× real-time` : ''}`
+                  : e.kind === 'phonon'
+                    ? `Phonon by Gradium · ~${PHONON_SIZE_MB} MB for English and Spanish, then offline`
+                    : `PocketTTS by Kyutai · ~${POCKET_SIZE_MB} MB per language, then offline`}
             </div>
           </div>
           <div style={{ color: 'var(--accent)' }}><Cpu size={30} /></div>
@@ -119,7 +121,8 @@ export function SettingsPage() {
           </div>
         </div>
         <p><strong>Based on <a href="https://github.com/SysAdminDoc/BetterTTS" target="_blank" rel="noreferrer">BetterTTS</a> by SysAdminDoc</strong> (MIT License). Logos is a simplified, phone-first rebuild; its listening player, export and service-worker isolation grew out of it.</p>
-        <p>Voices: <a href="https://github.com/kyutai-labs/pocket-tts" target="_blank" rel="noreferrer">Pocket TTS</a> by Kyutai (Manu Orsini, Simon Rouard, Gabriel De Marmiesse, Václav Volhejn, Neil Zeghidour, Alexandre Défossez), CC BY 4.0, run in the browser with <a href="https://github.com/thewh1teagle/pocket-tts-onnx" target="_blank" rel="noreferrer">pocket-tts-onnx</a> by thewh1teagle (CC BY 4.0) and ONNX Runtime Web.</p>
+        <p>Voices: <a href="https://huggingface.co/gradium/phonon-40m-multilingual" target="_blank" rel="noreferrer">Phonon 40m multilingual</a> by Gradium, CC BY-NC 4.0 (non-commercial), with voices from <a href="https://huggingface.co/gradium/phonon-voices" target="_blank" rel="noreferrer">gradium/phonon-voices</a> (Apache 2.0), run with phonon-tts (MIT/Apache 2.0).</p>
+        <p>Also <a href="https://github.com/kyutai-labs/pocket-tts" target="_blank" rel="noreferrer">Pocket TTS</a> by Kyutai (Manu Orsini, Simon Rouard, Gabriel De Marmiesse, Václav Volhejn, Neil Zeghidour, Alexandre Défossez), CC BY 4.0, run in the browser with <a href="https://github.com/thewh1teagle/pocket-tts-onnx" target="_blank" rel="noreferrer">pocket-tts-onnx</a> by thewh1teagle (CC BY 4.0) and ONNX Runtime Web.</p>
         <p>MP3 encoding: lamejs (LGPL-3.0). Fonts: Manrope & Instrument Serif (OFL).</p>
         <p className="muted small" style={{ marginBottom: 0 }}>© 2026 SysAdminDoc · © 2026 Oscar Arnoldo Velasquez (Logos modifications). Released under the MIT License.</p>
       </div>

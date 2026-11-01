@@ -20,13 +20,15 @@ export type Settings = {
 }
 
 const KEY = 'logos.settings.v1'
+// Oscar's favorite Phonon voices: Noa, Marcos, Zoey, Teddy, Spencer, Freya.
+const PHONON_FAVORITES = ['ph_b6FvJAiokjdqIti4', 'ph_jvPx8j8zLGQ3utZz', 'ph_NbpkqMVS3CJeq2j8', 'ph_Zn7g6NxLqXlJb7Qi', 'ph_JOW0vchyswkQUMDS', 'ph_GgfEkEJtxZR7gnpy']
 
 const DEFAULTS: Settings = {
   theme: 'dark',
   listenSpeed: 1,
   exportSpeed: 1,
-  defaultVoice: { en: 'pk_alba', es: 'pk_lola' },
-  favorites: ['pk_alba', 'pk_lola'],
+  defaultVoice: { en: 'ph_NbpkqMVS3CJeq2j8', es: 'ph_b6FvJAiokjdqIti4' },
+  favorites: [...PHONON_FAVORITES, 'pk_alba', 'pk_lola'],
   langMode: 'auto',
   voiceOverride: null,
   format: 'mp3',
@@ -57,10 +59,10 @@ try {
     if (initial.deviceFallback) { initial.deviceFallback = false; migrateEngine = true }
   }
 } catch { /* storage blocked */ }
-// Every voice is a PocketTTS voice (ids start with pk_). Anything else saved by
-// an older version of Logos is dropped here.
+// Voices are Phonon (ph_) or PocketTTS (pk_). Anything else saved by an older
+// version of Logos is dropped here.
 try {
-  const ok = (id: string | null | undefined) => Boolean(id && id.startsWith('pk_'))
+  const ok = (id: string | null | undefined) => Boolean(id && (id.startsWith('pk_') || id.startsWith('ph_')))
   const d = initial.defaultVoice
   if (!ok(d.en) || !ok(d.es)) { initial.defaultVoice = { en: ok(d.en) ? d.en : 'pk_alba', es: ok(d.es) ? d.es : 'pk_lola' }; migrateEngine = true }
   if (initial.voiceOverride && !ok(initial.voiceOverride)) { initial.voiceOverride = null; migrateEngine = true }
@@ -68,6 +70,17 @@ try {
   if (favs.length !== initial.favorites.length) { initial.favorites = favs.length ? favs : ['pk_alba', 'pk_lola']; migrateEngine = true }
   if ('engine' in initial) { delete (initial as Partial<Settings> & { engine?: unknown }).engine; migrateEngine = true }
   localStorage.removeItem('logos.mig120')
+} catch { /* storage blocked */ }
+// 1.4.0: Phonon arrives. Its favorites go to the top and become the defaults once;
+// Pocket voices and choices stay.
+try {
+  if (localStorage.getItem('logos.mig140') !== '1') {
+    localStorage.setItem('logos.mig140', '1')
+    initial.favorites = [...PHONON_FAVORITES, ...initial.favorites.filter((f) => !PHONON_FAVORITES.includes(f))]
+    initial.defaultVoice = { en: 'ph_NbpkqMVS3CJeq2j8', es: 'ph_b6FvJAiokjdqIti4' }
+    initial.voiceOverride = null
+    migrateEngine = true
+  }
 } catch { /* storage blocked */ }
 export const settings = createStore<Settings>(initial)
 settings.subscribe(() => {

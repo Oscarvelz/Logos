@@ -1,11 +1,13 @@
-// Logos voice engine: PocketTTS (Kyutai), running on the phone's processor.
-// This module is the one door the rest of the app uses: model status for the
-// UI, loading, and a prioritised synthesis queue (Listen jumps the line).
+// Logos voice engines: Phonon (Gradium) and PocketTTS (Kyutai), both running
+// on the phone's processor. This module is the one door the rest of the app
+// uses: model status for the UI, loading, and a prioritised synthesis queue
+// (Listen jumps the line). Each voice belongs to one engine.
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
-import { voiceById } from '../lib/voices.ts'
+import { voiceById, type EngineKind } from '../lib/voices.ts'
 import { timeStretch } from '../lib/audio.ts'
-import { pocket, pocketEnsure, pocketSynth, pocketPromote, pocketClear, pocketDelete, pocketCached, pocketCacheBytes, POCKET_SIZE_MB, type PocketLang } from './pocket.ts'
+import { pocket, pocketEnsure, pocketSynth, pocketPromote, pocketClear, pocketDelete, pocketCached, pocketCacheBytes, pocketRelease, onPocketBeforeLoad, POCKET_SIZE_MB, type PocketLang } from './pocket.ts'
+import { phonon, phononEnsure, phononSynth, phononPromote, phononClear, phononDelete, phononCached, phononCacheBytes, phononRelease, phononLoaded, onPhononBeforeLoad, PHONON_SIZE_MB } from './phonon.ts'
 
 export type ModelStatus = 'idle' | 'loading' | 'ready' | 'error'
 export type SynthResult = { samples: Float32Array; sampleRate: number; ms: number }
@@ -26,9 +28,17 @@ export type EngineState = {
   phase: 'download' | 'warm' | null
   /** language model being shown */
   lang: PocketLang | null
+  /** engine of the voice in use */
+  kind: EngineKind
+  /** CPU threads Phonon runs on */
+  threads: number | null
 }
 
-export { POCKET_SIZE_MB, pocketCacheBytes }
+export { POCKET_SIZE_MB, PHONON_SIZE_MB, pocketCacheBytes }
+export async function modelCacheBytes(): Promise<number> {
+  const [a, b] = await Promise.all([pocketCacheBytes(), phononCacheBytes()])
+  return a + b
+}
 
 const ls = {
   get: (k: string) => { try { return localStorage.getItem(k) } catch { return null } },
@@ -38,9 +48,29 @@ const ls = {
 
 let cachedFlag = false
 const wantedLang = (): PocketLang => (settings.get().langMode === 'es' ? 'es' : 'en')
+/** The engine of the voice Listen will use. */
+let lastKind: EngineKind | null = null
+function activeKind(): EngineKind {
+  if (lastKind) return lastKind
+  const st = settings.get()
+  const id = st.voiceOverride ?? st.defaultVoice[wantedLang()]
+  return voiceById(id)?.engine ?? 'phonon'
+}
+const kindOf = (voice: string): EngineKind => voiceById(voice)?.engine ?? (voice.startsWith('pk_') ? 'pocket' : 'phonon')
+
+// Phones run out of memory with several models loaded: loading one engine
+// frees the other unless the device has plenty of memory.
+const roomy = () => ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4) >= 8
+onPhononBeforeLoad((lang) => {
+  if (!roomy()) { pocketRelease(); for (const l of phononLoaded()) if (l !== lang) phononRelease(l) }
+})
+onPocketBeforeLoad(() => { if (!roomy()) for (const l of phononLoaded()) phononRelease(l) })
 
 function compute(): EngineState {
-  const p = pocket.get()
+  return activeKind() === 'phonon' ? computeFrom(phonon.get(), 'phonon') : computeFrom(pocket.get(), 'pocket')
+}
+
+function computeFrom(p: { langs: Record<PocketLang, { status: string; loaded: number; total: number; error: string | null; loadMs: number | null; fromCache: boolean }>; active: PocketLang | null; lastRtf: number | null; threads?: number | null }, kind: EngineKind): EngineState {
   const lang: PocketLang = p.active ?? wantedLang()
   const l = p.langs[lang]
   const anyReady = (['en', 'es'] as PocketLang[]).some((x) => p.langs[x].status === 'ready')
@@ -56,11 +86,15 @@ function compute(): EngineState {
     loadMs: l.loadMs,
     phase: l.status === 'loading' ? (l.fromCache || (cachedFlag && !l.total) ? 'warm' : 'download') : null,
     lang,
+    kind,
+    threads: p.threads ?? null,
   }
 }
 
 export const engine = createStore<EngineState>(compute())
 pocket.subscribe(() => engine.set(compute()))
+phonon.subscribe(() => engine.set(compute()))
+settings.subscribe(() => { lastKind = null; engine.set(compute()) })
 
 // Crash guard: if the app closed while loading last time, don't auto-load on
 // start (play still loads it on demand), so a bad load can't become a loop.
@@ -73,28 +107,34 @@ export function lastLoadCrashed(): boolean {
   crashedLastTime = t > 0 && Date.now() - t < 10 * 60_000
   return crashedLastTime
 }
-pocket.subscribe(() => {
-  const busy = (['en', 'es'] as PocketLang[]).some((x) => pocket.get().langs[x].status === 'loading')
+const watchLoading = () => {
+  const busy = (['en', 'es'] as PocketLang[]).some((x) => pocket.get().langs[x].status === 'loading' || phonon.get().langs[x].status === 'loading')
   if (busy) { if (!ls.get(LOADING_KEY)) ls.set(LOADING_KEY, String(Date.now())) } else ls.del(LOADING_KEY)
-})
+}
+pocket.subscribe(watchLoading)
+phonon.subscribe(watchLoading)
 
 /** Load the voice (from the phone after the first download). */
 export function ensureModel(): Promise<void> {
+  if (activeKind() === 'phonon') return phononEnsure(phonon.get().active ?? wantedLang())
   return pocketEnsure(pocket.get().active ?? wantedLang())
 }
 
 export function synthesize(text: string, voice: string, speed: number, opts: { priority?: number; signal?: AbortSignal } = {}): Promise<SynthResult> {
   const v = voiceById(voice)
   const lang: PocketLang = v?.lang === 'es' ? 'es' : 'en'
-  return pocketSynth(text, lang, voice.replace(/^pk_/, ''), opts).then((r) =>
+  const kind = kindOf(voice)
+  if (opts.priority && opts.priority >= 1000 && kind !== lastKind) { lastKind = kind; engine.set(compute()) }
+  const job = kind === 'phonon' ? phononSynth(text, lang, voice, opts) : pocketSynth(text, lang, voice.replace(/^pk_/, ''), opts)
+  return job.then((r) =>
     speed && Math.abs(speed - 1) > 0.01 ? { ...r, samples: timeStretch(r.samples, r.sampleRate, speed) } : r)
 }
 
-export const promote = pocketPromote
-export const clearQueue = pocketClear
+export function promote(signal: AbortSignal, priority: number) { pocketPromote(signal, priority); phononPromote(signal, priority) }
+export function clearQueue(maxPriority?: number) { pocketClear(maxPriority); phononClear(maxPriority) }
 
 export async function isModelCached(): Promise<boolean> {
-  cachedFlag = await pocketCached(wantedLang())
+  cachedFlag = activeKind() === 'phonon' ? await phononCached() : await pocketCached(wantedLang())
   engine.set(compute())
   return cachedFlag
 }
@@ -102,6 +142,7 @@ export async function isModelCached(): Promise<boolean> {
 /** Remove the downloaded voice models from this device. */
 export async function deleteModel() {
   await pocketDelete()
+  await phononDelete()
   cachedFlag = false
   engine.set(compute())
 }

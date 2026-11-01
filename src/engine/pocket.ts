@@ -56,6 +56,7 @@ function spawn(lang: PocketLang): Worker {
     const other = [...workers.keys()].find((l) => l !== lang && inFlight?.lang !== l) ?? [...workers.keys()][0]
     dropWorker(other)
   }
+  beforeSpawn()
   const w = new Worker(new URL('./pocket.worker.ts', import.meta.url), { type: 'module' })
   workers.set(lang, w)
   w.addEventListener('message', (e: MessageEvent<PocketResponse>) => onMessage(lang, e.data))
@@ -173,6 +174,13 @@ export function pocketClear(maxPriority = Infinity) {
     if (queue[i].priority <= maxPriority) { queue[i].reject(new DOMException('Aborted', 'AbortError')); queue.splice(i, 1) }
   }
 }
+
+/** Free the models from memory (they stay saved on the phone), except one mid-sentence. */
+export function pocketRelease() {
+  for (const l of [...workers.keys()]) if (inFlight?.lang !== l) dropWorker(l)
+}
+let beforeSpawn: () => void = () => {}
+export function onPocketBeforeLoad(fn: () => void) { beforeSpawn = fn }
 
 export function pocketReset() {
   pocketClear()

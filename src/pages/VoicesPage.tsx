@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Check, Loader2, Pause, Play, Star } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
-import { VOICES, PREVIEW_TEXT, type Voice } from '../lib/voices.ts'
+import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, type Voice } from '../lib/voices.ts'
 import { clipPlayer, playClip } from '../player/clip.ts'
 import { engine, synthesize } from '../engine/engine.ts'
 import { encodeWav, trimSilence } from '../lib/audio.ts'
@@ -10,12 +10,13 @@ import { refreshVoices } from '../player/listen.ts'
 import { Avatar, toast } from '../components/ui.tsx'
 import previews from '../lib/previews.json'
 
-type Filter = 'all' | 'fav' | 'en' | 'es'
+type Filter = 'all' | 'fav' | 'en' | 'es' | 'pocket'
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'all', label: 'All voices' },
   { value: 'fav', label: 'Favorites' },
   { value: 'en', label: 'English' },
   { value: 'es', label: 'Español' },
+  { value: 'pocket', label: 'Pocket' },
 ]
 
 const HAS_PREVIEW = new Set<string>(previews as string[])
@@ -24,13 +25,18 @@ const livePreviews = new Map<string, Blob>()
 export function VoicesPage() {
   const st = useStore(settings)
   const [filter, setFilter] = useState<Filter>('all')
-  const list = VOICES.filter((v) => filter === 'all' || (filter === 'fav' ? st.favorites.includes(v.id) : v.lang === filter))
+  const rank = (id: string) => { const i = st.favorites.indexOf(id); return i < 0 ? Infinity : i }
+  const list = VOICES
+    .filter((v) => filter === 'all' || (filter === 'fav' ? st.favorites.includes(v.id) : filter === 'pocket' ? v.engine === 'pocket' : v.lang === filter))
+    .map((v, i) => ({ v, i }))
+    .sort((a, b) => rank(a.v.id) - rank(b.v.id) || a.i - b.i)
+    .map((x) => x.v)
   return (
     <div className="page wide">
       <div className="page-head">
         <div>
           <h1 className="page-title">Voices</h1>
-          <p className="page-sub">Natural voices that run right on your phone. Star your favorites, set a default per language.</p>
+          <p className="page-sub">{VOICES.length} natural voices that run right on your phone. Star your favorites, set a default per language.</p>
         </div>
       </div>
       <div className="filter-row" role="tablist">
@@ -79,7 +85,7 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
       {isDefault && <span className="default-flag">Default · {v.lang === 'en' ? 'English' : 'Español'}</span>}
       <Avatar voice={v} playing={playing} />
       <div className="grow" style={{ minWidth: 0 }}>
-        <div className="voice-name">{v.name} <span className="badge">{v.lang === 'es' ? 'ES' : 'EN'}</span></div>
+        <div className="voice-name">{v.name} <span className="badge" title={ACCENT_LABEL[v.accent]}>{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
         <div className="voice-tag">{v.tagline}</div>
         {!isDefault && (
           <button className="btn sm ghost" style={{ height: 32, padding: '0 8px', marginLeft: -8, marginTop: 2, fontSize: 13, color: 'var(--text-2)' }}

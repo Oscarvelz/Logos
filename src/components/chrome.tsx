@@ -1,10 +1,10 @@
 import { AudioLines, Library, Mic2, Pause, Play, Settings2, SkipForward, Sparkles, Star, Check, Download, Loader2 } from 'lucide-react'
 import { navigate, useRoute, type Route } from '../lib/router.ts'
 import { useStore } from '../lib/store.ts'
-import { engine, ensureModel, POCKET_SIZE_MB } from '../engine/engine.ts'
+import { engine, ensureModel, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
 import { listen, toggle, next } from '../player/listen.ts'
 import { settings } from '../lib/settings.ts'
-import { VOICES, LANG_LABEL, type Lang, type Voice } from '../lib/voices.ts'
+import { VOICES, LANG_LABEL, ENGINE_LABEL, favoriteVoices, type Lang, type Voice } from '../lib/voices.ts'
 import { Avatar, ProgressRing, Sheet } from './ui.tsx'
 import { formatBytes } from '../lib/audio.ts'
 
@@ -79,7 +79,7 @@ export function StatusPill({ compact }: { compact?: boolean }) {
     return <button className="status-pill" style={{ color: 'var(--danger)' }} onClick={() => navigate('settings')}>Engine error</button>
   }
   return (
-    <button className="status-pill" onClick={() => { void ensureModel().catch(() => {}) }} title={`Download the neural voice (~${POCKET_SIZE_MB} MB)`}>
+    <button className="status-pill" onClick={() => { void ensureModel().catch(() => {}) }} title={`Download the neural voice (~${e.kind === 'phonon' ? PHONON_SIZE_MB : POCKET_SIZE_MB} MB)`}>
       <Download size={16} style={{ marginLeft: 4 }} />{compact ? 'Voice' : 'Neural voice'}
     </button>
   )
@@ -109,11 +109,13 @@ export function MiniPlayer() {
 export function VoicePicker({ open, onClose, value, onPick, lang }: { open: boolean; onClose: () => void; value: string | null; onPick: (id: string | null) => void; lang?: Lang | 'auto' }) {
   const st = useStore(settings)
   const groups: { title: string; list: Voice[] }[] = []
-  const favs = VOICES.filter((v) => st.favorites.includes(v.id) && (!lang || lang === 'auto' || v.lang === lang))
+  const favs = favoriteVoices(st.favorites).filter((v) => !lang || lang === 'auto' || v.lang === lang)
   if (favs.length) groups.push({ title: 'Favorites', list: favs })
   for (const l of ['en', 'es'] as Lang[]) {
     if (lang && lang !== 'auto' && lang !== l) continue
-    groups.push({ title: LANG_LABEL[l], list: VOICES.filter((v) => v.lang === l && !st.favorites.includes(v.id)) })
+    for (const k of ['phonon', 'pocket'] as const) {
+      groups.push({ title: `${LANG_LABEL[l]} · ${ENGINE_LABEL[k]}`, list: VOICES.filter((v) => v.lang === l && v.engine === k && !st.favorites.includes(v.id)) })
+    }
   }
   return (
     <Sheet open={open} onClose={onClose} title="Choose a voice">
@@ -132,7 +134,7 @@ export function VoicePicker({ open, onClose, value, onPick, lang }: { open: bool
             <button key={v.id} className={`pick ${value === v.id ? 'on' : ''}`} onClick={() => { onPick(v.id); onClose() }}>
               <Avatar voice={v} />
               <div className="grow">
-                <div className="voice-name">{v.name} <span className="badge">{v.lang === 'es' ? 'ES' : 'EN'}</span>{st.favorites.includes(v.id) && <Star size={13} fill="var(--accent)" color="var(--accent)" />}</div>
+                <div className="voice-name">{v.name} <span className="badge">{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}{st.favorites.includes(v.id) && <Star size={13} fill="var(--accent)" color="var(--accent)" />}</div>
                 <div className="voice-tag">{v.tagline}</div>
               </div>
               {value === v.id && <Check size={20} color="var(--accent)" />}

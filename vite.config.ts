@@ -32,5 +32,5 @@ export default defineConfig({
     chunkSizeWarningLimit: 4000,
     assetsInlineLimit: 0,
   },
-  optimizeDeps: { exclude: ['pocket-tts-onnx'] },
+  optimizeDeps: { exclude: ['pocket-tts-onnx', 'phonon-tts'] },
 })
