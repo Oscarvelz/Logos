@@ -10,9 +10,9 @@ import { formatBytes } from '../lib/audio.ts'
 
 const ITEMS: { route: Route; label: string; Icon: typeof Play }[] = [
   { route: 'listen', label: 'Listen', Icon: AudioLines },
+  { route: 'voices', label: 'Voices', Icon: Mic2 },
   { route: 'create', label: 'Create', Icon: Sparkles },
   { route: 'library', label: 'Library', Icon: Library },
-  { route: 'voices', label: 'Voices', Icon: Mic2 },
   { route: 'settings', label: 'Settings', Icon: Settings2 },
 ]
 

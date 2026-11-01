@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 export type Route = 'listen' | 'create' | 'library' | 'voices' | 'settings'
-export const ROUTES: Route[] = ['listen', 'create', 'library', 'voices', 'settings']
+export const ROUTES: Route[] = ['listen', 'voices', 'create', 'library', 'settings']
 
 function parse(): Route {
   const h = location.hash.replace(/^#\/?/, '').split(/[/?]/)[0] as Route
