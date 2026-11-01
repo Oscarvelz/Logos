@@ -58,10 +58,12 @@ export function StatusPill({ compact }: { compact?: boolean }) {
     )
   }
   if (e.status === 'loading' && e.phase !== 'download') {
+    // The voice is on this phone; it's only being loaded into memory, which
+    // happens quietly each time the app opens. Play works right away (it waits
+    // a moment for the first sentence), so don't make it look unready.
     return (
-      <button className="status-pill" onClick={() => navigate('settings')} title="Starting the neural voice">
-        <Loader2 size={16} className="spin" style={{ marginLeft: 4 }} />
-        <span>{compact ? 'Starting' : 'Starting voice'}</span>
+      <button className="status-pill ready warming" onClick={() => navigate('settings')} title="Voice on this device · loading into memory">
+        <span className="led" />{compact ? 'Ready' : e.family === 'pocket' ? 'Pocket · Fast' : 'Kokoro · WebGPU'}
       </button>
     )
   }
@@ -148,7 +150,7 @@ function voiceName(id: string) {
 
 export function EngineNote() {
   const e = useStore(engine)
-  if (e.status !== 'loading') return null
+  if (e.status !== 'loading' || e.phase !== 'download') return null
   return (
     <div className="engine-note">
       <Loader2 size={16} className="spin" color="var(--accent)" />

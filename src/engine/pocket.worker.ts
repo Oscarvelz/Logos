@@ -18,6 +18,7 @@ export type PocketResponse =
 
 let pipeline: Pipeline | null = null
 let loading: Promise<void> | null = null
+let warm: Promise<void> = Promise.resolve()
 const cancelled = new Set<number>()
 const post = (m: PocketResponse, t: Transferable[] = []) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(m, t)
 
@@ -38,9 +39,10 @@ async function load(m: Extract<PocketRequest, { type: 'load' }>) {
       threads: m.threads,
       onProgress: (stage, p) => { if (stage === 'model') post({ type: 'progress', loaded: p.loaded, total: p.total, cached: p.cached }) },
     })
-    // Warm the default voice so the first sentence starts quickly.
-    await pipeline.speak('Hi.', { voice: pipeline.defaultVoice }).catch(() => undefined)
     post({ type: 'ready', voices: pipeline.voices, sampleRate: pipeline.sampleRate, ms: Math.round(performance.now() - t0) })
+    // Warm the default voice in the background; the first sentence waits for it.
+    const p = pipeline
+    warm = p.speak('Hi.', { voice: p.defaultVoice }).then(() => undefined, () => undefined)
   })()
   try { await loading } catch (err) {
     pipeline = null
@@ -52,6 +54,7 @@ async function speak(m: Extract<PocketRequest, { type: 'speak' }>) {
   const t0 = performance.now()
   try {
     if (!pipeline) throw new Error('PocketTTS is not loaded')
+    await warm
     const ctrl = new AbortController()
     const frames: Float32Array[] = []
     let total = 0

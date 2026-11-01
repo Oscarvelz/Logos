@@ -201,7 +201,11 @@ export async function pocketCacheBytes(): Promise<number> {
   let bytes = 0
   try {
     const cache = await caches.open(CACHE)
-    for (const req of await cache.keys()) bytes += Number((await cache.match(req))?.headers.get('content-length') ?? 0)
+    for (const req of await cache.keys()) {
+      const res = await cache.match(req)
+      const len = Number(res?.headers.get('content-length') ?? 0)
+      bytes += len || (res ? (await res.blob()).size : 0)
+    }
   } catch { /* ignore */ }
   return bytes
 }

@@ -7,7 +7,7 @@ import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 
-const VERSION = '1.2.3'
+const VERSION = '1.2.4'
 
 export function SettingsPage() {
   const st = useStore(settings)
@@ -60,9 +60,11 @@ export function SettingsPage() {
       <div className="card engine-card stack">
         <div className="row between">
           <div>
-            <div className="big">{e.status === 'ready' ? 'Ready' : e.status === 'loading' ? (e.phase === 'download' ? 'Downloading' : 'Starting') : e.status === 'error' ? 'Needs attention' : e.cached ? 'Downloaded' : 'Not downloaded'}</div>
+            <div className="big">{e.status === 'ready' ? 'Ready' : e.status === 'loading' ? (e.phase === 'download' ? 'Downloading' : 'Ready') : e.status === 'error' ? 'Needs attention' : e.cached ? 'Downloaded' : 'Not downloaded'}</div>
             <div className="muted small" style={{ marginTop: 4 }}>
-              {pocketOn
+              {e.status === 'loading' && e.phase !== 'download'
+                ? 'On this device · loading into memory in the background'
+                : pocketOn
                 ? (e.status === 'ready' ? `PocketTTS on WASM (${e.pocketLang === 'es' ? 'Spanish' : 'English'})${e.lastRtf ? ` · ${(1 / e.lastRtf).toFixed(1)}× real-time` : ''}` : `PocketTTS · ~${POCKET_SIZE_MB} MB per language`)
                 : e.status === 'ready' ? `Kokoro-82M on ${e.device === 'webgpu' ? 'WebGPU' : 'WASM'} (${e.dtype})${e.lastRtf ? ` · ${(1 / e.lastRtf).toFixed(1)}× real-time` : ''}` : `Will use ${plannedLabel}`}
             </div>
@@ -77,7 +79,7 @@ export function SettingsPage() {
         )}
         {e.status === 'error' && <div className="error-note">{e.error}</div>}
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          {e.status !== 'ready' && (
+          {e.status !== 'ready' && !(e.status === 'loading' && e.phase !== 'download') && (
             <button className="btn primary" onClick={() => ensureModel().then(() => toast('Neural voice ready — works offline now')).catch((err) => toast((err as Error).message))} disabled={e.status === 'loading'}>
               {e.status === 'loading' ? <Loader2 size={18} className="spin" /> : <Download size={18} />} {e.cached ? 'Load now' : 'Download now'}
             </button>

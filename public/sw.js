@@ -4,6 +4,7 @@
 const CACHE_NAME = 'logos-shell-__BUILD_ID__'
 const ORT_CACHE = 'logos-ort' // .wasm assets survive deploys: the 21 MB runtime is content-hashed and rarely changes
 const SCOPE = new URL('./', self.location).href
+const POCKET_META = 'logos-pocket-meta'
 
 // credentialless keeps SharedArrayBuffer (multi-threaded WASM) available while
 // still allowing CORS fetches from the Hugging Face CDN.
@@ -45,6 +46,18 @@ self.addEventListener('fetch', (event) => {
   const req = event.request
   if (req.method !== 'GET') return
   const url = new URL(req.url)
+  // PocketTTS model descriptions (manifest.json, assets.json — tokenizer and
+  // voices): serve from the phone at once, refresh in the background. Without
+  // this every app start waited on the network before the voice could load.
+  if (url.hostname === 'huggingface.co' && url.pathname.includes('/pocket-tts-onnx/') && url.pathname.endsWith('.json')) {
+    event.respondWith(caches.open(POCKET_META).then(async (cache) => {
+      const hit = await cache.match(req.url)
+      const refresh = fetch(req).then((res) => { if (res.ok) void cache.put(req.url, res.clone()); return res })
+      if (hit) { refresh.catch(() => {}); return hit }
+      return refresh
+    }))
+    return
+  }
   if (url.origin !== self.location.origin || !req.url.startsWith(SCOPE)) return
 
   // Navigations (including share-target ?text=...) → network first, cached shell offline.

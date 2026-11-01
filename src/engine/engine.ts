@@ -427,7 +427,7 @@ function computeActive(): ActiveEngineState {
     error: l.error,
     cached: pocketCachedFlag,
     lastRtf: p.lastRtf, loadMs: l.loadMs,
-    phase: l.status === 'loading' ? (l.fromCache ? 'warm' : 'download') : null,
+    phase: l.status === 'loading' ? (l.fromCache || (pocketCachedFlag && !l.total) ? 'warm' : 'download') : null,
     family: 'pocket', pocketLang: lang,
   }
 }
