@@ -91,10 +91,8 @@ async function handleLoad(msg: Extract<WorkerRequest, { type: 'load' }>) {
         if (bad) throw new Error(`WebGPU ${dtype} self-test: ${bad}`)
       }
     } catch (err) {
-      if (device !== 'webgpu') throw err
       tts = null
-      device = 'wasm'; dtype = 'q8'
-      tts = await load(device, dtype)
+      throw err
     }
     loadedDevice = device
     post({ type: 'loaded', device, dtype, ms: Math.round(performance.now() - t0) })

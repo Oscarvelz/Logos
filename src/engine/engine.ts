@@ -59,6 +59,8 @@ const ls = {
 // 1.1.0 moved to ONNX Runtime 1.31 (the runtime BetterTTS ships), whose WebGPU
 // works on phones where the old one failed, so forget failures recorded before.
 if (ls.get('logos.mig110') !== '1') { ls.set('logos.mig110', '1'); ls.del(GPU_BROKEN_KEY); ls.del('logos.gpuFp16Broken') }
+// 1.2.3: Kokoro is WebGPU-only now (no CPU fallback), so give both GPU model sizes a fresh try.
+if (ls.get('logos.mig123') !== '1') { ls.set('logos.mig123', '1'); ls.del(GPU_BROKEN_KEY); ls.del('logos.gpuFp16Broken') }
 // fp32 (326 MB) can run a phone's GPU out of memory; the half-size fp16 model
 // (163 MB) often fits, so it gets its own chance before WASM.
 const GPU_FP16_BROKEN_KEY = 'logos.gpuFp16Broken'
@@ -117,25 +119,10 @@ function getWorker(): Worker {
     e.preventDefault?.()
     const message = e.message || 'The speech engine crashed.'
     ls.del(LOADING_KEY)
-    const usedGpu = requestedDevice === 'webgpu' || kokoro.get().device === 'webgpu'
     worker?.terminate()
     worker = null
-    if (usedGpu && gpuRetries < 2) {
-      // The GPU took the engine down (some phones run out of graphics memory with
-      // the 326 MB model): switch this device to WASM for good and carry on.
-      console.warn('[logos] WebGPU engine crashed, switching to WASM:', message)
-      gpuRetries++
-      markGpuBroken(kokoro.get().dtype ?? requestedDtype)
-      if (inFlight) { queue.unshift(inFlight); inFlight = null }
-      kokoro.set({ status: 'idle', device: null, dtype: null, error: null })
-      void startLoad()
-      return
-    }
-    kokoro.set({ status: 'error', error: message })
-    loadWaiters.forEach((w) => w.reject(new Error(message)))
-    loadWaiters = []
-    inFlight?.reject(new Error(message))
-    inFlight = null
+    // The GPU took the engine down (out of graphics memory): try the other model size.
+    gpuFailed(kokoro.get().dtype ?? requestedDtype, message)
   })
   return worker
 }
@@ -147,7 +134,6 @@ function onMessage(msg: WorkerResponse) {
       break
     case 'loaded':
       ls.del(LOADING_KEY)
-      if (requestedDevice === 'webgpu' && msg.device !== 'webgpu') markGpuBroken()
       kokoro.set({ status: 'ready', progress: 1, device: msg.device, dtype: msg.dtype, error: null, cached: true, loadMs: msg.ms, phase: null })
       keepStorage()
       loadWaiters.forEach((w) => w.resolve())
@@ -156,6 +142,7 @@ function onMessage(msg: WorkerResponse) {
       break
     case 'loadError':
       ls.del(LOADING_KEY)
+      if (requestedDevice === 'webgpu' && !/fetch|network|Failed to load/i.test(msg.message)) { gpuFailed(requestedDtype, msg.message); break }
       kokoro.set({ status: 'error', error: msg.message })
       loadWaiters.forEach((w) => w.reject(new Error(msg.message)))
       loadWaiters = []
@@ -165,15 +152,10 @@ function onMessage(msg: WorkerResponse) {
       ls.del(LOADING_KEY)
       const job = inFlight
       inFlight = null
-      if (msg.type === 'generateError' && job && job.id === msg.id && kokoro.get().device === 'webgpu' && gpuRetries < 2) {
-        // The GPU path broke mid-use: switch to WASM for good and retry this sentence.
-        gpuRetries++
-        markGpuBroken(kokoro.get().dtype)
-        queue.unshift(job)
-        worker?.terminate()
-        worker = null
-        kokoro.set({ status: 'idle', device: null, dtype: null })
-        void startLoad()
+      if (msg.type === 'generateError' && job && job.id === msg.id && kokoro.get().device === 'webgpu' && /GPU|NaN|silent|WebGPU|buffer/i.test(msg.message)) {
+        // The GPU path broke mid-use (or made blank audio): try the other model size, then stop.
+        inFlight = job
+        gpuFailed(kokoro.get().dtype, msg.message)
         break
       }
       if (job && job.id === msg.id) {
@@ -224,22 +206,26 @@ export async function probeWebGpu(): Promise<boolean> {
   return ok
 }
 
-/** Auto = WebGPU on capable desktops/tablets in desktop mode; WASM (q8, 92 MB) on phones. */
-export async function resolveEngine(choice: EngineChoice = settings.get().engine): Promise<{ device: Device; dtype: Dtype }> {
-  const wasm = { device: 'wasm' as const, dtype: 'q8' as const }
-  if (choice === 'wasm') return wasm
+/**
+ * Kokoro runs only on the graphics chip (WebGPU) since 1.2.3: on Oscar's phone
+ * the CPU (WASM) path made everything slow, and PocketTTS covers CPU speech much
+ * better. Half-precision first (163 MB, less GPU memory), then full precision.
+ * Returns null when no GPU option is left on this device.
+ */
+export async function resolveEngine(_choice: EngineChoice = settings.get().engine): Promise<{ device: Device; dtype: Dtype } | null> {
   const gpu = await probeWebGpu()
-  if (!gpu) return wasm
-  // Like BetterTTS: use the GPU whenever the browser offers one (phones too).
-  // fp32 first; if it failed here, the half-size fp16 model; then WASM for good.
-  if (!fp32Broken()) return { device: 'webgpu', dtype: 'fp32' }
+  if (!gpu) return null
   if (!fp16Broken() && kokoro.get().f16) return { device: 'webgpu', dtype: 'fp16' }
-  return wasm
+  if (!fp32Broken()) return { device: 'webgpu', dtype: 'fp32' }
+  return null
 }
+export const GPU_UNAVAILABLE = 'Kokoro needs your phone’s graphics chip (WebGPU), and it didn’t work on this device. PocketTTS voices work great here.'
 
 async function kokoroCached(): Promise<boolean> {
   try {
-    const { dtype } = await resolveEngine()
+    const plan = await resolveEngine()
+    if (!plan) { kokoro.set({ cached: false }); return false }
+    const { dtype } = plan
     const cache = await caches.open('transformers-cache')
     const keys = await cache.keys()
     const hit = keys.some((k) => k.url.includes('Kokoro-82M') && k.url.endsWith(MODEL_FILES[dtype]))
@@ -265,7 +251,9 @@ async function startLoad() {
   // phone's cache, so check first and show "Starting voice" instead of a download.
   const onPhone = await kokoroCached()
   kokoro.set({ phase: onPhone ? 'warm' : 'download' })
-  const { device, dtype } = await resolveEngine()
+  const plan = await resolveEngine()
+  if (!plan) { failKokoro(GPU_UNAVAILABLE); return }
+  const { device, dtype } = plan
   requestedDevice = device
   requestedDtype = dtype
   ls.set(LOADING_KEY, JSON.stringify({ device, dtype, t: Date.now() }))
@@ -273,6 +261,27 @@ async function startLoad() {
   const spin = ls.get('logos.spin') === '1'
   const threads = Number(ls.get('logos.threads')) || undefined
   getWorker().postMessage({ type: 'load', device, dtype, spin, threads } satisfies WorkerRequest)
+}
+
+function failKokoro(message: string) {
+  ls.del(LOADING_KEY)
+  kokoro.set({ status: 'error', error: message, device: null, dtype: null })
+  loadWaiters.forEach((w) => w.reject(new Error(message)))
+  loadWaiters = []
+  inFlight?.reject(new Error(message))
+  inFlight = null
+  for (const j of queue.splice(0)) j.reject(new Error(message))
+}
+
+/** A GPU attempt failed: remember it for this model size and try the next one (or stop). */
+function gpuFailed(dtype: Dtype | null, why: string) {
+  console.warn('[logos] WebGPU Kokoro failed:', dtype, why)
+  markGpuBroken(dtype ?? requestedDtype)
+  worker?.terminate()
+  worker = null
+  if (inFlight) { queue.unshift(inFlight); inFlight = null }
+  if (gpuRetries++ < 2) { kokoro.set({ status: 'idle', device: null, dtype: null, error: null }); void startLoad(); return }
+  failKokoro(GPU_UNAVAILABLE)
 }
 
 function kokoroSynth(text: string, voice: string, speed: number, opts: { priority?: number; signal?: AbortSignal } = {}): Promise<SynthResult> {

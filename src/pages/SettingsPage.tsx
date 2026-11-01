@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Cpu, Download, HardDrive, Loader2, Trash2, Zap } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
-import { settings, applyTheme, type EngineChoice, type Theme } from '../lib/settings.ts'
-import { engine, ensureModel, deleteModel, resetEngine, cacheUsage, probeWebGpu, resolveEngine, isModelCached, gpuBroken, MODEL_SIZE_MB, POCKET_SIZE_MB, pocketCacheBytes, type Family } from '../engine/engine.ts'
+import { settings, applyTheme, type Theme } from '../lib/settings.ts'
+import { engine, ensureModel, deleteModel, cacheUsage, probeWebGpu, resolveEngine, isModelCached, gpuBroken, MODEL_SIZE_MB, POCKET_SIZE_MB, pocketCacheBytes, type Family } from '../engine/engine.ts'
 import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 
-const VERSION = '1.2.2'
+const VERSION = '1.2.3'
 
 export function SettingsPage() {
   const st = useStore(settings)
@@ -37,16 +37,9 @@ export function SettingsPage() {
     void navigator.storage?.persisted?.().then(setPersisted)
   }, [e.status, st.engine])
 
-  const changeEngine = async (choice: EngineChoice) => {
-    settings.set({ engine: choice })
-    const wasReady = engine.get().status === 'ready'
-    endSession()
-    resetEngine()
-    await isModelCached()
-    if (wasReady) void ensureModel().catch(() => {})
-  }
 
-  const plannedLabel = planned ? `${planned.device === 'webgpu' ? 'WebGPU' : 'WASM'} · ${planned.dtype} · ~${MODEL_SIZE_MB[planned.dtype as 'q8']} MB` : '…'
+
+  const plannedLabel = planned ? `${planned.device === 'webgpu' ? 'WebGPU' : 'WASM'} · ${planned.dtype} · ~${MODEL_SIZE_MB[planned.dtype as 'q8']} MB` : 'WebGPU (not available here)'
 
   return (
     <div className="page">
@@ -97,8 +90,7 @@ export function SettingsPage() {
 
       <div className="list" style={{ marginTop: 12 }}>
         {!pocketOn && <div className="list-row col">
-          <div><div className="t">Kokoro engine</div><div className="d">Auto uses your phone’s graphics chip (WebGPU, much faster) when it works: the 326 MB model, or the 163 MB half-size one if the big one doesn’t fit. Otherwise the 92 MB WASM engine.{e.webgpu === false ? ' WebGPU is not available in this browser.' : ''}{gpuBroken() ? ' WebGPU failed on this device, so Logos uses WASM.' : ''}</div></div>
-          <Seg value={st.engine} label="Engine" onChange={changeEngine} options={[{ value: 'auto', label: 'Auto' }, { value: 'webgpu', label: 'WebGPU' }, { value: 'wasm', label: 'WASM' }]} />
+          <div><div className="t">Kokoro engine</div><div className="d">Kokoro runs only on your phone’s graphics chip (WebGPU): the 163 MB half-size model first, the 326 MB one if that fails. The slower CPU (WASM) engine is gone; PocketTTS handles CPU speech much better.{e.webgpu === false ? ' WebGPU is not available in this browser.' : ''}{gpuBroken() ? ' WebGPU didn’t work on this device, so Kokoro voices can’t play here. Use PocketTTS.' : ''}</div></div>
         </div>}
         <div className="list-row">
           <HardDrive size={20} className="muted" />
