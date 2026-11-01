@@ -5,7 +5,7 @@ import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
-import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, endSession, sentenceProgress } from '../player/listen.ts'
+import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, endSession, sentenceProgress, seekFraction } from '../player/listen.ts'
 import { engine } from '../engine/engine.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, VoicePicker } from '../components/chrome.tsx'
@@ -192,19 +192,49 @@ export function ListenPage() {
 function ProgressLine() {
   const s = useStore(listen)
   const [, force] = useState(0)
+  const [drag, setDrag] = useState<number | null>(null)
+  const bar = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (!s.playing) return
+    if (!s.playing || drag !== null) return
     const id = setInterval(() => force((n) => n + 1), 250)
     return () => clearInterval(id)
-  }, [s.playing])
+  }, [s.playing, drag])
   const n = Math.max(1, s.segments.length)
   const done = s.active ? (s.current + sentenceProgress()) / n : 0
   let ahead = s.current
   while (ahead < s.rendered.length && s.rendered[ahead]) ahead++
+  const shown = drag ?? done
+  const fracAt = (x: number) => {
+    const r = bar.current!.getBoundingClientRect()
+    return Math.max(0, Math.min(1, (x - r.left) / r.width))
+  }
+  const target = drag !== null ? Math.min(n - 1, Math.floor(drag * n)) : null
   return (
-    <div className="player-progress" aria-hidden>
-      <b style={{ width: `${(ahead / n) * 100}%`, background: 'var(--line-2)' }} />
-      <i style={{ width: `${done * 100}%` }} />
+    <div
+      ref={bar}
+      className={`scrubber ${drag !== null ? 'dragging' : ''} ${s.active ? '' : 'off'}`}
+      role="slider" aria-label="Position" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(shown * 100)}
+      tabIndex={s.active ? 0 : -1}
+      onPointerDown={(e) => { if (!s.active) return; e.currentTarget.setPointerCapture(e.pointerId); setDrag(fracAt(e.clientX)) }}
+      onPointerMove={(e) => { if (drag !== null) setDrag(fracAt(e.clientX)) }}
+      onPointerUp={(e) => { if (drag === null) return; const f = fracAt(e.clientX); setDrag(null); seekFraction(f) }}
+      onPointerCancel={() => setDrag(null)}
+      onKeyDown={(e) => {
+        if (!s.active) return
+        if (e.key === 'ArrowRight') seekFraction(Math.min(1, done + 1 / n))
+        else if (e.key === 'ArrowLeft') seekFraction(Math.max(0, done - 1 / n))
+      }}
+    >
+      <div className="player-progress">
+        <b style={{ width: `${(ahead / n) * 100}%`, background: 'var(--line-2)' }} />
+        <i style={{ width: `${shown * 100}%`, transition: drag !== null ? 'none' : undefined }} />
+      </div>
+      {s.active && <span className="scrub-thumb" style={{ left: `${shown * 100}%` }} />}
+      {target !== null && (
+        <span className="scrub-tip" style={{ left: `${Math.min(88, Math.max(12, drag! * 100))}%` }}>
+          Sentence {target + 1} of {n}{s.rendered[target] ? '' : ' · not ready yet'}
+        </span>
+      )}
     </div>
   )
 }

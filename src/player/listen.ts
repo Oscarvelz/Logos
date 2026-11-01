@@ -214,7 +214,7 @@ export async function play(from?: number) {
   await playIndex(idx)
 }
 
-async function playIndex(i: number) {
+async function playIndex(i: number, startFrac = 0) {
   cancelDevice()
   const s = listen.get()
   if (i < 0 || i >= s.segments.length) return
@@ -235,14 +235,17 @@ async function playIndex(i: number) {
   }
   if (my !== token || listen.get().current !== i || !listen.get().playing) return
   // We ran dry. If this phone renders slower than it speaks, build a head start
-  // big enough to play the rest without stopping (capped), instead of a pause
-  // after every sentence.
-  if (stalled || !allReadyFrom(i)) {
+  // big enough to play the rest without stopping, instead of a pause after every
+  // sentence. A sentence that is already rendered (going back, seeking, tapping
+  // a sentence) plays at once.
+  if (stalled && !allReadyFrom(i)) {
     const ok = await buildCushion(i, my)
     if (!ok) return
   }
   const a = el()
   a.src = r.url
+  if (startFrac > 0) await setTimeWhenReady(a, startFrac * r.duration)
+  if (my !== token) return
   a.playbackRate = settings.get().listenSpeed
   listen.set({ buffering: false })
   try {
@@ -251,6 +254,14 @@ async function playIndex(i: number) {
     if (my !== token) return
     listen.set({ playing: false, error: (err as Error).name === 'NotAllowedError' ? 'Tap play to start audio.' : (err as Error).message })
   }
+}
+
+function setTimeWhenReady(a: HTMLAudioElement, t: number): Promise<void> {
+  return new Promise((resolve) => {
+    const go = () => { try { a.currentTime = t } catch { /* ignore */ } resolve() }
+    if (a.readyState >= 1) go()
+    else { a.addEventListener('loadedmetadata', go, { once: true }); setTimeout(resolve, 1500) }
+  })
 }
 
 // Preload mode: hold playback until enough audio is ready that it can read to
@@ -387,6 +398,40 @@ export function seek(i: number) {
   const s = listen.get()
   if (!s.active) return
   void play(Math.max(0, Math.min(s.segments.length - 1, i)))
+}
+
+/**
+ * Seek anywhere in the text, like a video scrubber. `f` is 0..1 across all
+ * sentences (the same scale the progress bar shows). Ready audio seeks
+ * instantly; a sentence that isn't rendered yet jumps the queue.
+ */
+export function seekFraction(f: number) {
+  const s = listen.get()
+  if (!s.active || !s.segments.length) return
+  const n = s.segments.length
+  const pos = Math.max(0, Math.min(n - 1e-6, f * n))
+  const idx = Math.floor(pos)
+  const frac = pos - idx
+  const r = cache.get(idx)
+  if (s.mode === 'kokoro' && audio && r && audio.src === r.url && idx === s.current) {
+    // Same sentence: just move the playhead.
+    audio.currentTime = frac * r.duration
+    if (s.finished) listen.set({ finished: false })
+    updatePosition()
+    return
+  }
+  if (s.playing) { void playIndex(idx, frac); return }
+  // Paused: move there and stay paused (resume continues from the new spot).
+  token++
+  cancelDevice()
+  listen.set({ current: idx, finished: false, mode: r ? 'kokoro' : s.mode, buffering: false })
+  if (r) {
+    const a = el()
+    quietPause()
+    a.src = r.url
+    void setTimeWhenReady(a, frac * r.duration)
+  } else if (kokoroUsable()) prefetch(idx)
+  updateMediaSession()
 }
 
 export function next() {
