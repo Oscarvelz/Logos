@@ -266,7 +266,10 @@ async function startLoad() {
   requestedDevice = device
   requestedDtype = dtype
   ls.set(LOADING_KEY, JSON.stringify({ device, dtype, t: Date.now() }))
-  getWorker().postMessage({ type: 'load', device, dtype } satisfies WorkerRequest)
+  // Tuning knobs (tests / diagnostics): logos.spin=1 lets ORT threads busy-wait, logos.threads=N.
+  const spin = ls.get('logos.spin') === '1'
+  const threads = Number(ls.get('logos.threads')) || undefined
+  getWorker().postMessage({ type: 'load', device, dtype, spin, threads } satisfies WorkerRequest)
 }
 
 export function synthesize(text: string, voice: string, speed: number, opts: { priority?: number; signal?: AbortSignal } = {}): Promise<SynthResult> {

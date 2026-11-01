@@ -14,7 +14,7 @@ export type Device = 'webgpu' | 'wasm'
 export type Dtype = 'fp32' | 'fp16' | 'q8'
 
 export type WorkerRequest =
-  | { type: 'load'; device: Device; dtype: Dtype }
+  | { type: 'load'; device: Device; dtype: Dtype; spin?: boolean; threads?: number }
   | { type: 'generate'; id: number; text: string; voice: string; phonemeLang: 'en-us' | 'en' | 'es'; speed: number }
 
 export type ProgressInfo = { status?: string; file?: string; progress?: number; loaded?: number; total?: number }
@@ -58,34 +58,67 @@ async function handleLoad(msg: Extract<WorkerRequest, { type: 'load' }>) {
       // WASM binary Vite bundled next to this chunk (same origin, works offline).
       onnx.wasm.wasmPaths = undefined
       const cores = (self.navigator?.hardwareConcurrency ?? 2)
-      onnx.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(4, cores - 2)) /* leave cores free so scrolling stays smooth */ : 1
+      onnx.wasm.numThreads = self.crossOriginIsolated ? (msg.threads || Math.max(1, Math.min(4, cores - 2))) /* leave cores free so scrolling stays smooth */ : 1
     }
     env.allowLocalModels = false
     env.useBrowserCache = true
     const { KokoroTTS } = await import('kokoro-js')
-    const load = (device: Device, dtype: Dtype) => KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
-      device, dtype,
-      progress_callback: (info: unknown) => post({ type: 'progress', info: info as ProgressInfo }),
-    })
+    const { StyleTextToSpeech2Model, AutoTokenizer } = await import('@huggingface/transformers')
+    // Same as KokoroTTS.from_pretrained, but with session options it doesn't pass
+    // through: WASM worker threads sleep instead of busy-spinning between ops,
+    // which leaves the phone's cores to the page (smooth visualizer and
+    // scrolling) and keeps it cooler, so it throttles less on long texts.
+    const load = async (device: Device, dtype: Dtype): Promise<KokoroInstance> => {
+      const progress_callback = (info: unknown) => post({ type: 'progress', info: info as ProgressInfo })
+      const session_options = device === 'wasm' && msg.spin === false
+        ? { extra: { session: { intra_op: { allow_spinning: '0' }, inter_op: { allow_spinning: '0' } } } }
+        : {}
+      const [model, tokenizer] = await Promise.all([
+        StyleTextToSpeech2Model.from_pretrained(KOKORO_MODEL_ID, { device, dtype, progress_callback, session_options } as never),
+        AutoTokenizer.from_pretrained(KOKORO_MODEL_ID, { progress_callback } as never),
+      ])
+      return new (KokoroTTS as unknown as new (m: unknown, t: unknown) => KokoroInstance)(model, tokenizer)
+    }
     let device = msg.device
     let dtype = msg.dtype
     try {
       tts = await load(device, dtype)
       // Many phone GPUs load the model but fail on the first real run
       // ("createBuffer … too large"); find out now, not when you press play.
-      if (device === 'webgpu') await tts.generate('Hi.', { voice: 'af_heart' as never })
+      if (device === 'webgpu') {
+        const probe = (await tts.generate('Hello there, this is a quick check.', { voice: 'af_heart' as never })) as { audio?: Float32Array }
+        const bad = probe.audio ? audioFault(probe.audio, 'Hello there, this is a quick check.') : 'no audio'
+        if (bad) throw new Error(`WebGPU ${dtype} self-test: ${bad}`)
+      }
     } catch (err) {
       if (device !== 'webgpu') throw err
       tts = null
       device = 'wasm'; dtype = 'q8'
       tts = await load(device, dtype)
     }
+    loadedDevice = device
     post({ type: 'loaded', device, dtype, ms: Math.round(performance.now() - t0) })
   })()
   try { await loading } catch (err) {
     tts = null
     post({ type: 'loadError', message: err instanceof Error ? err.message : String(err) })
   } finally { loading = null }
+}
+
+let loadedDevice: Device | null = null
+
+/** Returns a reason when synthesized audio is unusable (NaN, or silent for real text). */
+function audioFault(x: Float32Array, text: string): string | null {
+  let peak = 0
+  const step = Math.max(1, Math.floor(x.length / 20000))
+  for (let i = 0; i < x.length; i += step) {
+    const v = x[i]
+    if (v !== v) return 'produced invalid audio (NaN)'
+    const a = v < 0 ? -v : v
+    if (a > peak) peak = a
+  }
+  if (peak < 1e-3 && /[\p{L}\p{N}]{2}/u.test(text)) return 'produced silent audio'
+  return null
 }
 
 async function handleGenerate(msg: Extract<WorkerRequest, { type: 'generate' }>) {
@@ -100,6 +133,11 @@ async function handleGenerate(msg: Extract<WorkerRequest, { type: 'generate' }>)
       samples = audio.audio
     }
     if (!samples || samples.length === 0) throw new Error('No audio produced')
+    // Half-precision GPU runs can overflow and return NaN or all-zero audio,
+    // which played as silence. Treat that as an engine failure so Logos falls
+    // back instead of "playing" blank sentences.
+    const bad = audioFault(samples, msg.text)
+    if (bad) throw new Error(`${loadedDevice === 'webgpu' ? 'GPU ' : ''}${bad}`)
     const copy = samples.buffer.byteLength === samples.byteLength ? samples : samples.slice()
     post({ type: 'generated', id: msg.id, samples: copy, sampleRate: SAMPLE_RATE, ms: Math.round(performance.now() - t0) }, [copy.buffer])
   } catch (err) {

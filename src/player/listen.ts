@@ -517,3 +517,12 @@ export function installMediaSession() {
 
 // Starting a Library clip or a voice preview pauses listening (never two at once).
 onClipPlay(() => { if (listen.get().playing) pause() })
+
+/** What the off-thread visualizer needs: the playing sentence's envelope and the raw playhead. */
+export function vizSnapshot(): { key: string; env: Float32Array | null; time: number; rate: number; running: boolean } {
+  const s = listen.get()
+  if (!s.playing || s.mode !== 'kokoro' || !audio) return { key: '', env: null, time: 0, rate: 1, running: false }
+  const r = cache.get(s.current)
+  if (!r || audio.src !== r.url) return { key: '', env: null, time: 0, rate: 1, running: false }
+  return { key: r.url, env: r.env, time: audio.currentTime, rate: audio.playbackRate || 1, running: !audio.paused }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { levels, listen } from '../player/listen.ts'
+import { levels, listen, vizSnapshot } from '../player/listen.ts'
 
 /**
  * Mirrored-bar visualizer. Reads the real loudness envelope of the sentence
@@ -10,6 +10,8 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const canvas = ref.current!
+    const off = startOffThread(canvas, bars)
+    if (off) return off
     const ctx = canvas.getContext('2d')!
     const target = new Float32Array(bars)
     const shown = new Float32Array(bars)
@@ -91,4 +93,51 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     return () => { cancelAnimationFrame(raf); themeObs.disconnect() }
   }, [bars])
   return <canvas ref={ref} className="viz" aria-hidden />
+}
+
+/**
+ * Preferred path: hand the canvas to a worker that draws every frame on its own
+ * thread; the page only sends it the sentence envelope and the playhead, a few
+ * times a second. Returns a cleanup, or null where OffscreenCanvas is missing.
+ */
+function startOffThread(canvas: HTMLCanvasElement, bars: number): (() => void) | null {
+  if (typeof canvas.transferControlToOffscreen !== 'function' || typeof OffscreenCanvas === 'undefined') return null
+  if (canvas.dataset.off) return () => {}
+  let worker: Worker | undefined
+  let offscreen: OffscreenCanvas
+  try {
+    worker = new Worker(new URL('./viz.worker.ts', import.meta.url), { type: 'module' })
+    offscreen = canvas.transferControlToOffscreen()
+    canvas.dataset.off = '1'
+  } catch { worker?.terminate(); return null }
+  const w = worker
+  w.postMessage({ type: 'init', canvas: offscreen, bars }, [offscreen])
+  const css = (n: string, d: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || d
+  const sendColors = () => w.postMessage({ type: 'colors', a: css('--accent', '#e9bd72'), b: css('--accent-2', '#f3d39c') })
+  const sendSize = () => w.postMessage({ type: 'size', w: canvas.clientWidth, h: canvas.clientHeight, dpr: Math.min(2, devicePixelRatio || 1) })
+  sendColors(); sendSize()
+  const themeObs = new MutationObserver(sendColors)
+  themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  const ro = new ResizeObserver(sendSize)
+  ro.observe(canvas)
+  let envKey = ''
+  let lastSig = ''
+  const tick = () => {
+    const s = listen.get()
+    const v = vizSnapshot()
+    if (v.key !== envKey) {
+      envKey = v.key
+      w.postMessage({ type: 'env', key: v.key, env: v.env ? v.env.slice() : null })
+    }
+    const mode = v.env ? 'live' : s.playing && s.mode === 'device' ? 'device' : s.buffering ? 'buffering' : 'idle'
+    const sig = `${v.key}|${v.time}|${v.running}|${mode}|${v.rate}`
+    if (sig !== lastSig || mode !== 'idle') {
+      lastSig = sig
+      w.postMessage({ type: 'clock', key: v.key, time: v.time, rate: v.rate, running: v.running, mode })
+    }
+  }
+  tick()
+  const id = setInterval(tick, 100)
+  const unsub = listen.subscribe(tick)
+  return () => { clearInterval(id); unsub(); ro.disconnect(); themeObs.disconnect(); w.terminate() }
 }
