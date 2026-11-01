@@ -58,7 +58,7 @@ self.addEventListener('fetch', (event) => {
     }))
     return
   }
-  if (url.origin !== self.location.origin || !req.url.startsWith(SCOPE)) return
+  if (url.origin !== self.location.origin || !req.url.startsWith(SCOPE) || req.url.startsWith(SCOPE + 'lab/')) return // lab pages are separate
 
   // Navigations (including share-target ?text=...) → network first, cached shell offline.
   if (req.mode === 'navigate') {
