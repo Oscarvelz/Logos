@@ -23,51 +23,14 @@ function swBuildId(): Plugin {
   }
 }
 
-// ephone's browser bundle contains a Node-only fallback branch that is never
-// entered in a browser; strip it so Vite does not try to externalize node:module.
-// (Adapted from BetterTTS.)
-function ephoneBrowserPatch(): Plugin {
-  return {
-    name: 'ephone-browser-patch',
-    enforce: 'pre',
-    transform(code, id) {
-      if (!id.replace(/\\/g, '/').includes('/ephone/ephone.js')) return null
-      return {
-        code: code
-          .replace(/const\{createRequire\}=await import\("node:module"\);var require=createRequire\(import\.meta\.url\)/u, 'const require = undefined')
-          .replace(/import\("node:module"\)/gu, 'Promise.resolve({ createRequire: () => undefined })')
-          .replace(/require\("node:[^"]+"\)/gu, 'undefined')
-          // Only the Romance pack (Spanish) is used; don't emit 30 MB of other languages.
-          .replace(/import\('\.\/lang\/(all|en-all|en-us|gmw|jpx|sit|zlx)\.js'\)/gu, "Promise.reject(new Error('language pack not bundled'))"),
-        map: null,
-      }
-    },
-  }
-}
-
-// GitHub push protection mistakes the model name string "Mistral3ForConditionalGeneration"
-// in transformers.js 4 for a secret and refuses the deploy push; split the literal.
-function pushScanSafe(): Plugin {
-  const fix = (code: string) => code.split('"Mistral3ForConditionalGeneration"').join('"Mistral3"+"ForConditionalGeneration"')
-  return {
-    name: 'logos-push-scan-safe',
-    generateBundle(_opts, bundle) {
-      for (const f of Object.values(bundle)) {
-        if (f.type === 'chunk' && f.code.includes('"Mistral3ForConditionalGeneration"')) f.code = fix(f.code)
-        else if (f.type === 'asset' && f.fileName.endsWith('.js') && typeof f.source === 'string' && f.source.includes('"Mistral3ForConditionalGeneration"')) f.source = fix(f.source)
-      }
-    },
-  }
-}
-
 export default defineConfig({
   base: BASE.endsWith('/') ? BASE : `${BASE}/`,
-  plugins: [react(), ephoneBrowserPatch(), swBuildId(), pushScanSafe()],
-  worker: { format: 'es', plugins: () => [ephoneBrowserPatch(), pushScanSafe()] },
+  plugins: [react(), swBuildId()],
+  worker: { format: 'es' },
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 4000,
     assetsInlineLimit: 0,
   },
-  optimizeDeps: { exclude: ['kokoro-js', '@huggingface/transformers', 'ephone'] },
+  optimizeDeps: { exclude: ['pocket-tts-onnx'] },
 })

@@ -23,24 +23,15 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     const themeObs = new MutationObserver(() => { colors = [accent(), accent2()] })
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
-    // 30 fps is plenty for bars; when idle and settled, stop drawing entirely so
-    // the CPU goes to the voice engine and scrolling.
-    // Full frame rate while sound plays (smooth), 30 fps otherwise; when idle
-    // and settled, stop drawing so the CPU goes to the voice engine.
+    // Fallback for browsers without OffscreenCanvas: draw on the page, every frame.
     let last = 0
-    let idleFrames = 0
     let grad: CanvasGradient | null = null
     let gradKey = ''
     const draw = (now = performance.now()) => {
       raf = requestAnimationFrame(draw)
-      const st = listen.get()
-      const minGap = st.playing && st.mode === 'kokoro' ? 0 : 32
-      if (now - last < minGap) return
       const dt = Math.min(0.1, (now - last) / 1000)
       t += dt
       last = now
-      const st0 = listen.get()
-      if (!st0.playing && !st0.buffering) { if (++idleFrames > 45) return } else idleFrames = 0
       const dpr = Math.min(2, devicePixelRatio || 1)
       const w = canvas.clientWidth
       const h = canvas.clientHeight

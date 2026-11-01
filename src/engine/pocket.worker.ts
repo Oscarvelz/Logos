@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 // PocketTTS (Kyutai, 100M, CC BY 4.0) running on ONNX Runtime WASM, one
 // language per worker. Built for CPUs: it decodes speech in 80 ms frames and
-// runs faster than real time on phones where Kokoro cannot.
+// runs faster than real time on phone processors.
 import { Pipeline } from 'pocket-tts-onnx'
 
 export type PocketRequest =

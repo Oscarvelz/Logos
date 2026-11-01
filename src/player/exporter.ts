@@ -1,5 +1,5 @@
-// Full-audio export: synthesize every sentence (at Kokoro's native speed
-// control), join with natural pauses, encode MP3 (incrementally) or WAV, and
+// Full-audio export: synthesize every sentence (speed applied without changing
+// pitch), join with natural pauses, encode MP3 (incrementally) or WAV, and
 // save to the Library. Lives outside React so it survives page changes.
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'

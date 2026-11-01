@@ -25,7 +25,7 @@ let env: Float32Array | null = null
 let mode: Mode = 'idle'
 let clockKey = ''
 let raw = 0, rawAt = 0, rate = 1, running = false, shownTime = 0
-let t = 0, last = 0, idleFrames = 0, timer = 0
+let t = 0, last = 0, timer = 0
 
 self.onmessage = (e: MessageEvent<Msg>) => {
   const m = e.data
@@ -37,14 +37,13 @@ self.onmessage = (e: MessageEvent<Msg>) => {
   } else if (m.type === 'size') {
     W = m.w; H = m.h; DPR = m.dpr
     if (canvas) { canvas.width = Math.max(1, Math.round(W * DPR)); canvas.height = Math.max(1, Math.round(H * DPR)) }
-    grad = null; idleFrames = 0
+    grad = null
   } else if (m.type === 'colors') {
-    colors = [m.a, m.b]; grad = null; idleFrames = 0
+    colors = [m.a, m.b]; grad = null
   } else if (m.type === 'env') {
     envKey = m.key; env = m.env
   } else if (m.type === 'clock') {
     const now = performance.now()
-    if (m.mode !== mode) idleFrames = 0
     mode = m.mode
     if (m.key !== clockKey || m.time < raw - 0.05 || Math.abs(m.time - shownTime) > 0.4) { clockKey = m.key; shownTime = m.time; raw = m.time; rawAt = now }
     else if (m.time !== raw) { raw = m.time; rawAt = now }
@@ -67,12 +66,8 @@ function playhead(now: number) {
 
 function frame(now: number) {
   const live = mode === 'live' && env && envKey === clockKey
-  const minGap = live ? 0 : 32
-  if (now - last < minGap) { schedule(); return }
   const dt = Math.min(0.1, (now - last) / 1000)
   t += dt; last = now
-  if (mode === 'idle' && ++idleFrames > 45) return // settled: stop until something changes
-  if (mode !== 'idle') idleFrames = 0
   schedule()
   if (!ctx) return
   if (live && env) {

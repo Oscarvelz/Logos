@@ -1,6 +1,6 @@
 // PocketTTS manager: one worker per language (each model is its own 177 MB
 // download), a priority queue shared with the rest of Logos, and progress
-// reported in the same shape as the Kokoro engine.
+// reported to the rest of the app through engine.ts.
 import { createStore } from '../lib/store.ts'
 import type { PocketRequest, PocketResponse } from './pocket.worker.ts'
 

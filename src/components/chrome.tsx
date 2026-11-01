@@ -1,7 +1,7 @@
 import { AudioLines, Library, Mic2, Pause, Play, Settings2, SkipForward, Sparkles, Star, Check, Download, Loader2 } from 'lucide-react'
 import { navigate, useRoute, type Route } from '../lib/router.ts'
 import { useStore } from '../lib/store.ts'
-import { engine, ensureModel, MODEL_SIZE_MB, POCKET_SIZE_MB } from '../engine/engine.ts'
+import { engine, ensureModel, POCKET_SIZE_MB } from '../engine/engine.ts'
 import { listen, toggle, next } from '../player/listen.ts'
 import { settings } from '../lib/settings.ts'
 import { VOICES, LANG_LABEL, type Lang, type Voice } from '../lib/voices.ts'
@@ -53,17 +53,17 @@ export function StatusPill({ compact }: { compact?: boolean }) {
   if (e.status === 'ready') {
     return (
       <button className="status-pill ready" onClick={() => navigate('settings')} title="Neural voice ready">
-        <span className="led" />{compact ? 'Ready' : e.family === 'pocket' ? 'Pocket · Fast' : `Kokoro · ${e.device === 'webgpu' ? 'WebGPU' : 'WASM'}`}
+        <span className="led" />{compact ? 'Ready' : 'Neural · Ready'}
       </button>
     )
   }
-  if (e.status === 'loading' && e.phase !== 'download') {
+  if (e.status === 'loading' && e.phase === 'warm') {
     // The voice is on this phone; it's only being loaded into memory, which
     // happens quietly each time the app opens. Play works right away (it waits
     // a moment for the first sentence), so don't make it look unready.
     return (
       <button className="status-pill ready warming" onClick={() => navigate('settings')} title="Voice on this device · loading into memory">
-        <span className="led" />{compact ? 'Ready' : e.family === 'pocket' ? 'Pocket · Fast' : 'Kokoro · WebGPU'}
+        <span className="led" />{compact ? 'Ready' : 'Neural · Ready'}
       </button>
     )
   }
@@ -79,7 +79,7 @@ export function StatusPill({ compact }: { compact?: boolean }) {
     return <button className="status-pill" style={{ color: 'var(--danger)' }} onClick={() => navigate('settings')}>Engine error</button>
   }
   return (
-    <button className="status-pill" onClick={() => { void ensureModel().catch(() => {}) }} title={`Download the neural voice (~${e.family === "pocket" ? POCKET_SIZE_MB : MODEL_SIZE_MB.q8} MB)`}>
+    <button className="status-pill" onClick={() => { void ensureModel().catch(() => {}) }} title={`Download the neural voice (~${POCKET_SIZE_MB} MB)`}>
       <Download size={16} style={{ marginLeft: 4 }} />{compact ? 'Voice' : 'Neural voice'}
     </button>
   )
@@ -132,7 +132,7 @@ export function VoicePicker({ open, onClose, value, onPick, lang }: { open: bool
             <button key={v.id} className={`pick ${value === v.id ? 'on' : ''}`} onClick={() => { onPick(v.id); onClose() }}>
               <Avatar voice={v} />
               <div className="grow">
-                <div className="voice-name">{v.name} <span className="badge">{v.accent}</span>{st.favorites.includes(v.id) && <Star size={13} fill="var(--accent)" color="var(--accent)" />}</div>
+                <div className="voice-name">{v.name} <span className="badge">{v.lang === 'es' ? 'ES' : 'EN'}</span>{st.favorites.includes(v.id) && <Star size={13} fill="var(--accent)" color="var(--accent)" />}</div>
                 <div className="voice-tag">{v.tagline}</div>
               </div>
               {value === v.id && <Check size={20} color="var(--accent)" />}
@@ -150,14 +150,14 @@ function voiceName(id: string) {
 
 export function EngineNote() {
   const e = useStore(engine)
-  if (e.status !== 'loading' || e.phase !== 'download') return null
+  if (e.status !== 'loading' || e.phase === 'warm') return null
   return (
     <div className="engine-note">
       <Loader2 size={16} className="spin" color="var(--accent)" />
       {e.phase === 'download'
         ? <><span>Downloading neural voice{e.total ? ` · ${formatBytes(e.loaded)} of ${formatBytes(e.total)}` : '…'}</span>
             <span className="bar"><i style={{ width: `${Math.round(e.progress * 100)}%` }} /></span></>
-        : <span>Starting the neural voice · already saved on this device</span>}
+        : <span>Getting the neural voice ready…</span>}
     </div>
   )
 }

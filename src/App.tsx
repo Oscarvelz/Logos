@@ -3,7 +3,7 @@ import { useRoute } from './lib/router.ts'
 import { useStore } from './lib/store.ts'
 import { settings, applyTheme } from './lib/settings.ts'
 import { listen, installMediaSession } from './player/listen.ts'
-import { isModelCached, ensureModel, lastLoadCrashed, purgeUnusedModels } from './engine/engine.ts'
+import { isModelCached, ensureModel, lastLoadCrashed, removeLegacyEngine } from './engine/engine.ts'
 import { refreshLibrary } from './lib/library.ts'
 import { BottomNav, SideRail, StatusPill, MiniPlayer, BrandMark } from './components/chrome.tsx'
 import { Toasts } from './components/ui.tsx'
@@ -35,7 +35,7 @@ export default function App() {
     // Model already on this device? Warm it up in the background (offline-ready).
     // Skipped when the last start never finished (the tab crashed), so a bad
     // load can never turn into a reload loop; play still loads it on demand.
-    void purgeUnusedModels()
+    void removeLegacyEngine()
     if (!lastLoadCrashed()) void isModelCached().then((cached) => { if (cached) ensureModel().catch(() => {}) })
   }, [])
 

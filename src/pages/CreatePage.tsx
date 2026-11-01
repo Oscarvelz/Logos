@@ -8,7 +8,7 @@ import { VOICES, voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
 import { exportJob, runExport, cancelExport, resetExport, titleFrom } from '../player/exporter.ts'
 import { clipPlayer, playClip, seekClip } from '../player/clip.ts'
 import { downloadBlob, formatBytes, slugify } from '../lib/audio.ts'
-import { engine, MODEL_SIZE_MB, POCKET_SIZE_MB } from '../engine/engine.ts'
+import { engine, POCKET_SIZE_MB } from '../engine/engine.ts'
 import { EngineNote, VoicePicker } from '../components/chrome.tsx'
 import { Avatar, Range, Seg, toast } from '../components/ui.tsx'
 import { navigate } from '../lib/router.ts'
@@ -105,7 +105,7 @@ export function CreatePage() {
                   style={{ width: '100%', height: 48, borderRadius: 14, border: '1px solid var(--line)', background: 'var(--surface)', padding: '0 14px', outline: 'none' }} />
               </div>
               <button className="btn primary block" onClick={generate} disabled={!text.trim()} style={{ height: 56, fontSize: 16 }}><Sparkles size={18} /> Generate audio</button>
-              {e.status !== 'ready' && <p className="muted small" style={{ margin: 0, textAlign: 'center' }}>First run downloads the neural voice (~{e.family === "pocket" ? POCKET_SIZE_MB : MODEL_SIZE_MB.q8} MB), then works offline.</p>}
+              {e.status !== 'ready' && <p className="muted small" style={{ margin: 0, textAlign: 'center' }}>First run downloads the neural voice (~{POCKET_SIZE_MB} MB), then works offline.</p>}
               {job.status === 'error' && <div className="error-note">{job.error}</div>}
             </div>
           )}

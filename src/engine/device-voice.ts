@@ -1,5 +1,5 @@
 // Built-in browser voices (speechSynthesis): an instant bridge while the
-// Kokoro model downloads on first use.
+// neural voice downloads on first use.
 import type { Lang } from '../lib/voices.ts'
 
 export function deviceSpeechAvailable(): boolean {

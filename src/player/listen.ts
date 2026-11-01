@@ -1,6 +1,6 @@
 // Listen-on-the-fly controller: sentence-chunked streaming with look-ahead
 // synthesis, a single <audio> element (background + lock-screen friendly),
-// Media Session controls, and a device-voice bridge while Kokoro downloads.
+// Media Session controls, and a device-voice bridge while the neural voice downloads.
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
 import { segmentText, speakable, estimateSeconds, type Segment } from '../lib/text.ts'
@@ -20,7 +20,7 @@ export type ListenState = {
   current: number
   playing: boolean
   buffering: boolean
-  mode: 'kokoro' | 'device' | null
+  mode: 'neural' | 'device' | null
   rendered: boolean[]
   error: string | null
   finished: boolean
@@ -85,7 +85,7 @@ function el(): HTMLAudioElement {
   ;(audio as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = true
   audio.addEventListener('ended', () => {
     const s = listen.get()
-    if (s.mode !== 'kokoro' || !s.playing) return
+    if (s.mode !== 'neural' || !s.playing) return
     advance()
   })
   audio.addEventListener('pause', () => {
@@ -93,7 +93,7 @@ function el(): HTMLAudioElement {
     if (!audio) return
     if (internalPauses > 0) { internalPauses--; return }
     const s = listen.get()
-    if (s.mode === 'kokoro' && s.playing && !audio.ended && audio.currentTime < (audio.duration || Infinity) - 0.05) {
+    if (s.mode === 'neural' && s.playing && !audio.ended && audio.currentTime < (audio.duration || Infinity) - 0.05) {
       listen.set({ playing: false })
       updateMediaSession()
     }
@@ -101,7 +101,7 @@ function el(): HTMLAudioElement {
   audio.addEventListener('emptied', () => { internalPauses = 0 })
   audio.addEventListener('play', () => {
     const s = listen.get()
-    if (!s.playing && s.mode === 'kokoro') listen.set({ playing: true })
+    if (!s.playing && s.mode === 'neural') listen.set({ playing: true })
     updateMediaSession()
   })
   audio.addEventListener('timeupdate', updatePosition)
@@ -220,7 +220,7 @@ function prefetch(from: number) {
   for (let i = from; i <= end; i++) render(i, i === s.current ? PLAYHEAD_PRIORITY : LISTEN_PRIORITY - (i - from)).catch(() => {})
 }
 
-const kokoroUsable = () => engine.get().status === 'ready'
+const neuralUsable = () => engine.get().status === 'ready'
 
 export async function play(from?: number) {
   const s = listen.get()
@@ -228,7 +228,7 @@ export async function play(from?: number) {
   stopClipPlayer()
   let idx = from ?? (s.finished ? 0 : s.current)
   if (idx >= s.segments.length) idx = 0
-  if (!kokoroUsable()) {
+  if (!neuralUsable()) {
     const st = settings.get()
     if (st.autoDownload || engine.get().cached) ensureModel().catch(() => {})
     if (st.deviceFallback && deviceSpeechAvailable() && !cache.has(idx)) {
@@ -247,9 +247,9 @@ async function playIndex(i: number, startFrac = 0) {
   const stalled = !cache.has(i)
   if (stalled) keepAlive()
   else quietPause()
-  listen.set({ current: i, playing: true, mode: 'kokoro', finished: false, error: null, buffering: stalled })
+  listen.set({ current: i, playing: true, mode: 'neural', finished: false, error: null, buffering: stalled })
   updateMediaSession()
-  if (!kokoroUsable()) ensureModel().catch((e) => { if (my === token) listen.set({ playing: false, buffering: false, error: (e as Error).message }) })
+  if (!neuralUsable()) ensureModel().catch((e) => { if (my === token) listen.set({ playing: false, buffering: false, error: (e as Error).message }) })
   prefetch(i)
   let r: Rendered
   try {
@@ -356,7 +356,7 @@ function advance() {
   const s = listen.get()
   const nxt = s.current + 1
   if (nxt >= s.segments.length) { finish(); return }
-  if (s.mode === 'device' && !(kokoroUsable() && cache.has(nxt))) { void playDevice(nxt); return }
+  if (s.mode === 'device' && !(neuralUsable() && cache.has(nxt))) { void playDevice(nxt); return }
   void playIndex(nxt)
 }
 
@@ -373,7 +373,7 @@ async function playDevice(i: number) {
   quietPause()
   listen.set({ current: i, playing: true, mode: 'device', finished: false, buffering: false, error: null })
   updateMediaSession()
-  if (kokoroUsable()) prefetch(i + 1)
+  if (neuralUsable()) prefetch(i + 1)
   const seg = s.segments[i]
   const ok = await speakDevice(seg.text, seg.lang, settings.get().listenSpeed)
   if (my !== token || !listen.get().playing) return
@@ -385,7 +385,7 @@ async function playDevice(i: number) {
   advance()
 }
 
-// Once Kokoro is ready mid-session, render ahead so the next sentence boundary can switch over.
+// Once the neural voice is ready mid-session, render ahead so the next sentence boundary can switch over.
 engine.subscribe(() => {
   const s = listen.get()
   if (engine.get().status === 'ready' && s.mode === 'device' && s.playing && pending.size === 0 && cache.size === 0) {
@@ -406,7 +406,7 @@ export function pause() {
 export function resume() {
   const s = listen.get()
   if (s.playing) return
-  if (s.mode === 'kokoro' && audio?.src && !s.finished && cache.get(s.current)?.url === audio.src && !audio.ended) {
+  if (s.mode === 'neural' && audio?.src && !s.finished && cache.get(s.current)?.url === audio.src && !audio.ended) {
     stopClipPlayer()
     listen.set({ playing: true })
     audio.playbackRate = settings.get().listenSpeed
@@ -440,7 +440,7 @@ export function seekFraction(f: number) {
   const idx = Math.floor(pos)
   const frac = pos - idx
   const r = cache.get(idx)
-  if (s.mode === 'kokoro' && audio && r && audio.src === r.url && idx === s.current) {
+  if (s.mode === 'neural' && audio && r && audio.src === r.url && idx === s.current) {
     // Same sentence: just move the playhead.
     audio.currentTime = frac * r.duration
     if (s.finished) listen.set({ finished: false })
@@ -451,13 +451,13 @@ export function seekFraction(f: number) {
   // Paused: move there and stay paused (resume continues from the new spot).
   token++
   cancelDevice()
-  listen.set({ current: idx, finished: false, mode: r ? 'kokoro' : s.mode, buffering: false })
+  listen.set({ current: idx, finished: false, mode: r ? 'neural' : s.mode, buffering: false })
   if (r) {
     const a = el()
     quietPause()
     a.src = r.url
     void setTimeWhenReady(a, frac * r.duration)
-  } else if (kokoroUsable()) prefetch(idx)
+  } else if (neuralUsable()) prefetch(idx)
   updateMediaSession()
 }
 
@@ -468,7 +468,7 @@ export function next() {
 
 export function prev() {
   const s = listen.get()
-  if (s.mode === 'kokoro' && audio && audio.currentTime > 2.5) seek(s.current)
+  if (s.mode === 'neural' && audio && audio.currentTime > 2.5) seek(s.current)
   else seek(s.current - 1)
 }
 
@@ -501,7 +501,7 @@ export function setRate(rate: number) {
 /** Visualizer feed: `count` levels around the playhead (0..1). */
 export function levels(count: number, out: Float32Array): boolean {
   const s = listen.get()
-  if (!s.playing || s.mode !== 'kokoro' || !audio) return false
+  if (!s.playing || s.mode !== 'neural' || !audio) return false
   const r = cache.get(s.current)
   if (!r || audio.src !== r.url) return false
   // Phones update audio.currentTime only a few times a second, which made the
@@ -539,7 +539,7 @@ function smoothTime(a: HTMLAudioElement): number {
 
 export function sentenceProgress(): number {
   const s = listen.get()
-  if (s.mode !== 'kokoro' || !audio) return 0
+  if (s.mode !== 'neural' || !audio) return 0
   const r = cache.get(s.current)
   return r && audio.src === r.url ? Math.min(1, audio.currentTime / r.duration) : 0
 }
@@ -593,7 +593,7 @@ onClipPlay(() => { if (listen.get().playing) pause() })
 /** What the off-thread visualizer needs: the playing sentence's envelope and the raw playhead. */
 export function vizSnapshot(): { key: string; env: Float32Array | null; time: number; rate: number; running: boolean } {
   const s = listen.get()
-  if (!s.playing || s.mode !== 'kokoro' || !audio) return { key: '', env: null, time: 0, rate: 1, running: false }
+  if (!s.playing || s.mode !== 'neural' || !audio) return { key: '', env: null, time: 0, rate: 1, running: false }
   const r = cache.get(s.current)
   if (!r || audio.src !== r.url) return { key: '', env: null, time: 0, rate: 1, running: false }
   return { key: r.url, env: r.env, time: audio.currentTime, rate: audio.playbackRate || 1, running: !audio.paused }

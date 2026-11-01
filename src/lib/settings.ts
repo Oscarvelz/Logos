@@ -2,11 +2,9 @@ import { createStore } from './store.ts'
 import type { Lang } from './voices.ts'
 
 export type Theme = 'dark' | 'light' | 'system'
-export type EngineChoice = 'auto' | 'webgpu' | 'wasm'
 
 export type Settings = {
   theme: Theme
-  engine: EngineChoice
   listenSpeed: number
   exportSpeed: number
   defaultVoice: Record<Lang, string>
@@ -25,11 +23,10 @@ const KEY = 'logos.settings.v1'
 
 const DEFAULTS: Settings = {
   theme: 'dark',
-  engine: 'auto',
   listenSpeed: 1,
   exportSpeed: 1,
   defaultVoice: { en: 'pk_alba', es: 'pk_lola' },
-  favorites: ['pk_alba', 'pk_lola', 'af_heart'],
+  favorites: ['pk_alba', 'pk_lola'],
   langMode: 'auto',
   voiceOverride: null,
   format: 'mp3',
@@ -51,7 +48,7 @@ function load(): Settings {
 }
 
 const initial = load()
-// WebGPU is not offered on phones any more (it crashed or failed there).
+// Settings migrations.
 let migrateEngine = false
 // 1.0.5: the built-in device voice is off by default (Oscar finds it ugly).
 try {
@@ -60,16 +57,17 @@ try {
     if (initial.deviceFallback) { initial.deviceFallback = false; migrateEngine = true }
   }
 } catch { /* storage blocked */ }
-// 1.2.0: PocketTTS voices become the defaults (much faster on phones; Oscar
-// preferred them to Kokoro). Kokoro voices stay one tap away.
+// Every voice is a PocketTTS voice (ids start with pk_). Anything else saved by
+// an older version of Logos is dropped here.
 try {
-  if (localStorage.getItem('logos.mig120') !== '1') {
-    localStorage.setItem('logos.mig120', '1')
-    initial.defaultVoice = { en: 'pk_alba', es: 'pk_lola' }
-    if (initial.voiceOverride && !initial.voiceOverride.startsWith('pk_')) initial.voiceOverride = null
-    for (const f of ['pk_alba', 'pk_lola']) if (!initial.favorites.includes(f)) initial.favorites = [f, ...initial.favorites]
-    migrateEngine = true
-  }
+  const ok = (id: string | null | undefined) => Boolean(id && id.startsWith('pk_'))
+  const d = initial.defaultVoice
+  if (!ok(d.en) || !ok(d.es)) { initial.defaultVoice = { en: ok(d.en) ? d.en : 'pk_alba', es: ok(d.es) ? d.es : 'pk_lola' }; migrateEngine = true }
+  if (initial.voiceOverride && !ok(initial.voiceOverride)) { initial.voiceOverride = null; migrateEngine = true }
+  const favs = initial.favorites.filter(ok)
+  if (favs.length !== initial.favorites.length) { initial.favorites = favs.length ? favs : ['pk_alba', 'pk_lola']; migrateEngine = true }
+  if ('engine' in initial) { delete (initial as Partial<Settings> & { engine?: unknown }).engine; migrateEngine = true }
+  localStorage.removeItem('logos.mig120')
 } catch { /* storage blocked */ }
 export const settings = createStore<Settings>(initial)
 settings.subscribe(() => {

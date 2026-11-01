@@ -23,6 +23,5 @@ SOFTWARE.
 
 ---
 Third-party voice models used at runtime (downloaded on first use, not bundled):
-- Kokoro-82M by hexgrad, Apache-2.0.
 - Pocket TTS by Kyutai, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/),
   via pocket-tts-onnx by thewh1teagle, CC BY 4.0. Models exported to ONNX; no changes by Logos.
