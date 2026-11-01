@@ -10,10 +10,11 @@ import { refreshVoices } from '../player/listen.ts'
 import { Avatar, toast } from '../components/ui.tsx'
 import previews from '../lib/previews.json'
 
-type Filter = 'all' | 'fav' | 'US' | 'UK' | 'ES'
+type Filter = 'all' | 'fav' | 'pocket' | 'US' | 'UK' | 'ES'
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'all', label: 'All voices' },
   { value: 'fav', label: 'Favorites' },
+  { value: 'pocket', label: 'Fast · PocketTTS' },
   { value: 'US', label: 'English · US' },
   { value: 'UK', label: 'English · UK' },
   { value: 'ES', label: 'Español' },
@@ -25,13 +26,13 @@ const livePreviews = new Map<string, Blob>()
 export function VoicesPage() {
   const st = useStore(settings)
   const [filter, setFilter] = useState<Filter>('all')
-  const list = VOICES.filter((v) => filter === 'all' || (filter === 'fav' ? st.favorites.includes(v.id) : v.accent === filter))
+  const list = VOICES.filter((v) => filter === 'all' || (filter === 'fav' ? st.favorites.includes(v.id) : filter === 'pocket' ? v.engine === 'pocket' : v.accent === filter))
   return (
     <div className="page wide">
       <div className="page-head">
         <div>
           <h1 className="page-title">Voices</h1>
-          <p className="page-sub">The best of Kokoro, hand-picked. Star your favorites, set a default per language.</p>
+          <p className="page-sub">PocketTTS voices run fast on your phone; Kokoro adds more variety. Star your favorites, set a default per language.</p>
         </div>
       </div>
       <div className="filter-row" role="tablist">
@@ -80,7 +81,7 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
       {isDefault && <span className="default-flag">Default · {v.lang === 'en' ? 'English' : 'Español'}</span>}
       <Avatar voice={v} playing={playing} />
       <div className="grow" style={{ minWidth: 0 }}>
-        <div className="voice-name">{v.name} <span className={`badge ${v.grade.startsWith('A') ? 'gold' : ''}`}>{v.grade}</span> <span className="badge">{v.accent}</span></div>
+        <div className="voice-name">{v.name} <span className={`badge ${v.grade.startsWith('A') || v.engine === 'pocket' ? 'gold' : ''}`}>{v.engine === 'pocket' ? 'Pocket · Fast' : v.grade}</span> <span className="badge">{v.accent}</span></div>
         <div className="voice-tag">{v.tagline}</div>
         {!isDefault && (
           <button className="btn sm ghost" style={{ height: 32, padding: '0 8px', marginLeft: -8, marginTop: 2, fontSize: 13, color: 'var(--text-2)' }}

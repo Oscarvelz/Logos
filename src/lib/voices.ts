@@ -14,9 +14,19 @@ export type Voice = {
   tagline: string
   /** espeak voice used by the direct (non-English) path */
   phonemeLang: 'en-us' | 'en' | 'es'
+  /** which engine speaks it (default Kokoro) */
+  engine?: 'kokoro' | 'pocket'
 }
 
 export const VOICES: Voice[] = [
+  // PocketTTS (Kyutai) — built for phone CPUs: fast, natural, streams as it speaks.
+  { id: 'pk_alba', name: 'Alba', lang: 'en', accent: 'US', gender: 'Female', grade: 'Fast', tagline: 'Natural, warm narrator · fast on phones', phonemeLang: 'en-us', engine: 'pocket' },
+  { id: 'pk_anna', name: 'Anna', lang: 'en', accent: 'US', gender: 'Female', grade: 'Fast', tagline: 'Calm and clear · fast on phones', phonemeLang: 'en-us', engine: 'pocket' },
+  { id: 'pk_michael', name: 'Michael', lang: 'en', accent: 'US', gender: 'Male', grade: 'Fast', tagline: 'Relaxed male voice · fast on phones', phonemeLang: 'en-us', engine: 'pocket' },
+  { id: 'pk_liat', name: 'Liat', lang: 'en', accent: 'US', gender: 'Female', grade: 'Fast', tagline: 'Bright and friendly · fast on phones', phonemeLang: 'en-us', engine: 'pocket' },
+  { id: 'pk_omer', name: 'Omer', lang: 'en', accent: 'US', gender: 'Male', grade: 'Fast', tagline: 'Low, steady male voice · fast on phones', phonemeLang: 'en-us', engine: 'pocket' },
+  { id: 'pk_lola', name: 'Lola', lang: 'es', accent: 'ES', gender: 'Female', grade: 'Fast', tagline: 'Voz natural y cálida · rápida en el móvil', phonemeLang: 'es', engine: 'pocket' },
+  { id: 'pk_javert', name: 'Javert', lang: 'es', accent: 'ES', gender: 'Male', grade: 'Fast', tagline: 'Voz masculina serena · rápida en el móvil', phonemeLang: 'es', engine: 'pocket' },
   { id: 'af_heart', name: 'Heart', lang: 'en', accent: 'US', gender: 'Female', grade: 'A', tagline: 'Warm, expressive — the flagship voice', phonemeLang: 'en-us' },
   { id: 'af_bella', name: 'Bella', lang: 'en', accent: 'US', gender: 'Female', grade: 'A−', tagline: 'Bright, lively narrator', phonemeLang: 'en-us' },
   { id: 'af_nicole', name: 'Nicole', lang: 'en', accent: 'US', gender: 'Female', grade: 'B−', tagline: 'Soft, close, almost whispered', phonemeLang: 'en-us' },

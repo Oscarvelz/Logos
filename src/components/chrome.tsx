@@ -1,7 +1,7 @@
 import { AudioLines, Library, Mic2, Pause, Play, Settings2, SkipForward, Sparkles, Star, Check, Download, Loader2 } from 'lucide-react'
 import { navigate, useRoute, type Route } from '../lib/router.ts'
 import { useStore } from '../lib/store.ts'
-import { engine, ensureModel, MODEL_SIZE_MB } from '../engine/engine.ts'
+import { engine, ensureModel, MODEL_SIZE_MB, POCKET_SIZE_MB } from '../engine/engine.ts'
 import { listen, toggle, next } from '../player/listen.ts'
 import { settings } from '../lib/settings.ts'
 import { VOICES, LANG_LABEL, type Lang, type Voice } from '../lib/voices.ts'
@@ -53,7 +53,7 @@ export function StatusPill({ compact }: { compact?: boolean }) {
   if (e.status === 'ready') {
     return (
       <button className="status-pill ready" onClick={() => navigate('settings')} title="Neural voice ready">
-        <span className="led" />{compact ? 'Ready' : `Neural · ${e.device === 'webgpu' ? 'WebGPU' : 'WASM'}`}
+        <span className="led" />{compact ? 'Ready' : e.family === 'pocket' ? 'Pocket · Fast' : `Kokoro · ${e.device === 'webgpu' ? 'WebGPU' : 'WASM'}`}
       </button>
     )
   }
@@ -77,7 +77,7 @@ export function StatusPill({ compact }: { compact?: boolean }) {
     return <button className="status-pill" style={{ color: 'var(--danger)' }} onClick={() => navigate('settings')}>Engine error</button>
   }
   return (
-    <button className="status-pill" onClick={() => { void ensureModel().catch(() => {}) }} title={`Download the neural voice (~${MODEL_SIZE_MB.q8} MB)`}>
+    <button className="status-pill" onClick={() => { void ensureModel().catch(() => {}) }} title={`Download the neural voice (~${e.family === "pocket" ? POCKET_SIZE_MB : MODEL_SIZE_MB.q8} MB)`}>
       <Download size={16} style={{ marginLeft: 4 }} />{compact ? 'Voice' : 'Neural voice'}
     </button>
   )

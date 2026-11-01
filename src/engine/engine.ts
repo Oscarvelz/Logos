@@ -4,6 +4,8 @@ import { createStore } from '../lib/store.ts'
 import { settings, type EngineChoice } from '../lib/settings.ts'
 import { voiceById } from '../lib/voices.ts'
 import type { Device, Dtype, ProgressInfo, WorkerRequest, WorkerResponse } from './tts.worker.ts'
+import { pocket, pocketEnsure, pocketSynth, pocketPromote, pocketClear, pocketDelete, pocketCached, pocketCacheBytes, POCKET_SIZE_MB, type PocketLang } from './pocket.ts'
+import { timeStretch } from '../lib/audio.ts'
 
 export type ModelStatus = 'idle' | 'checking' | 'loading' | 'ready' | 'error'
 
@@ -26,7 +28,8 @@ export type EngineState = {
   phase: 'download' | 'warm' | null
 }
 
-export const engine = createStore<EngineState>({
+/** Kokoro's own state. The UI reads `engine`, which shows whichever engine your voices use. */
+export const kokoro = createStore<EngineState>({
   status: 'idle', progress: 0, loaded: 0, total: 0, device: null, dtype: null,
   error: null, cached: false, webgpu: null, f16: null, lastRtf: null, loadMs: null, phase: null,
 })
@@ -62,7 +65,7 @@ const GPU_FP16_BROKEN_KEY = 'logos.gpuFp16Broken'
 const fp32Broken = () => ls.get(GPU_BROKEN_KEY) === '1'
 const fp16Broken = () => ls.get(GPU_FP16_BROKEN_KEY) === '1'
 /** True when no WebGPU model works on this device any more. */
-export const gpuBroken = () => fp32Broken() && (fp16Broken() || engine.get().f16 === false)
+export const gpuBroken = () => fp32Broken() && (fp16Broken() || kokoro.get().f16 === false)
 function markGpuBroken(dtype: Dtype | null = requestedDtype) {
   ls.set(dtype === 'fp16' ? GPU_FP16_BROKEN_KEY : GPU_BROKEN_KEY, '1')
 }
@@ -114,7 +117,7 @@ function getWorker(): Worker {
     e.preventDefault?.()
     const message = e.message || 'The speech engine crashed.'
     ls.del(LOADING_KEY)
-    const usedGpu = requestedDevice === 'webgpu' || engine.get().device === 'webgpu'
+    const usedGpu = requestedDevice === 'webgpu' || kokoro.get().device === 'webgpu'
     worker?.terminate()
     worker = null
     if (usedGpu && gpuRetries < 2) {
@@ -122,13 +125,13 @@ function getWorker(): Worker {
       // the 326 MB model): switch this device to WASM for good and carry on.
       console.warn('[logos] WebGPU engine crashed, switching to WASM:', message)
       gpuRetries++
-      markGpuBroken(engine.get().dtype ?? requestedDtype)
+      markGpuBroken(kokoro.get().dtype ?? requestedDtype)
       if (inFlight) { queue.unshift(inFlight); inFlight = null }
-      engine.set({ status: 'idle', device: null, dtype: null, error: null })
+      kokoro.set({ status: 'idle', device: null, dtype: null, error: null })
       void startLoad()
       return
     }
-    engine.set({ status: 'error', error: message })
+    kokoro.set({ status: 'error', error: message })
     loadWaiters.forEach((w) => w.reject(new Error(message)))
     loadWaiters = []
     inFlight?.reject(new Error(message))
@@ -145,7 +148,7 @@ function onMessage(msg: WorkerResponse) {
     case 'loaded':
       ls.del(LOADING_KEY)
       if (requestedDevice === 'webgpu' && msg.device !== 'webgpu') markGpuBroken()
-      engine.set({ status: 'ready', progress: 1, device: msg.device, dtype: msg.dtype, error: null, cached: true, loadMs: msg.ms, phase: null })
+      kokoro.set({ status: 'ready', progress: 1, device: msg.device, dtype: msg.dtype, error: null, cached: true, loadMs: msg.ms, phase: null })
       keepStorage()
       loadWaiters.forEach((w) => w.resolve())
       loadWaiters = []
@@ -153,7 +156,7 @@ function onMessage(msg: WorkerResponse) {
       break
     case 'loadError':
       ls.del(LOADING_KEY)
-      engine.set({ status: 'error', error: msg.message })
+      kokoro.set({ status: 'error', error: msg.message })
       loadWaiters.forEach((w) => w.reject(new Error(msg.message)))
       loadWaiters = []
       break
@@ -162,21 +165,21 @@ function onMessage(msg: WorkerResponse) {
       ls.del(LOADING_KEY)
       const job = inFlight
       inFlight = null
-      if (msg.type === 'generateError' && job && job.id === msg.id && engine.get().device === 'webgpu' && gpuRetries < 2) {
+      if (msg.type === 'generateError' && job && job.id === msg.id && kokoro.get().device === 'webgpu' && gpuRetries < 2) {
         // The GPU path broke mid-use: switch to WASM for good and retry this sentence.
         gpuRetries++
-        markGpuBroken(engine.get().dtype)
+        markGpuBroken(kokoro.get().dtype)
         queue.unshift(job)
         worker?.terminate()
         worker = null
-        engine.set({ status: 'idle', device: null, dtype: null })
+        kokoro.set({ status: 'idle', device: null, dtype: null })
         void startLoad()
         break
       }
       if (job && job.id === msg.id) {
         if (msg.type === 'generated') {
           const dur = msg.samples.length / msg.sampleRate
-          if (dur > 0.5) engine.set({ lastRtf: msg.ms / 1000 / dur })
+          if (dur > 0.5) kokoro.set({ lastRtf: msg.ms / 1000 / dur })
           job.resolve({ samples: msg.samples, sampleRate: msg.sampleRate, ms: msg.ms })
         } else job.reject(new Error(msg.message))
       }
@@ -199,7 +202,7 @@ function onProgress(info: ProgressInfo) {
   let total = 0
   files.forEach((f) => { loaded += f.loaded; total += f.total })
   const progress = total > 0 ? Math.min(1, loaded / total) : 0
-  engine.set({ loaded, total, progress, ...(progress >= 0.999 && engine.get().phase === 'download' ? { phase: 'warm' as const } : {}) })
+  kokoro.set({ loaded, total, progress, ...(progress >= 0.999 && kokoro.get().phase === 'download' ? { phase: 'warm' as const } : {}) })
 }
 
 export function isMobileDevice(): boolean {
@@ -208,16 +211,16 @@ export function isMobileDevice(): boolean {
 }
 
 export async function probeWebGpu(): Promise<boolean> {
-  const cached = engine.get().webgpu
+  const cached = kokoro.get().webgpu
   if (cached !== null) return cached
   let ok = false
   try {
     const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<{ features?: Set<string> } | null> } }).gpu
     const adapter = gpu ? await gpu.requestAdapter() : null
     ok = Boolean(adapter)
-    engine.set({ f16: Boolean(adapter?.features?.has('shader-f16')) })
+    kokoro.set({ f16: Boolean(adapter?.features?.has('shader-f16')) })
   } catch { ok = false }
-  engine.set({ webgpu: ok })
+  kokoro.set({ webgpu: ok })
   return ok
 }
 
@@ -230,25 +233,25 @@ export async function resolveEngine(choice: EngineChoice = settings.get().engine
   // Like BetterTTS: use the GPU whenever the browser offers one (phones too).
   // fp32 first; if it failed here, the half-size fp16 model; then WASM for good.
   if (!fp32Broken()) return { device: 'webgpu', dtype: 'fp32' }
-  if (!fp16Broken() && engine.get().f16) return { device: 'webgpu', dtype: 'fp16' }
+  if (!fp16Broken() && kokoro.get().f16) return { device: 'webgpu', dtype: 'fp16' }
   return wasm
 }
 
-export async function isModelCached(): Promise<boolean> {
+async function kokoroCached(): Promise<boolean> {
   try {
     const { dtype } = await resolveEngine()
     const cache = await caches.open('transformers-cache')
     const keys = await cache.keys()
     const hit = keys.some((k) => k.url.includes('Kokoro-82M') && k.url.endsWith(MODEL_FILES[dtype]))
-    engine.set({ cached: hit })
+    kokoro.set({ cached: hit })
     return hit
   } catch {
     return false
   }
 }
 
-export function ensureModel(): Promise<void> {
-  const s = engine.get()
+function kokoroEnsure(): Promise<void> {
+  const s = kokoro.get()
   if (s.status === 'ready') return Promise.resolve()
   const p = new Promise<void>((resolve, reject) => loadWaiters.push({ resolve, reject }))
   if (s.status !== 'loading') void startLoad()
@@ -257,11 +260,11 @@ export function ensureModel(): Promise<void> {
 
 async function startLoad() {
   files.clear()
-  engine.set({ status: 'loading', progress: 0, loaded: 0, total: 0, error: null, phase: null })
+  kokoro.set({ status: 'loading', progress: 0, loaded: 0, total: 0, error: null, phase: null })
   // Transformers.js reports "progress" even when it reads the model from the
   // phone's cache, so check first and show "Starting voice" instead of a download.
-  const onPhone = await isModelCached()
-  engine.set({ phase: onPhone ? 'warm' : 'download' })
+  const onPhone = await kokoroCached()
+  kokoro.set({ phase: onPhone ? 'warm' : 'download' })
   const { device, dtype } = await resolveEngine()
   requestedDevice = device
   requestedDtype = dtype
@@ -272,7 +275,7 @@ async function startLoad() {
   getWorker().postMessage({ type: 'load', device, dtype, spin, threads } satisfies WorkerRequest)
 }
 
-export function synthesize(text: string, voice: string, speed: number, opts: { priority?: number; signal?: AbortSignal } = {}): Promise<SynthResult> {
+function kokoroSynth(text: string, voice: string, speed: number, opts: { priority?: number; signal?: AbortSignal } = {}): Promise<SynthResult> {
   return new Promise<SynthResult>((resolve, reject) => {
     if (opts.signal?.aborted) { reject(new DOMException('Aborted', 'AbortError')); return }
     const job: Job = { id: nextId++, text, voice, speed, priority: opts.priority ?? 0, resolve, reject, signal: opts.signal }
@@ -284,17 +287,17 @@ export function synthesize(text: string, voice: string, speed: number, opts: { p
     queue.push(job)
     // stable sort: higher priority first, then FIFO
     queue.sort((a, b) => b.priority - a.priority || a.id - b.id)
-    ensureModel().then(pump, (e) => { const i = queue.indexOf(job); if (i >= 0) queue.splice(i, 1); reject(e) })
+    kokoroEnsure().then(pump, (e) => { const i = queue.indexOf(job); if (i >= 0) queue.splice(i, 1); reject(e) })
   })
 }
 
 function pump() {
-  if (inFlight || engine.get().status !== 'ready') return
+  if (inFlight || kokoro.get().status !== 'ready') return
   const job = queue.shift()
   if (!job) return
   inFlight = job
   // If the GPU takes the whole tab down mid-sentence, the next visit sees this and uses WASM.
-  if (engine.get().device === 'webgpu') ls.set(LOADING_KEY, JSON.stringify({ device: 'webgpu', dtype: engine.get().dtype, t: Date.now() }))
+  if (kokoro.get().device === 'webgpu') ls.set(LOADING_KEY, JSON.stringify({ device: 'webgpu', dtype: kokoro.get().dtype, t: Date.now() }))
   const v = voiceById(job.voice)
   getWorker().postMessage({
     type: 'generate', id: job.id, text: job.text, voice: job.voice,
@@ -303,7 +306,7 @@ function pump() {
 }
 
 /** Raise the priority of a queued job (identified by its AbortSignal). */
-export function promote(signal: AbortSignal, priority: number) {
+function kokoroPromote(signal: AbortSignal, priority: number) {
   const job = queue.find((j) => j.signal === signal)
   if (!job || job.priority >= priority) return
   job.priority = priority
@@ -311,7 +314,7 @@ export function promote(signal: AbortSignal, priority: number) {
 }
 
 /** Drop every queued (not yet running) job at or below a priority. */
-export function clearQueue(maxPriority = Infinity) {
+function kokoroClear(maxPriority = Infinity) {
   for (let i = queue.length - 1; i >= 0; i--) {
     if (queue[i].priority <= maxPriority) {
       queue[i].reject(new DOMException('Aborted', 'AbortError'))
@@ -320,24 +323,24 @@ export function clearQueue(maxPriority = Infinity) {
   }
 }
 
-export async function deleteModel() {
+async function kokoroDelete() {
   worker?.terminate()
   worker = null
-  clearQueue()
+  kokoroClear()
   inFlight = null
   for (const name of ['transformers-cache', 'kokoro-voices']) {
     try { await caches.delete(name) } catch { /* ignore */ }
   }
-  engine.set({ status: 'idle', progress: 0, loaded: 0, total: 0, device: null, dtype: null, cached: false, error: null })
+  kokoro.set({ status: 'idle', progress: 0, loaded: 0, total: 0, device: null, dtype: null, cached: false, error: null })
 }
 
 /** Restart with a different engine choice (worker reload). */
-export function resetEngine() {
+function kokoroReset() {
   worker?.terminate()
   worker = null
-  clearQueue()
+  kokoroClear()
   inFlight = null
-  engine.set({ status: 'idle', device: null, dtype: null, progress: 0 })
+  kokoro.set({ status: 'idle', device: null, dtype: null, progress: 0 })
 }
 
 export async function cacheUsage(): Promise<{ model: number; voices: number; quota: number; usage: number }> {
@@ -378,3 +381,89 @@ export async function purgeUnusedModels() {
     }
   } catch { /* ignore */ }
 }
+
+// ── Facade: Kokoro + PocketTTS ──
+// Each voice belongs to one engine. Your English default decides the "primary"
+// engine: the one Logos loads at start and shows in the status pill.
+
+export type Family = 'kokoro' | 'pocket'
+export type ActiveEngineState = EngineState & { family: Family; pocketLang: PocketLang | null }
+
+export function familyOf(voice: string | undefined | null): Family {
+  return voice && voice.startsWith('pk_') ? 'pocket' : 'kokoro'
+}
+export function primaryFamily(): Family {
+  return familyOf(settings.get().defaultVoice.en)
+}
+function pocketLangWanted(): PocketLang {
+  const m = settings.get().langMode
+  return m === 'es' ? 'es' : 'en'
+}
+
+function computeActive(): ActiveEngineState {
+  const fam = primaryFamily()
+  const k = kokoro.get()
+  if (fam === 'kokoro') return { ...k, family: 'kokoro', pocketLang: null }
+  const p = pocket.get()
+  const lang: PocketLang = p.active ?? pocketLangWanted()
+  const l = p.langs[lang]
+  const anyReady = (['en', 'es'] as PocketLang[]).some((x) => p.langs[x].status === 'ready')
+  const status: ModelStatus = l.status === 'loading' ? 'loading' : l.status === 'ready' || anyReady ? 'ready' : l.status === 'error' ? 'error' : 'idle'
+  return {
+    ...k,
+    status,
+    progress: l.total ? l.loaded / l.total : 0,
+    loaded: l.loaded, total: l.total,
+    device: 'wasm', dtype: null,
+    error: l.error,
+    cached: pocketCachedFlag,
+    lastRtf: p.lastRtf, loadMs: l.loadMs,
+    phase: l.status === 'loading' ? (l.fromCache ? 'warm' : 'download') : null,
+    family: 'pocket', pocketLang: lang,
+  }
+}
+let pocketCachedFlag = false
+export const engine = createStore<ActiveEngineState>(computeActive())
+const refresh = () => engine.set(computeActive())
+kokoro.subscribe(refresh)
+pocket.subscribe(refresh)
+let lastPrimary = primaryFamily()
+settings.subscribe(() => { const f = primaryFamily(); if (f !== lastPrimary) { lastPrimary = f; refresh() } })
+
+export function ensureModel(): Promise<void> {
+  if (primaryFamily() === 'pocket') return pocketEnsure(pocket.get().active ?? pocketLangWanted())
+  return kokoroEnsure()
+}
+
+export function synthesize(text: string, voice: string, speed: number, opts: { priority?: number; signal?: AbortSignal } = {}): Promise<SynthResult> {
+  if (familyOf(voice) === 'kokoro') return kokoroSynth(text, voice, speed, opts)
+  const v = voiceById(voice)
+  const lang: PocketLang = v?.lang === 'es' ? 'es' : 'en'
+  return pocketSynth(text, lang, voice.replace(/^pk_/, ''), opts).then((r) =>
+    speed && Math.abs(speed - 1) > 0.01 ? { ...r, samples: timeStretch(r.samples, r.sampleRate, speed) } : r)
+}
+
+export function promote(signal: AbortSignal, priority: number) { kokoroPromote(signal, priority); pocketPromote(signal, priority) }
+export function clearQueue(maxPriority = Infinity) { kokoroClear(maxPriority); pocketClear(maxPriority) }
+
+export async function isModelCached(): Promise<boolean> {
+  if (primaryFamily() === 'pocket') {
+    pocketCachedFlag = await pocketCached(pocketLangWanted())
+    refresh()
+    return pocketCachedFlag
+  }
+  return kokoroCached()
+}
+
+/** Delete the primary engine's downloaded model. */
+export async function deleteModel() {
+  if (primaryFamily() === 'pocket') { await pocketDelete(); pocketCachedFlag = false; refresh(); return }
+  await kokoroDelete()
+}
+
+/** Restart the engines (e.g. after changing the Kokoro engine choice). */
+export function resetEngine() {
+  kokoroReset()
+}
+
+export { pocketCacheBytes, POCKET_SIZE_MB }

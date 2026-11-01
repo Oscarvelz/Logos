@@ -114,3 +114,41 @@ export function formatBytes(n: number): string {
   if (n < 1024 ** 3) return `${(n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`
   return `${(n / 1024 ** 3).toFixed(2)} GB`
 }
+
+/**
+ * Change speed without changing pitch (WSOLA). Used for PocketTTS, which has
+ * no speed control of its own, when exporting at a speed other than 1×.
+ */
+export function timeStretch(x: Float32Array, sampleRate: number, speed: number): Float32Array {
+  if (!(speed > 0) || Math.abs(speed - 1) < 0.01 || x.length < sampleRate * 0.1) return x
+  const win = Math.round(sampleRate * 0.03) // 30 ms frames
+  const hop = win >> 1
+  const tol = Math.round(sampleRate * 0.01)
+  const outLen = Math.floor(x.length / speed)
+  const out = new Float32Array(outLen + win)
+  const norm = new Float32Array(outLen + win)
+  const w = new Float32Array(win)
+  for (let i = 0; i < win; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (win - 1))
+  let prev = 0 // input position of the previous frame
+  for (let o = 0; o + win < out.length; o += hop) {
+    const ideal = Math.round(o * speed)
+    let best = Math.max(0, Math.min(x.length - win, ideal))
+    if (o > 0) {
+      // pick the frame near `ideal` that best continues the previous one
+      const nat = prev + hop
+      let bestScore = -Infinity
+      for (let d = -tol; d <= tol; d += 2) {
+        const c = ideal + d
+        if (c < 0 || c + win >= x.length || nat + hop >= x.length) continue
+        let score = 0
+        for (let i = 0; i < hop; i += 4) score += x[c + i] * x[nat + i]
+        if (score > bestScore) { bestScore = score; best = c }
+      }
+    }
+    if (best + win > x.length) break
+    for (let i = 0; i < win; i++) { out[o + i] += x[best + i] * w[i]; norm[o + i] += w[i] }
+    prev = best
+  }
+  for (let i = 0; i < outLen; i++) out[i] = norm[i] > 1e-3 ? out[i] / norm[i] : 0
+  return out.subarray(0, outLen)
+}

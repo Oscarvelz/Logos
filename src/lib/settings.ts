@@ -28,8 +28,8 @@ const DEFAULTS: Settings = {
   engine: 'auto',
   listenSpeed: 1,
   exportSpeed: 1,
-  defaultVoice: { en: 'af_heart', es: 'ef_dora' },
-  favorites: ['af_heart', 'bf_emma', 'ef_dora'],
+  defaultVoice: { en: 'pk_alba', es: 'pk_lola' },
+  favorites: ['pk_alba', 'pk_lola', 'af_heart'],
   langMode: 'auto',
   voiceOverride: null,
   format: 'mp3',
@@ -58,6 +58,17 @@ try {
   if (localStorage.getItem('logos.mig105') !== '1') {
     localStorage.setItem('logos.mig105', '1')
     if (initial.deviceFallback) { initial.deviceFallback = false; migrateEngine = true }
+  }
+} catch { /* storage blocked */ }
+// 1.2.0: PocketTTS voices become the defaults (much faster on phones; Oscar
+// preferred them to Kokoro). Kokoro voices stay one tap away.
+try {
+  if (localStorage.getItem('logos.mig120') !== '1') {
+    localStorage.setItem('logos.mig120', '1')
+    initial.defaultVoice = { en: 'pk_alba', es: 'pk_lola' }
+    if (initial.voiceOverride && !initial.voiceOverride.startsWith('pk_')) initial.voiceOverride = null
+    for (const f of ['pk_alba', 'pk_lola']) if (!initial.favorites.includes(f)) initial.favorites = [f, ...initial.favorites]
+    migrateEngine = true
   }
 } catch { /* storage blocked */ }
 export const settings = createStore<Settings>(initial)
