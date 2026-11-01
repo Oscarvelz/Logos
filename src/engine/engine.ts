@@ -18,6 +18,8 @@ export type EngineState = {
   error: string | null
   cached: boolean
   webgpu: boolean | null
+  /** The GPU supports half-precision shaders (needed for the fp16 model). */
+  f16: boolean | null
   lastRtf: number | null
   loadMs: number | null
   /** while loading: 'download' = fetching from the internet, 'warm' = model is on the phone, starting it up */
@@ -26,7 +28,7 @@ export type EngineState = {
 
 export const engine = createStore<EngineState>({
   status: 'idle', progress: 0, loaded: 0, total: 0, device: null, dtype: null,
-  error: null, cached: false, webgpu: null, lastRtf: null, loadMs: null, phase: null,
+  error: null, cached: false, webgpu: null, f16: null, lastRtf: null, loadMs: null, phase: null,
 })
 
 const MODEL_FILES: Record<Dtype, string> = {
@@ -53,9 +55,17 @@ const ls = {
 }
 // 1.1.0 moved to ONNX Runtime 1.31 (the runtime BetterTTS ships), whose WebGPU
 // works on phones where the old one failed, so forget failures recorded before.
-if (ls.get('logos.mig110') !== '1') { ls.set('logos.mig110', '1'); ls.del(GPU_BROKEN_KEY) }
-export const gpuBroken = () => ls.get(GPU_BROKEN_KEY) === '1'
-function markGpuBroken() { ls.set(GPU_BROKEN_KEY, '1') }
+if (ls.get('logos.mig110') !== '1') { ls.set('logos.mig110', '1'); ls.del(GPU_BROKEN_KEY); ls.del('logos.gpuFp16Broken') }
+// fp32 (326 MB) can run a phone's GPU out of memory; the half-size fp16 model
+// (163 MB) often fits, so it gets its own chance before WASM.
+const GPU_FP16_BROKEN_KEY = 'logos.gpuFp16Broken'
+const fp32Broken = () => ls.get(GPU_BROKEN_KEY) === '1'
+const fp16Broken = () => ls.get(GPU_FP16_BROKEN_KEY) === '1'
+/** True when no WebGPU model works on this device any more. */
+export const gpuBroken = () => fp32Broken() && (fp16Broken() || engine.get().f16 === false)
+function markGpuBroken(dtype: Dtype | null = requestedDtype) {
+  ls.set(dtype === 'fp16' ? GPU_FP16_BROKEN_KEY : GPU_BROKEN_KEY, '1')
+}
 let crashedLastTime: boolean | null = null
 /** True when the previous visit started loading the model and never finished (the tab crashed). Checked once per page load. */
 export function lastLoadCrashed(): boolean {
@@ -65,17 +75,18 @@ export function lastLoadCrashed(): boolean {
   if (raw) {
     ls.del(LOADING_KEY)
     try {
-      const info = JSON.parse(raw) as { device?: string; t?: number }
+      const info = JSON.parse(raw) as { device?: string; dtype?: Dtype; t?: number }
       if (Date.now() - (info.t ?? 0) < 10 * 60_000) {
         crashedLastTime = true
-        if (info.device === 'webgpu') markGpuBroken()
+        if (info.device === 'webgpu') markGpuBroken(info.dtype ?? 'fp32')
       }
     } catch { /* ignore */ }
   }
   return crashedLastTime
 }
-let retriedOnWasm = false
+let gpuRetries = 0
 let requestedDevice: Device | null = null
+let requestedDtype: Dtype | null = null
 let loadWaiters: { resolve: () => void; reject: (e: Error) => void }[] = []
 const files = new Map<string, { loaded: number; total: number }>()
 
@@ -106,12 +117,12 @@ function getWorker(): Worker {
     const usedGpu = requestedDevice === 'webgpu' || engine.get().device === 'webgpu'
     worker?.terminate()
     worker = null
-    if (usedGpu && !retriedOnWasm) {
+    if (usedGpu && gpuRetries < 2) {
       // The GPU took the engine down (some phones run out of graphics memory with
       // the 326 MB model): switch this device to WASM for good and carry on.
       console.warn('[logos] WebGPU engine crashed, switching to WASM:', message)
-      retriedOnWasm = true
-      markGpuBroken()
+      gpuRetries++
+      markGpuBroken(engine.get().dtype ?? requestedDtype)
       if (inFlight) { queue.unshift(inFlight); inFlight = null }
       engine.set({ status: 'idle', device: null, dtype: null, error: null })
       void startLoad()
@@ -151,10 +162,10 @@ function onMessage(msg: WorkerResponse) {
       ls.del(LOADING_KEY)
       const job = inFlight
       inFlight = null
-      if (msg.type === 'generateError' && job && job.id === msg.id && engine.get().device === 'webgpu' && !retriedOnWasm) {
+      if (msg.type === 'generateError' && job && job.id === msg.id && engine.get().device === 'webgpu' && gpuRetries < 2) {
         // The GPU path broke mid-use: switch to WASM for good and retry this sentence.
-        retriedOnWasm = true
-        markGpuBroken()
+        gpuRetries++
+        markGpuBroken(engine.get().dtype)
         queue.unshift(job)
         worker?.terminate()
         worker = null
@@ -201,8 +212,10 @@ export async function probeWebGpu(): Promise<boolean> {
   if (cached !== null) return cached
   let ok = false
   try {
-    const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu
-    ok = Boolean(gpu && (await gpu.requestAdapter()))
+    const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<{ features?: Set<string> } | null> } }).gpu
+    const adapter = gpu ? await gpu.requestAdapter() : null
+    ok = Boolean(adapter)
+    engine.set({ f16: Boolean(adapter?.features?.has('shader-f16')) })
   } catch { ok = false }
   engine.set({ webgpu: ok })
   return ok
@@ -210,12 +223,15 @@ export async function probeWebGpu(): Promise<boolean> {
 
 /** Auto = WebGPU on capable desktops/tablets in desktop mode; WASM (q8, 92 MB) on phones. */
 export async function resolveEngine(choice: EngineChoice = settings.get().engine): Promise<{ device: Device; dtype: Dtype }> {
-  if (choice === 'wasm' || gpuBroken()) return { device: 'wasm', dtype: 'q8' }
+  const wasm = { device: 'wasm' as const, dtype: 'q8' as const }
+  if (choice === 'wasm') return wasm
   const gpu = await probeWebGpu()
-  if (choice === 'webgpu') return gpu ? { device: 'webgpu', dtype: 'fp32' } : { device: 'wasm', dtype: 'q8' }
-  // Like BetterTTS: use the GPU whenever the browser offers one (phones too); a
-  // failed smoke test or crash drops this device to WASM for good.
-  return gpu ? { device: 'webgpu', dtype: 'fp32' } : { device: 'wasm', dtype: 'q8' }
+  if (!gpu) return wasm
+  // Like BetterTTS: use the GPU whenever the browser offers one (phones too).
+  // fp32 first; if it failed here, the half-size fp16 model; then WASM for good.
+  if (!fp32Broken()) return { device: 'webgpu', dtype: 'fp32' }
+  if (!fp16Broken() && engine.get().f16) return { device: 'webgpu', dtype: 'fp16' }
+  return wasm
 }
 
 export async function isModelCached(): Promise<boolean> {
@@ -248,7 +264,8 @@ async function startLoad() {
   engine.set({ phase: onPhone ? 'warm' : 'download' })
   const { device, dtype } = await resolveEngine()
   requestedDevice = device
-  ls.set(LOADING_KEY, JSON.stringify({ device, t: Date.now() }))
+  requestedDtype = dtype
+  ls.set(LOADING_KEY, JSON.stringify({ device, dtype, t: Date.now() }))
   getWorker().postMessage({ type: 'load', device, dtype } satisfies WorkerRequest)
 }
 
@@ -274,7 +291,7 @@ function pump() {
   if (!job) return
   inFlight = job
   // If the GPU takes the whole tab down mid-sentence, the next visit sees this and uses WASM.
-  if (engine.get().device === 'webgpu') ls.set(LOADING_KEY, JSON.stringify({ device: 'webgpu', t: Date.now() }))
+  if (engine.get().device === 'webgpu') ls.set(LOADING_KEY, JSON.stringify({ device: 'webgpu', dtype: engine.get().dtype, t: Date.now() }))
   const v = voiceById(job.voice)
   getWorker().postMessage({
     type: 'generate', id: job.id, text: job.text, voice: job.voice,
@@ -350,11 +367,11 @@ function keepStorage() {
 
 /** When WebGPU failed on this device, free the space the full-precision model takes. */
 export async function purgeUnusedModels() {
-  if (!gpuBroken()) return
+  if (!fp32Broken() && !fp16Broken()) return
   try {
     const cache = await caches.open('transformers-cache')
     for (const k of await cache.keys()) {
-      if (k.url.includes('Kokoro-82M') && (k.url.endsWith(MODEL_FILES.fp32) || k.url.endsWith(MODEL_FILES.fp16))) await cache.delete(k)
+      if (k.url.includes('Kokoro-82M') && ((fp32Broken() && k.url.endsWith(MODEL_FILES.fp32)) || (fp16Broken() && k.url.endsWith(MODEL_FILES.fp16)))) await cache.delete(k)
     }
   } catch { /* ignore */ }
 }

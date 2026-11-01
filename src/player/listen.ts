@@ -432,12 +432,37 @@ export function levels(count: number, out: Float32Array): boolean {
   if (!s.playing || s.mode !== 'kokoro' || !audio) return false
   const r = cache.get(s.current)
   if (!r || audio.src !== r.url) return false
-  const f = Math.floor(audio.currentTime * 60)
+  // Phones update audio.currentTime only a few times a second, which made the
+  // bars step and lag; run a smooth clock between those updates instead.
+  const f = smoothTime(audio) * 60
+  const base = Math.floor(f)
+  const frac = f - base
+  const env = r.env
   for (let k = 0; k < count; k++) {
-    const idx = f - Math.floor(count / 2) + k
-    out[k] = idx >= 0 && idx < r.env.length ? r.env[idx] : 0
+    const idx = base - Math.floor(count / 2) + k
+    const a = idx >= 0 && idx < env.length ? env[idx] : 0
+    const b = idx + 1 >= 0 && idx + 1 < env.length ? env[idx + 1] : 0
+    out[k] = a + (b - a) * frac
   }
   return true
+}
+
+let clockSrc = ''
+let clockRaw = -1
+let clockAt = 0
+let clockShown = 0
+function smoothTime(a: HTMLAudioElement): number {
+  const now = performance.now()
+  const raw = a.currentTime
+  if (a.src !== clockSrc || raw < clockRaw - 0.05 || Math.abs(raw - clockShown) > 0.4) {
+    clockSrc = a.src; clockRaw = raw; clockAt = now; clockShown = raw
+    return raw
+  }
+  if (raw !== clockRaw) { clockRaw = raw; clockAt = now }
+  const predicted = a.paused ? raw : raw + ((now - clockAt) / 1000) * (a.playbackRate || 1)
+  // never run more than a quarter second ahead of what the element reported
+  clockShown = Math.max(clockShown, Math.min(predicted, raw + 0.25))
+  return clockShown
 }
 
 export function sentenceProgress(): number {

@@ -23,12 +23,19 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
 
     // 30 fps is plenty for bars; when idle and settled, stop drawing entirely so
     // the CPU goes to the voice engine and scrolling.
+    // Full frame rate while sound plays (smooth), 30 fps otherwise; when idle
+    // and settled, stop drawing so the CPU goes to the voice engine.
     let last = 0
     let idleFrames = 0
+    let grad: CanvasGradient | null = null
+    let gradKey = ''
     const draw = (now = performance.now()) => {
       raf = requestAnimationFrame(draw)
-      if (now - last < 32) return
-      t += (now - last > 200 ? 33 : now - last) / 1000
+      const st = listen.get()
+      const minGap = st.playing && st.mode === 'kokoro' ? 0 : 32
+      if (now - last < minGap) return
+      const dt = Math.min(0.1, (now - last) / 1000)
+      t += dt
       last = now
       const st0 = listen.get()
       if (!st0.playing && !st0.buffering) { if (++idleFrames > 45) return } else idleFrames = 0
@@ -57,23 +64,28 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
       ctx.clearRect(0, 0, w, h)
       const gap = w / bars
       const bw = Math.max(2, gap * 0.52)
-      const grad = ctx.createLinearGradient(0, 0, w, 0)
-      grad.addColorStop(0, colors[0] + '33')
-      grad.addColorStop(0.5, colors[1])
-      grad.addColorStop(1, colors[0] + '33')
+      const key = `${w}|${colors[0]}|${colors[1]}`
+      if (!grad || key !== gradKey) {
+        gradKey = key
+        grad = ctx.createLinearGradient(0, 0, w, 0)
+        grad.addColorStop(0, colors[0] + '33')
+        grad.addColorStop(0.5, colors[1])
+        grad.addColorStop(1, colors[0] + '33')
+      }
       ctx.fillStyle = grad
+      // ease toward target at the same speed whatever the frame rate; the centre bar is "now"
+      const k = 1 - Math.pow(1 - (live ? 0.45 : 0.12), dt * 30)
+      ctx.beginPath()
       for (let i = 0; i < bars; i++) {
-        // ease toward target; the centre bar is "now"
-        shown[i] += (target[i] - shown[i]) * (live ? 0.45 : 0.12)
+        shown[i] += (target[i] - shown[i]) * k
         const center = 1 - Math.abs(i - bars / 2) / (bars / 2)
         const amp = Math.max(0.04, shown[i]) * (0.55 + 0.45 * center)
         const bh = Math.max(3, amp * (h - 6))
         const x = i * gap + (gap - bw) / 2
         const y = (h - bh) / 2
-        ctx.beginPath()
         ctx.roundRect(x, y, bw, bh, bw / 2)
-        ctx.fill()
       }
+      ctx.fill()
     }
     draw()
     return () => { cancelAnimationFrame(raf); themeObs.disconnect() }

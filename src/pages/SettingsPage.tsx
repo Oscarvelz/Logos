@@ -7,7 +7,7 @@ import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 
-const VERSION = '1.1.1'
+const VERSION = '1.1.2'
 
 export function SettingsPage() {
   const st = useStore(settings)
@@ -75,7 +75,7 @@ export function SettingsPage() {
 
       <div className="list" style={{ marginTop: 12 }}>
         <div className="list-row col">
-          <div><div className="t">Engine</div><div className="d">Auto uses your phone’s graphics chip (WebGPU, 326 MB model, much faster) when it works, and the 92 MB WASM engine otherwise.{e.webgpu === false ? ' WebGPU is not available in this browser.' : ''}{gpuBroken() ? ' WebGPU failed on this device, so Logos uses WASM.' : ''}</div></div>
+          <div><div className="t">Engine</div><div className="d">Auto uses your phone’s graphics chip (WebGPU, much faster) when it works: the 326 MB model, or the 163 MB half-size one if the big one doesn’t fit. Otherwise the 92 MB WASM engine.{e.webgpu === false ? ' WebGPU is not available in this browser.' : ''}{gpuBroken() ? ' WebGPU failed on this device, so Logos uses WASM.' : ''}</div></div>
           <Seg value={st.engine} label="Engine" onChange={changeEngine} options={[{ value: 'auto', label: 'Auto' }, { value: 'webgpu', label: 'WebGPU' }, { value: 'wasm', label: 'WASM' }]} />
         </div>
         <div className="list-row">
