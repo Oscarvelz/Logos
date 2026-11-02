@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ClipboardPaste, Eraser, Gauge, Languages, Loader2, Pause, PenLine, Play, SkipBack, SkipForward, Sparkles, X } from 'lucide-react'
+import { ClipboardPaste, Eraser, Gauge, Languages, Loader2, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
@@ -10,7 +10,6 @@ import { engine } from '../engine/engine.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, VoicePicker } from '../components/chrome.tsx'
 import { Range, Sheet, toast } from '../components/ui.tsx'
-import { navigate } from '../lib/router.ts'
 
 const SPEEDS = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
 
@@ -122,14 +121,17 @@ export function ListenPage() {
         </div>
 
         <div className="card player-card">
-          <div className="row between" style={{ position: 'relative', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
-            <button className={`chip ${st.langMode === 'auto' ? '' : 'accent'}`} onClick={cycleLang} aria-label="Language">
+          <div className="player-top">
+            <button className={`chip lang-chip ${st.langMode === 'auto' ? '' : 'accent'}`} onClick={cycleLang} aria-label="Language">
               <Languages size={16} />
-              {st.langMode === 'auto' ? <>Auto · {mixed ? 'EN + ES' : LANG_LABEL[detected.lang]}</> : LANG_LABEL[st.langMode]}
+              <span className="chip-txt">{st.langMode === 'auto' ? <>Auto · {mixed ? 'EN + ES' : detected.lang.toUpperCase()}</> : LANG_LABEL[st.langMode]}</span>
             </button>
-            <button className="chip accent" onClick={() => setVoiceOpen(true)} aria-label="Voice">
-              <span className="dot" />{st.voiceOverride ? voiceById(st.voiceOverride)?.name : `Auto · ${currentVoice?.name ?? ''}`}
-            </button>
+            <div className="player-top-r">
+              <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={`Playback speed ${fmtSpeed(st.listenSpeed)}`}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
+              <button className="chip accent voice-chip" onClick={() => setVoiceOpen(true)} aria-label="Voice">
+                <span className="dot" /><span className="chip-txt">{st.voiceOverride ? voiceById(st.voiceOverride)?.name : currentVoice?.name ?? ''}</span>
+              </button>
+            </div>
           </div>
 
           <Visualizer />
@@ -142,13 +144,13 @@ export function ListenPage() {
           </div>
 
           <div className="transport">
-            <button className="chip t-left" onClick={() => setSpeedOpen(true)} aria-label="Playback speed"><Gauge size={16} /> {fmtSpeed(st.listenSpeed)}</button>
+            <span aria-hidden />
             <button className="icon-btn filled" onClick={prev} disabled={!reading} aria-label="Previous sentence"><SkipBack size={22} /></button>
             <button className={`play-btn ${s.buffering ? 'busy' : ''}`} onClick={reading ? toggle : start} aria-label={s.playing ? 'Pause' : 'Play'}>
               {s.buffering ? <Loader2 size={32} className="spin" /> : s.playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" style={{ marginLeft: 4 }} />}
             </button>
             <button className="icon-btn filled" onClick={next} disabled={!reading} aria-label="Next sentence"><SkipForward size={22} /></button>
-            <button className="icon-btn filled t-right" onClick={() => { drafts.set({ create: text }); navigate('create') }} disabled={!text.trim()} aria-label="Save as audio file" title="Save as audio file"><Sparkles size={20} /></button>
+            <span aria-hidden />
           </div>
 
           {s.mode === 'device' && s.playing && (

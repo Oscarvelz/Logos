@@ -316,6 +316,14 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 .player-progress > i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 99px; transition: width .3s linear; }
 .player-progress > b { position: absolute; inset: 0 auto 0 0; background: var(--surface-3); }
 .transport { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr); align-items: center; gap: 14px; margin: 14px 0 6px; }
+.player-top { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; min-width: 0; }
+.player-top-r { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; }
+.player-top .chip { min-width: 0; }
+.player-top .chip svg, .player-top .chip .dot { flex: none; }
+.player-top .chip-txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lang-chip { flex: 0 1 auto; }
+.speed-chip { flex: none; padding: 0 12px; gap: 6px; font-variant-numeric: tabular-nums; }
+.voice-chip { flex: 0 1 auto; max-width: 150px; }
 .transport .t-left { justify-self: start; }
 .transport .t-right { justify-self: end; }
 @media (max-width: 839px) {
@@ -331,8 +339,8 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
   /* the reading view takes the nav's space, so more text shows (text itself never moves) */
   [data-immersive][data-dock] .listen-page .reader { max-height: calc(46vh + var(--nav-h) + 64px); }
   .listen-page .transport { margin: 8px 0 2px; gap: 8px; }
-  .listen-page .transport .icon-btn.filled { width: 50px; height: 50px; }
-  .listen-page .transport .t-left { height: 44px; padding: 0 11px; gap: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .listen-page .transport .icon-btn.filled { width: 54px; height: 54px; }
+  .listen-page .transport { gap: 14px; }
   .listen-page .play-btn { width: 72px; height: 72px; }
   .create-page .editor textarea { min-height: 22vh; max-height: 40vh; }
 }
@@ -494,6 +502,5 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
   .listen-page .transport { gap: 6px; }
   .listen-page .transport .icon-btn.filled { width: 44px; height: 44px; }
   .listen-page .play-btn { width: 64px; height: 64px; }
-  .listen-page .transport .t-left { padding: 0 12px; }
-  .listen-page .transport .t-left svg { display: none; }
+  .speed-chip svg { display: none; }
 }
