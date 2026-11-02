@@ -8,7 +8,7 @@
 
 export type WebText = { title: string; text: string; site: string; url: string; words: number; via: string }
 
-const STOP_SECTIONS = /^(references|notes|footnotes|citations|sources|bibliography|external links|see also|further reading|related (articles|posts|stories)|more (stories|from)|you may also like|read (more|next)|recommended|comments?|share this( article)?|about the author|referencias|notas|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n|lectura adicional|art[ií]culos relacionados|comentarios|fuentes)\s*:?$/i
+const STOP_SECTIONS = /^(references|notes|footnotes|citations|sources|bibliography|external links|see also|further reading|related (articles|posts|stories)|more (stories|from)|you may also like|read (more|next)|recommended|comments?|share this( article)?|about the author|referencias|notas|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n|lectura adicional|art[ií]culos relacionados|comentarios|fuentes|data safety|ratings and reviews|what[’']s new|app support|similar apps|more by .{1,40}|flag as inappropriate|seguridad de los datos|calificaciones y opiniones|valoraciones y reseñas|asistencia de la app|apps similares)\s*:?$/i
 const JUNK = /(cookie|subscribe|newsletter|sign (up|in)|log ?in|advertis|sponsored|all rights reserved|follow us|share (this|on)|click here|read more|skip to|privacy policy|terms of (use|service)|download (the|our) app|suscr[ií]b|bolet[ií]n|inicia sesi[oó]n|publicidad|todos los derechos|s[ií]guenos|leer m[aá]s|comparte|haz clic)/i
 
 export function normalizeUrl(raw: string): string | null {

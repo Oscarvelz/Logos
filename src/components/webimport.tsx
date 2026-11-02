@@ -39,7 +39,12 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile }: { open: bo
   useEffect(() => {
     if (!open) { ctrl.current?.abort(); return }
     setRes(null); setErr('')
-    if (initialUrl) { setUrl(initialUrl); void go(initialUrl) } else { setUrl(''); setPhase('input') }
+    if (initialUrl) { setUrl(initialUrl); void go(initialUrl) }
+    else {
+      setUrl(''); setPhase('input')
+      // A link already copied shows up in the field, ready to bring in.
+      navigator.clipboard?.readText?.().then((c) => { const n = normalizeUrl(c ?? ''); if (n) setUrl((cur) => cur || n) }).catch(() => {})
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialUrl])
 

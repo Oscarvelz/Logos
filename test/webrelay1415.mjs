@@ -15,6 +15,6 @@ for (const u of process.argv.slice(2)) {
   const t0 = Date.now();
   const r = await p.evaluate(async (u) => { try { return await __logos.webtext.fetchWebText(u) } catch (e) { return { err: e.message } } }, u);
   console.log('\n=====', u, Math.round((Date.now() - t0) / 1000) + 's', r.err ?? `${r.via} · ${r.title} · ${r.words} words`);
-  if (r.text) console.log(r.text.slice(0, 1100), '\n…\n', r.text.slice(-450));
+  if (r.text) console.log(r.text);
 }
 await b.close();
