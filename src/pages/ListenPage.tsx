@@ -7,6 +7,7 @@ import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/t
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
 import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, endSession, sentenceProgress, seekFraction } from '../player/listen.ts'
 import { engine } from '../engine/engine.ts'
+import { aiDescribe, describeText } from '../lib/describe.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, VoicePicker } from '../components/chrome.tsx'
 import { Range, Sheet, toast } from '../components/ui.tsx'
@@ -336,18 +337,30 @@ function wordAt(ws: HTMLElement[], p: number): number {
 }
 
 // Slim header for Listen: what is loaded and how long it runs, instead of a big page title.
+// The title is the text's own heading, or a complete one Logos composes (with a one-line summary).
 function ListenHead({ text, lang, playing, remaining }: { text: string; lang: Lang; playing: boolean; remaining: number }) {
-  const first = text.trim().split(/\n/)[0]?.replace(/[#*_`>]/g, '').trim() ?? ''
-  const title = first.length > 70 ? first.slice(0, 70).replace(/\s+\S*$/, '') + '…' : first
+  const local = useMemo(() => describeText(text, lang), [text, lang])
+  const [ai, setAi] = useState<{ key: string; title?: string; summary?: string } | null>(null)
+  useEffect(() => {
+    if (!local.generated || text.trim().length < 200) return
+    let alive = true
+    const t = setTimeout(() => { void aiDescribe(text).then((r) => { if (alive && r) setAi({ key: text, ...r }) }) }, 600)
+    return () => { alive = false; clearTimeout(t) }
+  }, [text, local.generated])
+  const useAi = ai && ai.key === text && local.generated
+  const title = (useAi && ai.title && ai.title.length <= 60 ? ai.title : local.title)
+  const summary = local.generated ? (useAi && ai.summary && ai.summary.length <= 140 ? ai.summary : local.summary) : undefined
   const words = wordCount(text)
+  const has = !!text.trim()
   return (
     <div className={`listen-head ${playing ? 'live' : ''}`}>
       <div className="lh-eyebrow">
         <span className="lh-dot" />
-        <span>{text.trim() ? (playing ? 'Now reading' : 'Ready to read') : 'Listen'}</span>
-        {text.trim() ? <span className="lh-meta">{words.toLocaleString()} words · {formatDuration(remaining)} · {LANG_LABEL[lang]}</span> : null}
+        <span>{has ? (playing ? 'Now reading' : 'Ready to read') : 'Listen'}</span>
+        {has ? <span className="lh-meta">{words.toLocaleString()} words · {formatDuration(remaining)} · {LANG_LABEL[lang]}</span> : null}
       </div>
       <div className="lh-title" lang={lang}>{title || 'Paste anything. Hear it instantly.'}</div>
+      {summary ? <div className="lh-sum" lang={lang}>{summary}</div> : null}
     </div>
   )
 }
