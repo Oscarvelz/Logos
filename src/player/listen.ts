@@ -3,7 +3,7 @@
 // Media Session controls, and a device-voice bridge while the neural voice downloads.
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
-import { segmentText, speakable, estimateSeconds, type Segment } from '../lib/text.ts'
+import { segmentText, speakable, estimateSeconds, pauseAfter, type Segment } from '../lib/text.ts'
 import { voiceById, type Lang } from '../lib/voices.ts'
 import { encodeWav, envelope, silence, trimSilence, concat } from '../lib/audio.ts'
 import { engine, ensureModel, synthesize, promote } from '../engine/engine.ts'
@@ -256,7 +256,7 @@ function render(i: number, priority: number): Promise<Rendered> {
     synthMs += res.ms
     synthSec += res.samples.length / res.sampleRate
     const trimmed = trimSilence(res.samples, res.sampleRate)
-    const pauseMs = settings.get().sentencePauseMs * (seg.paraEnd ? 2.2 : 1)
+    const pauseMs = pauseAfter(seg, settings.get().sentencePauseMs)
     const full = concat([trimmed, silence(pauseMs, res.sampleRate)])
     const r: Rendered = {
       blob: encodeWav(full, res.sampleRate),

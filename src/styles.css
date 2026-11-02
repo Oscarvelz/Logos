@@ -148,7 +148,12 @@ button:disabled { cursor: default; opacity: .45; }
   display: flex; align-items: stretch; justify-content: space-around;
   background: var(--glass); backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4);
   border-top: 1px solid var(--line);
+  transition: transform .55s var(--ease), opacity .4s ease, visibility 0s linear 0s;
+  will-change: transform;
 }
+/* Immersive listening: nav slides down out of view while Listen plays (phone). */
+[data-immersive] .nav { transform: translateY(calc(100% + 12px)); opacity: 0; visibility: hidden; pointer-events: none;
+  transition: transform .6s var(--ease), opacity .45s ease .08s, visibility 0s linear .6s; }
 .nav-item {
   position: relative; flex: 1; max-width: 110px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
@@ -316,10 +321,15 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 @media (max-width: 839px) {
   .listen-page .page-sub { display: none; }
   .listen-page .page-head { margin-bottom: 12px; }
-  .listen-page .player-card { position: sticky; bottom: calc(var(--nav-h) + var(--safe-b) + 10px); z-index: 5; padding: 12px 14px 12px; background: color-mix(in srgb, var(--bg-3) 88%, transparent); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+  .listen-page .player-card { position: sticky; bottom: calc(var(--nav-h) + var(--safe-b) + 10px); z-index: 5; padding: 12px 14px 12px; background: color-mix(in srgb, var(--bg-3) 88%, transparent); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    transition: transform .6s var(--ease); will-change: transform; }
+  /* glide into the nav's space: ends safe-area + 10px above the screen edge */
+  [data-immersive][data-dock] .listen-page .player-card { transform: translateY(var(--nav-h)); }
   .listen-page .viz { height: 52px; }
   .listen-page .editor textarea { min-height: 30vh; }
-  .listen-page .reader { max-height: 46vh; }
+  .listen-page .reader { max-height: 46vh; transition: max-height .6s var(--ease); }
+  /* the reading view takes the nav's space, so more text shows (text itself never moves) */
+  [data-immersive][data-dock] .listen-page .reader { max-height: calc(46vh + var(--nav-h) + 64px); }
   .listen-page .transport { margin: 8px 0 2px; gap: 10px; }
   .listen-page .play-btn { width: 72px; height: 72px; }
   .create-page .editor textarea { min-height: 22vh; max-height: 40vh; }
@@ -474,3 +484,7 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 
 .status-pill.ready.warming .led { animation: led-warm 1.6s ease-in-out infinite; }
 @keyframes led-warm { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .nav, [data-immersive] .nav, .listen-page .player-card, .listen-page .reader { transition-duration: .01s !important; transition-delay: 0s !important; }
+}

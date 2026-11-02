@@ -3,7 +3,7 @@
 // save to the Library. Lives outside React so it survives page changes.
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
-import { segmentText } from '../lib/text.ts'
+import { segmentText, pauseAfter } from '../lib/text.ts'
 import { voiceById, type Lang } from '../lib/voices.ts'
 import { concat, createMp3Encoder, encodeWav, silence, trimSilence } from '../lib/audio.ts'
 import { synthesize } from '../engine/engine.ts'
@@ -58,7 +58,7 @@ export async function runExport(text: string, opts: { voice: string | null; spee
       const res = await inflight[i]
       if (i + 2 < segments.length) inflight.push(request(i + 2))
       const body = trimSilence(res.samples, res.sampleRate)
-      const gap = silence(st.sentencePauseMs * (segments[i].paraEnd ? 2.2 : 1) / opts.speed, res.sampleRate)
+      const gap = silence(pauseAfter(segments[i], st.sentencePauseMs) / opts.speed, res.sampleRate)
       const lead = i === 0 ? silence(150, res.sampleRate) : null
       const chunk = concat(lead ? [lead, body, gap] : [body, gap])
       samples += chunk.length

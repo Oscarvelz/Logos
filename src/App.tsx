@@ -39,6 +39,31 @@ export default function App() {
     if (!lastLoadCrashed()) void isModelCached().then((cached) => { if (cached) ensureModel().catch(() => {}) })
   }, [])
 
+  // Immersive listening (phone): while Listen plays, the bottom nav slides away and
+  // the player glides into its space. Hiding waits a beat so a quick play/pause tap
+  // never starts an animation; showing is immediate. Ended, errors (playing goes
+  // false) and leaving Listen all bring the nav back.
+  const immersive = route === 'listen' && s.playing && !s.error
+  useEffect(() => {
+    const root = document.documentElement
+    if (!immersive) { delete root.dataset.immersive; return }
+    // The player only glides down when it is docked at the bottom of the screen
+    // (sticky); when the page is short and it sits in the flow, it stays put.
+    const dock = () => {
+      const c = document.querySelector<HTMLElement>('.listen-page .player-card')
+      if (!c) return
+      const ty = new DOMMatrixReadOnly(getComputedStyle(c).transform === 'none' ? undefined : getComputedStyle(c).transform).m42
+      const navTop = document.querySelector('.nav')?.getBoundingClientRect().height ?? 0
+      const bottom = c.getBoundingClientRect().bottom - ty
+      const docked = bottom >= innerHeight - navTop - 40
+      if (docked) root.dataset.dock = '1'; else delete root.dataset.dock
+    }
+    const t = setTimeout(() => { dock(); root.dataset.immersive = '1' }, 220)
+    addEventListener('scroll', dock, { passive: true })
+    addEventListener('resize', dock)
+    return () => { clearTimeout(t); removeEventListener('scroll', dock); removeEventListener('resize', dock) }
+  }, [immersive])
+
   const Page = PAGES[route]
   const showMini = s.active && route !== 'listen' && (s.playing || s.current > 0 || s.mode !== null)
   return (

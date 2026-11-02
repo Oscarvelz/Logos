@@ -10,6 +10,8 @@ export type Segment = {
   end: number
   /** true when this segment ends a paragraph (adds a longer pause) */
   paraEnd: boolean
+  /** false when this piece stops mid-sentence (at a comma or semicolon): only a short breath follows */
+  sentEnd: boolean
   lang: Lang
 }
 
@@ -18,10 +20,18 @@ const ABBREV = new Set([
   'sra', 'srta', 'dra', 'ud', 'uds', 'pág', 'pag', 'núm', 'num', 'av', 'avda', 'lic', 'ing', 'arq', 'cap', 'art', 'aprox', 'p.ej', 'ej', 'tel',
 ])
 
-const MAX_CHARS = 220
-// Chunk ramp: the first chunks are short so audio starts fast and the engine
-// can build a buffer before the longer chunks arrive (no stall at sentence 2).
-const RAMP = [80, 120, 160, 200]
+// Segments follow the text's own shape: one sentence each. A sentence is only
+// divided when it is long, and then only where a reader would breathe (a comma,
+// semicolon, colon or dash), never between two words of the same phrase.
+// The first pieces prefer a clause break sooner so audio starts fast.
+const SOFT_MAX = 240
+const HARD_MAX = 520
+const RAMP = [110, 160, 200]
+
+/** Pause after a segment: sentence pause, ×2.2 at a paragraph end, a short breath mid-sentence. */
+export function pauseAfter(seg: Pick<Segment, 'paraEnd' | 'sentEnd'>, sentencePauseMs: number) {
+  return sentencePauseMs * (seg.paraEnd ? 2.2 : seg.sentEnd === false ? 0.4 : 1)
+}
 
 /** Split text into speakable segments with offsets. */
 export function segmentText(source: string, langMode: Lang | 'auto' = 'auto'): Segment[] {
@@ -37,9 +47,10 @@ export function segmentText(source: string, langMode: Lang | 'auto' = 'auto'): S
     const paraLang: Lang = langMode !== 'auto' ? langMode : pd.confidence >= 0.25 ? pd.lang : docLang
     const sentences = splitSentences(para)
     sentences.forEach((s, i) => {
-      for (const piece of capLength(para, s, RAMP[out.length] ?? MAX_CHARS)) {
-        out.push({ text: para.slice(piece.start, piece.end).replace(/\s+/g, ' ').trim(), start: base + piece.start, end: base + piece.end, paraEnd: false, paraLang })
-      }
+      const pieces = capLength(para, s, RAMP[out.length] ?? SOFT_MAX)
+      pieces.forEach((piece, k) => {
+        out.push({ text: para.slice(piece.start, piece.end).replace(/\s+/g, ' ').trim(), start: base + piece.start, end: base + piece.end, paraEnd: false, sentEnd: k === pieces.length - 1, paraLang })
+      })
       if (i === sentences.length - 1 && out.length) out[out.length - 1].paraEnd = true
     })
   }
@@ -90,20 +101,34 @@ function trimSpan(p: string) {
   }
 }
 
-/** Break an over-long sentence at clause boundaries, then at spaces. */
-function capLength(p: string, s: Span, max: number): Span[] {
-  if (s.end - s.start <= max) return [s]
+/** Divide a long sentence only at natural breath points. */
+function capLength(p: string, s: Span, soft: number): Span[] {
+  const CLAUSE = /([,;:])\s+|\s+[—–]\s+/g
+  const breaks = (a: number, b: number) => {
+    const out: number[] = []
+    CLAUSE.lastIndex = 0
+    const seg = p.slice(a, b)
+    let m: RegExpExecArray | null
+    while ((m = CLAUSE.exec(seg))) out.push(a + m.index + m[0].length)
+    return out
+  }
+  if (s.end - s.start <= soft) return [s]
   const pieces: Span[] = []
   let a = s.start
-  while (s.end - a > max) {
-    const window = p.slice(a, a + max)
-    let cut = Math.max(window.lastIndexOf(', '), window.lastIndexOf('; '), window.lastIndexOf(': '), window.lastIndexOf(' — '), window.lastIndexOf(' – '))
-    if (cut < max * 0.35) cut = window.lastIndexOf(' ')
-    if (cut <= 0) cut = max - 1
-    const b = a + cut + 1
-    pieces.push({ start: a, end: b })
-    a = b
+  let limit = soft
+  while (s.end - a > limit) {
+    // the last breath point inside the soft limit, if it leaves a real phrase on both sides
+    const inSoft = breaks(a, Math.min(s.end, a + limit)).filter((x) => x - a >= 25 && s.end - x >= 25)
+    let cut = inSoft.length ? inSoft[inSoft.length - 1] : -1
+    if (cut < 0) {
+      if (s.end - a <= HARD_MAX) break // no breath point yet: keep the sentence whole
+      const inHard = breaks(a, a + HARD_MAX).filter((x) => x - a >= 25 && s.end - x >= 25)
+      cut = inHard.length ? inHard[inHard.length - 1] : (() => { const w = p.slice(a, a + HARD_MAX); const sp = w.lastIndexOf(' '); return sp > 0 ? a + sp + 1 : a + HARD_MAX })()
+    }
+    pieces.push({ start: a, end: cut })
+    a = cut
     while (a < s.end && /\s/.test(p[a])) a++
+    limit = SOFT_MAX
   }
   if (a < s.end) pieces.push({ start: a, end: s.end })
   return pieces.map(trimSpan(p)).filter((x) => x.end > x.start)
