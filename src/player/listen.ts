@@ -9,6 +9,7 @@ import { encodeWav, envelope, silence, trimSilence, concat } from '../lib/audio.
 import { engine, ensureModel, synthesize, promote } from '../engine/engine.ts'
 import { speakDevice, cancelDevice, deviceSpeechAvailable } from '../engine/device-voice.ts'
 import { stopClipPlayer, onClipPlay } from './clip.ts'
+import { alignWords } from './wordsync.ts'
 
 type Rendered = { blob: Blob; env: Float32Array; duration: number; voice: string }
 
@@ -309,7 +310,7 @@ export async function play(from?: number) {
   await playIndex(idx)
 }
 
-async function playIndex(i: number, startFrac = 0) {
+async function playIndex(i: number, startFrac = 0, startWord?: { w: number; words: string[] }) {
   cancelDevice()
   const s = listen.get()
   if (i < 0 || i >= s.segments.length) return
@@ -343,7 +344,8 @@ async function playIndex(i: number, startFrac = 0) {
   a.loop = false
   const tr = buildTrack(i)
   a.src = tr.url
-  if (startFrac > 0) await setTimeWhenReady(a, startFrac * r.duration)
+  const startT = startWord ? wordStart(r, startWord.w, startWord.words) : startFrac * r.duration
+  if (startT > 0) await setTimeWhenReady(a, startT)
   if (my !== token) return
   a.playbackRate = settings.get().listenSpeed
   listen.set({ buffering: false })
@@ -497,6 +499,35 @@ export function seek(i: number) {
   const s = listen.get()
   if (!s.active) return
   void play(Math.max(0, Math.min(s.segments.length - 1, i)))
+}
+
+/** Where word `w` begins inside a rendered sentence, a hair early so its first sound isn't clipped. */
+function wordStart(r: Rendered, w: number, words: string[]): number {
+  if (w <= 0) return 0
+  const starts = alignWords(r.env, 60, words)
+  return Math.max(0, Math.min(r.duration - 0.05, (starts[Math.min(w, starts.length - 1)] ?? 0) - 0.06))
+}
+
+/**
+ * Tap a word: read from that word. `words` is the sentence as shown, split on spaces
+ * (the same list the word highlight uses), so the timing matches what lights up.
+ */
+export function seekWord(i: number, w: number, words: string[]) {
+  const s = listen.get()
+  if (!s.active) return
+  i = Math.max(0, Math.min(s.segments.length - 1, i))
+  if (w <= 0) { seek(i); return }
+  const r = cache.get(i)
+  if (r && s.playing && s.mode === 'neural' && audio && onTrack() && i >= track!.start && i < track!.end) {
+    audio.currentTime = track!.offs[i - track!.start] + wordStart(r, w, words)
+    if (i !== s.current) { listen.set({ current: i }); updateMediaSession() }
+    if (s.finished) listen.set({ finished: false })
+    updatePosition()
+    return
+  }
+  if (!neuralUsable() && !r) { seek(i); return }   // device-voice bridge reads whole sentences
+  stopClipPlayer()
+  void playIndex(i, 0, { w, words })
 }
 
 /**

@@ -1,0 +1,18 @@
+import { launch, BASE, PHONE } from './common.mjs';
+const b = await launch(); const p = await (await b.newContext({ ...PHONE, viewport: { width: 384, height: 832 } })).newPage(); const errs=[]; p.on('pageerror', e=>errs.push(e.message));
+await p.addInitScript(() => { localStorage.setItem('logos.phononThreads', '1'); localStorage.setItem('logos.debug','1') });
+await p.goto(BASE + '#/listen'); await p.waitForTimeout(6000);
+await p.fill('textarea', 'Sleep matters more than most people think. When we sleep, the brain clears waste and stores memories, which is why a long night of rest changes how you feel.');
+await p.locator('[aria-label="Play"]').first().click();
+await p.waitForSelector('.reader-head', { timeout: 60000 });
+console.log('hint', await p.locator('.rh-hint').textContent());
+await p.waitForTimeout(30000);
+const tap = async (sel, word) => {
+  const pt = await p.evaluate(([sel, word]) => { const el = document.querySelector(sel); const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let n; while ((n = tw.nextNode())) { const i = n.textContent.indexOf(word); if (i >= 0) { const r = document.createRange(); r.setStart(n, i + 1); r.setEnd(n, i + 2); const b = r.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2] } } return null }, [sel, word]);
+  await p.mouse.click(pt[0], pt[1]); await p.waitForTimeout(900);
+  return p.evaluate(() => ({ cur: document.querySelector('.w.cur')?.textContent, idx: __logos.listen.wordClock?.()?.idx, t: +(__logos.listen.wordClock?.()?.t ?? -1).toFixed(2) }));
+};
+console.log('tap brain', JSON.stringify(await tap('[data-i="1"]', 'brain')));
+console.log('tap rest', JSON.stringify(await tap('[data-i="1"]', 'rest')));
+console.log('tap people', JSON.stringify(await tap('[data-i="0"]', 'people')));
+console.log('errs', errs); await b.close();

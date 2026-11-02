@@ -5,7 +5,7 @@ import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
-import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, endSession, sentenceProgress, seekFraction, wordClock } from '../player/listen.ts'
+import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, endSession, sentenceProgress, seekFraction, wordClock, seekWord } from '../player/listen.ts'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
 import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
@@ -319,7 +319,7 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
         <span key={g.index}>
           <span data-i={g.index} role="button" tabIndex={0}
             className={`sent ${st.highlight && g.index === s.current ? 'now' : ''} ${g.index < s.current ? 'past' : ''}`}
-            onClick={() => seek(g.index)} onKeyDown={(ev) => { if (ev.key === 'Enter') seek(g.index) }}>{g.index === s.current ? <Words text={g.text.replace(/\*\*|__|`/g, '')} /> : g.text.replace(/\*\*|__|`/g, '')}</span>{' '}
+            onClick={(ev) => tapWord(ev, g.index, g.text.replace(/\*\*|__|`/g, ''))} onKeyDown={(ev) => { if (ev.key === 'Enter') seek(g.index) }}>{g.index === s.current ? <Words text={g.text.replace(/\*\*|__|`/g, '')} /> : g.text.replace(/\*\*|__|`/g, '')}</span>{' '}
         </span>
       ))}
     </p>
@@ -327,7 +327,7 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
   return (
     <>
       <div className="reader-head">
-        <span className="rh-hint">Tap any sentence to jump there</span>
+        <span className="rh-hint">Tap any word to read from there</span>
         <div className="rh-actions">
           <button className="rh-btn" onClick={onKeep} aria-label="Save to Library"><BookmarkPlus size={13} /> Save</button>
           <button className="rh-btn" onClick={onEdit}><PenLine size={13} /> Edit</button>
@@ -346,6 +346,29 @@ function formatWait(sec: number): string {
   if (sec < 60) return `${Math.max(5, Math.round(sec / 5) * 5)} s`
   const m = Math.round(sec / 60)
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`
+}
+
+// Tap a word: find which word sits under the finger and read from it.
+function tapWord(ev: { currentTarget: HTMLElement; clientX: number; clientY: number }, idx: number, text: string) {
+  const el = ev.currentTarget
+  const words = text.split(/\s+/).filter(Boolean)
+  let w = 0
+  try {
+    const d = document as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null }
+    let node: Node | null = null, off = 0
+    const cp = d.caretPositionFromPoint?.(ev.clientX, ev.clientY)
+    if (cp) { node = cp.offsetNode; off = cp.offset }
+    else { const r = document.caretRangeFromPoint?.(ev.clientX, ev.clientY); if (r) { node = r.startContainer; off = r.startOffset } }
+    if (node && el.contains(node)) {
+      const rg = document.createRange()
+      rg.setStart(el, 0)
+      rg.setEnd(node, off)
+      const before = rg.toString()
+      const n = before.split(/\s+/).filter(Boolean).length
+      w = /\s$/.test(before) || !before ? n : n - 1
+    }
+  } catch { w = 0 }
+  seekWord(idx, Math.max(0, Math.min(words.length - 1, w)), words)
 }
 
 // Splits the sentence being read into words (spaces kept outside the word spans).
