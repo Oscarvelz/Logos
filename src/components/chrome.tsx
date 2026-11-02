@@ -8,6 +8,25 @@ import { useEffect, useState } from 'react'
 import { VOICES, favoriteVoices, type Lang, type Voice } from '../lib/voices.ts'
 import { Avatar, FavStar, ProgressRing, Sheet, voiceHue } from './ui.tsx'
 import { formatBytes } from '../lib/audio.ts'
+import { clipPlayer, playClip, stopClipPlayer } from '../player/clip.ts'
+import { pause as pauseListen } from '../player/listen.ts'
+import previewList from '../lib/previews.json'
+
+const PREVIEWS = new Set<string>(previewList as string[])
+
+/** Small play button beside a voice's name in the picker: hear it before choosing. */
+function PreviewBtn({ v, tab }: { v: Voice; tab: number }) {
+  const cp = useStore(clipPlayer)
+  if (!PREVIEWS.has(v.id)) return null
+  const key = `preview:${v.id}`
+  const on = cp.key === key && cp.playing
+  return (
+    <button className={`pick-play ${on ? 'on' : ''}`} tabIndex={tab} aria-label={on ? `Stop ${v.name} sample` : `Hear ${v.name}`}
+      onClick={(e) => { e.stopPropagation(); if (on) { stopClipPlayer(); return } if (listen.get().playing) pauseListen(); void playClip(key, `${import.meta.env.BASE_URL}previews/${v.id}.mp3`, { title: `${v.name} — sample` }) }}>
+      {on ? <Pause size={11} fill="currentColor" /> : <Play size={11} fill="currentColor" style={{ marginLeft: 1 }} />}
+    </button>
+  )
+}
 
 const ITEMS: { route: Route; label: string; Icon: typeof Play }[] = [
   { route: 'listen', label: 'Listen', Icon: AudioLines },
@@ -128,12 +147,10 @@ function pickerGroups(favorites: string[], lang?: Lang | 'auto'): PickGroup[] {
 export function VoicePicker({ open, onClose, value, onPick, lang }: { open: boolean; onClose: () => void; value: string | null; onPick: (id: string | null) => void; lang?: Lang | 'auto' }) {
   const st = useStore(settings)
   const groups = pickerGroups(st.favorites, lang)
-  const initial = () => {
-    if (value === null || st.favorites.includes(value)) return groups[0]?.key ?? null
-    return groups.find((g) => g.list.some((v) => v.id === value))?.key ?? groups[0]?.key ?? null
-  }
+  // Oscar wants every section folded when the picker opens; "Selected · name" shows where the voice is.
+  const initial = (): string | null => null
   const [openKey, setOpenKey] = useState<string | null>(initial)
-  useEffect(() => { if (open) setOpenKey(initial()) }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) setOpenKey(initial()); else stopClipPlayer() }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   const toggleGroup = (key: string, el: HTMLElement) => {
     const next = openKey === key ? null : key
     setOpenKey(next)
@@ -173,7 +190,7 @@ export function VoicePicker({ open, onClose, value, onPick, lang }: { open: bool
                     <div key={v.id} className={`pick ${value === v.id ? 'on' : ''}`} role="button" tabIndex={isOpen ? 0 : -1} onClick={pick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick() } }}>
                       <Avatar voice={v} />
                       <div className="grow">
-                        <div className="voice-name"><span className="vn">{v.name}</span>{(g.key === 'fav' || g.key === 'pocket') && <span className="badge">{v.accent}</span>}{g.key === 'fav' && v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
+                        <div className="voice-name"><span className="vn">{v.name}</span><PreviewBtn v={v} tab={isOpen ? 0 : -1} />{(g.key === 'fav' || g.key === 'pocket') && <span className="badge">{v.accent}</span>}{g.key === 'fav' && v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
                         <div className="voice-tag">{v.tagline}</div>
                       </div>
                       {value === v.id && <Check size={20} color="var(--accent)" />}

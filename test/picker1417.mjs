@@ -1,0 +1,11 @@
+import { launch, BASE, PHONE } from './common.mjs';
+const b = await launch(); const p = await (await b.newContext({ ...PHONE, viewport: { width: 384, height: 832 } })).newPage(); const errs=[]; p.on('pageerror', e=>errs.push(e.message));
+await p.goto(BASE + '#/listen'); await p.waitForTimeout(6000);
+await p.locator('.player-top button').last().click(); await p.waitForSelector('.vgroups'); await p.waitForTimeout(500);
+console.log('open groups', await p.locator('.vgroup.open').count());
+await p.locator('.vgroup-head').first().click(); await p.waitForTimeout(700);
+await p.locator('.vgroup.open .pick-play').first().click(); await p.waitForTimeout(1200);
+console.log('playing', await p.locator('.pick-play.on').count(), 'still open sheet', await p.locator('.vgroups').count());
+await p.screenshot({ path: 'test/shots/picker.png' });
+const f = await p.evaluate(() => { const r = document.querySelector('.vgroup.open .pick .voice-name').getBoundingClientRect(); return Math.round(r.height) }); console.log('name row h', f, errs);
+await b.close();
