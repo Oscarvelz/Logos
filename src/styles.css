@@ -315,7 +315,7 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 .scrub-tip { position: absolute; bottom: 100%; transform: translateX(-50%); white-space: nowrap; font-size: 12px; padding: 4px 9px; border-radius: 8px; background: var(--bg-3); border: 1px solid var(--line-2); color: var(--text); pointer-events: none; }
 .player-progress > i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 99px; transition: width .3s linear; }
 .player-progress > b { position: absolute; inset: 0 auto 0 0; background: var(--surface-3); }
-.transport { position: relative; display: grid; grid-template-columns: 1fr auto auto auto 1fr; align-items: center; gap: 14px; margin: 14px 0 6px; }
+.transport { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr); align-items: center; gap: 14px; margin: 14px 0 6px; }
 .transport .t-left { justify-self: start; }
 .transport .t-right { justify-self: end; }
 @media (max-width: 839px) {
@@ -330,7 +330,9 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
   .listen-page .reader { max-height: 46vh; transition: max-height .6s var(--ease); }
   /* the reading view takes the nav's space, so more text shows (text itself never moves) */
   [data-immersive][data-dock] .listen-page .reader { max-height: calc(46vh + var(--nav-h) + 64px); }
-  .listen-page .transport { margin: 8px 0 2px; gap: 10px; }
+  .listen-page .transport { margin: 8px 0 2px; gap: 8px; }
+  .listen-page .transport .icon-btn.filled { width: 50px; height: 50px; }
+  .listen-page .transport .t-left { height: 44px; padding: 0 11px; gap: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .listen-page .play-btn { width: 72px; height: 72px; }
   .create-page .editor textarea { min-height: 22vh; max-height: 40vh; }
 }
@@ -487,4 +489,11 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 
 @media (prefers-reduced-motion: reduce) {
   .nav, [data-immersive] .nav, .listen-page .player-card, .listen-page .reader { transition-duration: .01s !important; transition-delay: 0s !important; }
+}
+@media (max-width: 380px) {
+  .listen-page .transport { gap: 6px; }
+  .listen-page .transport .icon-btn.filled { width: 44px; height: 44px; }
+  .listen-page .play-btn { width: 64px; height: 64px; }
+  .listen-page .transport .t-left { padding: 0 12px; }
+  .listen-page .transport .t-left svg { display: none; }
 }
