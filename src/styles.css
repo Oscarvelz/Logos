@@ -329,15 +329,20 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 @media (max-width: 839px) {
   .listen-page .page-sub { display: none; }
   .listen-page .page-head { margin-bottom: 12px; }
-  .listen-page .player-card { position: sticky; bottom: calc(var(--nav-h) + var(--safe-b) + 10px); z-index: 5; padding: 12px 14px 12px; background: color-mix(in srgb, var(--bg-3) 88%, transparent); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-    transition: transform .6s var(--ease); will-change: transform; }
-  /* glide into the nav's space: ends safe-area + 10px above the screen edge */
-  [data-immersive][data-dock] .listen-page .player-card { transform: translateY(var(--nav-h)); }
+  /* Phone: the text card and the player share the screen as two separate cards;
+     the player never covers the text. The text card fills what is left and scrolls inside. */
+  .listen-page { flex: none; display: flex; flex-direction: column; height: calc(100dvh - var(--top-h) - var(--safe-t)); min-height: 560px;
+    padding-bottom: calc(var(--nav-h) + var(--safe-b) + 12px); transition: padding-bottom .6s var(--ease); }
+  /* immersive: the nav slides away and both cards take its space (text grows, player settles lower) */
+  [data-immersive] .listen-page { padding-bottom: calc(var(--safe-b) + 12px); }
+  .listen-page .listen-grid { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+  .listen-page .listen-grid > .card:first-child { flex: 1; min-height: 150px; display: flex; flex-direction: column;
+    box-shadow: 0 18px 40px -26px rgba(0,0,0,.75); }
+  .listen-page .player-card { flex: none; padding: 12px 14px 12px; }
   .listen-page .viz { height: 52px; }
-  .listen-page .editor textarea { min-height: 30vh; }
-  .listen-page .reader { max-height: 46vh; transition: max-height .6s var(--ease); }
-  /* the reading view takes the nav's space, so more text shows (text itself never moves) */
-  [data-immersive][data-dock] .listen-page .reader { max-height: calc(46vh + var(--nav-h) + 64px); }
+  .listen-page .editor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .listen-page .editor textarea { flex: 1; min-height: 0; max-height: none; }
+  .listen-page .reader { flex: 1; min-height: 0; max-height: none; }
   .listen-page .transport { margin: 8px 0 2px; gap: 8px; }
   .listen-page .transport .icon-btn.filled { width: 54px; height: 54px; }
   .listen-page .transport { gap: 14px; }
@@ -496,7 +501,7 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 @keyframes led-warm { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav, [data-immersive] .nav, .listen-page .player-card, .listen-page .reader { transition-duration: .01s !important; transition-delay: 0s !important; }
+  .nav, [data-immersive] .nav, .listen-page { transition-duration: .01s !important; transition-delay: 0s !important; }
 }
 @media (max-width: 380px) {
   .listen-page .transport { gap: 6px; }
