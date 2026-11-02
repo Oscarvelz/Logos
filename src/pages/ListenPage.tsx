@@ -287,7 +287,7 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
       const ws = sent ? [...sent.querySelectorAll<HTMLElement>('.w')] : []
       if (!ws.length) return
       const idx = listen.get().current
-      if (idx !== lastIdx) { lastIdx = idx; lastWord = -1; lastLine = -1 }
+      if (idx !== lastIdx) { box.current?.querySelectorAll('.w.said, .w.cur').forEach((x) => { if (!sent?.contains(x)) x.className = 'w' }); lastIdx = idx; lastWord = -1; lastLine = -1 }
       // Words are timed from the sentence's own audio (see wordsync.ts); the clock is smoothed
       // between the phone's coarse time updates and led slightly, so the light lands as the word starts.
       const clk = wordClock()
@@ -319,7 +319,7 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
         <span key={g.index}>
           <span data-i={g.index} role="button" tabIndex={0}
             className={`sent ${st.highlight && g.index === s.current ? 'now' : ''} ${g.index < s.current ? 'past' : ''}`}
-            onClick={(ev) => tapWord(ev, g.index, g.text.replace(/\*\*|__|`/g, ''))} onKeyDown={(ev) => { if (ev.key === 'Enter') seek(g.index) }}>{g.index === s.current ? <Words text={g.text.replace(/\*\*|__|`/g, '')} /> : g.text.replace(/\*\*|__|`/g, '')}</span>{' '}
+            onClick={(ev) => tapWord(ev, g.index, g.text.replace(/\*\*|__|`/g, ''))} onKeyDown={(ev) => { if (ev.key === 'Enter') seek(g.index) }}><Words text={g.text.replace(/\*\*|__|`/g, '')} /></span>{' '}
         </span>
       ))}
     </p>
@@ -349,11 +349,14 @@ function formatWait(sec: number): string {
 }
 
 // Tap a word: find which word sits under the finger and read from it.
-function tapWord(ev: { currentTarget: HTMLElement; clientX: number; clientY: number }, idx: number, text: string) {
+function tapWord(ev: { currentTarget: HTMLElement; target: EventTarget; clientX: number; clientY: number }, idx: number, text: string) {
   const el = ev.currentTarget
   const words = text.split(/\s+/).filter(Boolean)
   let w = 0
-  try {
+  // Every sentence is split into word spans, so the tapped word is simply the span under the finger.
+  const hit = (ev.target as Element | null)?.closest?.('.w')
+  if (hit && el.contains(hit)) { w = [...el.querySelectorAll('.w')].indexOf(hit) }
+  else try {
     const d = document as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null }
     let node: Node | null = null, off = 0
     const cp = d.caretPositionFromPoint?.(ev.clientX, ev.clientY)
