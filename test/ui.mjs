@@ -7,7 +7,7 @@ for (const [tag, dev] of [['phone', PHONE], ['tablet', TABLET]]) {
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e).slice(0, 200)));
   p.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text().slice(0, 200)); });
-  await p.goto(BASE); await p.waitForTimeout(2500);
+  await p.goto(BASE); await p.waitForTimeout(6000);
   console.log(tag, 'isolated:', await p.evaluate(() => crossOriginIsolated), 'sw:', await p.evaluate(() => !!navigator.serviceWorker.controller));
   await p.screenshot({ path: `shots/${tag}-listen-empty.png` });
   await p.fill('textarea', SAMPLE);

@@ -86,12 +86,7 @@ export function ListenPage() {
 
   return (
     <div className="page wide listen-page">
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">Listen</h1>
-          <p className="page-sub">Paste anything. It starts speaking in a heartbeat.</p>
-        </div>
-      </div>
+      <ListenHead text={reading ? s.text : text} lang={lang} playing={s.playing && reading} remaining={remaining} />
 
       <div className="listen-grid">
         <div className="card" style={{ overflow: 'hidden' }}>
@@ -147,7 +142,7 @@ export function ListenPage() {
             <span aria-hidden />
             <button className="icon-btn filled" onClick={prev} disabled={!reading} aria-label="Previous sentence"><SkipBack size={22} /></button>
             <button className={`play-btn ${s.buffering ? 'busy' : ''}`} onClick={reading ? toggle : start} aria-label={s.playing ? 'Pause' : 'Play'}>
-              {s.buffering ? <Loader2 size={32} className="spin" /> : s.playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" style={{ marginLeft: 4 }} />}
+              <span className="pb-icon" key={s.buffering ? 'b' : s.playing ? 'p' : 'l'}>{s.buffering ? <Loader2 size={32} className="spin" /> : s.playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" style={{ marginLeft: 4 }} />}</span>
             </button>
             <button className="icon-btn filled" onClick={next} disabled={!reading} aria-label="Next sentence"><SkipForward size={22} /></button>
             <span aria-hidden />
@@ -245,14 +240,45 @@ function Reader({ onEdit }: { onEdit: () => void }) {
   const s = useStore(listen)
   const st = useStore(settings)
   const box = useRef<HTMLDivElement>(null)
+  // The user scrolling by hand pauses the automatic follow for a few seconds.
+  const handScroll = useRef(0)
   useEffect(() => {
-    const el = box.current?.querySelector<HTMLElement>(`[data-i="${s.current}"]`)
-    if (el && box.current) {
-      const r = el.getBoundingClientRect()
-      const b = box.current.getBoundingClientRect()
-      if (r.top < b.top + 40 || r.bottom > b.bottom - 60) box.current.scrollTo({ top: box.current.scrollTop + r.top - b.top - b.height / 3, behavior: 'smooth' })
+    const el = box.current; if (!el) return
+    const mark = () => { handScroll.current = performance.now() }
+    el.addEventListener('touchmove', mark, { passive: true }); el.addEventListener('wheel', mark, { passive: true })
+    return () => { el.removeEventListener('touchmove', mark); el.removeEventListener('wheel', mark) }
+  }, [])
+  const follow = (target: HTMLElement | null, force = false) => {
+    const b = box.current
+    if (!target || !b) return
+    if (!force && performance.now() - handScroll.current < 3500) return
+    const r = target.getBoundingClientRect(), br = b.getBoundingClientRect()
+    // keep the line being read in the upper-middle of the card
+    if (force ? (r.top < br.top + 30 || r.bottom > br.bottom - 40) : (r.bottom > br.top + br.height * 0.58 || r.top < br.top + 24))
+      b.scrollTo({ top: b.scrollTop + r.top - br.top - br.height * 0.3, behavior: 'smooth' })
+  }
+  useEffect(() => { follow(box.current?.querySelector<HTMLElement>(`[data-i="${s.current}"]`) ?? null, true) }, [s.current])
+  // Word by word: purely visual. The voice still reads whole sentences; words light up in step with the audio.
+  useEffect(() => {
+    if (!s.playing) return
+    let raf = 0, lastWord = -1, lastLine = -1, lastIdx = -1
+    const tick = () => {
+      raf = requestAnimationFrame(tick)
+      const sent = box.current?.querySelector<HTMLElement>(`[data-i="${listen.get().current}"]`)
+      const ws = sent ? [...sent.querySelectorAll<HTMLElement>('.w')] : []
+      if (!ws.length) return
+      const idx = listen.get().current
+      if (idx !== lastIdx) { lastIdx = idx; lastWord = -1; lastLine = -1 }
+      const w = wordAt(ws, sentenceProgress())
+      if (w === lastWord) return
+      for (let i = 0; i < ws.length; i++) ws[i].className = i < w ? 'w said' : i === w ? 'w cur' : 'w'
+      lastWord = w
+      const top = ws[w].offsetTop
+      if (top !== lastLine) { lastLine = top; follow(ws[w]) }
     }
-  }, [s.current])
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [s.playing, s.current])
   const paras = useMemo(() => {
     const out: (typeof s.segments)[] = []
     let curr: typeof s.segments = []
@@ -267,7 +293,7 @@ function Reader({ onEdit }: { onEdit: () => void }) {
         <span key={g.index}>
           <span data-i={g.index} role="button" tabIndex={0}
             className={`sent ${st.highlight && g.index === s.current ? 'now' : ''} ${g.index < s.current ? 'past' : ''}`}
-            onClick={() => seek(g.index)} onKeyDown={(ev) => { if (ev.key === 'Enter') seek(g.index) }}>{g.text.replace(/\*\*|__|`/g, '')}</span>{' '}
+            onClick={() => seek(g.index)} onKeyDown={(ev) => { if (ev.key === 'Enter') seek(g.index) }}>{g.index === s.current ? <Words text={g.text.replace(/\*\*|__|`/g, '')} /> : g.text.replace(/\*\*|__|`/g, '')}</span>{' '}
         </span>
       ))}
     </p>
@@ -291,4 +317,37 @@ function formatWait(sec: number): string {
   if (sec < 60) return `${Math.max(5, Math.round(sec / 5) * 5)} s`
   const m = Math.round(sec / 60)
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`
+}
+
+// Splits the sentence being read into words (spaces kept outside the word spans).
+function Words({ text }: { text: string }) {
+  const parts = text.split(/(\s+)/)
+  return <>{parts.map((t, i) => /^\s+$/.test(t) || !t ? t : <span key={i} className="w">{t}</span>)}</>
+}
+
+// Which word the voice is on, from how far through the sentence's audio we are.
+// Each word weighs its letters plus a little for the breath after punctuation.
+function wordAt(ws: HTMLElement[], p: number): number {
+  const wt = ws.map((w) => { const t = w.textContent ?? ''; return t.replace(/[^\p{L}\p{N}]/gu, '').length + 1.2 + (/[.!?…]$/.test(t) ? 3 : /[,;:—–]$/.test(t) ? 2 : 0) })
+  const total = wt.reduce((a, b) => a + b, 0)
+  let acc = 0, target = Math.max(0, Math.min(1, p)) * total
+  for (let i = 0; i < wt.length; i++) { acc += wt[i]; if (target < acc - wt[i] * 0.35) return i }
+  return wt.length - 1
+}
+
+// Slim header for Listen: what is loaded and how long it runs, instead of a big page title.
+function ListenHead({ text, lang, playing, remaining }: { text: string; lang: Lang; playing: boolean; remaining: number }) {
+  const first = text.trim().split(/\n/)[0]?.replace(/[#*_`>]/g, '').trim() ?? ''
+  const title = first.length > 70 ? first.slice(0, 70).replace(/\s+\S*$/, '') + '…' : first
+  const words = wordCount(text)
+  return (
+    <div className={`listen-head ${playing ? 'live' : ''}`}>
+      <div className="lh-eyebrow">
+        <span className="lh-dot" />
+        <span>{text.trim() ? (playing ? 'Now reading' : 'Ready to read') : 'Listen'}</span>
+        {text.trim() ? <span className="lh-meta">{words.toLocaleString()} words · {formatDuration(remaining)} · {LANG_LABEL[lang]}</span> : null}
+      </div>
+      <div className="lh-title" lang={lang}>{title || 'Paste anything. Hear it instantly.'}</div>
+    </div>
+  )
 }
