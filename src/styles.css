@@ -376,20 +376,18 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 
 /* ── Sheet ─────────────────────────────────────────────── */
 .scrim { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.5); backdrop-filter: blur(4px); animation: fadeIn .25s both; }
+/* 1.4.14: every sheet is a centered floating window, on phone too (Oscar: "far more premium"). */
 .sheet {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-height: 86dvh; overflow: auto;
-  background: var(--bg-2); border-top-left-radius: 28px; border-top-right-radius: 28px; border: 1px solid var(--line-2); border-bottom: 0;
-  padding: 10px 16px calc(20px + var(--safe-b)); animation: sheetUp .4s var(--ease) both; box-shadow: 0 -20px 60px -20px rgba(0,0,0,.6);
+  position: fixed; left: 50%; top: 50%; z-index: 61; width: min(560px, calc(100vw - 28px)); max-height: min(82dvh, 760px); overflow: auto; overscroll-behavior: contain;
+  transform: translate(-50%, -50%); border-radius: 28px; border: 1px solid var(--line-2);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, var(--bg-2)), var(--bg-2) 140px);
+  padding: 20px 16px 18px; animation: popIn .34s var(--ease) both;
+  box-shadow: 0 30px 80px -24px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.02), inset 0 1px 0 rgba(255,255,255,.05);
 }
-.sheet-grip { width: 42px; height: 5px; border-radius: 99px; background: var(--surface-3); margin: 4px auto 12px; }
+.sheet-grip { display: none; }
 .sheet h3 { font-family: var(--font-display); font-weight: 400; font-size: 30px; margin: 0 4px 12px; }
-@media (min-width: 840px) {
-  .sheet { left: 50%; right: auto; bottom: auto; top: 50%; width: min(560px, 92vw); transform: translate(-50%, -50%); border-radius: 28px; border: 1px solid var(--line-2); animation: popIn .32s var(--ease) both; }
-  .sheet-grip { display: none; }
-}
 @keyframes fadeIn { from { opacity: 0; } }
-@keyframes sheetUp { from { transform: translateY(100%); } }
-@keyframes popIn { from { opacity: 0; transform: translate(-50%, -46%) scale(.97); } }
+@keyframes popIn { from { opacity: 0; transform: translate(-50%, -46%) scale(.96); } }
 
 /* ── Voices ─────────────────────────────────────────────── */
 .voice-grid { display: grid; gap: 12px; grid-template-columns: 1fr; }

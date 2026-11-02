@@ -1,0 +1,15 @@
+import { launch, BASE, PHONE } from './common.mjs';
+const b = await launch(); const p = await (await b.newContext(PHONE)).newPage(); const errs = [];
+p.on('pageerror', (e) => errs.push(e.message));
+await p.addInitScript(() => { localStorage.setItem('logos.debug', '1'); localStorage.setItem('logos.phononThreads', '1') });
+await p.goto(BASE + '#/listen'); await p.waitForTimeout(6000);
+await p.fill('textarea', 'Sleep matters more than most people think. When we sleep, the brain clears waste and stores memories.');
+await p.click('[aria-label="Save to Library"]'); await p.waitForTimeout(600); await p.screenshot({ path: 'test/shots/s-keep.png' });
+const box = await p.locator('.sheet').boundingBox(); const vp = p.viewportSize(); console.log('keep center offset', Math.round(box.x + box.width / 2 - vp.width / 2), Math.round(box.y + box.height / 2 - vp.height / 2), box.width);
+await p.click('.keep-opt >> nth=1'); await p.waitForTimeout(500);
+await p.click('.voice-chip'); await p.waitForTimeout(700); await p.screenshot({ path: 'test/shots/s-voice.png' });
+const vb = await p.locator('.sheet').boundingBox(); console.log('voice sheet', vb);
+await p.keyboard.press('Escape');
+await p.goto(BASE + '#/library'); await p.waitForTimeout(800);
+await p.locator('[aria-label="More actions"]').first().click(); await p.waitForTimeout(600); await p.screenshot({ path: 'test/shots/s-menu.png' });
+console.log('errs', errs); await b.close();
