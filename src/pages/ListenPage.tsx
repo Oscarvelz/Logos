@@ -5,12 +5,13 @@ import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
-import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, endSession, sentenceProgress, seekFraction } from '../player/listen.ts'
+import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, endSession, sentenceProgress, seekFraction, wordClock } from '../player/listen.ts'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
 import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
 import { exportJob, queueExport } from '../player/exporter.ts'
 import { navigate } from '../lib/router.ts'
+import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { WebImport } from '../components/webimport.tsx'
 import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
@@ -287,7 +288,14 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
       if (!ws.length) return
       const idx = listen.get().current
       if (idx !== lastIdx) { lastIdx = idx; lastWord = -1; lastLine = -1 }
-      const w = wordAt(ws, sentenceProgress())
+      // Words are timed from the sentence's own audio (see wordsync.ts); the clock is smoothed
+      // between the phone's coarse time updates and led slightly, so the light lands as the word starts.
+      const clk = wordClock()
+      let w: number
+      if (clk && clk.idx === idx) {
+        const starts = alignWords(clk.env, 60, ws.map((x) => x.textContent ?? ''))
+        w = wordAtTime(starts, clk.t + settings.get().wordLeadMs / 1000)
+      } else w = wordAt(ws, sentenceProgress())
       if (w === lastWord) return
       for (let i = 0; i < ws.length; i++) ws[i].className = i < w ? 'w said' : i === w ? 'w cur' : 'w'
       lastWord = w
@@ -319,9 +327,11 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
   return (
     <>
       <div className="reader-head">
-        <span className="muted small grow">Tap any sentence to jump there</span>
-        <button className="btn sm ghost" onClick={onKeep} aria-label="Save to Library"><BookmarkPlus size={16} /> Save</button>
-        <button className="btn sm ghost" onClick={onEdit}><PenLine size={16} /> Edit</button>
+        <span className="rh-hint">Tap any sentence to jump there</span>
+        <div className="rh-actions">
+          <button className="rh-btn" onClick={onKeep} aria-label="Save to Library"><BookmarkPlus size={13} /> Save</button>
+          <button className="rh-btn" onClick={onEdit}><PenLine size={13} /> Edit</button>
+        </div>
       </div>
       <div className="reader" ref={box}>{body}</div>
     </>

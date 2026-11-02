@@ -1,0 +1,11 @@
+import { launch, BASE, PHONE } from './common.mjs';
+const b = await launch(); const ctx = await b.newContext({ ...PHONE, viewport: { width: 384, height: 832 } }); const p = await ctx.newPage(); const errs=[]; p.on('pageerror', e=>errs.push(e.message));
+await p.addInitScript(() => { localStorage.setItem('logos.phononThreads', '1') });
+await p.goto(BASE + '#/listen'); await p.waitForTimeout(6000);
+await p.fill('textarea', 'Sleep matters more than most people think. When we sleep, the brain clears waste and stores memories. A long night of rest can change how you feel the next day.');
+await p.locator('.editor-bar button[aria-label="Done"], .editor-bar .btn.primary').first().click().catch(()=>{});
+await p.waitForTimeout(800);
+const r = await p.evaluate(() => { const h = document.querySelector('.rh-hint'); if (!h) return null; return { h: h.getBoundingClientRect().height, clipped: h.scrollWidth > h.clientWidth, btns: [...document.querySelectorAll('.rh-btn')].map(b => { const r = b.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] }), card: (() => { const r = document.querySelector('.reader-head').getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)] })() } });
+console.log(JSON.stringify(r), errs);
+await p.locator('.reader-head').screenshot({ path: 'test/shots/rh.png' }).catch(e=>console.log(e.message));
+await b.close();

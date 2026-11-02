@@ -17,6 +17,8 @@ export type Settings = {
   autoDownload: boolean
   deviceFallback: boolean
   highlight: boolean
+  /** Word highlight timing nudge in ms (+ = earlier). For Bluetooth delay. */
+  wordLeadMs: number
 }
 
 const KEY = 'logos.settings.v1'
@@ -40,6 +42,7 @@ const DEFAULTS: Settings = {
   autoDownload: true,
   deviceFallback: false,
   highlight: true,
+  wordLeadMs: 90,
 }
 
 function load(): Settings {

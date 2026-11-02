@@ -612,6 +612,16 @@ function smoothTime(a: HTMLAudioElement): number {
   return clockShown
 }
 
+/** For the word highlight: the current sentence's loudness envelope and a smooth time into it. */
+export function wordClock(): { env: Float32Array; t: number; idx: number } | null {
+  const s = listen.get()
+  if (s.mode !== 'neural' || !audio || !onTrack()) return null
+  const r = cache.get(s.current)
+  if (!r) return null
+  const off = track!.offs[s.current - track!.start] ?? 0
+  return { env: r.env, t: Math.max(0, smoothTime(audio) - off), idx: s.current }
+}
+
 export function sentenceProgress(): number {
   const s = listen.get()
   if (s.mode !== 'neural' || !audio) return 0

@@ -7,7 +7,7 @@ import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 
-const VERSION = '1.4.15'
+const VERSION = '1.4.16'
 
 export function SettingsPage() {
   const st = useStore(settings)
@@ -100,6 +100,14 @@ export function SettingsPage() {
         <div className="list-row">
           <div className="grow"><div className="t">Highlight current sentence</div></div>
           <Switch label="Highlight current sentence" on={st.highlight} onChange={(v) => settings.set({ highlight: v })} />
+        </div>
+        <div className="list-row">
+          <div className="grow"><div className="t">Word timing</div><div className="d">{st.wordLeadMs === 90 ? 'Tuned for the phone speaker' : st.wordLeadMs > 90 ? `${st.wordLeadMs - 90} ms earlier · for Bluetooth delay` : `${90 - st.wordLeadMs} ms later`}</div></div>
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn sm ghost" aria-label="Highlight later" onClick={() => settings.set({ wordLeadMs: Math.max(-150, st.wordLeadMs - 30) })}>−</button>
+            <button className="btn sm ghost" aria-label="Reset word timing" onClick={() => settings.set({ wordLeadMs: 90 })} style={{ minWidth: 0, padding: '0 8px', opacity: st.wordLeadMs === 90 ? .4 : 1 }}>↺</button>
+            <button className="btn sm ghost" aria-label="Highlight earlier" onClick={() => settings.set({ wordLeadMs: Math.min(450, st.wordLeadMs + 30) })}>+</button>
+          </div>
         </div>
       </div>
 
