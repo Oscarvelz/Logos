@@ -41,8 +41,8 @@ function reloadOnceForIsolation() {
 // Opt-in debug/test handle (localStorage 'logos.debug' = '1'); used by the headless test kit.
 try {
   if (localStorage.getItem('logos.debug') === '1') {
-    void Promise.all([import('./engine/engine.ts'), import('./player/listen.ts'), import('./player/exporter.ts'), import('./lib/audio.ts'), import('./lib/library.ts')]).then(([engine, listen, exporter, audio, library]) => {
-      ;(window as unknown as Record<string, unknown>).__logos = { engine, listen, exporter, audio, library }
+    void Promise.all([import('./engine/engine.ts'), import('./player/listen.ts'), import('./player/exporter.ts'), import('./lib/audio.ts'), import('./lib/library.ts'), import('./lib/webtext.ts')]).then(([engine, listen, exporter, audio, library, webtext]) => {
+      ;(window as unknown as Record<string, unknown>).__logos = { engine, listen, exporter, audio, library, webtext }
     })
   }
 } catch { /* ignore */ }

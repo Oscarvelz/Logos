@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownToLine, AudioLines, Check, CheckCheck, CircleCheck, Clock, FileAudio, MoreHorizontal, Pause, Pencil, Play, Plus, Search, Share2, Square, Star, Trash2, Upload, X } from 'lucide-react'
+import { ArrowDownToLine, AudioLines, ExternalLink, Globe, Check, CheckCheck, CircleCheck, Clock, FileAudio, MoreHorizontal, Pause, Pencil, Play, Plus, Search, Share2, Square, Star, Trash2, Upload, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { library, refreshLibrary, getClip, deleteClips, restoreClips, updateClip, importAudio, kindOf, type ClipMeta } from '../lib/library.ts'
 import { clipPlayer, playClip, seekClip, pauseClip } from '../player/clip.ts'
@@ -12,6 +12,7 @@ import { drafts } from '../lib/drafts.ts'
 import { navigate } from '../lib/router.ts'
 import { loadText, play as listenPlay } from '../player/listen.ts'
 import { Sheet, toast } from '../components/ui.tsx'
+import { WebImport } from '../components/webimport.tsx'
 
 type Filter = 'all' | 'later' | 'new' | 'progress' | 'fav' | 'done'
 type Sort = 'new' | 'old' | 'long' | 'short' | 'az'
@@ -59,6 +60,7 @@ export function LibraryPage() {
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [menu, setMenu] = useState<ClipMeta | null>(null)
   const [renaming, setRenaming] = useState<ClipMeta | null>(null)
+  const [adding, setAdding] = useState(false)
   const file = useRef<HTMLInputElement>(null)
   useEffect(() => { void refreshLibrary() }, [])
   useEffect(() => { if (job.status === 'done' || job.status === 'idle') void refreshLibrary() }, [job.status])
@@ -94,11 +96,11 @@ export function LibraryPage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">Library</h1>
-          <p className="page-sub">{lib.clips.length ? `${lib.clips.length} item${lib.clips.length === 1 ? '' : 's'} · ${formatBytes(total)} on this device` : 'Saved audio and texts to hear later, offline.'}</p>
+          <p className="page-sub">{lib.clips.length ? `${lib.clips.length} item${lib.clips.length === 1 ? '' : 's'}${total ? ` · ${formatBytes(total)} on this device` : ''}` : 'Saved audio and texts to hear later, offline.'}</p>
         </div>
         <div className="row" style={{ gap: 6 }}>
           {lib.clips.length > 0 && <button className="btn sm ghost" onClick={() => (selecting ? endSelect() : setSelecting(true))}>{selecting ? 'Done' : 'Select'}</button>}
-          <button className="icon-btn filled" onClick={() => file.current?.click()} aria-label="Add audio from this device" title="Add audio"><Plus size={20} /></button>
+          <button className="icon-btn filled" onClick={() => setAdding(true)} aria-label="Add to Library" title="Add a web page or audio"><Plus size={20} /></button>
           <input ref={file} type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.opus,.flac" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
         </div>
       </div>
@@ -142,9 +144,9 @@ export function LibraryPage() {
         <div className="card empty">
           <div className="glyph">λ</div>
           <h3>Nothing saved yet</h3>
-          <p style={{ margin: '0 auto 18px', maxWidth: 330 }}>On Listen, tap Save to keep the audio or put a text aside to hear later. You can also add audio files from your phone.</p>
+          <p style={{ margin: '0 auto 18px', maxWidth: 330 }}>Bring in any web page as clean text, save what you hear on Listen, or add audio files from your phone.</p>
           <div className="row" style={{ justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn primary" onClick={() => navigate('listen')}>Go to Listen</button>
+            <button className="btn primary" onClick={() => setAdding(true)}><Globe size={18} /> From a web page</button>
             <button className="btn" onClick={() => file.current?.click()}><Upload size={18} /> Add audio</button>
           </div>
         </div>
@@ -171,6 +173,7 @@ export function LibraryPage() {
 
       <ItemMenu clip={menu} onClose={() => setMenu(null)} onRename={(c) => { setMenu(null); setRenaming(c) }} />
       <RenameSheet clip={renaming} onClose={() => setRenaming(null)} />
+      <WebImport open={adding} onClose={() => setAdding(false)} onAudioFile={() => file.current?.click()} />
     </div>
   )
 }
@@ -214,7 +217,7 @@ function ClipCard({ clip, selecting, selected, onSelect, onLongPress, onMore }: 
         )}
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="clip-kicker">
-            {isText ? <Clock size={12} /> : clip.source === 'import' ? <FileAudio size={12} /> : <AudioLines size={12} />}
+            {clip.url && isText ? <Globe size={12} /> : isText ? <Clock size={12} /> : clip.source === 'import' ? <FileAudio size={12} /> : <AudioLines size={12} />}
             <span className={`ck-status ${clip.done ? 'done' : isText ? 'later' : pos > 1 ? 'prog' : 'new'}`}>{status}</span>
           </div>
           <div className="clip-title">{clip.title}</div>
@@ -222,6 +225,7 @@ function ClipCard({ clip, selecting, selected, onSelect, onLongPress, onMore }: 
           <div className="clip-meta">
             {isText ? <span>{wordCount(clip.text).toLocaleString()} words · about {formatDuration(clip.duration)}</span>
               : <span className="mono">{active && cp.duration ? `${formatDuration(cp.time)} / ` : ''}{formatDuration(clip.duration)}</span>}
+            {clip.site && <span className="clip-site"><Globe size={11} /> {clip.site}</span>}
             {v && <span>{v.name}</span>}
             {!isText && <span>{clip.format.toUpperCase()} · {formatBytes(clip.size)}</span>}
             <span>{new Date(clip.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
@@ -273,6 +277,7 @@ function ItemMenu({ clip, onClose, onRename }: { clip: ClipMeta | null; onClose:
         {isText && <button onClick={run(() => makeAudio(clip))}><FileAudio size={20} /> Make audio</button>}
         <button onClick={run(() => updateClip(clip.id, clip.done ? { done: false } : { done: true, pos: 0 }, false))}><CircleCheck size={20} /> {clip.done ? 'Mark as not finished' : 'Mark as finished'}</button>
         {!isText && !!clip.pos && !clip.done && <button onClick={run(() => updateClip(clip.id, { pos: 0 }, false))}><Clock size={20} /> Start over next time</button>}
+        {clip.url && <button onClick={run(() => { window.open(clip.url, '_blank', 'noopener') })}><ExternalLink size={20} /> Open the web page</button>}
         <button onClick={() => onRename(clip)}><Pencil size={20} /> Rename</button>
         {!isText && <button onClick={run(download)}><ArrowDownToLine size={20} /> Download {clip.format.toUpperCase()}</button>}
         {!isText && <button onClick={run(share)}><Share2 size={20} /> Share</button>}

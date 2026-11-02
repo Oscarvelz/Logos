@@ -539,7 +539,7 @@ html[data-immersive] .play-btn { box-shadow: 0 22px 46px -14px var(--accent-glow
 .keep-title { font-family: var(--font-display); font-size: 22px; line-height: 1.2; margin: -4px 4px 2px; text-wrap: balance; }
 .keep-sub { color: var(--muted); font-size: 12.5px; margin: 0 4px 14px; }
 .keep-opts { display: grid; gap: 10px; }
-.keep-opt { display: flex; align-items: center; gap: 14px; text-align: left; padding: 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); color: var(--text); transition: transform .18s var(--ease), border-color .25s, background .25s; }
+.keep-opt { width: 100%; display: flex; align-items: center; gap: 14px; text-align: left; padding: 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); color: var(--text); transition: transform .18s var(--ease), border-color .25s, background .25s; }
 .keep-opt:active { transform: scale(.985); }
 .keep-opt:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 .keep-opt b { display: block; font-size: 15.5px; margin-bottom: 3px; }
@@ -595,3 +595,26 @@ html[data-immersive] .play-btn { box-shadow: 0 22px 46px -14px var(--accent-glow
 .menu-list button.danger, .menu-list button.danger svg { color: var(--danger); }
 .text-input { width: 100%; height: 50px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); padding: 0 14px; outline: 0; color: var(--text); font: inherit; font-size: 16px; }
 .text-input:focus { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+
+/* ── Web page import (1.4.15) ── */
+.url-field { display: flex; align-items: center; gap: 10px; height: 54px; padding: 0 6px 0 16px; border-radius: 18px; border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); transition: border-color .25s, box-shadow .25s; }
+.url-field:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
+.url-field input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 15.5px; }
+.web-err { color: var(--danger); font-size: 13px; line-height: 1.45; margin: 10px 4px 0; }
+.or-rule { display: flex; align-items: center; gap: 12px; margin: 16px 4px 12px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .12em; }
+.or-rule::before, .or-rule::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.web-loading { display: grid; justify-items: center; gap: 6px; padding: 26px 0 8px; text-align: center; color: var(--accent); }
+.web-loading .wl-t { font-family: var(--font-display); font-size: 24px; color: var(--text); margin-top: 6px; }
+.web-loading .wl-s { color: var(--muted); font-size: 13px; margin-bottom: 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.web-site { display: inline-flex; align-items: center; gap: 6px; margin: 0 4px; padding: 4px 10px; border-radius: 99px; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; color: var(--accent); background: var(--accent-soft); }
+.web-preview { position: relative; max-height: 168px; overflow: hidden; margin: 2px 4px 0; font-family: var(--font-read, var(--font-display)); font-size: 15px; line-height: 1.55; color: var(--text-2);
+  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent); mask-image: linear-gradient(180deg, #000 55%, transparent); }
+.web-preview p { margin: 0 0 10px; }
+.keep-opt.primary { border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+.keep-opt.primary .keep-ic { background: var(--accent); color: var(--accent-ink); }
+.url-banner { display: flex; align-items: center; gap: 10px; margin: 0 12px 8px; padding: 12px 14px; border-radius: 16px; text-align: left; color: var(--text); font-size: 14px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); animation: fadeIn .3s both; }
+.url-banner svg { color: var(--accent); flex: none; }
+.url-banner b { font-weight: 700; }
+.ub-go { flex: none; font-size: 12.5px; font-weight: 700; color: var(--accent-ink); background: var(--accent); padding: 6px 12px; border-radius: 99px; }
+.clip-site { display: inline-flex; align-items: center; gap: 4px; }

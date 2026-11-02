@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AudioLines, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Languages, Library as LibraryIcon, Loader2, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
+import { AudioLines, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
@@ -11,6 +11,8 @@ import { aiDescribe, describeText } from '../lib/describe.ts'
 import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
 import { exportJob, queueExport } from '../player/exporter.ts'
 import { navigate } from '../lib/router.ts'
+import { WebImport } from '../components/webimport.tsx'
+import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, VoicePicker } from '../components/chrome.tsx'
 import { Range, Sheet, toast } from '../components/ui.tsx'
@@ -26,6 +28,7 @@ export function ListenPage() {
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [speedOpen, setSpeedOpen] = useState(false)
   const [keepOpen, setKeepOpen] = useState(false)
+  const [webUrl, setWebUrl] = useState<string | null>(null)
   const text = d.listen
 
   useEffect(() => {
@@ -43,7 +46,7 @@ export function ListenPage() {
 
   // Begin preparing the audio as soon as text is pasted or typed (after a short pause in typing).
   useEffect(() => {
-    if (!text.trim()) return
+    if (!text.trim() || isJustUrl(text)) return   // a bare link waits for "Read page"
     const t = setTimeout(() => prepareText(text), 1200)
     return () => clearTimeout(t)
   }, [text, st.voiceOverride, st.defaultVoice, st.langMode])
@@ -59,6 +62,7 @@ export function ListenPage() {
     try {
       const clip = await navigator.clipboard.readText()
       if (!clip.trim()) { toast('Clipboard is empty'); return }
+      if (isJustUrl(clip)) { setWebUrl(normalizeUrl(clip)); return }
       setText(clip)
       if (s.active) endSession()
       setEditing(true)
@@ -107,6 +111,11 @@ export function ListenPage() {
                 lang={lang}
                 aria-label="Text to listen to"
               />
+              {isJustUrl(text) && (
+                <button className="url-banner" onClick={() => setWebUrl(normalizeUrl(text))}>
+                  <Globe size={17} /><span className="grow">Bring the text from <b>{new URL(normalizeUrl(text)!).hostname.replace(/^www\./, '')}</b></span><span className="ub-go">Read page</span>
+                </button>
+              )}
               <div className="editor-bar">
                 <button className="icon-btn" onClick={paste} aria-label="Paste from clipboard" title="Paste"><ClipboardPaste size={21} /></button>
                 <button className="icon-btn" onClick={() => { setText(''); endSession() }} disabled={!text} aria-label="Clear text" title="Clear"><Eraser size={21} /></button>
@@ -181,6 +190,7 @@ export function ListenPage() {
       <VoicePicker open={voiceOpen} onClose={() => setVoiceOpen(false)} value={st.voiceOverride} lang={st.langMode}
         onPick={(id) => { settings.set({ voiceOverride: id }); refreshVoices() }} />
 
+      <WebImport open={webUrl !== null} onClose={() => setWebUrl(null)} initialUrl={webUrl ?? undefined} />
       <KeepSheet open={keepOpen} onClose={() => setKeepOpen(false)} text={reading ? s.text : text} lang={lang} />
 
       <Sheet open={speedOpen} onClose={() => setSpeedOpen(false)} title="Speed">
@@ -360,6 +370,16 @@ function ListenHead({ text, lang, playing, remaining }: { text: string; lang: La
   const summary = local.generated ? (useAi && ai.summary && ai.summary.length <= 140 ? ai.summary : local.summary) : undefined
   const words = wordCount(text)
   const has = !!text.trim()
+  if (isJustUrl(text)) {
+    const host = new URL(normalizeUrl(text)!).hostname.replace(/^www\./, '')
+    return (
+      <div className="listen-head">
+        <div className="lh-eyebrow"><span className="lh-dot" /><span>Web page</span></div>
+        <div className="lh-title">{host}</div>
+        <div className="lh-sum">Tap Read page to bring in its text, clean and ready to hear.</div>
+      </div>
+    )
+  }
   return (
     <div className={`listen-head ${playing ? 'live' : ''}`}>
       <div className="lh-eyebrow">

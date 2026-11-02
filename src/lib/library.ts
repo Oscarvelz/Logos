@@ -21,6 +21,8 @@ export type Clip = {
   pos?: number              // resume position (seconds)
   playedAt?: number
   rendering?: boolean       // audio is being made for this item right now
+  url?: string              // the web page the text came from
+  site?: string
 }
 
 export type ClipMeta = Omit<Clip, 'blob'>
@@ -115,7 +117,7 @@ export async function restoreClips(clips: Clip[]) {
 }
 
 /** Save a text to hear later, instantly, with no audio yet. */
-export async function saveForLater(text: string, info: { title: string; summary?: string; lang: string; voice: string; duration: number }) {
+export async function saveForLater(text: string, info: { title: string; summary?: string; lang: string; voice: string; duration: number; url?: string; site?: string }) {
   return saveClip({ ...info, text, format: '', kind: 'text', source: 'listen' })
 }
 

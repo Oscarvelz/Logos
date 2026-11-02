@@ -1,0 +1,21 @@
+import { launch, BASE, PHONE } from './common.mjs';
+import { execFileSync } from 'child_process';
+const b = await launch(); const ctx = await b.newContext(PHONE); const p = await ctx.newPage(); const errs = [];
+p.on('pageerror', (e) => errs.push(e.message));
+await ctx.route(/r\.jina\.ai/, (r) => r.fulfill({ status: 401, body: '{}', headers: { 'access-control-allow-origin': '*' } }));
+await ctx.route(/api\.cors\.lol/, async (r) => {
+  const target = new URL(r.request().url()).searchParams.get('url');
+  const body = execFileSync('curl', ['-sL', '-m', '15', '-A', 'Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile', target], { maxBuffer: 1e8 }).toString();
+  r.fulfill({ status: 200, body, headers: { 'content-type': 'text/html', 'access-control-allow-origin': '*' } });
+});
+await p.addInitScript(() => { localStorage.setItem('logos.debug', '1'); localStorage.setItem('logos.phononThreads', '1') });
+const step = async (name, fn) => { try { await fn(); console.log('ok', name) } catch (e) { console.log('FAIL', name, e.message.split('\n')[0]) } };
+await p.goto(BASE + '#/library'); await p.waitForTimeout(6000);
+await step('add window', async () => { await p.click('[aria-label="Add to Library"]'); await p.waitForSelector('.url-field'); await p.screenshot({ path: 'test/shots/w-add.png' }) });
+await step('bring', async () => { await p.fill('.url-field input', 'blog.samaltman.com/the-days-are-long-but-the-decades-are-short'); await p.click('.sheet .btn.primary'); await p.waitForSelector('.web-preview', { timeout: 30000 }); await p.waitForTimeout(400); await p.screenshot({ path: 'test/shots/w-preview.png' }) });
+await step('later', async () => { await p.click('.keep-opt:has-text("Listen later")'); await p.waitForTimeout(800); await p.screenshot({ path: 'test/shots/w-lib.png' }) });
+console.log(JSON.stringify(await p.evaluate(() => __logos.library.library.get().clips.map((c) => ({ t: c.title, site: c.site, k: c.kind, sum: c.summary })))));
+await step('listen banner', async () => { await p.goto(BASE + '#/listen'); await p.waitForTimeout(800); await p.fill('textarea', 'https://www.npr.org/sections/shots-health-news/2026/01/12/nx-s1-5668378'); await p.waitForSelector('.url-banner'); await p.screenshot({ path: 'test/shots/w-banner.png' }) });
+await step('listen now', async () => { await p.click('.url-banner'); await p.waitForSelector('.web-preview', { timeout: 30000 }); await p.click('.keep-opt:has-text("Listen now")'); await p.waitForTimeout(1500); await p.screenshot({ path: 'test/shots/w-listen.png' }); console.log(await p.locator('.listen-head').innerText()) });
+console.log('overflow', await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), 'errs', errs);
+await b.close();

@@ -32,7 +32,7 @@ export function titleFrom(text: string): string {
   return first.length > 64 ? `${first.slice(0, 61).replace(/\s+\S*$/, '')}…` : first || 'Untitled'
 }
 
-type ExportOpts = { voice: string | null; speed: number; format: 'mp3' | 'wav'; title?: string; summary?: string; origin?: 'create' | 'listen'; id?: string }
+type ExportOpts = { voice: string | null; speed: number; format: 'mp3' | 'wav'; title?: string; summary?: string; origin?: 'create' | 'listen'; id?: string; url?: string; site?: string }
 const queue: { text: string; opts: ExportOpts }[] = []
 
 /** Render now, or after the current job when one is already running (Listen → Library can stack several). */
@@ -96,7 +96,7 @@ export async function runExport(text: string, opts: ExportOpts) {
       ? await saveClip({ ...existing, voice: first?.id ?? '', duration: samples / SR, format: opts.format, blob, kind: 'audio', rendering: false, pos: 0 })
       : await saveClip({
         title: opts.title?.trim() || titleFrom(text), summary: opts.summary, text, voice: first?.id ?? '', lang: segments[0].lang,
-        duration: samples / SR, format: opts.format, blob, kind: 'audio', source: opts.origin ?? 'create',
+        duration: samples / SR, format: opts.format, blob, kind: 'audio', source: opts.origin ?? 'create', url: opts.url, site: opts.site,
       })
     exportJob.set({ status: 'done', result: { blob, meta } })
   } catch (err) {
