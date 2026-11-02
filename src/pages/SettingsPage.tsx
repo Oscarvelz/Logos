@@ -7,7 +7,7 @@ import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 
-const VERSION = '1.4.19'
+const VERSION = '1.4.20'
 
 export function SettingsPage() {
   const st = useStore(settings)

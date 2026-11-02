@@ -122,10 +122,10 @@ export function ListenPage() {
                 <button className="icon-btn" onClick={() => { setText(''); endSession() }} disabled={!text} aria-label="Clear text" title="Clear"><Eraser size={21} /></button>
                 <button className="icon-btn" onClick={() => setKeepOpen(true)} disabled={!text.trim()} aria-label="Save to Library" title="Save to Library"><BookmarkPlus size={21} /></button>
                 {s.active && <button className="icon-btn" onClick={() => { if (s.text !== text) loadText(text); setEditing(false) }} aria-label="Back to reading view" title="Reading view"><X size={21} /></button>}
-                <div className="editor-meta">
-                  <div>{text.length.toLocaleString()} chars · {wordCount(text).toLocaleString()} words</div>
-                  <div>≈ {formatDuration(estimateSeconds(text, st.listenSpeed))} listening</div>
-                </div>
+                {text.trim() && <div className="editor-meta" aria-label={`About ${formatDuration(estimateSeconds(text, st.listenSpeed))} of listening, ${wordCount(text)} words`}>
+                  <span className="em-time"><Clock size={12} strokeWidth={2.4} />{formatDuration(estimateSeconds(text, st.listenSpeed))}</span>
+                  <span className="em-words">{wordCount(text).toLocaleString()} words</span>
+                </div>}
               </div>
             </div>
           )}
