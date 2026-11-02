@@ -10,7 +10,7 @@ const STOP_ES = new Set(('el la los las un una unos unas y o pero si de del al a
 const SENT_RE = /[^.!?¡¿…]+[.!?…]+["'”’)]*|[^.!?…]+$/g
 
 function sentences(text: string): string[] {
-  return (text.replace(/\s+/g, ' ').match(SENT_RE) ?? []).map((s) => s.trim()).filter((s) => s.length > 2)
+  return (text.replace(/\[(?:\d+|[a-z]|citation needed|cita requerida)\]/gi, '').replace(/\s+/g, ' ').match(SENT_RE) ?? []).map((s) => s.trim()).filter((s) => s.length > 2)
 }
 
 // A first line that reads like a heading: short, no full stop at the end, followed by more text.
@@ -108,6 +108,8 @@ function bestSentence(text: string, lang: Lang, maxLen = 108): string | undefine
       score *= 0.85
     }
     if (s.length < 30) score *= 0.6
+    // a sentence that leans on what came before ("She said…", "At the time…") doesn't stand alone as a summary
+    if (/^(she|he|it|they|this|that|these|those|his|her|their|but|however|also|then|at the time|later|ella|él|ellos|ellas|esto|eso|pero|sin embargo|también|luego|entonces|en ese momento)\b/i.test(s)) score *= 0.35
     if (!best || score > best.score) best = { s, score }
   })
   return best?.s.replace(/^[«"“'‘]+|[»"”'’]+$/g, '').trim()
