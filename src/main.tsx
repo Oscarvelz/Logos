@@ -4,9 +4,11 @@ import './styles.css'
 import App from './App.tsx'
 import { consumeShareTarget } from './lib/drafts.ts'
 import { applyTheme, settings } from './lib/settings.ts'
+import { trackPlayback } from './lib/library.ts'
 
 applyTheme(settings.get().theme)
 consumeShareTarget()
+trackPlayback()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -39,8 +41,8 @@ function reloadOnceForIsolation() {
 // Opt-in debug/test handle (localStorage 'logos.debug' = '1'); used by the headless test kit.
 try {
   if (localStorage.getItem('logos.debug') === '1') {
-    void Promise.all([import('./engine/engine.ts'), import('./player/listen.ts'), import('./player/exporter.ts'), import('./lib/audio.ts')]).then(([engine, listen, exporter, audio]) => {
-      ;(window as unknown as Record<string, unknown>).__logos = { engine, listen, exporter, audio }
+    void Promise.all([import('./engine/engine.ts'), import('./player/listen.ts'), import('./player/exporter.ts'), import('./lib/audio.ts'), import('./lib/library.ts')]).then(([engine, listen, exporter, audio, library]) => {
+      ;(window as unknown as Record<string, unknown>).__logos = { engine, listen, exporter, audio, library }
     })
   }
 } catch { /* ignore */ }

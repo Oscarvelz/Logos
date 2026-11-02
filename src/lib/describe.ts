@@ -130,7 +130,8 @@ export function describeText(text: string, lang: Lang): TextInfo {
   else if (top && second && top.n >= 2 && second.n >= 2 && (shortName(top.name, 18) + shortName(second.name, 18)).length <= 36) title = cap(`${withArticle(shortName(top.name, 18), es)} ${es ? 'y' : 'and'} ${withArticle(shortName(second.name, 18), es)}`)
   else if (top && top.n >= 2) title = es ? `Sobre ${withArticle(shortName(top.name, 32), true)}` : `On ${withArticle(shortName(top.name, 32), false)}`
   else if (kw[0] && kw[0][1] >= 2) title = es ? `Sobre ${kw[0][0]}` : `On ${cap(kw[0][0])}`
-  else if (top) title = es ? `Sobre ${withArticle(shortName(top.name, 32), true)}` : `On ${withArticle(shortName(top.name, 32), false)}`
+  else if (top && top.name.includes(' ')) title = es ? `Sobre ${withArticle(shortName(top.name, 32), true)}` : `On ${withArticle(shortName(top.name, 32), false)}`
+  else if ((sentences(clean)[0] ?? '').length <= 48) title = sentences(clean)[0].replace(/[.…]+$/, '')
   else title = es ? 'Un texto para escuchar' : 'A Text to Listen To'
   const summary = poem ? undefined : bestSentence(clean, lang)
   return { title, summary: summary && summary !== title ? summary : undefined, generated: true }

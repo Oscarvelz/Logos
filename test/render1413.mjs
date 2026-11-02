@@ -1,0 +1,14 @@
+import { launch, BASE, PHONE } from './common.mjs';
+const b = await launch(); const p = await (await b.newContext(PHONE)).newPage(); const errs = [];
+p.on('pageerror', (e) => errs.push(e.message));
+await p.addInitScript(() => { localStorage.setItem('logos.debug', '1'); localStorage.setItem('logos.phononThreads', '1') });
+await p.goto(BASE + '#/listen'); await p.waitForTimeout(6000); await p.waitForFunction(() => window.__logos);
+await p.fill('textarea', 'Hello there. This is a short test.'); await p.waitForTimeout(300);
+await p.click('[aria-label="Save to Library"]'); await p.click('.keep-opt >> nth=0');
+await p.goto(BASE + '#/library'); 
+const t0 = Date.now();
+await p.waitForFunction(() => __logos.library.library.get().clips.some((c) => (c.kind ?? 'audio') === 'audio' && c.size > 0), null, { timeout: 95000 }).catch(() => {});
+await p.waitForTimeout(500);
+console.log('secs', Math.round((Date.now() - t0) / 1000), JSON.stringify(await p.evaluate(() => __logos.library.library.get().clips.map((c) => ({ t: c.title, k: c.kind, d: c.duration.toFixed(1), f: c.format, s: c.size, src: c.source })))), errs, JSON.stringify(await p.evaluate(() => { const j = __logos.exporter.exportJob.get(); return { s: j.status, o: j.origin, e: j.error } })));
+await p.screenshot({ path: 'test/shots/lib-rendered.png' });
+await b.close();

@@ -5,7 +5,7 @@ import { drafts } from '../lib/drafts.ts'
 import { settings } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, favoriteVoices, LANG_LABEL, type Lang } from '../lib/voices.ts'
-import { exportJob, runExport, cancelExport, resetExport, titleFrom } from '../player/exporter.ts'
+import { exportJob, queueExport, cancelExport, resetExport, titleFrom } from '../player/exporter.ts'
 import { clipPlayer, playClip, seekClip } from '../player/clip.ts'
 import { downloadBlob, formatBytes, slugify } from '../lib/audio.ts'
 import { engine, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
@@ -33,7 +33,7 @@ export function CreatePage() {
 
   const generate = () => {
     if (!text.trim()) { toast('Add some text first'); return }
-    void runExport(text, { voice, speed: st.exportSpeed, format: st.format, title })
+    if (queueExport(text, { voice, speed: st.exportSpeed, format: st.format, title, origin: 'create' }) === 'queued') toast('Queued — it starts after the audio being made now', { label: 'Library', run: () => navigate('library') })
   }
 
   return (
@@ -63,7 +63,7 @@ export function CreatePage() {
         </div>
 
         <div className="stack">
-          {job.status === 'running' ? (
+          {job.status === 'running' && job.origin !== 'listen' ? (
             <div className="card card-pad" style={{ textAlign: 'center' }}>
               <Ring value={job.total ? job.done / job.total : 0} />
               <div style={{ fontWeight: 700, fontSize: 17 }}>Rendering {job.done} of {job.total}</div>
@@ -73,7 +73,7 @@ export function CreatePage() {
               <button className="btn" onClick={cancelExport}><Square size={16} /> Cancel</button>
               <EngineNote />
             </div>
-          ) : job.status === 'done' && job.result ? (
+          ) : job.status === 'done' && job.result && job.origin !== 'listen' ? (
             <Result onAgain={resetExport} />
           ) : (
             <div className="card card-pad stack">

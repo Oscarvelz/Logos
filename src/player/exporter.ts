@@ -7,7 +7,7 @@ import { segmentText, pauseAfter } from '../lib/text.ts'
 import { voiceById, type Lang } from '../lib/voices.ts'
 import { concat, createMp3Encoder, encodeWav, silence, trimSilence } from '../lib/audio.ts'
 import { synthesize } from '../engine/engine.ts'
-import { saveClip, type ClipMeta } from '../lib/library.ts'
+import { saveClip, updateClip, getClip, type ClipMeta } from '../lib/library.ts'
 
 export type ExportState = {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -17,6 +17,10 @@ export type ExportState = {
   audioSec: number
   result: { blob: Blob; meta: ClipMeta } | null
   error: string | null
+  origin?: 'create' | 'listen'
+  title?: string
+  itemId?: string | null
+  queued?: number
 }
 
 export const exportJob = createStore<ExportState>({ status: 'idle', done: 0, total: 0, startedAt: 0, audioSec: 0, result: null, error: null })
@@ -28,11 +32,29 @@ export function titleFrom(text: string): string {
   return first.length > 64 ? `${first.slice(0, 61).replace(/\s+\S*$/, '')}…` : first || 'Untitled'
 }
 
-export async function runExport(text: string, opts: { voice: string | null; speed: number; format: 'mp3' | 'wav'; title?: string }) {
+type ExportOpts = { voice: string | null; speed: number; format: 'mp3' | 'wav'; title?: string; summary?: string; origin?: 'create' | 'listen'; id?: string }
+const queue: { text: string; opts: ExportOpts }[] = []
+
+/** Render now, or after the current job when one is already running (Listen → Library can stack several). */
+export function queueExport(text: string, opts: ExportOpts): 'started' | 'queued' {
+  if (exportJob.get().status === 'running') { queue.push({ text, opts }); exportJob.set({ queued: queue.length }); return 'queued' }
+  void runExport(text, opts)
+  return 'started'
+}
+
+function next() {
+  const n = queue.shift()
+  exportJob.set({ queued: queue.length })
+  if (n) setTimeout(() => void runExport(n.text, n.opts), 50)
+}
+
+export function isQueued(id: string) { return queue.some((q) => q.opts.id === id) }
+
+export async function runExport(text: string, opts: ExportOpts) {
   if (exportJob.get().status === 'running') return
   const st = settings.get()
   const segments = segmentText(text, st.langMode)
-  if (!segments.length) return
+  if (!segments.length) { next(); return }
   const pick = (lang: Lang) => {
     const v = voiceById(opts.voice ?? undefined)
     if (v && (v.lang === lang || st.langMode !== 'auto')) return v.id
@@ -40,7 +62,8 @@ export async function runExport(text: string, opts: { voice: string | null; spee
   }
   ctrl = new AbortController()
   const signal = ctrl.signal
-  exportJob.set({ status: 'running', done: 0, total: segments.length, startedAt: Date.now(), audioSec: 0, result: null, error: null })
+  exportJob.set({ status: 'running', done: 0, total: segments.length, startedAt: Date.now(), audioSec: 0, result: null, error: null, origin: opts.origin ?? 'create', title: opts.title?.trim() || titleFrom(text), itemId: opts.id ?? null })
+  if (opts.id) void updateClip(opts.id, { rendering: true }, false)
   const SR = 24000
   try {
     const mp3 = opts.format === 'mp3' ? await createMp3Encoder(SR, 128) : null
@@ -68,21 +91,33 @@ export async function runExport(text: string, opts: { voice: string | null; spee
     }
     const blob = mp3 ? mp3.finish() : encodeWav(concat(pcm), SR)
     const first = voiceById(pick(segments[0].lang))
-    const meta = await saveClip({
-      title: opts.title?.trim() || titleFrom(text), text, voice: first?.id ?? '', lang: segments[0].lang,
-      duration: samples / SR, format: opts.format, blob,
-    })
+    const existing = opts.id ? await getClip(opts.id) : null
+    const meta = existing
+      ? await saveClip({ ...existing, voice: first?.id ?? '', duration: samples / SR, format: opts.format, blob, kind: 'audio', rendering: false, pos: 0 })
+      : await saveClip({
+        title: opts.title?.trim() || titleFrom(text), summary: opts.summary, text, voice: first?.id ?? '', lang: segments[0].lang,
+        duration: samples / SR, format: opts.format, blob, kind: 'audio', source: opts.origin ?? 'create',
+      })
     exportJob.set({ status: 'done', result: { blob, meta } })
   } catch (err) {
+    if (opts.id) void updateClip(opts.id, { rendering: false })
     if ((err as Error).name === 'AbortError') exportJob.set({ status: 'idle', done: 0, total: 0 })
     else exportJob.set({ status: 'error', error: (err as Error).message })
   } finally {
     ctrl = null
+    next()
   }
 }
 
 export function cancelExport() {
   ctrl?.abort()
+}
+
+/** Remove a waiting job (or stop it if it is the one rendering). */
+export function cancelItem(id: string) {
+  const i = queue.findIndex((q) => q.opts.id === id)
+  if (i >= 0) { queue.splice(i, 1); exportJob.set({ queued: queue.length }); return }
+  if (exportJob.get().itemId === id) ctrl?.abort()
 }
 
 export function resetExport() {

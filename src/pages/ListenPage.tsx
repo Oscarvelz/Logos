@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ClipboardPaste, Eraser, Gauge, Languages, Loader2, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
+import { AudioLines, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Languages, Library as LibraryIcon, Loader2, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
@@ -8,6 +8,9 @@ import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
 import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, endSession, sentenceProgress, seekFraction } from '../player/listen.ts'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
+import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
+import { exportJob, queueExport } from '../player/exporter.ts'
+import { navigate } from '../lib/router.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, VoicePicker } from '../components/chrome.tsx'
 import { Range, Sheet, toast } from '../components/ui.tsx'
@@ -22,6 +25,7 @@ export function ListenPage() {
   const [editing, setEditing] = useState(() => !listen.get().active)
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [speedOpen, setSpeedOpen] = useState(false)
+  const [keepOpen, setKeepOpen] = useState(false)
   const text = d.listen
 
   useEffect(() => {
@@ -92,7 +96,7 @@ export function ListenPage() {
       <div className="listen-grid">
         <div className="card" style={{ overflow: 'hidden' }}>
           {reading ? (
-            <Reader onEdit={() => setEditing(true)} />
+            <Reader onEdit={() => setEditing(true)} onKeep={() => setKeepOpen(true)} />
           ) : (
             <div className="editor">
               <textarea
@@ -106,6 +110,7 @@ export function ListenPage() {
               <div className="editor-bar">
                 <button className="icon-btn" onClick={paste} aria-label="Paste from clipboard" title="Paste"><ClipboardPaste size={21} /></button>
                 <button className="icon-btn" onClick={() => { setText(''); endSession() }} disabled={!text} aria-label="Clear text" title="Clear"><Eraser size={21} /></button>
+                <button className="icon-btn" onClick={() => setKeepOpen(true)} disabled={!text.trim()} aria-label="Save to Library" title="Save to Library"><BookmarkPlus size={21} /></button>
                 {s.active && <button className="icon-btn" onClick={() => { if (s.text !== text) loadText(text); setEditing(false) }} aria-label="Back to reading view" title="Reading view"><X size={21} /></button>}
                 <div className="editor-meta">
                   <div>{text.length.toLocaleString()} chars · {wordCount(text).toLocaleString()} words</div>
@@ -176,6 +181,8 @@ export function ListenPage() {
       <VoicePicker open={voiceOpen} onClose={() => setVoiceOpen(false)} value={st.voiceOverride} lang={st.langMode}
         onPick={(id) => { settings.set({ voiceOverride: id }); refreshVoices() }} />
 
+      <KeepSheet open={keepOpen} onClose={() => setKeepOpen(false)} text={reading ? s.text : text} lang={lang} />
+
       <Sheet open={speedOpen} onClose={() => setSpeedOpen(false)} title="Speed">
         <div className="speed-row" style={{ marginBottom: 14 }}>
           {SPEEDS.map((v) => <button key={v} className={Math.abs(st.listenSpeed - v) < 0.001 ? 'on' : ''} onClick={() => setRate(v)}>{v}×</button>)}
@@ -237,7 +244,7 @@ function ProgressLine() {
   )
 }
 
-function Reader({ onEdit }: { onEdit: () => void }) {
+function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) {
   const s = useStore(listen)
   const st = useStore(settings)
   const box = useRef<HTMLDivElement>(null)
@@ -303,6 +310,7 @@ function Reader({ onEdit }: { onEdit: () => void }) {
     <>
       <div className="reader-head">
         <span className="muted small grow">Tap any sentence to jump there</span>
+        <button className="btn sm ghost" onClick={onKeep} aria-label="Save to Library"><BookmarkPlus size={16} /> Save</button>
         <button className="btn sm ghost" onClick={onEdit}><PenLine size={16} /> Edit</button>
       </div>
       <div className="reader" ref={box}>{body}</div>
@@ -362,5 +370,58 @@ function ListenHead({ text, lang, playing, remaining }: { text: string; lang: La
       <div className="lh-title" lang={lang}>{title || 'Paste anything. Hear it instantly.'}</div>
       {summary ? <div className="lh-sum" lang={lang}>{summary}</div> : null}
     </div>
+  )
+}
+
+// "Keep this": save the whole audio to the Library, or save the text to hear later.
+function KeepSheet({ open, onClose, text, lang }: { open: boolean; onClose: () => void; text: string; lang: Lang }) {
+  const st = useStore(settings)
+  const lib = useStore(library)
+  const job = useStore(exportJob)
+  useEffect(() => { if (open) void refreshLibrary() }, [open])
+  const info = useMemo(() => describeText(text, lang), [text, lang])
+  const existing = lib.clips.filter((c) => c.text === text)
+  const hasAudio = existing.some((c) => (c.kind ?? 'audio') === 'audio')
+  const hasLater = existing.some((c) => c.kind === 'text')
+  const speed = Math.min(2, Math.max(0.6, st.listenSpeed))
+  const v = voiceById(st.voiceOverride ?? st.defaultVoice[lang])
+  const words = wordCount(text)
+  const busy = job.status === 'running'
+  const saveAudio = () => {
+    const r = queueExport(text, { voice: st.voiceOverride, speed, format: st.format, title: info.title, summary: info.summary, origin: 'listen' })
+    onClose()
+    toast(r === 'queued' ? 'Queued for your Library · it starts after the current one' : 'Making the audio · it will be in your Library', { label: 'Library', run: () => navigate('library') }, 5000)
+  }
+  const later = async () => {
+    await saveForLater(text, { title: info.title, summary: info.summary, lang, voice: st.voiceOverride ?? '', duration: estimateSeconds(text, 1) })
+    onClose()
+    toast('Saved to Listen later', { label: 'Library', run: () => navigate('library') }, 4000)
+  }
+  return (
+    <Sheet open={open} onClose={onClose} title="Keep this">
+      <div className="keep-title">{info.title}</div>
+      <div className="keep-sub">{words.toLocaleString()} words · about {formatDuration(estimateSeconds(text, speed))} at {fmtSpeed(speed)}</div>
+      <div className="keep-opts">
+        <button className="keep-opt" onClick={saveAudio}>
+          <span className="keep-ic"><AudioLines size={22} /></span>
+          <span className="grow">
+            <b>Save the audio</b>
+            <small>{st.format.toUpperCase()} in {v?.name ?? 'your voice'}{st.voiceOverride ? '' : ' (switches by language)'} · plays offline, ready to share{busy ? ' · queued after the current one' : ''}</small>
+          </span>
+        </button>
+        <button className="keep-opt" onClick={() => void later()}>
+          <span className="keep-ic"><Clock size={22} /></span>
+          <span className="grow">
+            <b>Listen later</b>
+            <small>Saves the text instantly. Make its audio whenever you like</small>
+          </span>
+        </button>
+      </div>
+      {(hasAudio || hasLater) && (
+        <button className="keep-note" onClick={() => { onClose(); navigate('library') }}>
+          <LibraryIcon size={16} /> {hasAudio ? 'This text is already in your Library as audio' : 'This text is already in Listen later'} · Open
+        </button>
+      )}
+    </Sheet>
   )
 }

@@ -1,0 +1,32 @@
+import { launch, BASE, PHONE } from './common.mjs';
+import { writeFileSync } from 'fs';
+// a 2-second 440 Hz wav to import
+const sr = 8000, n = sr * 2, buf = Buffer.alloc(44 + n * 2);
+buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write('WAVEfmt ', 8); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22); buf.writeUInt32LE(sr, 24); buf.writeUInt32LE(sr * 2, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(n * 2, 40);
+for (let i = 0; i < n; i++) buf.writeInt16LE(Math.round(Math.sin(i / sr * 2 * Math.PI * 440) * 8000), 44 + i * 2);
+writeFileSync('/tmp/tone_sample.wav', buf);
+const b = await launch(); const ctx = await b.newContext(PHONE); const p = await ctx.newPage(); const errs = [];
+p.on('pageerror', (e) => errs.push(e.message)); p.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text().slice(0, 160)) });
+await p.addInitScript(() => { localStorage.setItem('logos.debug', '1'); localStorage.setItem('logos.phononThreads', '1') });
+await p.goto(BASE + '#/listen'); await p.waitForTimeout(6000); await p.waitForFunction(() => window.__logos);
+const step = async (name, fn) => { try { await fn(); console.log('ok', name) } catch (e) { console.log('FAIL', name, e.message.split('\n')[0]) } };
+const TEXT = 'Sleep matters more than most people think. When we sleep, the brain clears waste and stores memories.';
+await p.fill('textarea', TEXT); await p.waitForTimeout(300);
+await step('keep sheet from editor', async () => { await p.click('[aria-label="Save to Library"]'); await p.waitForSelector('.keep-opt'); await p.screenshot({ path: 'test/shots/keep-sheet.png' }) });
+await step('listen later', async () => { await p.click('.keep-opt >> nth=1'); await p.waitForTimeout(600) });
+await step('import audio', async () => { await p.goto(BASE + '#/library'); await p.waitForTimeout(800); await p.setInputFiles('input[type=file]', '/tmp/tone_sample.wav'); await p.waitForTimeout(1500) });
+const state = () => p.evaluate(() => __logos.library.library.get().clips.map((c) => ({ t: c.title, k: c.kind, d: Math.round(c.duration), fav: !!c.fav, done: !!c.done })));
+console.log(JSON.stringify(await state()));
+await step('filters', async () => console.log(await p.locator('.lib-filters').innerText()));
+await p.screenshot({ path: 'test/shots/library.png', fullPage: true });
+await step('star', async () => { await p.click('.clip >> nth=0 >> .fav-btn'); await p.waitForTimeout(300) });
+await step('play imported', async () => { const card = p.locator('.clip', { hasText: 'tone sample' }); await card.locator('.mini-play').click(); await p.waitForTimeout(2800) });
+console.log(JSON.stringify(await state()));
+await step('menu + finished', async () => { await p.locator('.clip >> nth=1 >> [aria-label="More actions"]').click(); await p.waitForSelector('.menu-list'); await p.screenshot({ path: 'test/shots/lib-menu.png' }); await p.click('.menu-list button:has-text("Mark as")'); await p.waitForTimeout(400) });
+await step('rename', async () => { await p.locator('.clip >> nth=0 >> [aria-label="More actions"]').click(); await p.click('.menu-list button:has-text("Rename")'); await p.fill('.text-input', 'Renamed item'); await p.click('.sheet .btn.primary'); await p.waitForTimeout(400) });
+await step('select + delete + undo', async () => {
+  await p.click('button:has-text("Select")'); await p.click('.clip >> nth=0'); await p.screenshot({ path: 'test/shots/lib-select.png' });
+  await p.click('[aria-label="Delete selected"]'); await p.waitForTimeout(500); const n1 = (await state()).length; await p.click('.toast button'); await p.waitForTimeout(500); console.log('after delete', n1, 'after undo', (await state()).length) });
+console.log(JSON.stringify(await state()));
+const ov = await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1); console.log('overflow', ov, 'errs', errs);
+await b.close();
