@@ -23,12 +23,16 @@ const KEY = 'logos.settings.v1'
 // Oscar's favorite Phonon voices: Noa, Marcos, Zoey, Teddy, Spencer, Freya.
 const PHONON_FAVORITES = ['ph_b6FvJAiokjdqIti4', 'ph_jvPx8j8zLGQ3utZz', 'ph_NbpkqMVS3CJeq2j8', 'ph_Zn7g6NxLqXlJb7Qi', 'ph_JOW0vchyswkQUMDS', 'ph_GgfEkEJtxZR7gnpy']
 
+/** The starting favorites (gold star). Anything Oscar stars later gets the violet star. */
+export const ORIGINAL_FAVORITES = [...PHONON_FAVORITES, 'pk_alba', 'pk_lola']
+export const isOriginalFavorite = (id: string) => ORIGINAL_FAVORITES.includes(id)
+
 const DEFAULTS: Settings = {
   theme: 'dark',
   listenSpeed: 1,
   exportSpeed: 1,
   defaultVoice: { en: 'ph_NbpkqMVS3CJeq2j8', es: 'ph_b6FvJAiokjdqIti4' },
-  favorites: [...PHONON_FAVORITES, 'pk_alba', 'pk_lola'],
+  favorites: [...ORIGINAL_FAVORITES],
   langMode: 'auto',
   voiceOverride: null,
   format: 'mp3',

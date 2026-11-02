@@ -386,6 +386,12 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 .pick .avatar { width: 42px; height: 42px; border-radius: 13px; font-size: 22px; }
 .pick .voice-name { white-space: nowrap; min-width: 0; }
 .pick .vn { overflow: hidden; text-overflow: ellipsis; }
+.pick { cursor: pointer; }
+.pick-star { flex: none; width: 40px; height: 40px; margin: -6px -4px -6px 0; display: grid; place-items: center; border-radius: 99px; color: var(--muted); opacity: .55; transition: opacity .2s, transform .2s var(--ease), background .2s; }
+.pick-star.on { opacity: 1; }
+.pick-star:hover { background: var(--surface-2); opacity: 1; }
+.pick-star:active { transform: scale(.86); }
+.star-later { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--violet) 55%, transparent)); }
 
 /* voice picker sections (accordion) */
 .vgroups { margin-top: 14px; border-top: 1px solid var(--line); }

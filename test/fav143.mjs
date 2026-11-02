@@ -1,0 +1,17 @@
+import { launch, BASE, PHONE } from './common.mjs';
+const b = await launch(); const ctx = await b.newContext(PHONE); const p = await ctx.newPage();
+const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+await p.goto(BASE + '#/listen'); await p.waitForTimeout(1500);
+await p.click('button[aria-label="Voice"]'); await p.waitForTimeout(700);
+console.log('order', await p.$$eval('.vgroup', (e) => e.map((x) => x.dataset.group)));
+await p.click('[data-group="en-UK"] .vgroup-head'); await p.waitForTimeout(900);
+const name = await p.textContent('[data-group="en-UK"] .pick:not(:has(.pick-star.on)) .vn');
+await p.click('[data-group="en-UK"] .pick:not(:has(.pick-star.on)) .pick-star'); await p.waitForTimeout(300);
+console.log('starred', name, 'sheet still open', await p.isVisible('.sheet'));
+await p.click('[data-group="fav"] .vgroup-head'); await p.waitForTimeout(900);
+const favs = await p.$$eval('[data-group="fav"] .pick', (e) => e.map((x) => x.querySelector('.vn').textContent + (x.querySelector('.star-later') ? '*' : '')));
+console.log('favs', favs);
+await p.screenshot({ path: 'test/shots/fav143.png' });
+await p.goto(BASE + '#/voices'); await p.waitForTimeout(1200);
+console.log('voices page later stars', await p.$$eval('.star-later', (e) => e.length));
+console.log('errors', errs); await b.close();

@@ -3,10 +3,10 @@ import { navigate, useRoute, type Route } from '../lib/router.ts'
 import { useStore } from '../lib/store.ts'
 import { engine, ensureModel, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
 import { listen, toggle, next } from '../player/listen.ts'
-import { settings } from '../lib/settings.ts'
+import { settings, toggleFavorite } from '../lib/settings.ts'
 import { useEffect, useState } from 'react'
 import { VOICES, favoriteVoices, type Lang, type Voice } from '../lib/voices.ts'
-import { Avatar, ProgressRing, Sheet, voiceHue } from './ui.tsx'
+import { Avatar, FavStar, ProgressRing, Sheet, voiceHue } from './ui.tsx'
 import { formatBytes } from '../lib/audio.ts'
 
 const ITEMS: { route: Route; label: string; Icon: typeof Play }[] = [
@@ -108,18 +108,18 @@ export function MiniPlayer() {
 
 type PickGroup = { key: string; title: string; sub: string; list: Voice[] }
 
-/** Picker sections: Favorites, then one per accent, then Pocket. */
+/** Picker sections: Favorites, Pocket, then one per accent. */
 function pickerGroups(favorites: string[], lang?: Lang | 'auto'): PickGroup[] {
   const want = (v: Voice) => !lang || lang === 'auto' || v.lang === lang
   const ph = (l: Lang, a: string) => VOICES.filter((v) => v.engine === 'phonon' && v.lang === l && v.accent === a && want(v))
     .sort((x, y) => (x.gender === y.gender ? x.name.localeCompare(y.name) : x.gender === 'Female' ? -1 : 1))
   const groups: PickGroup[] = [
     { key: 'fav', title: 'Favorites', sub: 'Your starred voices', list: favoriteVoices(favorites).filter(want) },
+    { key: 'pocket', title: 'Pocket', sub: 'Classic engine', list: VOICES.filter((v) => v.engine === 'pocket' && want(v)) },
     { key: 'es-ES', title: 'Spanish', sub: 'Spain', list: ph('es', 'ES') },
     { key: 'es-MX', title: 'Spanish', sub: 'Mexico', list: ph('es', 'MX') },
     { key: 'en-US', title: 'English', sub: 'American', list: ph('en', 'US') },
     { key: 'en-UK', title: 'English', sub: 'British', list: ph('en', 'UK') },
-    { key: 'pocket', title: 'Pocket', sub: 'Classic engine', list: VOICES.filter((v) => v.engine === 'pocket' && want(v)) },
   ]
   return groups.filter((g) => g.list.length > 0)
 }
@@ -166,16 +166,24 @@ export function VoicePicker({ open, onClose, value, onPick, lang }: { open: bool
                 <ChevronDown size={20} className="vgroup-chev" />
               </button>
               <div className="vgroup-body"><div>
-                {g.list.map((v) => (
-                  <button key={v.id} className={`pick ${value === v.id ? 'on' : ''}`} tabIndex={isOpen ? 0 : -1} onClick={() => { onPick(v.id); onClose() }}>
-                    <Avatar voice={v} />
-                    <div className="grow">
-                      <div className="voice-name"><span className="vn">{v.name}</span>{(g.key === 'fav' || g.key === 'pocket') && <span className="badge">{v.accent}</span>}{g.key === 'fav' && v.engine === 'pocket' && <span className="badge">Pocket</span>}{g.key !== 'fav' && st.favorites.includes(v.id) && <Star size={13} fill="var(--accent)" color="var(--accent)" />}</div>
-                      <div className="voice-tag">{v.tagline}</div>
+                {g.list.map((v) => {
+                  const fav = st.favorites.includes(v.id)
+                  const pick = () => { onPick(v.id); onClose() }
+                  return (
+                    <div key={v.id} className={`pick ${value === v.id ? 'on' : ''}`} role="button" tabIndex={isOpen ? 0 : -1} onClick={pick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick() } }}>
+                      <Avatar voice={v} />
+                      <div className="grow">
+                        <div className="voice-name"><span className="vn">{v.name}</span>{(g.key === 'fav' || g.key === 'pocket') && <span className="badge">{v.accent}</span>}{g.key === 'fav' && v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
+                        <div className="voice-tag">{v.tagline}</div>
+                      </div>
+                      {value === v.id && <Check size={20} color="var(--accent)" />}
+                      <button className={`pick-star ${fav ? 'on' : ''}`} tabIndex={isOpen ? 0 : -1} aria-pressed={fav} aria-label={fav ? `Remove ${v.name} from favorites` : `Add ${v.name} to favorites`}
+                        onClick={(e) => { e.stopPropagation(); toggleFavorite(v.id) }}>
+                        <FavStar id={v.id} on={fav} size={19} />
+                      </button>
                     </div>
-                    {value === v.id && <Check size={20} color="var(--accent)" />}
-                  </button>
-                ))}
+                  )
+                })}
               </div></div>
             </section>
           )

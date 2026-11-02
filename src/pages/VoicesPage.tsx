@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Loader2, Pause, Play, Star } from 'lucide-react'
+import { Check, Loader2, Pause, Play } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
 import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, type Voice } from '../lib/voices.ts'
@@ -7,7 +7,7 @@ import { clipPlayer, playClip } from '../player/clip.ts'
 import { engine, synthesize } from '../engine/engine.ts'
 import { encodeWav, trimSilence } from '../lib/audio.ts'
 import { refreshVoices } from '../player/listen.ts'
-import { Avatar, toast } from '../components/ui.tsx'
+import { FavStar, Avatar, toast } from '../components/ui.tsx'
 import previews from '../lib/previews.json'
 
 type Filter = 'all' | 'fav' | 'en' | 'es' | 'pocket'
@@ -96,7 +96,7 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
       </div>
       <div className="voice-actions">
         <button className={`icon-btn ${fav ? 'on' : ''}`} onClick={() => toggleFavorite(v.id)} aria-label={fav ? 'Remove favorite' : 'Add favorite'} aria-pressed={fav}>
-          <Star size={21} fill={fav ? 'currentColor' : 'none'} />
+          <FavStar id={v.id} on={fav} size={21} />
         </button>
         <button className="icon-btn filled" onClick={preview} aria-label={playing ? 'Pause preview' : `Preview ${v.name}`}>
           {loading ? <Loader2 size={20} className="spin" /> : playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" style={{ marginLeft: 2 }} />}

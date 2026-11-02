@@ -1,3 +1,5 @@
+import { isOriginalFavorite } from '../lib/settings.ts'
+import { Star } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { createStore, useStore } from '../lib/store.ts'
@@ -113,4 +115,11 @@ export function ProgressRing({ value, size = 20, stroke = 2.5 }: { value: number
         strokeDasharray={c} strokeDashoffset={c * (1 - Math.max(0.02, Math.min(1, value)))} transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: 'stroke-dashoffset .4s' }} />
     </svg>
   )
+}
+
+/** Favorite star: gold for the starting favorites, violet with a soft glow for ones starred later. */
+export function FavStar({ id, on = true, size = 13 }: { id: string; on?: boolean; size?: number }) {
+  const later = on && !isOriginalFavorite(id)
+  const color = !on ? 'currentColor' : later ? 'var(--violet)' : 'var(--accent)'
+  return <Star size={size} fill={on ? color : 'none'} color={color} className={later ? 'star-later' : undefined} aria-hidden />
 }
