@@ -1,7 +1,7 @@
 // Logos service worker — offline app shell + cross-origin isolation headers.
 // Adapted from BetterTTS by SysAdminDoc (MIT). Voice models are cached by
 // pocket-tts-onnx itself (Cache Storage: pocket-tts-models-v2).
-const CACHE_NAME = 'logos-shell-1793627493328'
+const CACHE_NAME = 'logos-shell-1793660956960'
 const ORT_CACHE = 'logos-ort' // .wasm assets survive deploys: the 21 MB runtime is content-hashed and rarely changes
 const SCOPE = new URL('./', self.location).href
 const POCKET_META = 'logos-pocket-meta'
