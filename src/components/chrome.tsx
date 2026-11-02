@@ -1,11 +1,12 @@
-import { AudioLines, Library, Mic2, Pause, Play, Settings2, SkipForward, Sparkles, Star, Check, Download, Loader2 } from 'lucide-react'
+import { AudioLines, Library, Mic2, Pause, Play, Settings2, SkipForward, Sparkles, Star, Check, Download, Loader2, ChevronDown } from 'lucide-react'
 import { navigate, useRoute, type Route } from '../lib/router.ts'
 import { useStore } from '../lib/store.ts'
 import { engine, ensureModel, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
 import { listen, toggle, next } from '../player/listen.ts'
 import { settings } from '../lib/settings.ts'
-import { VOICES, LANG_LABEL, ENGINE_LABEL, favoriteVoices, type Lang, type Voice } from '../lib/voices.ts'
-import { Avatar, ProgressRing, Sheet } from './ui.tsx'
+import { useEffect, useState } from 'react'
+import { VOICES, favoriteVoices, type Lang, type Voice } from '../lib/voices.ts'
+import { Avatar, ProgressRing, Sheet, voiceHue } from './ui.tsx'
 import { formatBytes } from '../lib/audio.ts'
 
 const ITEMS: { route: Route; label: string; Icon: typeof Play }[] = [
@@ -105,17 +106,38 @@ export function MiniPlayer() {
   )
 }
 
-/** Voice picker sheet: favourites first, grouped by language. */
+type PickGroup = { key: string; title: string; sub: string; list: Voice[] }
+
+/** Picker sections: Favorites, then one per accent, then Pocket. */
+function pickerGroups(favorites: string[], lang?: Lang | 'auto'): PickGroup[] {
+  const want = (v: Voice) => !lang || lang === 'auto' || v.lang === lang
+  const ph = (l: Lang, a: string) => VOICES.filter((v) => v.engine === 'phonon' && v.lang === l && v.accent === a && want(v))
+    .sort((x, y) => (x.gender === y.gender ? x.name.localeCompare(y.name) : x.gender === 'Female' ? -1 : 1))
+  const groups: PickGroup[] = [
+    { key: 'fav', title: 'Favorites', sub: 'Your starred voices', list: favoriteVoices(favorites).filter(want) },
+    { key: 'es-ES', title: 'Spanish', sub: 'Spain', list: ph('es', 'ES') },
+    { key: 'es-MX', title: 'Spanish', sub: 'Mexico', list: ph('es', 'MX') },
+    { key: 'en-US', title: 'English', sub: 'American', list: ph('en', 'US') },
+    { key: 'en-UK', title: 'English', sub: 'British', list: ph('en', 'UK') },
+    { key: 'pocket', title: 'Pocket', sub: 'Classic engine', list: VOICES.filter((v) => v.engine === 'pocket' && want(v)) },
+  ]
+  return groups.filter((g) => g.list.length > 0)
+}
+
+/** Voice picker sheet: collapsible sections, one open at a time. */
 export function VoicePicker({ open, onClose, value, onPick, lang }: { open: boolean; onClose: () => void; value: string | null; onPick: (id: string | null) => void; lang?: Lang | 'auto' }) {
   const st = useStore(settings)
-  const groups: { title: string; list: Voice[] }[] = []
-  const favs = favoriteVoices(st.favorites).filter((v) => !lang || lang === 'auto' || v.lang === lang)
-  if (favs.length) groups.push({ title: 'Favorites', list: favs })
-  for (const l of ['en', 'es'] as Lang[]) {
-    if (lang && lang !== 'auto' && lang !== l) continue
-    for (const k of ['phonon', 'pocket'] as const) {
-      groups.push({ title: `${LANG_LABEL[l]} · ${ENGINE_LABEL[k]}`, list: VOICES.filter((v) => v.lang === l && v.engine === k && !st.favorites.includes(v.id)) })
-    }
+  const groups = pickerGroups(st.favorites, lang)
+  const initial = () => {
+    if (value === null || st.favorites.includes(value)) return groups[0]?.key ?? null
+    return groups.find((g) => g.list.some((v) => v.id === value))?.key ?? groups[0]?.key ?? null
+  }
+  const [openKey, setOpenKey] = useState<string | null>(initial)
+  useEffect(() => { if (open) setOpenKey(initial()) }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const toggleGroup = (key: string, el: HTMLElement) => {
+    const next = openKey === key ? null : key
+    setOpenKey(next)
+    if (next) setTimeout(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }), 420)
   }
   return (
     <Sheet open={open} onClose={onClose} title="Choose a voice">
@@ -127,21 +149,38 @@ export function VoicePicker({ open, onClose, value, onPick, lang }: { open: bool
         </div>
         {value === null && <Check size={20} color="var(--accent)" />}
       </button>
-      {groups.map((g) => g.list.length > 0 && (
-        <div key={g.title}>
-          <div className="section-label" style={{ marginTop: 16 }}>{g.title}</div>
-          {g.list.map((v) => (
-            <button key={v.id} className={`pick ${value === v.id ? 'on' : ''}`} onClick={() => { onPick(v.id); onClose() }}>
-              <Avatar voice={v} />
-              <div className="grow">
-                <div className="voice-name">{v.name} <span className="badge">{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}{st.favorites.includes(v.id) && <Star size={13} fill="var(--accent)" color="var(--accent)" />}</div>
-                <div className="voice-tag">{v.tagline}</div>
-              </div>
-              {value === v.id && <Check size={20} color="var(--accent)" />}
-            </button>
-          ))}
-        </div>
-      ))}
+      <div className="vgroups">
+        {groups.map((g) => {
+          const isOpen = openKey === g.key
+          const chosen = value ? g.list.find((v) => v.id === value) : undefined
+          return (
+            <section key={g.key} className={`vgroup ${isOpen ? 'open' : ''}`} data-group={g.key}>
+              <button className="vgroup-head" aria-expanded={isOpen} onClick={(e) => toggleGroup(g.key, e.currentTarget.parentElement as HTMLElement)}>
+                <span className="vgroup-stack" aria-hidden>
+                  {g.list.slice(0, 3).map((v) => { const [a, b] = voiceHue(v.id); return <i key={v.id} style={{ background: `linear-gradient(135deg, hsl(${a} 62% 56%), hsl(${b} 58% 32%))` }} /> })}
+                </span>
+                <span className="vgroup-text">
+                  <span className="vgroup-title">{g.key === 'fav' && <Star size={14} fill="var(--accent)" color="var(--accent)" />}{g.title}{g.key !== 'fav' && g.key !== 'pocket' && <span className="vgroup-sub">{g.sub}</span>}</span>
+                  <span className="vgroup-meta">{chosen && !isOpen ? <>Selected · <b>{chosen.name}</b></> : `${g.list.length} voice${g.list.length === 1 ? '' : 's'}${g.key === 'pocket' ? ' · Classic engine' : ''}`}</span>
+                </span>
+                <ChevronDown size={20} className="vgroup-chev" />
+              </button>
+              <div className="vgroup-body"><div>
+                {g.list.map((v) => (
+                  <button key={v.id} className={`pick ${value === v.id ? 'on' : ''}`} tabIndex={isOpen ? 0 : -1} onClick={() => { onPick(v.id); onClose() }}>
+                    <Avatar voice={v} />
+                    <div className="grow">
+                      <div className="voice-name"><span className="vn">{v.name}</span>{(g.key === 'fav' || g.key === 'pocket') && <span className="badge">{v.accent}</span>}{g.key === 'fav' && v.engine === 'pocket' && <span className="badge">Pocket</span>}{g.key !== 'fav' && st.favorites.includes(v.id) && <Star size={13} fill="var(--accent)" color="var(--accent)" />}</div>
+                      <div className="voice-tag">{v.tagline}</div>
+                    </div>
+                    {value === v.id && <Check size={20} color="var(--accent)" />}
+                  </button>
+                ))}
+              </div></div>
+            </section>
+          )
+        })}
+      </div>
     </Sheet>
   )
 }
