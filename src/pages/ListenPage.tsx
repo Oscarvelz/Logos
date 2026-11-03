@@ -327,7 +327,7 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
   return (
     <>
       <div className="reader-head">
-        <span className="rh-hint">Tap any word to read from there</span>
+        <span className="rh-hint">Tap a word to start there.</span>
         <div className="rh-actions">
           <button className="rh-btn" onClick={onKeep} aria-label="Save to Library"><BookmarkPlus size={13} /> Save</button>
           <button className="rh-btn" onClick={onEdit}><PenLine size={13} /> Edit</button>
