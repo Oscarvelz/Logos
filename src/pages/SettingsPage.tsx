@@ -2,23 +2,28 @@ import { useEffect, useState } from 'react'
 import { Cpu, Download, HardDrive, Loader2, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, applyTheme, type Theme } from '../lib/settings.ts'
+import { keep } from '../engine/keep.ts'
 import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHONON_SIZE_MB, modelCacheBytes } from '../engine/engine.ts'
 import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 
-const VERSION = '1.4.22'
+const VERSION = '1.4.23'
 
 export function SettingsPage() {
   const st = useStore(settings)
   const e = useStore(engine)
   const [usage, setUsage] = useState<{ quota: number; usage: number } | null>(null)
   const [persisted, setPersisted] = useState<boolean | null>(null)
+  const kn = useStore(keep)
   const [modelBytes, setModelBytes] = useState(0)
   const refresh = () => { void storageEstimate().then(setUsage); void modelCacheBytes().then(setModelBytes) }
   useEffect(() => {
     refresh()
     void navigator.storage?.persisted?.().then(setPersisted)
+    // The model is written to the cache just after it reports ready.
+    const t = e.status === 'ready' ? setTimeout(refresh, 6000) : 0
+    return () => clearTimeout(t)
   }, [e.status])
 
   const warming = e.status === 'loading' && e.phase === 'warm'
@@ -74,6 +79,10 @@ export function SettingsPage() {
           <div className="grow">
             <div className="t">Storage</div>
             <div className="d">Voice models {formatBytes(modelBytes)}{usage?.quota ? ` · ${formatBytes(usage.usage)} of ${formatBytes(usage.quota)} used` : ''}</div>
+            {persisted !== null && <div className="d">{persisted ? 'Protected from automatic cleanup' : 'Not protected: the phone may clear the voice'}</div>}
+            {kn.note && <div className="d" style={{ color: 'var(--accent)' }}>{kn.note.kind === 'cleared'
+              ? `The phone cleared the saved ${kn.note.engine === 'pocket' ? 'Pocket' : 'Phonon'} voice (noticed ${new Date(kn.note.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}).`
+              : `The ${kn.note.engine === 'pocket' ? 'Pocket' : 'Phonon'} voice loaded but couldn't be saved on this phone.`}</div>}
           </div>
           {persisted === false && <button className="btn sm" onClick={async () => { const ok = await navigator.storage?.persist?.(); setPersisted(Boolean(ok)); toast(ok ? 'Storage protected from automatic cleanup' : 'The browser declined — install the app to keep storage') }}>Protect</button>}
         </div>

@@ -5,10 +5,12 @@ import App from './App.tsx'
 import { consumeShareTarget } from './lib/drafts.ts'
 import { applyTheme, settings } from './lib/settings.ts'
 import { trackPlayback } from './lib/library.ts'
+import { startKeeping } from './engine/keep.ts'
 
 applyTheme(settings.get().theme)
 consumeShareTarget()
 trackPlayback()
+startKeeping()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
