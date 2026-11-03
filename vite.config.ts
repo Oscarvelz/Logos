@@ -23,10 +23,24 @@ function swBuildId(): Plugin {
   }
 }
 
+// Logos patch: pocket-tts-onnx's downloader buffers then copies the model before
+// caching it; ours streams it into the cache (src/engine/pocket-assets.js).
+function pocketAssets(): Plugin {
+  const target = join(import.meta.dirname, 'src/engine/pocket-assets.js')
+  return {
+    name: 'pocket-assets',
+    enforce: 'pre',
+    resolveId(source, importer) {
+      if (!process.env.NOPATCH && source === './assets.js' && importer && importer.includes('pocket-tts-onnx')) return target
+      return null
+    },
+  }
+}
+
 export default defineConfig({
   base: BASE.endsWith('/') ? BASE : `${BASE}/`,
-  plugins: [react(), swBuildId()],
-  worker: { format: 'es' },
+  plugins: [pocketAssets(), react(), swBuildId()],
+  worker: { format: 'es', plugins: () => [pocketAssets()] },
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 4000,
