@@ -17,7 +17,7 @@ export type Segment = {
 
 const ABBREV = new Set([
   'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st', 'vs', 'etc', 'e.g', 'i.e', 'inc', 'ltd', 'co', 'no', 'vol', 'fig', 'approx', 'dept', 'est', 'mt', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
-  'sra', 'srta', 'dra', 'ud', 'uds', 'pág', 'pag', 'núm', 'num', 'av', 'avda', 'lic', 'ing', 'arq', 'cap', 'art', 'aprox', 'p.ej', 'ej', 'tel',
+  'sra', 'srta', 'uu', 'ee', 'hh', 'aa', 'oo', 'mm', 'vv', 'dra', 'ud', 'uds', 'pág', 'pag', 'núm', 'num', 'av', 'avda', 'lic', 'ing', 'arq', 'cap', 'art', 'aprox', 'p.ej', 'ej', 'tel',
 ])
 
 // Segments follow the text's own shape: one sentence each. A sentence is only
@@ -179,8 +179,33 @@ export function formatDuration(sec: number): string {
 }
 
 /** Text as it should be spoken: drops markdown and list symbols the voice would read out. */
-export function speakable(text: string): string {
+// Spanish doubled-letter abbreviations (plural initials) and a few common ones the
+// voices would otherwise spell out or misread: "EE.UU.", "EE. UU.", "E.E.U.U.", "EEUU" → Estados Unidos.
+const ES_ABBR: [RegExp, string][] = [
+  [/(?<![\p{L}])(?:E\.?\s?E\.?\s?U\.?\s?U\.?|EEUU|EE\.?\s?UU\.?)(?![\p{L}])/gu, 'Estados Unidos'],
+  [/(?<![\p{L}])RR\.?\s?HH\.?(?![\p{L}])/gu, 'recursos humanos'],
+  [/(?<![\p{L}])FF\.?\s?AA\.?(?![\p{L}])/gu, 'Fuerzas Armadas'],
+  [/(?<![\p{L}])JJ\.?\s?OO\.?(?![\p{L}])/gu, 'Juegos Olímpicos'],
+  [/(?<![\p{L}])CC\.?\s?AA\.?(?![\p{L}])/gu, 'comunidades autónomas'],
+  [/(?<![\p{L}])SS\.?\s?MM\.?(?![\p{L}])/gu, 'Sus Majestades'],
+  [/(?<![\p{L}])AA\.?\s?VV\.?(?![\p{L}])/gu, 'autores varios'],
+  [/(?<![\p{L}])Sr\.(?=\s)/gu, 'señor'], [/(?<![\p{L}])Sra\.(?=\s)/gu, 'señora'], [/(?<![\p{L}])Srta\.(?=\s)/gu, 'señorita'],
+  [/(?<![\p{L}])Dr\.(?=\s)/gu, 'doctor'], [/(?<![\p{L}])Dra\.(?=\s)/gu, 'doctora'],
+  [/(?<![\p{L}])Ud\.(?=\s)/gu, 'usted'], [/(?<![\p{L}])Uds\.(?=\s)/gu, 'ustedes'],
+  [/(?<![\p{L}])(?:Avda|Av)\.(?=\s)/gu, 'avenida'], [/(?<![\p{L}])[Pp]ág\.(?=\s)/gu, 'página'],
+  [/(?<![\p{L}])[Nn]úm\.(?=\s)/gu, 'número'], [/(?<![\p{L}])aprox\.(?=\s)/gu, 'aproximadamente'],
+]
+const EN_ABBR: [RegExp, string][] = []
+
+/** Expands abbreviations the voice would misread, by language. */
+export function expandAbbrev(text: string, lang?: Lang): string {
+  const list = lang === 'es' ? ES_ABBR : lang === 'en' ? EN_ABBR : []
+  for (const [re, to] of list) text = text.replace(re, to)
   return text
+}
+
+export function speakable(text: string, lang?: Lang): string {
+  return expandAbbrev(text, lang)
     .replace(/\*\*|__|~~|`+/g, '')
     .replace(/(^|\s)[*_](?=\S)|(?<=\S)[*_](?=\s|$|[.,;:!?])/g, '$1')
     .replace(/(^|\s)#{1,6}\s+/g, '$1')

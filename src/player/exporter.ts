@@ -3,7 +3,7 @@
 // save to the Library. Lives outside React so it survives page changes.
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
-import { segmentText, pauseAfter } from '../lib/text.ts'
+import { segmentText, pauseAfter, speakable } from '../lib/text.ts'
 import { voiceById, type Lang } from '../lib/voices.ts'
 import { concat, createMp3Encoder, encodeWav, silence, trimSilence } from '../lib/audio.ts'
 import { synthesize } from '../engine/engine.ts'
@@ -72,7 +72,7 @@ export async function runExport(text: string, opts: ExportOpts) {
     // Keep two requests queued so the worker never idles between sentences.
     const inflight: Promise<{ samples: Float32Array; sampleRate: number }>[] = []
     const request = (i: number) => {
-      const p = synthesize(segments[i].text, pick(segments[i].lang), opts.speed, { priority: 0, signal })
+      const p = synthesize(speakable(segments[i].text, segments[i].lang) || segments[i].text, pick(segments[i].lang), opts.speed, { priority: 0, signal })
       p.catch(() => {})
       return p
     }

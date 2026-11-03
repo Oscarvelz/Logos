@@ -253,7 +253,7 @@ function render(i: number, priority: number): Promise<Rendered> {
   const ctrl = new AbortController()
   const mySession = session
   const promise = (async () => {
-    const res = await synthesize(speakable(seg.text) || seg.text, voice, 1, { priority, signal: ctrl.signal })
+    const res = await synthesize(speakable(seg.text, seg.lang) || seg.text, voice, 1, { priority, signal: ctrl.signal })
     synthMs += res.ms
     synthSec += res.samples.length / res.sampleRate
     const trimmed = trimSilence(res.samples, res.sampleRate)
