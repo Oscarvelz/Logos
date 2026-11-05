@@ -33,7 +33,17 @@ export function ListenPage() {
   const text = d.listen
 
   useEffect(() => {
-    if (d.sharedAt && Date.now() - d.sharedAt < 4000) { setEditing(true); toast('Shared text is ready — tap play') }
+    // Shared in from another app: a bare link opens the page reader; any other
+    // text is loaded and read aloud at once (Oscar, 1.4.26).
+    if (!d.sharedAt || Date.now() - d.sharedAt > 4000) return
+    const shared = d.listen
+    drafts.set({ sharedAt: 0 })
+    if (!shared.trim()) return
+    if (isJustUrl(shared)) { setWebUrl(normalizeUrl(shared)); return }
+    if (listen.get().active) endSession()
+    loadText(shared)
+    setEditing(false)
+    void play()
   }, [d.sharedAt])
 
   const setText = (t: string) => { drafts.set({ listen: t }); saveLastText(t) }

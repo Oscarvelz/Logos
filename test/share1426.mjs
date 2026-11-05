@@ -1,0 +1,10 @@
+import { launch, BASE, PHONE } from './common.mjs';
+const b = await launch(); const ctx = await b.newContext(PHONE); const p = await ctx.newPage();
+await p.addInitScript(() => localStorage.setItem('logos.phononThreads', '1'));
+const errs=[]; p.on('pageerror', e => errs.push(e.message));
+await p.goto(BASE); await p.waitForTimeout(6000);
+await p.goto(BASE.replace(/#.*$/,'') + '?title=Logos&text=' + encodeURIComponent('Heraclitus said everything flows. No one steps in the same river twice.')); await p.waitForTimeout(5000);
+console.log(JSON.stringify(await p.evaluate(() => ({ hash: location.hash, search: location.search, reader: !!document.querySelector('.reader-head'), textarea: !!document.querySelector('textarea'), title: document.querySelector('.listen-head')?.textContent?.slice(0,120) }))), errs);
+await p.goto(BASE.replace(/#.*$/,'') + '?url=' + encodeURIComponent('https://en.wikipedia.org/wiki/Logos')); await p.waitForTimeout(4000);
+console.log('url →', await p.evaluate(() => document.querySelector('.sheet')?.textContent?.slice(0,100)));
+await b.close();
