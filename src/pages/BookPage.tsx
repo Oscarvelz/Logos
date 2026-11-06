@@ -1,12 +1,13 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, CornerUpLeft, ListTree, Loader2, Pause, Play, Search, Type, X } from 'lucide-react'
+import { ArrowLeft, AudioLines, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, CornerUpLeft, ListTree, Loader2, Pause, Play, Search, Type, X } from 'lucide-react'
 import { getBook, getContent, updateBook, progressAt, type BookMeta, type Block, type Chapter, type Pos } from '../lib/books.ts'
 import { drafts } from '../lib/drafts.ts'
 import { loadText, play, listen, toggle } from '../player/listen.ts'
 import { useStore } from '../lib/store.ts'
 import { Sheet, Seg, toast } from '../components/ui.tsx'
 import { BookCover } from '../components/bookcover.tsx'
+import { setNowReading, nowReadingFor } from '../lib/book/nowreading.ts'
 
 const bookIdFromHash = () => decodeURIComponent(location.hash.replace(/^#\/?book\/?/, '').split(/[/?]/)[0] ?? '')
 type Type = { size: number; font: 'serif' | 'sans'; spacing: 'snug' | 'airy' }
@@ -126,12 +127,14 @@ export function BookPage() {
   const listenFrom = (b: number) => {
     if (!chapters || !meta) return
     const parts: string[] = []
+    const where: Pos[] = []
     let n = 0
     for (let c = ch; c < chapters.length && n < 40000; c++) {
       const blocks = chapters[c].blocks
-      for (let i = c === ch ? b : 0; i < blocks.length && n < 40000; i++) { parts.push(blocks[i].t); n += blocks[i].t.length }
+      for (let i = c === ch ? b : 0; i < blocks.length && n < 40000; i++) { parts.push(blocks[i].t); where.push({ ch: c, b: i }); n += blocks[i].t.length }
     }
     const text = parts.join('\n\n')
+    setNowReading(meta.id, meta.title, parts, where)
     drafts.set({ listen: text })
     loadText(text)
     void play()
@@ -299,6 +302,7 @@ function BottomBar({ meta, chapters, ch, progress, onPrev, onNext, onToc, onList
   const s = useStore(listen)
   const left = Math.max(0, meta.words * (1 - progress))
   const mins = Math.round(left / 230)
+  const fromHere = s.active && nowReadingFor(s.text)?.id === meta.id
   const timeLeft = mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min left` : `${Math.max(1, mins)} min left`
   return (
     <div className="bk-bar">
@@ -308,7 +312,12 @@ function BottomBar({ meta, chapters, ch, progress, onPrev, onNext, onToc, onList
         <b>{Math.round(progress * 100)}%</b>
         <span>{progress >= 0.995 ? 'Finished' : timeLeft} · {ch + 1}/{chapters.length}</span>
       </button>
-      {s.active && (s.playing || s.buffering)
+      {fromHere
+        ? <div className="bk-duo">
+            <button className="bk-duo-play" onClick={toggle} aria-label={s.playing || s.buffering ? 'Pause' : 'Resume'}>{s.buffering ? <Loader2 size={17} className="spin" /> : s.playing ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}</button>
+            <button className="bk-duo-go" onClick={() => { location.hash = '#/listen' }} aria-label="Follow the text in Listen"><AudioLines size={17} /> Follow</button>
+          </div>
+        : s.active && (s.playing || s.buffering)
         ? <button className="bk-listen" onClick={toggle} aria-label="Pause">{s.buffering ? <Loader2 size={17} className="spin" /> : <Pause size={17} fill="currentColor" />} Pause</button>
         : <button className="bk-listen" onClick={onListen} aria-label="Listen from here"><Play size={17} fill="currentColor" /> Listen</button>}
       <button className="icon-btn" onClick={onNext} disabled={ch >= chapters.length - 1} aria-label="Next chapter"><ChevronRight size={22} /></button>

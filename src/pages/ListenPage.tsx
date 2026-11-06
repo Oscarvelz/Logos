@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AudioLines, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
+import { AudioLines, BookOpen, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
@@ -11,6 +11,8 @@ import { aiDescribe, describeText } from '../lib/describe.ts'
 import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
 import { exportJob, queueExport } from '../player/exporter.ts'
 import { navigate } from '../lib/router.ts'
+import { nowReadingFor, posAt } from '../lib/book/nowreading.ts'
+import { updateBook } from '../lib/books.ts'
 import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { WebImport } from '../components/webimport.tsx'
 import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
@@ -404,6 +406,14 @@ function wordAt(ws: HTMLElement[], p: number): number {
 // The title is the text's own heading, or a complete one Logos composes (with a one-line summary).
 function ListenHead({ text, lang, playing, remaining }: { text: string; lang: Lang; playing: boolean; remaining: number }) {
   const local = useMemo(() => describeText(text, lang), [text, lang])
+  const book = useMemo(() => nowReadingFor(text), [text])
+  const backToBook = () => {
+    if (!book) return
+    const s = listen.get()
+    const seg = s.text === text ? s.segments[s.current] : undefined
+    const at = posAt(book, seg?.start ?? 0)
+    void updateBook(book.id, { pos: at }, false).finally(() => { location.hash = `#/book/${encodeURIComponent(book.id)}` })
+  }
   const [ai, setAi] = useState<{ key: string; title?: string; summary?: string } | null>(null)
   useEffect(() => {
     if (!local.generated || text.trim().length < 200) return
@@ -433,8 +443,14 @@ function ListenHead({ text, lang, playing, remaining }: { text: string; lang: La
         <span>{has ? (playing ? 'Now reading' : 'Ready to read') : 'Listen'}</span>
         {has ? <span className="lh-meta">{words.toLocaleString()} words · {formatDuration(remaining)} · {LANG_LABEL[lang]}</span> : null}
       </div>
-      <div className="lh-title" lang={lang}>{title || 'Paste anything. Hear it instantly.'}</div>
-      {summary ? <div className="lh-sum" lang={lang}>{summary}</div> : null}
+      {book
+        ? <button className="lh-book" onClick={backToBook} aria-label={`Back to ${book.title}`}>
+            <BookOpen size={17} />
+            <span className="lh-book-t" lang={lang}>{book.title}</span>
+            <span className="lh-book-go">Back to book</span>
+          </button>
+        : <div className="lh-title" lang={lang}>{title || 'Paste anything. Hear it instantly.'}</div>}
+      {summary && !book ? <div className="lh-sum" lang={lang}>{summary}</div> : null}
     </div>
   )
 }

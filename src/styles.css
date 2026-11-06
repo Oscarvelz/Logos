@@ -774,3 +774,16 @@ html[data-immersive] .play-btn { box-shadow: 0 22px 46px -14px var(--accent-glow
 .bk-type-row .seg { min-width: 200px; }
 .bk-note { font-family: 'Iowan Old Style', Palatino, 'Noto Serif', Georgia, serif; font-size: 17px; line-height: 1.6; margin: 0 4px; white-space: pre-line; }
 .spin-ring { width: 34px; height: 34px; border-radius: 99px; border: 3px solid var(--surface-3); border-top-color: var(--accent); animation: spin 1s linear infinite; }
+
+/* Listen ⇄ book */
+.lh-book { margin-top: 8px; display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px 10px 14px; border-radius: 16px; text-align: left;
+  background: color-mix(in srgb, var(--accent) 9%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); color: var(--accent);
+  transition: background .2s, transform .2s var(--ease-spring); }
+.lh-book:active { transform: scale(.98); }
+.lh-book-t { flex: 1; min-width: 0; font-family: var(--font-display); font-size: 19px; line-height: 1.2; color: var(--text); text-wrap: balance; overflow-wrap: anywhere; }
+.lh-book-go { flex: none; font-size: 12.5px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+.bk-duo { display: flex; align-items: center; gap: 6px; flex: none; }
+.bk-duo-play { width: 44px; height: 44px; border-radius: 99px; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 22px -10px var(--accent-glow); }
+.bk-duo-go { height: 44px; padding: 0 14px 0 12px; border-radius: 99px; display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.bk-duo button:active { transform: scale(.94); }
