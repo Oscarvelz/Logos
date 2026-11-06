@@ -16,10 +16,10 @@ export function formatOf(file: File): string | null {
   return null
 }
 
-export async function importBook(file: File): Promise<BookMeta> {
+export async function importBook(file: File, batch?: string): Promise<BookMeta> {
   const format = formatOf(file)
   if (!format) throw new Error(`${file.name} isn’t a book file Logos can read.`)
-  const step = (s: string, done: number, total: number) => books.set({ importing: { name: file.name, step: s, done, total } })
+  const step = (s: string, done: number, total: number) => books.set({ importing: { name: file.name, step: s, done, total, batch } })
   step('Opening', 0, 1)
   try {
     const buf = await file.arrayBuffer()
@@ -45,4 +45,24 @@ export async function importBook(file: File): Promise<BookMeta> {
   } finally {
     books.set({ importing: null })
   }
+}
+
+/** Files shared into Logos from another app wait in a cache until the app opens. */
+export async function takeSharedFiles(): Promise<File[]> {
+  if (!new URLSearchParams(location.search).has('sharedfiles')) return []
+  history.replaceState(null, '', `${location.pathname}#/library`)
+  try {
+    const cache = await caches.open('logos-share')
+    const files: File[] = []
+    for (const req of await cache.keys()) {
+      if (!req.url.includes('/__share/')) continue
+      const res = await cache.match(req)
+      if (res) {
+        const blob = await res.blob()
+        files.push(new File([blob], decodeURIComponent(res.headers.get('x-name') ?? 'book'), { type: res.headers.get('content-type') ?? blob.type }))
+      }
+      await cache.delete(req)
+    }
+    return files
+  } catch { return [] }
 }

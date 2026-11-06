@@ -58,7 +58,7 @@ async function run<T>(store: 'books' | 'content', mode: IDBTransactionMode, fn: 
   })
 }
 
-export type Importing = { name: string; step: string; done: number; total: number }
+export type Importing = { name: string; step: string; done: number; total: number; batch?: string }
 export const books = createStore<{ list: BookMeta[]; loaded: boolean; importing: Importing | null }>({ list: [], loaded: false, importing: null })
 
 export async function refreshBooks() {

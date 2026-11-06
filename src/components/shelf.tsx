@@ -18,19 +18,24 @@ const FILTERS: { id: Filter; label: string; test: (b: BookMeta) => boolean }[] =
 
 export const openBook = (id: string) => { location.hash = `#/book/${encodeURIComponent(id)}` }
 
+/** Import one or more book files, one after another; opens the book when there is only one. */
+export async function importMany(list: File[]) {
+  let last: BookMeta | null = null
+  let added = 0
+  for (const [i, f] of list.entries()) {
+    try { last = await importBook(f, list.length > 1 ? `${i + 1} of ${list.length}` : undefined); added++; if (list.length === 1) toast(`Added ${last.title}`) } catch (e) { toast((e as Error).message || `Couldn’t read ${f.name}`, undefined, 6000) }
+  }
+  if (list.length > 1 && added) toast(`Added ${added} book${added === 1 ? '' : 's'}`)
+  if (last && list.length === 1) openBook(last.id)
+}
+
 /** Pick and import one or more book files. */
 export function useBookPicker() {
   const input = useRef<HTMLInputElement>(null)
   const onFiles = async (files: FileList | null) => {
     const list = Array.from(files ?? [])
     if (input.current) input.current.value = ''
-    let last: BookMeta | null = null
-    let added = 0
-    for (const f of list) {
-      try { last = await importBook(f); added++; if (list.length === 1) toast(`Added ${last.title}`) } catch (e) { toast((e as Error).message || `Couldn’t read ${f.name}`, undefined, 6000) }
-    }
-    if (list.length > 1 && added) toast(`Added ${added} book${added === 1 ? '' : 's'}`)
-    if (last && list.length === 1) openBook(last.id)
+    await importMany(list)
   }
   const el = <input ref={input} type="file" accept={BOOK_ACCEPT} multiple hidden onChange={(e) => void onFiles(e.target.files)} />
   return { pick: () => input.current?.click(), el }
@@ -64,7 +69,7 @@ export function BookShelf({ onPick }: { onPick: () => void }) {
         <div className="card render-card">
           <span className="keep-ic"><BookPlus size={20} /></span>
           <div className="grow" style={{ minWidth: 0 }}>
-            <div className="rc-title">Importing · {st.importing.name}</div>
+            <div className="rc-title">Importing{st.importing.batch ? ` ${st.importing.batch}` : ''} · {st.importing.name}</div>
             <div className="rc-meta">{st.importing.step}{st.importing.total > 1 ? ` · ${st.importing.done} of ${st.importing.total}` : ''}</div>
             <div className="clip-bar" style={{ marginTop: 8 }}><i style={{ width: `${st.importing.total ? (st.importing.done / st.importing.total) * 100 : 0}%`, transition: 'width .3s var(--ease)' }} /></div>
           </div>

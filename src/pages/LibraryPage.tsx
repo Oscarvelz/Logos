@@ -12,7 +12,8 @@ import { drafts } from '../lib/drafts.ts'
 import { navigate } from '../lib/router.ts'
 import { loadText, play as listenPlay } from '../player/listen.ts'
 import { Sheet, Seg, toast } from '../components/ui.tsx'
-import { BookShelf, useBookPicker } from '../components/shelf.tsx'
+import { BookShelf, useBookPicker, importMany } from '../components/shelf.tsx'
+import { takeSharedFiles } from '../lib/book/import.ts'
 import { books } from '../lib/books.ts'
 import { WebImport } from '../components/webimport.tsx'
 
@@ -69,6 +70,8 @@ export function LibraryPage() {
   const bk = useStore(books)
   const picker = useBookPicker()
   useEffect(() => { void refreshLibrary() }, [])
+  // Books shared from another app (share sheet): import them all, one after another.
+  useEffect(() => { void takeSharedFiles().then((files) => { if (files.length) { setShelf('books'); void importMany(files) } }) }, [])
   useEffect(() => { if (job.status === 'done' || job.status === 'idle') void refreshLibrary() }, [job.status])
 
   const total = lib.clips.reduce((n, c) => n + c.size, 0)

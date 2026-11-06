@@ -15,12 +15,39 @@
     "utilities"
   ],
   "share_target": {
-    "action": "./",
-    "method": "GET",
+    "action": "./share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
     "params": {
       "title": "title",
       "text": "text",
-      "url": "url"
+      "url": "url",
+      "files": [
+        {
+          "name": "books",
+          "accept": [
+            "application/epub+zip",
+            ".epub",
+            "application/pdf",
+            ".pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".docx",
+            "application/x-fictionbook+xml",
+            ".fb2",
+            "text/plain",
+            ".txt",
+            "text/markdown",
+            ".md",
+            "text/html",
+            ".html",
+            ".htm",
+            "application/rtf",
+            "text/rtf",
+            ".rtf",
+            "application/octet-stream"
+          ]
+        }
+      ]
     }
   },
   "shortcuts": [
