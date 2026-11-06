@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.PendingIntent
+import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageInstaller
@@ -181,6 +182,13 @@ class MainActivity : Activity() {
 
     inner class Bridge {
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
+
+        /** WebView can't grant clipboard-read, so Paste reads the system clipboard here. */
+        @JavascriptInterface fun clipboard(): String = runCatching {
+            val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = cm.primaryClip ?: return@runCatching ""
+            buildString { for (i in 0 until clip.itemCount) { val t = clip.getItemAt(i).coerceToText(this@MainActivity)?.toString().orEmpty(); if (t.isNotEmpty()) { if (isNotEmpty()) append('\n'); append(t) } } }
+        }.getOrDefault("")
 
         @JavascriptInterface fun sharedList(): String {
             val a = JSONArray()
