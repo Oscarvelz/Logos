@@ -8,7 +8,7 @@ import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 
-const VERSION = '1.4.34'
+const VERSION = '1.4.35'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -32,7 +32,7 @@ export function SettingsPage() {
   const warming = e.status === 'loading' && e.phase === 'warm'
 
   return (
-    <div className="page">
+    <div className="page settings-page">
       <div className="page-head">
         <div>
           <h1 className="page-title">Settings</h1>
@@ -40,6 +40,8 @@ export function SettingsPage() {
         </div>
       </div>
 
+      <div className="set-cols">
+      <section className="set-group">
       <div className="section-label">Neural voice</div>
       <div className="card engine-card stack">
         <div className="row between">
@@ -102,6 +104,8 @@ export function SettingsPage() {
         )}
       </div>
 
+      </section>
+      <section className="set-group">
       <div className="section-label">Playback</div>
       <div className="list">
         <div className="list-row col">
@@ -126,6 +130,8 @@ export function SettingsPage() {
         </div>
       </div>
 
+      </section>
+      <section className="set-group">
       <div className="section-label">Appearance</div>
       <div className="list">
         <div className="list-row col">
@@ -134,6 +140,8 @@ export function SettingsPage() {
         </div>
       </div>
 
+      </section>
+      <section className="set-group">
       <div className="section-label">About</div>
       <div className="card card-pad credits">
         <div className="row" style={{ marginBottom: 12 }}>
@@ -148,6 +156,8 @@ export function SettingsPage() {
         <p>Also <a href="https://github.com/kyutai-labs/pocket-tts" target="_blank" rel="noreferrer">Pocket TTS</a> by Kyutai (Manu Orsini, Simon Rouard, Gabriel De Marmiesse, Václav Volhejn, Neil Zeghidour, Alexandre Défossez), CC BY 4.0, run in the browser with <a href="https://github.com/thewh1teagle/pocket-tts-onnx" target="_blank" rel="noreferrer">pocket-tts-onnx</a> by thewh1teagle (CC BY 4.0) and ONNX Runtime Web.</p>
         <p>MP3 encoding: lamejs (LGPL-3.0). Fonts: Manrope & Instrument Serif (OFL).</p>
         <p className="muted small" style={{ marginBottom: 0 }}>© 2026 SysAdminDoc · © 2026 Oscar Arnoldo Velasquez (Logos modifications). Released under the MIT License.</p>
+      </div>
+      </section>
       </div>
     </div>
   )

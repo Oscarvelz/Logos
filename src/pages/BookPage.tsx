@@ -223,7 +223,7 @@ export function BookPage() {
         <div className="bk-type">
           <div className="bk-type-row"><span>Size</span>
             <div className="row" style={{ gap: 8 }}>
-              <button className="icon-btn" onClick={() => setType({ ...type, size: Math.max(14, type.size - 1) })} aria-label="Smaller"><span style={{ fontSize: 14 }}>A</span></button>
+              <button className="icon-btn" onClick={() => setType({ ...type, size: Math.max(11, type.size - 1) })} aria-label="Smaller"><span style={{ fontSize: 14 }}>A</span></button>
               <span className="mono" style={{ minWidth: 30, textAlign: 'center' }}>{type.size}</span>
               <button className="icon-btn" onClick={() => setType({ ...type, size: Math.min(30, type.size + 1) })} aria-label="Larger"><span style={{ fontSize: 22 }}>A</span></button>
             </div>

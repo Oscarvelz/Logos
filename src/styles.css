@@ -647,7 +647,21 @@ html[data-immersive] .play-btn { box-shadow: 0 22px 46px -14px var(--accent-glow
   border-color: color-mix(in srgb, var(--accent) 26%, var(--line)); background: linear-gradient(120deg, var(--accent-soft), var(--surface) 60%); }
 .shelf-continue .bcover.small { width: 66px; }
 .shelf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); gap: 22px 16px; margin-top: 14px; }
-@media (max-width: 420px) { .shelf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 14px; } }
+.shelf-grid.size-s { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 18px 12px; }
+.shelf-grid.size-l { grid-template-columns: repeat(auto-fill, minmax(184px, 1fr)); gap: 26px 20px; }
+@media (max-width: 420px) {
+  .shelf-grid.size-l { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 14px; }
+  .shelf-grid.size-m { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 12px; }
+  .shelf-grid.size-s { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 10px; }
+}
+.shelf-grid.size-s .book-tile-title { font-size: 14px; }
+.shelf-grid.size-s .book-tile-sub { font-size: 10.5px; }
+.shelf-grid.size-l .book-tile-title { font-size: 20px; }
+@media (max-width: 420px) { .shelf-grid.size-m .book-tile-title { font-size: 15px; } .shelf-grid.size-m .book-tile-sub { font-size: 10.5px; } }
+.lib-sort-r { display: flex; align-items: center; gap: 8px; }
+.cover-size { display: inline-flex; align-items: center; height: 32px; padding: 2px; gap: 2px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); }
+.cover-size button { width: 32px; height: 26px; border: 0; border-radius: 99px; display: grid; place-items: center; background: transparent; color: var(--muted); transition: background .2s, color .2s; cursor: pointer; }
+.cover-size button.on { background: var(--accent-soft); color: var(--accent); }
 .book-tile { min-width: 0; animation: pageIn .4s var(--ease) both; }
 .book-tile-cover { position: relative; display: block; width: 100%; border-radius: 6px 12px 12px 6px; transition: transform .25s var(--ease); -webkit-touch-callout: none; user-select: none; }
 .book-tile-cover:active { transform: scale(.97); }
@@ -790,3 +804,15 @@ html[data-immersive] .play-btn { box-shadow: 0 22px 46px -14px var(--accent-glow
 
 /* Nothing may widen the page: a wider page makes phones zoom out and push the bottom bar off screen. */
 html, body { overflow-x: clip; }
+
+/* ── Tablet polish (Galaxy Tab class screens) ───────────── */
+@media (min-width: 1100px) {
+  /* Listen: the editor and the reading view fill the screen beside the player, no dead space below. */
+  .listen-page .editor textarea { min-height: calc(100dvh - 250px); max-height: calc(100dvh - 250px); }
+  .listen-page .reader { max-height: calc(100dvh - 230px); }
+  /* Settings: two balanced columns instead of one narrow strip. */
+  .settings-page { max-width: 1180px; }
+  .set-cols { column-count: 2; column-gap: 28px; }
+  .set-group { break-inside: avoid; display: flow-root; }
+  .set-group > .section-label:first-child { margin-top: 0; }
+}
