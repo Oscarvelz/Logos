@@ -8,7 +8,10 @@ import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 
-const VERSION = '1.4.33'
+const VERSION = '1.4.34'
+
+/** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
+const IN_APP = /LogosAndroid/.test(navigator.userAgent)
 
 export function SettingsPage() {
   const st = useStore(settings)
@@ -79,21 +82,24 @@ export function SettingsPage() {
           <div className="grow">
             <div className="t">Storage</div>
             <div className="d">Voice models {formatBytes(modelBytes)}{usage?.quota ? ` · ${formatBytes(usage.usage)} of ${formatBytes(usage.quota)} used` : ''}</div>
-            {persisted !== null && <div className="d">{persisted ? 'Protected from automatic cleanup' : 'Not protected: the phone may clear the voice'}</div>}
+            {IN_APP ? <div className="d">Kept inside the Logos app. Only clearing Logos’s own data removes it.</div>
+              : persisted !== null && <div className="d">{persisted ? 'Protected from automatic cleanup' : 'Not protected: the phone may clear the voice'}</div>}
             {kn.note && <div className="d" style={{ color: 'var(--accent)' }}>{kn.note.kind === 'cleared'
               ? `The phone cleared the saved ${kn.note.engine === 'pocket' ? 'Pocket' : 'Phonon'} voice (noticed ${new Date(kn.note.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}).`
               : `The ${kn.note.engine === 'pocket' ? 'Pocket' : 'Phonon'} voice loaded but couldn't be saved on this phone.`}</div>}
           </div>
-          {persisted === false && <button className="btn sm" onClick={async () => { const ok = await navigator.storage?.persist?.(); setPersisted(Boolean(ok)); toast(ok ? 'Storage protected from automatic cleanup' : 'The browser declined — install the app to keep storage') }}>Protect</button>}
+          {!IN_APP && persisted === false && <button className="btn sm" onClick={async () => { const ok = await navigator.storage?.persist?.(); setPersisted(Boolean(ok)); toast(ok ? 'Storage protected from automatic cleanup' : 'The browser declined — install the app to keep storage') }}>Protect</button>}
         </div>
         <div className="list-row">
           <div className="grow"><div className="t">Download on first play</div><div className="d">Fetch the neural voice automatically the first time you press play.</div></div>
           <Switch label="Download on first play" on={st.autoDownload} onChange={(v) => settings.set({ autoDownload: v })} />
         </div>
+        {!IN_APP && (
         <div className="list-row">
           <div className="grow"><div className="t">Device voice bridge</div><div className="d">Speak instantly with your phone’s built-in voice while the neural model downloads.</div></div>
           <Switch label="Device voice bridge" on={st.deviceFallback} onChange={(v) => settings.set({ deviceFallback: v })} />
         </div>
+        )}
       </div>
 
       <div className="section-label">Playback</div>
