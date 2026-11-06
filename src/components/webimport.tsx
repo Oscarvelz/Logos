@@ -1,4 +1,5 @@
 // "From a web page": paste a link, get the page's clean text, then listen now,
+import { readClipboard } from '../lib/clipboard.ts'
 // keep it for later, or save its audio. Used by Library (+) and by Listen's paste.
 import { useEffect, useRef, useState } from 'react'
 import { AudioLines, BookPlus, ClipboardPaste, Clock, FileAudio, Globe, Link2, Loader2, Play, RotateCcw } from 'lucide-react'
@@ -43,14 +44,14 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
     else {
       setUrl(''); setPhase('input')
       // A link already copied shows up in the field, ready to bring in.
-      navigator.clipboard?.readText?.().then((c) => { const n = normalizeUrl(c ?? ''); if (n) setUrl((cur) => cur || n) }).catch(() => {})
+      readClipboard().then((c) => { const n = normalizeUrl(c ?? ''); if (n) setUrl((cur) => cur || n) }).catch(() => {})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialUrl])
 
   const pasteUrl = async () => {
     try {
-      const c = (await navigator.clipboard.readText()).trim()
+      const c = (await readClipboard()).trim()
       const n = normalizeUrl(c)
       if (n) { setUrl(n); void go(n) } else toast('No link on the clipboard')
     } catch { toast('Clipboard blocked — long-press the field to paste') }

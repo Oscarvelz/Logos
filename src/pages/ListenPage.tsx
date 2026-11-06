@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { readClipboard } from '../lib/clipboard.ts'
 import { AudioLines, BookOpen, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
@@ -74,7 +75,7 @@ export function ListenPage() {
 
   const paste = async () => {
     try {
-      const clip = await navigator.clipboard.readText()
+      const clip = await readClipboard()
       if (!clip.trim()) { toast('Clipboard is empty'); return }
       if (isJustUrl(clip)) { setWebUrl(normalizeUrl(clip)); return }
       setText(clip)
