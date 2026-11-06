@@ -5,7 +5,7 @@ import { getBook, getContent, updateBook, progressAt, type BookMeta, type Block,
 import { drafts } from '../lib/drafts.ts'
 import { loadText, play, listen, toggle } from '../player/listen.ts'
 import { useStore } from '../lib/store.ts'
-import { Sheet, Seg, toast } from '../components/ui.tsx'
+import { Sheet, Seg, toast, useMediaQuery } from '../components/ui.tsx'
 import { BookCover } from '../components/bookcover.tsx'
 import { setNowReading, nowReadingFor } from '../lib/book/nowreading.ts'
 
@@ -30,6 +30,7 @@ export function BookPage() {
   const [mark, setMark] = useState<Mark>(null)
   const [pos, setPos] = useState<Pos>({ ch: 0, b: 0 })
   const [sheet, setSheet] = useState<'toc' | 'search' | 'type' | null>(null)
+  const wide = useMediaQuery('(min-width: 1100px)')
   const [sel, setSel] = useState<number | null>(null)
   const [back, setBack] = useState<Pos[]>([])
   const [note, setNote] = useState<{ to: Pos; text: string } | null>(null)
@@ -164,7 +165,8 @@ export function BookPage() {
   const st = { '--bk-size': `${type.size}px`, '--bk-lh': type.spacing === 'airy' ? 1.72 : 1.5 } as React.CSSProperties
 
   return (
-    <div className={`page book-page bk-${type.font}`} style={st}>
+    <div className={`page book-page bk-${type.font} ${wide ? 'has-side' : ''}`} style={st}>
+      {wide && <aside className="bk-side" aria-label="Contents"><TocBody side active meta={meta} chapters={chapters} at={{ ch, b: pos.ch === ch ? pos.b : 0 }} onGo={(p) => jump(p, { push: true })} /></aside>}
       <header className="bk-head">
         <button className="icon-btn" onClick={() => { location.hash = '#/library?books' }} aria-label="Back to Library"><ArrowLeft size={21} /></button>
         <div className="bk-head-t">
@@ -172,7 +174,7 @@ export function BookPage() {
           <div className="bk-head-ch">{shortTitle(chapter.title)}</div>
         </div>
         <button className="icon-btn" onClick={() => setSheet('search')} aria-label="Search this book"><Search size={20} /></button>
-        <button className="icon-btn" onClick={() => setSheet('toc')} aria-label="Contents"><ListTree size={20} /></button>
+        {!wide && <button className="icon-btn" onClick={() => setSheet('toc')} aria-label="Contents"><ListTree size={20} /></button>}
         <button className="icon-btn" onClick={() => setSheet('type')} aria-label="Text size and font"><Type size={20} /></button>
       </header>
 
@@ -326,6 +328,15 @@ function BottomBar({ meta, chapters, ch, progress, onPrev, onNext, onToc, onList
 }
 
 function TocSheet({ open, onClose, meta, chapters, at, onGo }: { open: boolean; onClose: () => void; meta: BookMeta; chapters: Chapter[]; at: Pos; onGo: (p: Pos) => void }) {
+  return (
+    <Sheet open={open} onClose={onClose} title={meta.title.length > 40 ? 'Contents' : meta.title}>
+      <TocBody active={open} meta={meta} chapters={chapters} at={at} onGo={onGo} />
+    </Sheet>
+  )
+}
+
+/** Contents and bookmarks: inside the sheet on phones, pinned beside the text on a tablet. */
+function TocBody({ active, meta, chapters, at, onGo, side = false }: { active: boolean; meta: BookMeta; chapters: Chapter[]; at: Pos; onGo: (p: Pos) => void; side?: boolean }) {
   const [tab, setTab] = useState<'toc' | 'marks'>('toc')
   const listRef = useRef<HTMLDivElement>(null)
   // The entry for where the reader is now: the last one at or before the place.
@@ -334,13 +345,14 @@ function TocSheet({ open, onClose, meta, chapters, at, onGo }: { open: boolean; 
     meta.toc.forEach((t, i) => { if (t.ch < at.ch || (t.ch === at.ch && t.b <= at.b)) k = i })
     return k
   }, [meta.toc, at])
-  useEffect(() => { if (open && tab === 'toc') setTimeout(() => listRef.current?.querySelector('.cur')?.scrollIntoView({ block: 'center' }), 60) }, [open, tab])
+  useEffect(() => { if (active && tab === 'toc') setTimeout(() => listRef.current?.querySelector('.cur')?.scrollIntoView({ block: side ? 'nearest' : 'center' }), 60) }, [active, tab, side, current])
   const marks = [...(meta.bookmarks ?? [])].sort((a, b) => a.ch - b.ch || a.b - b.b)
   return (
-    <Sheet open={open} onClose={onClose} title={meta.title.length > 40 ? 'Contents' : meta.title}>
+    <>
       <div className="bk-toc-head">
         <BookCover meta={meta} small />
         <div className="grow" style={{ minWidth: 0 }}>
+          {side && <div className="bk-side-title">{meta.title}</div>}
           {meta.author && <div className="bk-toc-author">{meta.author}</div>}
           <div className="bk-toc-stats">{chapters.length} chapters · {meta.words.toLocaleString()} words{meta.links ? ` · ${meta.links.toLocaleString()} links` : ''}</div>
           <Seg value={tab} onChange={setTab} options={[{ value: 'toc', label: 'Contents' }, { value: 'marks', label: `Bookmarks${marks.length ? ` ${marks.length}` : ''}` }]} />
@@ -358,7 +370,7 @@ function TocSheet({ open, onClose, meta, chapters, at, onGo }: { open: boolean; 
           </button>
         )) : <p className="muted small" style={{ padding: '14px 6px' }}>Tap any paragraph, then the bookmark, to keep your place.</p>}
       </div>
-    </Sheet>
+    </>
   )
 }
 

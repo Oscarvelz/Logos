@@ -62,8 +62,8 @@ export function SideRail() {
   return (
     <nav className="rail" aria-label="Main">
       <a className="brand" href="#/listen"><BrandMark size={42} /><span className="brand-name">Logos</span></a>
+      <div className="rail-status"><StatusPill compact /></div>
       <NavItems />
-      <div className="rail-foot"><StatusPill compact /></div>
     </nav>
   )
 }

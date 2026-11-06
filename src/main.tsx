@@ -25,7 +25,9 @@ requestAnimationFrame(() => requestAnimationFrame(() => { void document.fonts.re
 // Adapted from BetterTTS.
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   const base = import.meta.env.BASE_URL
-  navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).then((reg) => {
+  navigator.serviceWorker.register(`${base}sw.js`, { scope: base, updateViaCache: 'none' }).then((reg) => {
+    // Look for a new version whenever Logos comes back to the screen.
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void reg.update().catch(() => {}) })
     reg.addEventListener('updatefound', () => { if (!window.crossOriginIsolated) reloadOnceForIsolation() })
     if ((reg.active || reg.waiting) && !navigator.serviceWorker.controller && !window.crossOriginIsolated) reloadOnceForIsolation()
   }).catch(() => {})

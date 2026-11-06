@@ -13,7 +13,7 @@ const COEP_VALUE = /Chrome\//.test(self.navigator.userAgent) ? 'credentialless' 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll([SCOPE, `${SCOPE}manifest.webmanifest`, `${SCOPE}icon-192.png`, `${SCOPE}icon-512.png`]))
+      .then((cache) => cache.addAll([SCOPE, `${SCOPE}manifest.webmanifest`, `${SCOPE}icon-192.png`, `${SCOPE}icon-512.png`].map((u) => new Request(u, { cache: 'reload' }))))
       .catch(() => {})
       .then(() => self.skipWaiting()),
   )
@@ -86,7 +86,9 @@ self.addEventListener('fetch', (event) => {
   // Navigations (including share-target ?text=...) → network first, cached shell offline.
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
+      // no-cache: always ask GitHub Pages (its 10-minute HTTP cache otherwise hands back the
+      // previous index.html, and the app flips back to the old version on the next load).
+      fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
         .then((res) => {
           if (res.ok) { const copy = res.clone(); caches.open(CACHE_NAME).then((c) => c.put(SCOPE, copy)).catch(() => {}) }
           return isolate(res)
@@ -110,7 +112,7 @@ self.addEventListener('fetch', (event) => {
     return
   }
   event.respondWith(
-    fetch(req)
+    fetch(req.method === 'GET' ? new Request(req, { cache: 'no-cache' }) : req)
       .then((res) => {
         if (res.ok && res.type === 'basic') { const copy = res.clone(); caches.open(CACHE_NAME).then((c) => c.put(key, copy)).catch(() => {}) }
         return isolate(res)
