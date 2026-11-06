@@ -1,7 +1,7 @@
 // Logos service worker — offline app shell + cross-origin isolation headers.
 // Adapted from BetterTTS by SysAdminDoc (MIT). Voice models are cached by
 // pocket-tts-onnx itself (Cache Storage: pocket-tts-models-v2).
-const CACHE_NAME = 'logos-shell-1793924291003'
+const CACHE_NAME = 'logos-shell-1793924773167'
 const ORT_CACHE = 'logos-ort' // .wasm assets survive deploys: the 21 MB runtime is content-hashed and rarely changes
 const SCOPE = new URL('./', self.location).href
 const POCKET_META = 'logos-pocket-meta'
@@ -42,8 +42,31 @@ function cacheKey(request) {
   return url.toString()
 }
 
+// Share sheet (POST multipart): text goes on as ?title&text&url, files wait in a
+// cache for the app to import as books.
+const SHARE_CACHE = 'logos-share'
+async function takeShare(request) {
+  const back = (q) => Response.redirect(`${SCOPE}${q}`, 303)
+  try {
+    const form = await request.formData()
+    const files = form.getAll('books').filter((f) => f && typeof f !== 'string' && f.size > 0)
+    if (files.length) {
+      const cache = await caches.open(SHARE_CACHE)
+      const stamp = Date.now()
+      await Promise.all(files.map((f, i) => cache.put(`${SCOPE}__share/${stamp}-${i}`, new Response(f, { headers: { 'content-type': f.type || 'application/octet-stream', 'x-name': encodeURIComponent(f.name || `book-${i + 1}`) } }))))
+      return back(`?sharedfiles=${files.length}#/library`)
+    }
+    const q = new URLSearchParams()
+    for (const k of ['title', 'text', 'url']) { const v = form.get(k); if (typeof v === 'string' && v.trim()) q.set(k, v) }
+    return back(`?${q.toString()}`)
+  } catch {
+    return back('#/listen')
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request
+  if (req.method === 'POST' && new URL(req.url).pathname.endsWith('/share-target')) { event.respondWith(takeShare(req)); return }
   if (req.method !== 'GET') return
   const url = new URL(req.url)
   // PocketTTS model descriptions (manifest.json, assets.json — tokenizer and
