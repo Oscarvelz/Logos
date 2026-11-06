@@ -150,3 +150,6 @@ Oscar's OCR'd PDF (How the Mind Works) imported badly: blurb as title, running h
 - Library: Saved and Books side by side (lib-split), tabs hidden.
 - Voices five across; Settings three columns; Book: contents | text (860) | BookInfo (progress ring, time left, Listen/Search/Text, bookmarks).
 - Test: /tmp-style script big.mjs at 1973×1180 and 1232×1940.
+
+## 1.4.38 (2026-11-06)
+- Tablet (>=840): engine pill moved from the rail into Listen title line, right edge (.lh-status); rail pill hidden on Listen. Phone untouched.

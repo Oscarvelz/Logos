@@ -938,3 +938,12 @@ html, body { overflow-x: clip; }
   html:has(.book-page.has-info) .bk-bar { left: calc(var(--rail-w) + max(0px, (100vw - var(--rail-w) - 1556px) / 2) + 348px); right: calc(max(0px, (100vw - var(--rail-w) - 1556px) / 2) + 348px); }
   html:has(.book-page.has-info) .bk-actions { left: calc(var(--rail-w) + (100vw - var(--rail-w)) / 2); }
 }
+
+/* 1.4.38 — tablet: the engine pill sits on Listen's title line, at the right edge (phone untouched) */
+.lh-status { display: none; }
+@media (min-width: 840px) {
+  .listen-head { position: relative; padding-right: 128px; }
+  .lh-status { display: flex; position: absolute; right: 0; top: 50%; transform: translateY(-50%); }
+  .lh-status .status-pill { max-width: none; height: 34px; padding: 0 14px; }
+  html:has(.listen-head) .rail-status { display: none; }
+}

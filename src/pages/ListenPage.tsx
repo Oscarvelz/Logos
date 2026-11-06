@@ -17,7 +17,7 @@ import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { WebImport } from '../components/webimport.tsx'
 import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
-import { EngineNote, VoicePicker } from '../components/chrome.tsx'
+import { EngineNote, StatusPill, VoicePicker } from '../components/chrome.tsx'
 import { Range, Sheet, toast, useMediaQuery } from '../components/ui.tsx'
 import { TabletDesk, TextMap } from '../components/desk.tsx'
 
@@ -458,6 +458,7 @@ function ListenHead({ text, lang, playing, remaining }: { text: string; lang: La
           </button>
         : <div className="lh-title" lang={lang}>{title || 'Paste anything. Hear it instantly.'}</div>}
       {summary && !book ? <div className="lh-sum" lang={lang}>{summary}</div> : null}
+      <div className="lh-status"><StatusPill compact /></div>
     </div>
   )
 }
