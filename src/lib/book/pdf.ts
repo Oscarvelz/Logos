@@ -8,6 +8,25 @@ type Line = { text: string; x: number; xEnd: number; y: number; h: number; items
 type Annot = { page: number; rect: number[]; to: string }
 
 const TERMINAL = /[.!?:;…»”"')\]]$/
+const foldT = (t: string) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+const lettersOf = (t: string) => foldT(t).replace(/[^a-z\u00f1]/g, '')
+/** Share of words that look like real words: OCR noise ("//AW Jr v^") scores low. */
+const quality = (t: string) => {
+  const toks = t.split(/\s+/).filter(Boolean)
+  if (!toks.length) return 0
+  const good = toks.filter((w) => /^[("“'‘¿¡[]*\p{L}{2,}[\p{L}'’-]*[.,;:!?'’"”)\]…]*$/u.test(w) || /^[(\[]?\d+[.,:)\]]?$/.test(w) || /^[aAyYoOeIu][.,]?$/.test(w)).length
+  return good / toks.length
+}
+function lev(a: string, b: string): number {
+  const d = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    let prev = d[0]; d[0] = i
+    for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t }
+  }
+  return d[b.length]
+}
+const SMALL = new Set(['a', 'an', 'the', 'of', 'and', 'or', 'in', 'on', 'to', 'for', 'by', 'at', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'en', 'un', 'una'])
+const titleCase = (t: string) => (t === t.toUpperCase() && /\p{Lu}{3}/u.test(t) ? t.split(' ').map((W, i) => { if (/^[IVXLC]+\.?$/.test(W)) return W; const w = W.toLowerCase(); return i && SMALL.has(w) && !/^[IVXLC\d]+\.?$/.test(t.split(' ')[i - 1]) ? w : w.charAt(0).toUpperCase() + w.slice(1) }).join(' ') : t)
 const median = (a: number[]) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] }
 
 export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number, total: number) => void): Promise<RawBook> {
@@ -61,6 +80,20 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
     }
     if (cur && cur.text.trim()) lines.push(cur)
     for (const l of lines) { const lead = l.text.length - l.text.trimStart().length; l.text = l.text.trim(); if (lead) l.items.forEach((i) => { i.s = Math.max(0, i.s - lead); i.e = Math.max(0, i.e - lead) }) }
+    // Drop caps ("W" + "hen I was…") join their line; OCR noise lines go.
+    const kept: Line[] = []
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i], nx = lines[i + 1]
+      if (/^\p{Lu}$/u.test(l.text)) {
+        if (nx && l.h > nx.h * 1.4 && /^\p{L}/u.test(nx.text)) { nx.text = l.text + nx.text; nx.items.forEach((it) => { it.s += 1; it.e += 1 }); nx.x = Math.min(nx.x, l.x) }
+        continue
+      }
+      const letters = (l.text.match(/\p{L}/gu) ?? []).length
+      if (letters < l.text.replace(/\s/g, '').length * 0.45 && !/^[\d\s.,–—-]+$/.test(l.text)) continue
+      if (l.text.length < 60 && quality(l.text) < 0.5 && !/^[-–—]?\s*\d{1,4}\s*[-–—]?$/.test(l.text)) continue
+      kept.push(l)
+    }
+    lines.length = 0; lines.push(...kept)
     pages.push(lines)
     try {
       for (const a of await page.getAnnotations()) {
@@ -76,25 +109,50 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
   const chars = all.reduce((n, l) => n + l.text.length, 0)
   if (chars < Math.max(200, N * 40)) throw new Error('This PDF is scanned pictures of pages, so it has no text to read.')
 
-  // Running heads and feet: the same words at the top or bottom of many pages. Page numbers: read, then dropped.
+  // Running heads and feet: the same words at the top or bottom of many pages, even when
+  // OCR garbles them a little ("24 I HOW THE MIND WORKS", "The M i d i Eye 231"). Page numbers: read, then dropped.
   const printed = new Map<number, number>()
-  const edgeCount = new Map<string, number>()
-  const edgeKey = (t: string) => t.replace(/\d+/g, '#').replace(/\s+/g, ' ').toLowerCase()
+  const edgesOf = (lines: Line[]) => [...lines.slice(0, 3), ...lines.slice(-2)].filter((l) => l.text.length < 90)
+  const keyCount = new Map<string, number>()
+  const keyForms = new Map<string, Map<string, number>>()
   for (const lines of pages) {
-    const edge = new Set([...lines.slice(0, 2), ...lines.slice(-2)].map((l) => edgeKey(l.text)))
-    edge.forEach((k) => edgeCount.set(k, (edgeCount.get(k) ?? 0) + 1))
+    const seen = new Set<string>()
+    for (const l of edgesOf(lines)) {
+      const k = lettersOf(l.text)
+      if (k.length < 4 || seen.has(k)) continue
+      seen.add(k); keyCount.set(k, (keyCount.get(k) ?? 0) + 1)
+      const form = l.text.replace(/\d+/g, ' ').replace(/^[\s\p{P}]*(\S\s+)*(?=\S{2})/u, '').replace(/(\s+\S)*[\s\p{P}]*$/u, '').replace(/\s+/g, ' ').trim()
+      const forms = keyForms.get(k) ?? new Map<string, number>(); forms.set(form, (forms.get(form) ?? 0) + 1); keyForms.set(k, forms)
+    }
   }
-  const repeated = (t: string) => N >= 4 && (edgeCount.get(edgeKey(t)) ?? 0) >= Math.max(3, N * 0.25)
+  const minRepeat = N >= 12 ? Math.max(3, Math.ceil(N * 0.03)) : Math.max(3, N * 0.25)
+  const frequent = [...keyCount].filter(([k, c]) => c >= minRepeat && k.length >= 5).map(([k]) => k)
+  const isHead = (t: string) => {
+    if (N < 4) return false
+    const k = lettersOf(t)
+    if (k.length < 4) return false
+    if ((keyCount.get(k) ?? 0) >= minRepeat) return true
+    return frequent.some((f) => (k.includes(f) && k.length <= f.length + 3) || (Math.abs(k.length - f.length) <= 3 && lev(k, f) <= Math.max(1, Math.floor(f.length / 6))))
+  }
   pages.forEach((lines, i) => {
-    const edges = new Set([...lines.slice(0, 2), ...lines.slice(-2)])
+    const edges = new Set(edgesOf(lines))
     pages[i] = lines.filter((l) => {
       if (!edges.has(l)) return true
-      const num = /^(?:[-–—]\s*)?(?:p[áa]g(?:ina)?\.?\s*|page\s*)?(\d{1,4})(?:\s*[-–—])?$/i.exec(l.text) ?? /(?:^|\s)(\d{1,4})$/.exec(l.text)
-      if (num && (l.text.length < 8 || repeated(l.text))) { const n = parseInt(num[1], 10); if (!printed.has(n)) printed.set(n, i + 1) }
-      if (/^[-–—]?\s*\d{1,4}\s*[-–—]?$/.test(l.text) || /^[ivxlcdm]{1,6}$/i.test(l.text)) return false
-      return !repeated(l.text)
+      const bare = /^[-–—]?\s*(?:p[áa]g(?:ina)?\.?\s*|page\s*)?(\d{1,4})\s*[-–—]?$/i.exec(l.text)
+      const head = isHead(l.text)
+      const num = bare ?? (head ? (/(?:^|\s)(\d{1,4})$/.exec(l.text) ?? /^(\d{1,4})\s/.exec(l.text)) : null)
+      if (num) { const n = parseInt(num[1], 10); if (!printed.has(n)) printed.set(n, i + 1) }
+      if (bare || /^[ivxlcdm]{1,6}$/i.test(l.text)) return false
+      return !head
     })
   })
+  // The book's title is usually the running head on most left-hand pages.
+  let headTitle: string | undefined
+  const topKey = [...keyCount].filter(([k]) => frequent.includes(k)).sort((a, b) => b[1] - a[1])[0]
+  if (topKey && topKey[1] >= Math.max(4, N * 0.15)) {
+    const form = [...(keyForms.get(topKey[0]) ?? [])].sort((a, b) => b[1] - a[1])[0]?.[0]
+    if (form && form.length >= 4 && form.length < 120 && quality(form) >= 0.8) headTitle = titleCase(form)
+  }
 
   const flat = pages.flat()
   const body = median(flat.flatMap((l) => (l.text.length > 30 ? [l.h] : []))) || median(flat.map((l) => l.h)) || 10
@@ -113,7 +171,7 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
     lines.forEach((l, li) => {
       const numbered = /^(\d{1,2}(?:\.\d{1,2}){0,2})\.?\s+\p{Lu}[^.!?]{1,70}$/u.exec(l.text)
       const gapAbove = prev && prev.page === l.page ? prev.y - l.y : lineGap * 2
-      const big = (l.h >= body * 1.22 && l.text.length < 140 && /[\p{L}]/u.test(l.text)) || (!!numbered && gapAbove > lineGap * 1.25 && l.xEnd < left + width * 0.75)
+      const big = (l.h >= body * 1.22 && l.text.length < 140 && /[\p{L}]/u.test(l.text) && !/^\p{Ll}/u.test(l.text) && quality(l.text) >= 0.7 && lettersOf(l.text).length >= 3) || (!!numbered && gapAbove > lineGap * 1.25 && l.xEnd < left + width * 0.75)
       if (big) {
         const last = blocks[blocks.length - 1]
         const depth = numbered ? numbered[1].split('.').length : 0
@@ -182,6 +240,48 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
     }
     return at
   }
+  function contentsChapters(): { at: number; title: string }[] {
+    const limit = Math.min(N, 40)
+    const start = blocks.findIndex((b) => (b.pg ?? 0) <= limit && /^(table of )?(contents|índice|indice|contenidos?|sumario|tabla de contenidos?)$/i.test(fold(b.t)))
+    if (start < 0) return []
+    const page0 = blocks[start].pg ?? 1
+    let text = ''
+    for (let i = start + 1; i < blocks.length && (blocks[i].pg ?? 0) <= page0 + 5 && text.length < 6000; i++) text += ' ' + blocks[i].t
+    const re = /(?:^|\s)(?:(\d{1,2}|[IVXLC]{1,6})\.?\s+)?(\p{Lu}[^\d]{1,90}?)[\s.·…_]*\b(\d{1,4})(?=\s|$)/gu
+    const entries: { title: string; n: number }[] = []
+    for (const m of text.matchAll(re)) {
+      let title = `${m[1] ? m[1] + '. ' : ''}${m[2]}`.replace(/[\s.·…_]+$/u, '').trim()
+      const n = parseInt(m[3], 10)
+      // Running heads caught in the text ("CONTENTS PAGE V. The Necessity…"): keep from the chapter number on.
+      const numbered = /^.*(?:^|\s)((?:[IVXLC]{1,6}|\d{1,2})\.\s+\p{Lu}.{2,})$/u.exec(title)
+      if (numbered) title = numbered[1]
+      // Sub-entries of a detailed contents ("Fear and love,") are not chapters.
+      if (title.length < 2 || title.length > 75 || /[,;:]$/.test(title) || quality(title) < 0.6) continue
+      title = titleCase(title)
+      if (entries.length && n <= entries[entries.length - 1].n) continue
+      entries.push({ title, n })
+    }
+    if (entries.length < 3) return []
+    // Printed page → PDF page: the page numbers read on each page, or their usual offset.
+    const offs = new Map<number, number>()
+    printed.forEach((pdf, n) => { const o = pdf - n; offs.set(o, (offs.get(o) ?? 0) + 1) })
+    const offset = [...offs].sort((a, b) => b[1] - a[1])[0]
+    const out: { at: number; title: string }[] = []
+    for (const e of entries) {
+      const want = fold(e.title)
+      const guess = printed.get(e.n) ?? (offset && offset[1] >= 3 ? e.n + offset[0] : null)
+      let at = -1
+      const lo = guess ? firstOnPage(Math.max(page0 + 1, guess - 1)) : blocks.findIndex((b) => (b.pg ?? 0) > page0 + 1)
+      const hiPage = guess ? guess + 2 : N
+      if (lo >= 0) for (let i = lo; i < blocks.length && (blocks[i].pg ?? 0) <= hiPage; i++) {
+        const t = fold(blocks[i].t)
+        if (t.length < want.length + 50 && (t === want || t.endsWith(want) || t.startsWith(want))) { at = i; break }
+      }
+      if (at < 0 && guess) at = firstOnPage(guess)
+      if (at >= 0 && (!out.length || at > out[out.length - 1].at)) out.push({ at, title: e.title })
+    }
+    return out.length >= Math.min(3, entries.length) ? out : []
+  }
   // Outline → contents and chapter breaks.
   const toc: RawToc[] = []
   try {
@@ -198,6 +298,11 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
   step('Building chapters', N, N)
 
   let bounds: { at: number; title?: string }[] | undefined
+  // No outline: read the book's own printed contents page and place each entry by its page number.
+  if (toc.length < 2) {
+    const fromContents = contentsChapters()
+    if (fromContents.length >= 3) for (const c of fromContents) toc.push({ title: c.title, level: 0, to: `b:${c.at}` })
+  }
   const tops = toc.filter((t) => t.level === 0)
   const useLevel = tops.length >= 2 ? 0 : toc.filter((t) => t.level === 1).length >= 2 ? 1 : -1
   if (useLevel >= 0) bounds = toc.filter((t) => t.level === useLevel).map((t) => ({ at: parseInt(t.to.slice(2), 10), title: t.title.trim() })).filter((x) => x.at >= 0)
@@ -224,6 +329,6 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
   } catch { /* the shelf draws a cover */ }
   void task.destroy()
 
-  const metaTitle = info.Title && !/^(untitled|microsoft word|document|\s*$)/i.test(info.Title) ? info.Title : undefined
-  return { title: metaTitle ?? titleGuess, author: info.Author, lang: info.Language, cover, pages: N, chapters, anchors, toc: toc.filter((t) => t.to.startsWith('x:')), printed }
+  const metaTitle = info.Title && !/^(untitled|microsoft word|document|scan|\s*$)|\.(pdf|docx?|indd|qxd)$/i.test(info.Title.trim()) && quality(info.Title) >= 0.6 ? info.Title.trim() : undefined
+  return { title: metaTitle ?? headTitle, titleGuess, author: info.Author, lang: info.Language, cover, pages: N, chapters, anchors, toc: toc.filter((t) => t.to.startsWith('x:')), printed }
 }

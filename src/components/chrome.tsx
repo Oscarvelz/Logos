@@ -108,7 +108,7 @@ export function StatusPill({ compact }: { compact?: boolean }) {
 export function MiniPlayer() {
   const s = useStore(listen)
   const route = useRoute()
-  if (!s.active || route === 'listen' || (!s.playing && s.current === 0 && !s.mode)) return null
+  if (!s.active || route === 'listen' || route === 'book' || (!s.playing && s.current === 0 && !s.mode)) return null
   const seg = s.segments[s.current]
   return (
     <div className="mini" role="region" aria-label="Now playing">

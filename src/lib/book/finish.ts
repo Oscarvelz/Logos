@@ -8,6 +8,8 @@ export type RawChapter = { title?: string; blocks: Block[]; gen?: boolean }
 export type RawToc = { title: string; level: number; to: string }
 export type RawBook = {
   title?: string
+  /** A weaker guess (the first big line), used only when the file name says nothing. */
+  titleGuess?: string
   author?: string
   lang?: string
   cover?: Blob
@@ -208,7 +210,7 @@ export function finishBook(raw: RawBook, file: File, format: string): { meta: Bo
   const id = crypto.randomUUID?.() ?? String(Date.now())
   const meta: BookMeta = {
     id,
-    title: (raw.title?.trim() || fileTitle || 'Untitled').slice(0, 200),
+    title: (raw.title?.trim() || (/\p{L}{3,}\s+\S*\p{L}{3,}/u.test(fileTitle) && !/^(scan|img|doc|book|file|download)[\s\d-]*$/i.test(fileTitle) ? fileTitle : '') || raw.titleGuess?.trim() || fileTitle || 'Untitled').slice(0, 200),
     author: (raw.author ?? '').trim().slice(0, 160),
     format,
     lang: /^(en|es)/i.test(raw.lang ?? '') ? raw.lang!.slice(0, 2).toLowerCase() : detectLang(sample).lang,

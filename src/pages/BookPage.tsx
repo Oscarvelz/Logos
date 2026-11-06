@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, CornerUpLeft, ListTree, Play, Search, Type, X } from 'lucide-react'
+import { ArrowLeft, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, CornerUpLeft, ListTree, Loader2, Pause, Play, Search, Type, X } from 'lucide-react'
 import { getBook, getContent, updateBook, progressAt, type BookMeta, type Block, type Chapter, type Pos } from '../lib/books.ts'
 import { drafts } from '../lib/drafts.ts'
-import { loadText, play, listen } from '../player/listen.ts'
+import { loadText, play, listen, toggle } from '../player/listen.ts'
 import { useStore } from '../lib/store.ts'
 import { Sheet, Seg, toast } from '../components/ui.tsx'
 import { BookCover } from '../components/bookcover.tsx'
@@ -301,14 +301,16 @@ function BottomBar({ meta, chapters, ch, progress, onPrev, onNext, onToc, onList
   const mins = Math.round(left / 230)
   const timeLeft = mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min left` : `${Math.max(1, mins)} min left`
   return (
-    <div className={`bk-bar ${s.active && s.playing ? 'with-mini' : ''}`}>
+    <div className="bk-bar">
       <div className="bk-prog"><i style={{ width: `${progress * 100}%` }} /></div>
       <button className="icon-btn" onClick={onPrev} disabled={ch === 0} aria-label="Previous chapter"><ChevronLeft size={22} /></button>
       <button className="bk-bar-mid" onClick={onToc}>
         <b>{Math.round(progress * 100)}%</b>
         <span>{progress >= 0.995 ? 'Finished' : timeLeft} · {ch + 1}/{chapters.length}</span>
       </button>
-      <button className="bk-listen" onClick={onListen} aria-label="Listen from here"><Play size={17} fill="currentColor" /> Listen</button>
+      {s.active && (s.playing || s.buffering)
+        ? <button className="bk-listen" onClick={toggle} aria-label="Pause">{s.buffering ? <Loader2 size={17} className="spin" /> : <Pause size={17} fill="currentColor" />} Pause</button>
+        : <button className="bk-listen" onClick={onListen} aria-label="Listen from here"><Play size={17} fill="currentColor" /> Listen</button>}
       <button className="icon-btn" onClick={onNext} disabled={ch >= chapters.length - 1} aria-label="Next chapter"><ChevronRight size={22} /></button>
     </div>
   )
