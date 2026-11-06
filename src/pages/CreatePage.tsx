@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { readClipboard } from '../lib/clipboard.ts'
 import { ArrowDownToLine, ClipboardPaste, Library, Pause, Play, RotateCcw, Share2, Sparkles, Square, Wand2 } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
@@ -53,7 +54,7 @@ export function CreatePage() {
             <textarea value={text} onChange={(ev) => drafts.set({ create: ev.target.value })} placeholder="What should Logos record?" aria-label="Text to render" lang={lang} />
             <div className="editor-bar">
               <button className="icon-btn" title="Paste" aria-label="Paste" onClick={async () => {
-                try { const c = await navigator.clipboard.readText(); if (c.trim()) drafts.set({ create: c }) } catch { toast('Clipboard blocked — long-press to paste') }
+                try { const c = await readClipboard(); if (c.trim()) drafts.set({ create: c }) } catch { toast('Clipboard blocked — long-press to paste') }
               }}><ClipboardPaste size={21} /></button>
               <button className="btn sm ghost" onClick={() => drafts.set({ create: drafts.get().listen })} disabled={!d.listen.trim()}>Use Listen text</button>
               <div className="editor-meta">

@@ -153,3 +153,6 @@ Oscar's OCR'd PDF (How the Mind Works) imported badly: blurb as title, running h
 
 ## 1.4.38 (2026-11-06)
 - Tablet (>=840): engine pill moved from the rail into Listen title line, right edge (.lh-status); rail pill hidden on Listen. Phone untouched.
+
+## 1.4.39 (2026-11-06)
+- Paste in the Android app: WebView blocks clipboard-read, so readClipboard() (src/lib/clipboard.ts) uses LogosAndroid.clipboard() (new in the shell, ClipboardManager) and falls back to navigator.clipboard.
