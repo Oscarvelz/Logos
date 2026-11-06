@@ -284,7 +284,7 @@ function ItemMenu({ clip, onClose, onRename }: { clip: ClipMeta | null; onClose:
     const f = await getClip(clip.id)
     if (!f?.blob) return
     const file = new File([f.blob], filename, { type: f.blob.type })
-    if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: clip.title }) } catch { /* cancelled */ } } else downloadBlob(f.blob, filename)
+    if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: clip.title }) } catch { /* cancelled */ } } else downloadBlob(f.blob, filename, true)
   }
   return (
     <Sheet open onClose={onClose} title={clip.title.length > 34 ? 'Options' : clip.title}>

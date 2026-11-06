@@ -19,6 +19,8 @@
 
     <style>
       #splash { position: fixed; inset: 0; z-index: 9999; background: #0a0a0f; display: grid; place-items: center; overflow: hidden; transition: opacity .55s ease, transform .55s cubic-bezier(.4,0,.2,1), filter .55s ease; }
+      #splash.shell .sp-mark { opacity: 0; animation: spFadeIn .6s cubic-bezier(.2,.8,.2,1) .05s forwards, spLift 1.15s cubic-bezier(.55,0,.2,1) .7s forwards; }
+      @keyframes spFadeIn { from { opacity: 0; filter: blur(8px) } to { opacity: 1; filter: none } }
       #splash.out { opacity: 0; transform: scale(1.06); filter: blur(10px); pointer-events: none; }
       #splash .sp-amb { position: absolute; width: 140vmax; height: 140vmax; border-radius: 50%; background: radial-gradient(circle, rgba(233,189,114,.10) 0, rgba(233,189,114,.04) 26%, transparent 55%); opacity: 0; animation: spAmb 2.4s ease-out .2s forwards; }
       #splash .sp-lock { position: absolute; inset: 0; }
@@ -96,6 +98,8 @@
           el.classList.add('out'); setTimeout(function () { el.remove() }, 600)
         }
         if (seen) { hide(true); window.__logosReady = function () {}; return }
+        // In the Android app the phone shows a plain dark screen first, so the mark fades in instead of matching an icon.
+        if (/LogosAndroid/.test(navigator.userAgent)) el.classList.add('shell')
         function check() { if (ready && Date.now() - t0 >= MIN) hide() }
         window.__logosReady = function () { ready = true; setTimeout(check, Math.max(0, MIN - (Date.now() - t0))) }
         setTimeout(function () { hide() }, MAX)

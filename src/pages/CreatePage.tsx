@@ -141,7 +141,7 @@ function Result({ onAgain }: { onAgain: () => void }) {
     const file = new File([blob], filename, { type: blob.type })
     if (navigator.canShare?.({ files: [file] })) {
       try { await navigator.share({ files: [file], title: meta.title }) } catch { /* cancelled */ }
-    } else downloadBlob(blob, filename)
+    } else downloadBlob(blob, filename, true)
   }
   return (
     <div className="card card-pad stack">

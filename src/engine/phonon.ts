@@ -43,8 +43,18 @@ function setLang(lang: PhononLang, patch: Partial<LangState>) {
   phonon.set((s) => ({ langs: { ...s.langs, [lang]: { ...s.langs[lang], ...patch } } }))
 }
 
+/** Android's WebView can share memory with workers without cross-origin isolation. */
+function sharedMemoryWorks(): boolean {
+  try {
+    if (typeof SharedArrayBuffer === 'undefined') return false
+    const m = new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true })
+    const ch = new MessageChannel(); ch.port1.postMessage(m); ch.port1.close(); ch.port2.close()
+    return true
+  } catch { return false }
+}
+
 function threads(): number {
-  if (!self.crossOriginIsolated) return 1
+  if (!self.crossOriginIsolated && !sharedMemoryWorks()) return 1
   const forced = Number(localStorage.getItem('logos.phononThreads'))
   if (forced) return forced
   return Math.max(1, Math.min(3, (navigator.hardwareConcurrency ?? 2) - 1))

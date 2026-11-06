@@ -51,6 +51,8 @@ export async function importBook(file: File, batch?: string): Promise<BookMeta> 
 export async function takeSharedFiles(): Promise<File[]> {
   if (!new URLSearchParams(location.search).has('sharedfiles')) return []
   history.replaceState(null, '', `${location.pathname}#/library`)
+  const droid = (window as unknown as { LogosAndroid?: AndroidBridge }).LogosAndroid
+  if (droid?.sharedList) return takeFromAndroid(droid)
   try {
     const cache = await caches.open('logos-share')
     const files: File[] = []
@@ -65,4 +67,29 @@ export async function takeSharedFiles(): Promise<File[]> {
     }
     return files
   } catch { return [] }
+}
+
+type AndroidBridge = { sharedList(): string; sharedChunk(i: number, offset: number, length: number): string; sharedDone(): void }
+/** Files shared into the Android app: read from the phone through the app's bridge, 1 MB at a time. */
+async function takeFromAndroid(b: AndroidBridge): Promise<File[]> {
+  const out: File[] = []
+  try {
+    const list = JSON.parse(b.sharedList() || '[]') as { name: string; type: string; size: number }[]
+    for (let i = 0; i < list.length; i++) {
+      const parts: Uint8Array[] = []
+      for (let off = 0; ; ) {
+        const b64 = b.sharedChunk(i, off, 1 << 20)
+        if (!b64) break
+        const bin = atob(b64)
+        const u = new Uint8Array(bin.length)
+        for (let k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k)
+        parts.push(u); off += u.length
+        if (u.length < 1 << 20) break
+        await new Promise((r) => setTimeout(r, 0))
+      }
+      if (parts.length) out.push(new File(parts as BlobPart[], list[i].name, { type: list[i].type || '' }))
+    }
+  } catch { /* nothing readable */ }
+  try { b.sharedDone() } catch { /* old shell */ }
+  return out
 }
