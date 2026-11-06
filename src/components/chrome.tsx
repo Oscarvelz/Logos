@@ -45,7 +45,7 @@ export function NavItems() {
   return (
     <>
       {ITEMS.map(({ route: r, label, Icon }) => (
-        <a key={r} href={`#/${r}`} className={`nav-item ${route === r ? 'active' : ''}`} aria-current={route === r ? 'page' : undefined}>
+        <a key={r} href={`#/${r}`} className={`nav-item ${route === r || (route === 'book' && r === 'library') ? 'active' : ''}`} aria-current={route === r ? 'page' : undefined}>
           <span className="nav-ico"><Icon size={22} strokeWidth={route === r ? 2.2 : 1.8} /></span>
           <span>{label}</span>
         </a>

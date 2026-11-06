@@ -1,7 +1,7 @@
 // "From a web page": paste a link, get the page's clean text, then listen now,
 // keep it for later, or save its audio. Used by Library (+) and by Listen's paste.
 import { useEffect, useRef, useState } from 'react'
-import { AudioLines, ClipboardPaste, Clock, FileAudio, Globe, Link2, Loader2, Play, RotateCcw } from 'lucide-react'
+import { AudioLines, BookPlus, ClipboardPaste, Clock, FileAudio, Globe, Link2, Loader2, Play, RotateCcw } from 'lucide-react'
 import { Sheet, toast } from './ui.tsx'
 import { fetchWebText, normalizeUrl, type WebText } from '../lib/webtext.ts'
 import { detectLang, estimateSeconds, formatDuration } from '../lib/text.ts'
@@ -15,7 +15,7 @@ import { loadText, play as listenPlay } from '../player/listen.ts'
 
 type Phase = 'input' | 'loading' | 'ready' | 'error'
 
-export function WebImport({ open, onClose, initialUrl, onAudioFile }: { open: boolean; onClose: () => void; initialUrl?: string; onAudioFile?: () => void }) {
+export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }: { open: boolean; onClose: () => void; initialUrl?: string; onAudioFile?: () => void; onBookFile?: () => void }) {
   const [url, setUrl] = useState('')
   const [phase, setPhase] = useState<Phase>('input')
   const [res, setRes] = useState<WebText | null>(null)
@@ -94,6 +94,12 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile }: { open: bo
           {onAudioFile && (
             <>
               <div className="or-rule"><span>or</span></div>
+              {onBookFile && (
+                <button className="keep-opt" style={{ marginBottom: 10 }} onClick={() => { onClose(); onBookFile() }}>
+                  <span className="keep-ic"><BookPlus size={22} /></span>
+                  <span className="grow"><b>Import a book</b><small>EPUB, PDF, Word, FB2, Markdown or text</small></span>
+                </button>
+              )}
               <button className="keep-opt" onClick={() => { onClose(); onAudioFile() }}>
                 <span className="keep-ic"><FileAudio size={22} /></span>
                 <span className="grow"><b>Add an audio file</b><small>MP3, M4A, WAV or OGG from this phone</small></span>

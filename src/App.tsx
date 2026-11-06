@@ -12,8 +12,9 @@ import { CreatePage } from './pages/CreatePage.tsx'
 import { LibraryPage } from './pages/LibraryPage.tsx'
 import { VoicesPage } from './pages/VoicesPage.tsx'
 import { SettingsPage } from './pages/SettingsPage.tsx'
+import { BookPage } from './pages/BookPage.tsx'
 
-const PAGES = { listen: ListenPage, create: CreatePage, library: LibraryPage, voices: VoicesPage, settings: SettingsPage }
+const PAGES = { listen: ListenPage, create: CreatePage, library: LibraryPage, voices: VoicesPage, settings: SettingsPage, book: BookPage }
 
 export default function App() {
   const route = useRoute()
@@ -78,7 +79,7 @@ export default function App() {
             <div className="spacer" />
             <StatusPill />
           </header>
-          <main key={route} className="page-host" style={{ display: 'contents' }}>
+          <main key={route === 'book' ? location.hash : route} className="page-host" style={{ display: 'contents' }}>
             <PageWrap mini={showMini}><Page /></PageWrap>
           </main>
         </div>
