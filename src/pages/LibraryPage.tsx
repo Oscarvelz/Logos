@@ -11,7 +11,7 @@ import { settings } from '../lib/settings.ts'
 import { drafts } from '../lib/drafts.ts'
 import { navigate } from '../lib/router.ts'
 import { loadText, play as listenPlay } from '../player/listen.ts'
-import { Sheet, Seg, toast } from '../components/ui.tsx'
+import { Sheet, Seg, toast, useMediaQuery } from '../components/ui.tsx'
 import { BookShelf, useBookPicker, importMany } from '../components/shelf.tsx'
 import { takeSharedFiles } from '../lib/book/import.ts'
 import { books } from '../lib/books.ts'
@@ -68,6 +68,7 @@ export function LibraryPage() {
   const [shelf, setShelfState] = useState<'saved' | 'books'>(() => (location.hash.includes('books') || localStorage.getItem('logos.shelf') === 'books' ? 'books' : 'saved'))
   const setShelf = (v: 'saved' | 'books') => { setShelfState(v); localStorage.setItem('logos.shelf', v); endSelect() }
   const bk = useStore(books)
+  const big = useMediaQuery('(min-width: 1500px)')
   const picker = useBookPicker()
   useEffect(() => { void refreshLibrary() }, [])
   // Books shared from another app (share sheet): import them all, one after another.
@@ -100,26 +101,7 @@ export function LibraryPage() {
     if (file.current) file.current.value = ''
   }
 
-  return (
-    <div className={`page wide library-page ${selecting ? 'selecting' : ''}`}>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">Library</h1>
-          <p className="page-sub">{shelf === 'books'
-            ? (bk.list.length ? `${bk.list.length} book${bk.list.length === 1 ? '' : 's'} on this device` : 'Your books, with contents, links and search.')
-            : lib.clips.length ? `${lib.clips.length} item${lib.clips.length === 1 ? '' : 's'}${total ? ` · ${formatBytes(total)} on this device` : ''}` : 'Saved audio and texts to hear later, offline.'}</p>
-        </div>
-        <div className="row" style={{ gap: 6 }}>
-          {shelf === 'saved' && lib.clips.length > 0 && <button className="btn sm ghost" onClick={() => (selecting ? endSelect() : setSelecting(true))}>{selecting ? 'Done' : 'Select'}</button>}
-          <button className="icon-btn filled" onClick={() => (shelf === 'books' ? picker.pick() : setAdding(true))} aria-label={shelf === 'books' ? 'Import a book' : 'Add to Library'} title={shelf === 'books' ? 'Import a book' : 'Add a web page, book or audio'}><Plus size={20} /></button>
-          <input ref={file} type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.opus,.flac" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
-          {picker.el}
-        </div>
-      </div>
-      <div className="shelf-tabs">
-        <Seg value={shelf} onChange={setShelf} label="Shelf" options={[{ value: 'saved', label: <>Saved{lib.clips.length ? <span className="lf-n">{lib.clips.length}</span> : null}</> }, { value: 'books', label: <>Books{bk.list.length ? <span className="lf-n">{bk.list.length}</span> : null}</> }]} />
-      </div>
-      {shelf === 'books' ? <BookShelf onPick={picker.pick} /> : <>
+  const savedPart = (<>
       {job.status === 'running' && (
         <div className="card render-card">
           <span className="keep-ic"><AudioLines size={20} /></span>
@@ -186,7 +168,33 @@ export function LibraryPage() {
         </div>
       )}
 
-      </>}
+  </>)
+
+  return (
+    <div className={`page wide library-page ${selecting ? 'selecting' : ''}`}>
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">Library</h1>
+          <p className="page-sub">{shelf === 'books'
+            ? (bk.list.length ? `${bk.list.length} book${bk.list.length === 1 ? '' : 's'} on this device` : 'Your books, with contents, links and search.')
+            : lib.clips.length ? `${lib.clips.length} item${lib.clips.length === 1 ? '' : 's'}${total ? ` · ${formatBytes(total)} on this device` : ''}` : 'Saved audio and texts to hear later, offline.'}</p>
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          {shelf === 'saved' && lib.clips.length > 0 && <button className="btn sm ghost" onClick={() => (selecting ? endSelect() : setSelecting(true))}>{selecting ? 'Done' : 'Select'}</button>}
+          <button className="icon-btn filled" onClick={() => (shelf === 'books' ? picker.pick() : setAdding(true))} aria-label={shelf === 'books' ? 'Import a book' : 'Add to Library'} title={shelf === 'books' ? 'Import a book' : 'Add a web page, book or audio'}><Plus size={20} /></button>
+          <input ref={file} type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.opus,.flac" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
+          {picker.el}
+        </div>
+      </div>
+      {!big && <div className="shelf-tabs">
+        <Seg value={shelf} onChange={setShelf} label="Shelf" options={[{ value: 'saved', label: <>Saved{lib.clips.length ? <span className="lf-n">{lib.clips.length}</span> : null}</> }, { value: 'books', label: <>Books{bk.list.length ? <span className="lf-n">{bk.list.length}</span> : null}</> }]} />
+      </div>}
+      {big ? (
+        <div className="lib-split">
+          <section className="lib-col"><div className="lib-col-head"><span>Saved</span>{lib.clips.length ? <span className="lf-n">{lib.clips.length}</span> : null}</div>{savedPart}</section>
+          <section className="lib-col"><div className="lib-col-head"><span>Books</span>{bk.list.length ? <span className="lf-n">{bk.list.length}</span> : null}<button className="btn sm ghost lib-col-add" onClick={picker.pick}>Import a book</button></div><BookShelf onPick={picker.pick} /></section>
+        </div>
+      ) : shelf === 'books' ? <BookShelf onPick={picker.pick} /> : savedPart}
       <ItemMenu clip={menu} onClose={() => setMenu(null)} onRename={(c) => { setMenu(null); setRenaming(c) }} />
       <RenameSheet clip={renaming} onClose={() => setRenaming(null)} />
       <WebImport open={adding} onClose={() => setAdding(false)} onAudioFile={() => file.current?.click()} onBookFile={() => { setShelf('books'); picker.pick() }} />

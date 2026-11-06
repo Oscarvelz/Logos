@@ -10,7 +10,8 @@ import { clipPlayer, playClip, seekClip } from '../player/clip.ts'
 import { downloadBlob, formatBytes, slugify } from '../lib/audio.ts'
 import { engine, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
 import { EngineNote, VoicePicker } from '../components/chrome.tsx'
-import { Avatar, Range, Seg, toast } from '../components/ui.tsx'
+import { Avatar, Range, Seg, toast, useMediaQuery } from '../components/ui.tsx'
+import { RecordingsPanel } from '../components/desk.tsx'
 import { navigate } from '../lib/router.ts'
 
 export function CreatePage() {
@@ -31,6 +32,7 @@ export function CreatePage() {
   const elapsed = (Date.now() - job.startedAt) / 1000
   const eta = job.done > 0 ? (elapsed / job.done) * (job.total - job.done) : NaN
 
+  const big = useMediaQuery('(min-width: 1500px)')
   const generate = () => {
     if (!text.trim()) { toast('Add some text first'); return }
     if (queueExport(text, { voice, speed: st.exportSpeed, format: st.format, title, origin: 'create' }) === 'queued') toast('Queued — it starts after the audio being made now', { label: 'Library', run: () => navigate('library') })
@@ -110,6 +112,7 @@ export function CreatePage() {
             </div>
           )}
         </div>
+        {big && <RecordingsPanel />}
       </div>
 
       <VoicePicker open={pickerOpen} onClose={() => setPickerOpen(false)} value={voice} onPick={setVoice} />

@@ -19,7 +19,7 @@ import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, VoicePicker } from '../components/chrome.tsx'
 import { Range, Sheet, toast, useMediaQuery } from '../components/ui.tsx'
-import { TabletDesk } from '../components/desk.tsx'
+import { TabletDesk, TextMap } from '../components/desk.tsx'
 
 const SPEEDS = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
 
@@ -106,6 +106,7 @@ export function ListenPage() {
 
   const reading = s.active && !editing
   const wide = useMediaQuery('(min-width: 1100px)')
+  const big = useMediaQuery('(min-width: 1500px)')
   const remaining = reading ? estimateSeconds(s.segments.slice(s.current).map((g) => g.text).join(' '), st.listenSpeed) : estimateSeconds(text, st.listenSpeed)
 
   return (
@@ -203,6 +204,7 @@ export function ListenPage() {
         </div>
         {wide && <TabletDesk onOpen={(t) => { setText(t); setEditing(false) }} />}
         </div>
+        {big && <TextMap text={text} reading={reading} />}
       </div>
 
       <VoicePicker open={voiceOpen} onClose={() => setVoiceOpen(false)} value={st.voiceOverride} lang={st.langMode}
