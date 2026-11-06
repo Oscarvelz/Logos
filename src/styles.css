@@ -863,3 +863,78 @@ html, body { overflow-x: clip; }
   html:has(.book-page.has-side) .bk-actions { left: calc(var(--rail-w) + max(0px, (100vw - var(--rail-w) - 1160px) / 2) + 328px + (min(1160px, 100vw - var(--rail-w)) - 328px) / 2); }
 }
 @media (min-width: 1100px) and (max-height: 900px) { .desk-voices { display: none; } }
+
+/* ── Big tablet (Galaxy Tab S10 Ultra landscape ≈ 1973×1202 CSS px) — phone untouched ── */
+@media (min-width: 1500px) {
+  .page, .page.wide, .settings-page { max-width: 1800px; padding-left: 44px; padding-right: 44px; }
+  .page-title { font-size: 60px; }
+  .page-sub { font-size: 16px; }
+
+  /* Listen: text | player + desk | text map */
+  .listen-grid { grid-template-columns: minmax(0, 1fr) 440px 380px; gap: 20px; }
+  .listen-map, .desk-map { position: sticky; top: 28px; height: calc(100dvh - 186px); }
+  .listen-grid > .card:first-child { height: calc(100dvh - 186px); display: flex; flex-direction: column; }
+  .listen-grid > .card:first-child .editor { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .listen-page .editor textarea { flex: 1; min-height: 0; max-height: none; font-size: 20px; padding: 24px 28px 10px; }
+  .listen-page .reader { flex: 1; max-height: none; min-height: 0; padding: 28px 34px 22px; }
+  .listen-page .reader p { font-size: 21px; }
+  .desk-voices { display: block !important; }
+  .desk-stats .ds-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; }
+  .ds-grid div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .ds-grid b { font-size: 19px; font-weight: 750; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .ds-grid span { font-size: 11px; color: var(--muted); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+  .desk-outline { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .desk-para { display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 9px 8px; border-radius: 12px; color: var(--text-2); font-size: 13.5px; line-height: 1.4; transition: background .2s, color .2s; }
+  .desk-para:hover { background: var(--surface); }
+  .desk-para.past { color: var(--muted); }
+  .desk-para.now { background: var(--accent-soft); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
+  .dp-n { flex: none; min-width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 11px; font-weight: 750; background: var(--surface-2); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .desk-para.now .dp-n { background: var(--accent); color: var(--accent-ink); }
+  .desk-empty { margin: 2px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+  .desk-item.on .desk-ic { background: var(--accent); color: var(--accent-ink); }
+
+  /* Voices: five across */
+  .voice-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+
+  /* Create: text | settings | recordings, all full height */
+  .create-grid { grid-template-columns: minmax(0, 1fr) 440px 380px; gap: 20px; align-items: stretch; }
+  .create-page .create-grid > .card:first-child { height: calc(100dvh - 186px); display: flex; flex-direction: column; }
+  .create-page .create-grid > .card:first-child .editor { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .create-page .editor textarea { flex: 1; min-height: 0; max-height: none; font-size: 20px; padding: 24px 28px 10px; }
+  .desk-recs { height: calc(100dvh - 186px); }
+
+  /* Library: Saved and Books side by side */
+  .lib-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 28px; align-items: start; }
+  .lib-col { min-width: 0; }
+  .lib-col-head { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 4px 12px; min-height: 32px; }
+  .lib-col-add { margin-left: auto; letter-spacing: 0; text-transform: none; }
+  .lib-split .clips { grid-template-columns: 1fr; }
+
+  /* Settings: three columns */
+  .set-cols { column-count: 3; }
+
+  /* Book reader: wider contents column, comfortable measure, toolbar follows */
+  .book-page.has-side { max-width: 1500px; grid-template-columns: 340px minmax(0, 860px); justify-content: center; }
+  .bk-text { padding: 40px 56px 10px; }
+}
+@media (min-width: 1500px) {
+  html:has(.book-page.has-side) .bk-bar { left: calc(var(--rail-w) + max(0px, (100vw - var(--rail-w) - 1228px) / 2) + 368px + 40px); right: calc(max(0px, (100vw - var(--rail-w) - 1228px) / 2) + 40px); }
+  html:has(.book-page.has-side) .bk-actions { left: calc(var(--rail-w) + max(0px, (100vw - var(--rail-w) - 1228px) / 2) + 368px + 430px); }
+}
+@media (min-width: 1500px) {
+  .book-page.has-side.has-info { max-width: 1760px; grid-template-columns: 320px minmax(0, 860px) 320px; justify-content: center; }
+  .book-page.has-info > .bk-info { grid-column: 3; grid-row: 1 / span 30; position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; gap: 12px; padding: 22px 0 120px; }
+  .bk-info .card { padding: 14px 16px; }
+  .bi-prog { display: flex; gap: 14px; align-items: center; }
+  .bi-ring { --p: 0deg; flex: none; width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--accent) var(--p), var(--surface-2) 0); position: relative; }
+  .bi-ring::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: var(--bg-2); }
+  .bi-ring span { position: relative; font-size: 20px; font-weight: 750; font-variant-numeric: tabular-nums; color: var(--text); }
+  .bi-ring small { font-size: 11px; color: var(--muted); margin-left: 1px; }
+  .bi-line { font-size: 13px; color: var(--text-2); line-height: 1.5; }
+  .bi-line b { color: var(--text); }
+  .bi-actions { display: flex; flex-direction: column; gap: 8px; }
+  .bi-marks { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .bi-stats { font-size: 12px; color: var(--muted); text-align: center; }
+  html:has(.book-page.has-info) .bk-bar { left: calc(var(--rail-w) + max(0px, (100vw - var(--rail-w) - 1556px) / 2) + 348px); right: calc(max(0px, (100vw - var(--rail-w) - 1556px) / 2) + 348px); }
+  html:has(.book-page.has-info) .bk-actions { left: calc(var(--rail-w) + (100vw - var(--rail-w)) / 2); }
+}

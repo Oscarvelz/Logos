@@ -31,6 +31,7 @@ export function BookPage() {
   const [pos, setPos] = useState<Pos>({ ch: 0, b: 0 })
   const [sheet, setSheet] = useState<'toc' | 'search' | 'type' | null>(null)
   const wide = useMediaQuery('(min-width: 1100px)')
+  const big = useMediaQuery('(min-width: 1500px)')
   const [sel, setSel] = useState<number | null>(null)
   const [back, setBack] = useState<Pos[]>([])
   const [note, setNote] = useState<{ to: Pos; text: string } | null>(null)
@@ -165,7 +166,8 @@ export function BookPage() {
   const st = { '--bk-size': `${type.size}px`, '--bk-lh': type.spacing === 'airy' ? 1.72 : 1.5 } as React.CSSProperties
 
   return (
-    <div className={`page book-page bk-${type.font} ${wide ? 'has-side' : ''}`} style={st}>
+    <div className={`page book-page bk-${type.font} ${wide ? 'has-side' : ''} ${big ? 'has-info' : ''}`} style={st}>
+      {big && <BookInfo meta={meta} chapters={chapters} ch={ch} progress={progress} onGo={(p) => jump(p, { push: true })} onSearch={() => setSheet('search')} onType={() => setSheet('type')} onListen={() => listenFrom(pos.ch === ch ? pos.b : 0)} />}
       {wide && <aside className="bk-side" aria-label="Contents"><TocBody side active meta={meta} chapters={chapters} at={{ ch, b: pos.ch === ch ? pos.b : 0 }} onGo={(p) => jump(p, { push: true })} /></aside>}
       <header className="bk-head">
         <button className="icon-btn" onClick={() => { location.hash = '#/library?books' }} aria-label="Back to Library"><ArrowLeft size={21} /></button>
@@ -324,6 +326,48 @@ function BottomBar({ meta, chapters, ch, progress, onPrev, onNext, onToc, onList
         : <button className="bk-listen" onClick={onListen} aria-label="Listen from here"><Play size={17} fill="currentColor" /> Listen</button>}
       <button className="icon-btn" onClick={onNext} disabled={ch >= chapters.length - 1} aria-label="Next chapter"><ChevronRight size={22} /></button>
     </div>
+  )
+}
+
+/** Big tablet: the book at a glance on the right: progress, time left, bookmarks, quick actions. */
+function BookInfo({ meta, chapters, ch, progress, onGo, onSearch, onType, onListen }: { meta: BookMeta; chapters: Chapter[]; ch: number; progress: number; onGo: (p: Pos) => void; onSearch: () => void; onType: () => void; onListen: () => void }) {
+  const left = Math.max(0, Math.round(meta.words * (1 - progress)))
+  const chWords = meta.chWords?.[ch] ?? chapters[ch].blocks.reduce((n, b) => n + b.t.split(/\s+/).length, 0)
+  const fmt = (w: number) => { const m = Math.round(w / 230); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${Math.max(1, m)} min` }
+  const marks = [...(meta.bookmarks ?? [])].sort((a, b) => b.at - a.at)
+  const pct = Math.round(progress * 100)
+  return (
+    <aside className="bk-info" aria-label="About this book">
+      <div className="card bi-prog">
+        <div className="bi-ring" style={{ ['--p' as string]: `${pct * 3.6}deg` }}><span>{pct}<small>%</small></span></div>
+        <div className="grow" style={{ minWidth: 0 }}>
+          <div className="desk-kicker">Progress</div>
+          <div className="bi-line"><b>Chapter {ch + 1}</b> of {chapters.length}</div>
+          <div className="bi-line">About {fmt(chWords)} for this chapter</div>
+          <div className="bi-line">About {fmt(left)} left in the book</div>
+        </div>
+      </div>
+      <div className="card bi-actions">
+        <button className="btn primary block" onClick={onListen}><Play size={16} fill="currentColor" /> Listen from here</button>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn grow" onClick={onSearch}><Search size={16} /> Search</button>
+          <button className="btn grow" onClick={onType}><Type size={16} /> Text</button>
+        </div>
+      </div>
+      <div className="card bi-marks">
+        <div className="desk-kicker"><Bookmark size={13} /> Bookmarks</div>
+        {marks.length ? (
+          <div className="desk-list">
+            {marks.map((m, i) => (
+              <button key={i} className="desk-para" onClick={() => onGo({ ch: m.ch, b: m.b })}>
+                <span className="dp-n">{m.ch + 1}</span><span className="grow">{m.text}</span>
+              </button>
+            ))}
+          </div>
+        ) : <p className="desk-empty">Tap any paragraph, then the bookmark, and it appears here.</p>}
+      </div>
+      <div className="bi-stats">{meta.words.toLocaleString()} words · {chapters.length} chapters{meta.links ? ` · ${meta.links.toLocaleString()} links` : ''}</div>
+    </aside>
   )
 }
 

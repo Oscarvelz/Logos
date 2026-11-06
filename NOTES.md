@@ -142,3 +142,11 @@ Oscar's OCR'd PDF (How the Mind Works) imported badly: blurb as title, running h
 - Ready/Voice status pill moved from the rail's bottom corner to under the brand (rail-status).
 - Listen ≥1100: right column = player + TabletDesk (src/components/desk.tsx): Continue/Start reading book card, Favorite voices chips (hidden when height ≤900), Recent in Library (opens in Listen).
 - Book reader ≥1100: contents/bookmarks pinned in a left column (TocBody side), header Contents button hidden there, bottom bar centred over the text column.
+
+## 1.4.37 (2026-11-06) — big tablet (Tab S10 Ultra landscape ≈ 1973×1202 CSS, DPR 1.5; portrait ≈ 1232×1973)
+- Measured from Oscar's screenshots (rail 138 px real = 92 CSS). ≥1500 px rules at the end of styles.css; phone untouched.
+- Listen: text | player + desk | TextMap (stats: listening time, words, sentences, paragraphs, language, % heard; paragraph map that jumps with seek). Editor/reader fill the height.
+- Create: text | settings | RecordingsPanel (play recordings in place).
+- Library: Saved and Books side by side (lib-split), tabs hidden.
+- Voices five across; Settings three columns; Book: contents | text (860) | BookInfo (progress ring, time left, Listen/Search/Text, bookmarks).
+- Test: /tmp-style script big.mjs at 1973×1180 and 1232×1940.
