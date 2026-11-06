@@ -715,3 +715,30 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
   if (!r || !onTrack()) return { key: '', env: null, time: 0, rate: 1, running: false }
   return { key: `${track!.url}#${s.current}`, env: r.env, time: localTime(), rate: audio.playbackRate || 1, running: !audio.paused }
 }
+
+// Android app: keep the phone's media notification (and the app awake while reading) in step with playback,
+// and take play/pause/next/previous from that notification.
+{
+  type Droid = { playing(on: boolean, title: string, text: string): void }
+  const droid = (window as unknown as { LogosAndroid?: Droid }).LogosAndroid
+  if (droid?.playing) {
+    let last = ''
+    let started = false
+    listen.subscribe(() => {
+      const s = listen.get()
+      const on = s.active && (s.playing || s.buffering)
+      // The notification appears with the first play, not when text is merely loaded.
+      if (on) started = true
+      if (!started) return
+      if (!s.active) started = false
+      const v = voiceById(s.voices[s.current])
+      const key = `${on}|${s.current}|${s.active}`
+      if (key === last) return
+      last = key
+      try { droid.playing(on, `Logos · ${v?.name ?? 'Voice'}`, s.active ? (s.segments[s.current]?.text.slice(0, 120) ?? '') : '') } catch { /* old shell */ }
+    })
+    addEventListener('logosandroid-toggle', () => toggle())
+    addEventListener('logosandroid-next', () => next())
+    addEventListener('logosandroid-prev', () => prev())
+  }
+}

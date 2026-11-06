@@ -92,7 +92,23 @@ export function concat(chunks: Float32Array[]): Float32Array {
   return out
 }
 
-export function downloadBlob(blob: Blob, filename: string) {
+type DroidSave = { saveChunk(name: string, b64: string, first: boolean): string; saveDone(name: string, mime: string, share: boolean): void }
+/** In the Android app a blob link cannot download, so the file goes to Download/Logos through the app (and to the share sheet when asked). */
+async function androidSave(d: DroidSave, blob: Blob, filename: string, share: boolean) {
+  const step = 768 * 1024
+  for (let off = 0, first = true; off < blob.size || first; off += step, first = false) {
+    const buf = new Uint8Array(await blob.slice(off, off + step).arrayBuffer())
+    let bin = ''
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000))
+    d.saveChunk(filename, btoa(bin), first)
+    if (off + step >= blob.size) break
+  }
+  d.saveDone(filename, blob.type || 'application/octet-stream', share)
+}
+
+export function downloadBlob(blob: Blob, filename: string, share = false) {
+  const droid = (window as unknown as { LogosAndroid?: DroidSave }).LogosAndroid
+  if (droid?.saveChunk) { void androidSave(droid, blob, filename, share); return }
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

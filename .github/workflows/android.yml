@@ -1,0 +1,32 @@
+name: Logos for Android
+on:
+  push:
+    branches: [source]
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.9' }
+      - name: Build
+        working-directory: android
+        run: gradle assembleRelease --no-daemon --stacktrace
+        env:
+          KS_PASS: ${{ secrets.LOGOS_KS_PASS || 'dcda2bfc0a2f7b021970fe55950dae39' }}
+          VERSION_CODE: ${{ github.run_number }}
+      - run: cp android/app/build/outputs/apk/release/app-release.apk Logos.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-${{ github.run_number }}
+          target_commitish: source
+          name: Logos for Android ${{ github.run_number }}
+          body: Install Logos.apk on the phone. The app opens https://oscarvelz.github.io/Logos/ with its own private storage; saved audio goes to Download/Logos.
+          files: Logos.apk
+          make_latest: 'true'
