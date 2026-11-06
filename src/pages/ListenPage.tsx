@@ -5,7 +5,7 @@ import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
-import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, endSession, sentenceProgress, seekFraction, wordClock, seekWord } from '../player/listen.ts'
+import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, voiceFor, endSession, sentenceProgress, seekFraction, wordClock, seekWord } from '../player/listen.ts'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
 import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
@@ -53,7 +53,7 @@ export function ListenPage() {
     return langs.size > 1
   }, [text])
   const lang: Lang = st.langMode === 'auto' ? detected.lang : st.langMode
-  const currentVoice = voiceById(s.active && !editing ? s.voices[s.current] : (st.voiceOverride ?? st.defaultVoice[lang]))
+  const currentVoice = voiceById(s.active && !editing && s.voices[s.current] ? s.voices[s.current] : voiceFor(lang))
 
   // Begin preparing the audio as soon as text is pasted or typed (after a short pause in typing).
   useEffect(() => {
@@ -150,7 +150,7 @@ export function ListenPage() {
             <div className="player-top-r">
               <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={`Playback speed ${fmtSpeed(st.listenSpeed)}`}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
               <button className="chip accent voice-chip" onClick={() => setVoiceOpen(true)} aria-label="Voice">
-                <span className="dot" /><span className="chip-txt">{st.voiceOverride ? voiceById(st.voiceOverride)?.name : currentVoice?.name ?? ''}</span>
+                <span className="dot" /><span className="chip-txt">{currentVoice?.name ?? ''}</span>
               </button>
             </div>
           </div>

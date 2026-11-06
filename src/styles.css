@@ -140,6 +140,11 @@ button:disabled { cursor: default; opacity: .45; }
   from { opacity: 0; transform: translateY(14px) scale(.992); filter: blur(4px); }
   to { opacity: 1; transform: none; filter: none; }
 }
+.page.long { animation-name: pageInLong; }
+@keyframes pageInLong {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: none; }
+}
 @media (prefers-reduced-motion: reduce) { .page { animation: none; } }
 
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 6px 0 18px; }

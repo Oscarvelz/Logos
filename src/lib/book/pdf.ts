@@ -247,8 +247,47 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
     const page0 = blocks[start].pg ?? 1
     let text = ''
     for (let i = start + 1; i < blocks.length && (blocks[i].pg ?? 0) <= page0 + 5 && text.length < 6000; i++) text += ' ' + blocks[i].t
-    const re = /(?:^|\s)(?:(\d{1,2}|[IVXLC]{1,6})\.?\s+)?(\p{Lu}[^\d]{1,90}?)[\s.·…_]*\b(\d{1,4})(?=\s|$)/gu
+    // Line by line first: each contents line is "[number] Title … page". OCR misreads numbers
+    // ("J" or "l" for 1, "O" for 0), so those are read as the digits they stand for.
+    const ocrNum = (t: string) => { const d = t.replace(/[JlI|!]/g, '1').replace(/[Oo]/g, '0').replace(/S/g, '5').replace(/B/g, '8'); return /^\d{1,4}$/.test(d) ? parseInt(d, 10) : null }
+    const lineEntries: { title: string; n: number | null; num?: string }[] = []
+    for (let pg = page0; pg <= Math.min(N, page0 + 5); pg++) {
+      const lines = pages[pg - 1] ?? []
+      let from = 0
+      if (pg === page0) { const h = lines.findIndex((l) => /^(table of )?(contents|índice|indice|contenidos?|sumario|tabla de contenidos?)$/i.test(fold(l.text))); from = h + 1 }
+      for (const l of lines.slice(from)) {
+        const m = /^(?:(\S{1,4}?)\.?\s+)?(\S.*?)[\s.·…_]*\s((?:[\dJlI|!OoSB]{1,4})|[ivxlcdm]{1,7})$/u.exec(l.text.trim())
+        if (!m) continue
+        let num: string | undefined
+        let title = m[2]
+        if (m[1]) {
+          const asNum = ocrNum(m[1])
+          if (/^[IVXLC]{2,6}$/.test(m[1])) num = m[1]
+          else if (asNum != null && asNum < 100) num = String(asNum)
+          else if (/^[IVXLC]$/.test(m[1])) num = m[1]
+          else title = `${m[1]} ${title}`
+        }
+        const pageTok = m[3]
+        const n = /^[ivxlcdm]+$/.test(pageTok) ? null : ocrNum(pageTok)
+        title = title.replace(/[\s.·…_]+$/u, '')
+        if (!/^\p{L}/u.test(title) || quality(title) < 0.6 || title.length > 75 || /[,;:]$/.test(title)) continue
+        lineEntries.push({ title: titleCase(title.replace(/[\s.·…_]+$/u, '')), n, num })
+      }
+    }
+    // Roman chapters: a lone "I" read as 1 goes back to I.
+    lineEntries.forEach((e, i) => { if (e.num === '1' && /^[IVXLC]{2,}$/.test(lineEntries[i + 1]?.num ?? '')) e.num = 'I' })
+    // Chapter numbers in order: a junk number between 1 and 3 is 2.
+    lineEntries.forEach((e, i) => { if (!e.num && e.n != null) { const a = lineEntries[i - 1]?.num, b = lineEntries[i + 1]?.num; if (a && b && /^\d+$/.test(a) && +b === +a + 2) e.num = String(+a + 1) } })
     const entries: { title: string; n: number }[] = []
+    const front: string[] = []
+    for (const e of lineEntries) {
+      const title = e.num ? `${e.num}. ${e.title}` : e.title
+      if (e.n == null) { if (!entries.length) front.push(title); continue }
+      if (entries.length && e.n <= entries[entries.length - 1].n) continue
+      entries.push({ title, n: e.n })
+    }
+    const re = /(?:^|\s)(?:(\d{1,2}|[IVXLC]{1,6})\.?\s+)?(\p{Lu}[^\d]{1,90}?)[\s.·…_]*\b(\d{1,4})(?=\s|$)/gu
+    const textEntries: { title: string; n: number }[] = []
     for (const m of text.matchAll(re)) {
       let title = `${m[1] ? m[1] + '. ' : ''}${m[2]}`.replace(/[\s.·…_]+$/u, '').trim()
       const n = parseInt(m[3], 10)
@@ -258,15 +297,26 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
       // Sub-entries of a detailed contents ("Fear and love,") are not chapters.
       if (title.length < 2 || title.length > 75 || /[,;:]$/.test(title) || quality(title) < 0.6) continue
       title = titleCase(title)
-      if (entries.length && n <= entries[entries.length - 1].n) continue
-      entries.push({ title, n })
+      if (textEntries.length && n <= textEntries[textEntries.length - 1].n) continue
+      textEntries.push({ title, n })
     }
+    // Whichever reading found more chapters wins (line by line keeps its front matter).
+    if (textEntries.length > entries.length) { entries.length = 0; entries.push(...textEntries); front.length = 0 }
     if (entries.length < 3) return []
     // Printed page → PDF page: the page numbers read on each page, or their usual offset.
     const offs = new Map<number, number>()
     printed.forEach((pdf, n) => { const o = pdf - n; offs.set(o, (offs.get(o) ?? 0) + 1) })
     const offset = [...offs].sort((a, b) => b[1] - a[1])[0]
     const out: { at: number; title: string }[] = []
+    for (const t of front) {
+      const want = fold(t.replace(/^\S+\.\s/, ''))
+      const lo = blocks.findIndex((b) => (b.pg ?? 0) > page0)
+      if (lo < 0 || want.length < 3) continue
+      for (let i = lo; i < blocks.length && (blocks[i].pg ?? 0) <= page0 + 30; i++) {
+        const b = fold(blocks[i].t)
+        if (b.length < want.length + 30 && (b === want || b.startsWith(want) || b.endsWith(want))) { if (!out.length || i > out[out.length - 1].at) out.push({ at: i, title: t }); break }
+      }
+    }
     for (const e of entries) {
       const want = fold(e.title)
       const guess = printed.get(e.n) ?? (offset && offset[1] >= 3 ? e.n + offset[0] : null)

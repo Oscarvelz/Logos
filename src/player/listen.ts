@@ -179,7 +179,7 @@ function el(): HTMLAudioElement {
   return audio
 }
 
-function voiceFor(lang: Lang): string {
+export function voiceFor(lang: Lang): string {
   const s = settings.get()
   const override = voiceById(s.voiceOverride ?? undefined)
   if (override && (override.lang === lang || s.langMode !== 'auto')) return override.id

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { useRoute } from './lib/router.ts'
 import { useStore } from './lib/store.ts'
 import { settings, applyTheme } from './lib/settings.ts'
@@ -95,6 +95,11 @@ function PageWrap({ mini, children }: { mini: boolean; children: React.ReactNode
   // Pages render their own `.page` root; add bottom room when the mini player shows.
   useEffect(() => {
     document.querySelectorAll('.page').forEach((el) => el.classList.toggle('has-mini', mini))
+  })
+  // Very long pages (Voices) skip the blur in their entrance: a blurred layer that tall is
+  // too big for phone GPUs and the screen jumps while it settles.
+  useLayoutEffect(() => {
+    document.querySelectorAll<HTMLElement>('.page').forEach((el) => { if (!el.dataset.sized) { el.dataset.sized = '1'; el.classList.toggle('long', el.scrollHeight > innerHeight * 2.2) } })
   })
   return <>{children}</>
 }

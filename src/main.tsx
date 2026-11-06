@@ -17,6 +17,8 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+// The launch splash (index.html) leaves once the app has painted and fonts are in.
+requestAnimationFrame(() => requestAnimationFrame(() => { void document.fonts.ready.then(() => (window as unknown as { __logosReady?: () => void }).__logosReady?.()) }))
 
 // Service worker: offline app shell + COOP/COEP injection so ONNX Runtime can
 // use multi-threaded WASM on GitHub Pages (which cannot set headers).
