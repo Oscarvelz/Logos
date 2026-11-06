@@ -6,3 +6,7 @@ android/.gradle/
 *.jks
 *.keystore
 ks-password*
+.env
+.env.*
+*.pem
+*.key
