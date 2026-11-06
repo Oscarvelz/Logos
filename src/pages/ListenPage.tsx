@@ -18,7 +18,8 @@ import { WebImport } from '../components/webimport.tsx'
 import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, VoicePicker } from '../components/chrome.tsx'
-import { Range, Sheet, toast } from '../components/ui.tsx'
+import { Range, Sheet, toast, useMediaQuery } from '../components/ui.tsx'
+import { TabletDesk } from '../components/desk.tsx'
 
 const SPEEDS = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
 
@@ -104,6 +105,7 @@ export function ListenPage() {
   })
 
   const reading = s.active && !editing
+  const wide = useMediaQuery('(min-width: 1100px)')
   const remaining = reading ? estimateSeconds(s.segments.slice(s.current).map((g) => g.text).join(' '), st.listenSpeed) : estimateSeconds(text, st.listenSpeed)
 
   return (
@@ -143,6 +145,7 @@ export function ListenPage() {
           )}
         </div>
 
+        <div className="listen-side">
         <div className="card player-card">
           <div className="player-top">
             <button className={`chip lang-chip ${st.langMode === 'auto' ? '' : 'accent'}`} onClick={cycleLang} aria-label="Language">
@@ -197,6 +200,8 @@ export function ListenPage() {
           <EngineNote />
           {s.error && <div className="error-note">{s.error}</div>}
           {e.status === 'error' && <div className="error-note">Neural engine: {e.error}</div>}
+        </div>
+        {wide && <TabletDesk onOpen={(t) => { setText(t); setEditing(false) }} />}
         </div>
       </div>
 
