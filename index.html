@@ -21,21 +21,25 @@
       #splash { position: fixed; inset: 0; z-index: 9999; background: #0a0a0f; display: grid; place-items: center; overflow: hidden; transition: opacity .55s ease, transform .55s cubic-bezier(.4,0,.2,1), filter .55s ease; }
       #splash.out { opacity: 0; transform: scale(1.06); filter: blur(10px); pointer-events: none; }
       #splash .sp-amb { position: absolute; width: 140vmax; height: 140vmax; border-radius: 50%; background: radial-gradient(circle, rgba(233,189,114,.10) 0, rgba(233,189,114,.04) 26%, transparent 55%); opacity: 0; animation: spAmb 2.4s ease-out .2s forwards; }
-      #splash .sp-lock { position: relative; display: flex; flex-direction: column; align-items: center; }
-      #splash .sp-mark { position: relative; width: 240px; height: 240px; animation: spLift .95s cubic-bezier(.65,0,.25,1) .95s forwards; }
+      #splash .sp-lock { position: absolute; inset: 0; }
+      #splash .sp-mark { position: absolute; left: 50%; top: 50%; width: 240px; height: 240px; margin: -130px 0 0 -120px; transform: scale(.98); animation: spLift 1.15s cubic-bezier(.55,0,.2,1) .7s forwards; }
+      #splash .sp-box { rx: 200px; ry: 200px; animation: spBox 1.15s cubic-bezier(.55,0,.2,1) .7s forwards; }
+      #splash .sp-in { transform-origin: 256px 256px; transform: scale(.91); animation: spIn 1.15s cubic-bezier(.55,0,.2,1) .7s forwards; }
       #splash .sp-mark svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-      #splash .sp-glow { transform-origin: 256px 268px; animation: spGlow 2.6s ease-in-out .1s infinite; }
+      #splash .sp-glow { transform-origin: 256px 268px; animation: spGlow 2.6s ease-in-out .5s infinite; }
       #splash .sp-arc { transform-origin: 256px 268px; } #splash .sp-arc1 { opacity: .55 } #splash .sp-arc2 { opacity: .28 }
-      #splash .sp-arc1 { animation: spArc1 1.6s ease-out .15s forwards, spBreath1 2.4s ease-in-out 1.75s infinite; }
-      #splash .sp-arc2 { animation: spArc2 1.6s ease-out .35s forwards, spBreath2 2.4s ease-in-out 1.95s infinite; }
-      #splash .sp-ripple { opacity: 0; transform-origin: 236px 268px; animation: spRipple 1.9s cubic-bezier(.2,.6,.3,1) infinite; }
-      #splash .sp-ripple.r2 { animation-delay: .63s; } #splash .sp-ripple.r3 { animation-delay: 1.26s; }
-      #splash .sp-shine { transform: translateX(-340px) skewX(-18deg); animation: spShine 1.25s cubic-bezier(.45,0,.2,1) .35s forwards; }
-      #splash .sp-word { margin: -88px 0 0; position: relative; font-family: 'Instrument Serif', 'Iowan Old Style', Georgia, serif; font-weight: 400; font-size: 64px; line-height: 1; letter-spacing: .02em; color: #f2d9a6; display: flex; }
+      #splash .sp-arc1 { animation: spArc1 1.6s ease-out .55s forwards, spBreath1 2.4s ease-in-out 2.15s infinite; }
+      #splash .sp-arc2 { animation: spArc2 1.6s ease-out .75s forwards, spBreath2 2.4s ease-in-out 2.35s infinite; }
+      #splash .sp-ripple { opacity: 0; transform-origin: 236px 268px; animation: spRipple 1.9s cubic-bezier(.2,.6,.3,1) .5s infinite; }
+      #splash .sp-ripple.r2 { animation-delay: 1.13s; } #splash .sp-ripple.r3 { animation-delay: 1.76s; }
+      #splash .sp-shine { transform: translateX(-340px) skewX(-18deg); animation: spShine 1.25s cubic-bezier(.45,0,.2,1) .45s forwards; }
+      #splash .sp-word { position: absolute; left: 0; right: 0; top: calc(50% + 14px); margin: 0; justify-content: center; font-family: 'Instrument Serif', 'Iowan Old Style', Georgia, serif; font-weight: 400; font-size: 64px; line-height: 1; letter-spacing: .02em; color: #f2d9a6; display: flex; }
       #splash .sp-word span { display: inline-block; opacity: 0; transform: translateY(26px); filter: blur(6px); animation: spRise .7s cubic-bezier(.2,.8,.2,1) forwards; color: #f0cf8e; text-shadow: 0 0 24px rgba(233,189,114,.35); }
-      #splash .sp-tag { margin: 16px 0 0; font: 600 12px/1 'Manrope Variable', system-ui, sans-serif; letter-spacing: .32em; text-transform: uppercase; color: rgba(242,217,166,.55); opacity: 0; white-space: nowrap; animation: spTag .8s ease 2.15s forwards; }
+      #splash .sp-tag { position: absolute; left: 0; right: 0; top: calc(50% + 96px); margin: 0; text-align: center; font: 600 12px/1 'Manrope Variable', system-ui, sans-serif; letter-spacing: .32em; text-transform: uppercase; color: rgba(242,217,166,.55); opacity: 0; white-space: nowrap; animation: spTag .8s ease 2.15s forwards; }
       @keyframes spAmb { to { opacity: 1 } }
       @keyframes spLift { to { transform: translateY(-62px) scale(.62) } }
+      @keyframes spBox { to { rx: 116px; ry: 116px } }
+      @keyframes spIn { to { transform: scale(1) } }
       @keyframes spGlow { 0%,100% { opacity: .85; transform: scale(1) } 50% { opacity: 1; transform: scale(1.08) } }
       @keyframes spArc1 { 0% { opacity: .55 } 30% { opacity: .2; transform: scale(.94) } 100% { opacity: .55; transform: scale(1) } }
       @keyframes spArc2 { 0% { opacity: .28 } 30% { opacity: .08; transform: scale(.94) } 100% { opacity: .3; transform: scale(1) } }
@@ -45,10 +49,10 @@
       @keyframes spShine { to { transform: translateX(380px) skewX(-18deg) } }
       @keyframes spRise { to { opacity: 1; transform: none; filter: none } }
       @keyframes spTag { to { opacity: 1 } }
-      @media (prefers-reduced-motion: reduce) { #splash *, #splash { animation: none !important; transition-duration: .2s !important } #splash .sp-arc { opacity: .5 } #splash .sp-word span, #splash .sp-tag { opacity: 1; transform: none; filter: none } #splash .sp-mark { transform: translateY(-62px) scale(.62) } }
+      @media (prefers-reduced-motion: reduce) { #splash *, #splash { animation: none !important; transition-duration: .2s !important } #splash .sp-arc { opacity: .5 } #splash .sp-word span, #splash .sp-tag { opacity: 1; transform: none; filter: none } #splash .sp-mark { transform: translateY(-62px) scale(.62) } #splash .sp-in { transform: none } }
     </style>
-    <script type="module" crossorigin src="/Logos/assets/index-CwlC8A0k.js"></script>
-    <link rel="stylesheet" crossorigin href="/Logos/assets/index-f85SRNv6.css">
+    <script type="module" crossorigin src="/Logos/assets/index-Ck89UauZ.js"></script>
+    <link rel="stylesheet" crossorigin href="/Logos/assets/index-D9lMUJmq.css">
   </head>
   <body>
     <div id="splash" role="status" aria-label="Logos">
@@ -63,7 +67,8 @@
               <linearGradient id="spshine" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
               <clipPath id="splam"><g transform="translate(-26 -6)"><path d="M 150 124 C 176 104 214 104 232 136 L 340 360 C 348 377 358 384 374 380 L 380 396 C 348 414 318 404 302 372 L 198 156 C 188 136 172 130 156 138 Z"/><path d="M 238 232 L 256 266 L 186 398 C 182 406 174 408 166 404 L 160 400 C 156 396 156 390 160 384 Z"/></g></clipPath>
             </defs>
-            <rect width="512" height="512" rx="116" fill="url(#spbg)"/>
+            <rect class="sp-box" width="512" height="512" rx="200" fill="url(#spbg)"/>
+            <g class="sp-in">
             <circle class="sp-glow" cx="256" cy="268" r="200" fill="url(#spglow)"/>
             <g fill="none" stroke="url(#spgold)" stroke-linecap="round">
               <path class="sp-ripple" d="M 364 156 A 146 146 0 0 1 364 380" stroke-width="4"/>
@@ -74,6 +79,7 @@
             </g>
             <g fill="url(#spgold)" transform="translate(-26 -6)"><path d="M 150 124 C 176 104 214 104 232 136 L 340 360 C 348 377 358 384 374 380 L 380 396 C 348 414 318 404 302 372 L 198 156 C 188 136 172 130 156 138 Z"/><path d="M 238 232 L 256 266 L 186 398 C 182 406 174 408 166 404 L 160 400 C 156 396 156 390 160 384 Z"/></g>
             <g clip-path="url(#splam)"><rect class="sp-shine" x="40" y="60" width="110" height="420" fill="url(#spshine)" opacity=".7"/></g>
+            </g>
           </svg>
         </div>
         <h1 class="sp-word" aria-hidden="true"><span style="animation-delay:1.50s">L</span><span style="animation-delay:1.58s">o</span><span style="animation-delay:1.66s">g</span><span style="animation-delay:1.74s">o</span><span style="animation-delay:1.82s">s</span></h1>
