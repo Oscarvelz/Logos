@@ -15,13 +15,20 @@ jobs:
         with: { distribution: temurin, java-version: '17' }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: '8.9' }
+      - name: Signing key from secrets (no fallback: the build fails without them)
+        env:
+          KS_B64: ${{ secrets.LOGOS_KS_B64 }}
+          KS_PASS: ${{ secrets.LOGOS_KS_PASS }}
+        run: |
+          if [ -z "$KS_B64" ] || [ -z "$KS_PASS" ]; then echo "::error::Secrets LOGOS_KS_B64 and LOGOS_KS_PASS are required"; exit 1; fi
+          echo "$KS_B64" | base64 -d > android/logos.p12
       - name: Build
         working-directory: android
         run: gradle assembleRelease --no-daemon --stacktrace
         env:
-          KS_PASS: ${{ secrets.LOGOS_KS_PASS || 'dcda2bfc0a2f7b021970fe55950dae39' }}
+          KS_PASS: ${{ secrets.LOGOS_KS_PASS }}
           VERSION_CODE: ${{ github.run_number }}
-      - run: cp android/app/build/outputs/apk/release/app-release.apk Logos.apk
+      - run: rm -f android/logos.p12 && cp android/app/build/outputs/apk/release/app-release.apk Logos.apk
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: android-${{ github.run_number }}
