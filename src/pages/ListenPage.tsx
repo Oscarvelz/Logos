@@ -79,8 +79,10 @@ export function ListenPage() {
       if (!clip.trim()) { toast('Clipboard is empty'); return }
       if (isJustUrl(clip)) { setWebUrl(normalizeUrl(clip)); return }
       setText(clip)
-      if (s.active) endSession()
-      setEditing(true)
+      // Paste = listen: load the new text and start playing right away (Oscar, 1.4.40)
+      loadText(clip)
+      setEditing(false)
+      void play()
     } catch {
       toast('Clipboard blocked — long-press the box and choose Paste')
     }

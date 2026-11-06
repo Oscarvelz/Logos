@@ -156,3 +156,6 @@ Oscar's OCR'd PDF (How the Mind Works) imported badly: blurb as title, running h
 
 ## 1.4.39 (2026-11-06)
 - Paste in the Android app: WebView blocks clipboard-read, so readClipboard() (src/lib/clipboard.ts) uses LogosAndroid.clipboard() (new in the shell, ClipboardManager) and falls back to navigator.clipboard.
+
+## 1.4.40 (2026-11-06)
+- Listen Paste button now loads the clipboard text and starts playing at once (was: open editor and only prepare). Test test/pastetest.mjs (stubs LogosAndroid.clipboard). Android signing moved to secrets LOGOS_KS_B64/LOGOS_KS_PASS, key v2 (v1 was public).
