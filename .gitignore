@@ -2,3 +2,7 @@ node_modules
 dist
 android/app/build/
 android/.gradle/
+*.p12
+*.jks
+*.keystore
+ks-password*
