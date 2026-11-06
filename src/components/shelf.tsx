@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, BookPlus, CircleCheck, MoreHorizontal, Pencil, Search, Star, Trash2, X } from 'lucide-react'
+import { BookOpen, BookPlus, Grid2x2, Grid3x3, Square, CircleCheck, MoreHorizontal, Pencil, Search, Star, Trash2, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { books, refreshBooks, updateBook, deleteBook, putBook, type BookMeta } from '../lib/books.ts'
 import { importBook, BOOK_ACCEPT } from '../lib/book/import.ts'
@@ -41,7 +41,19 @@ export function useBookPicker() {
   return { pick: () => input.current?.click(), el }
 }
 
+type CoverSize = 's' | 'm' | 'l'
+const SIZE_KEY = 'logos.shelfSize'
+/** Phones start with the large covers (two a row), tablets with the medium ones. */
+const loadSize = (): CoverSize => { const v = localStorage.getItem(SIZE_KEY); return v === 's' || v === 'm' || v === 'l' ? v : innerWidth <= 420 ? 'l' : 'm' }
+const SIZES: { id: CoverSize; label: string; icon: React.ReactNode }[] = [
+  { id: 's', label: 'Small covers', icon: <Grid3x3 size={15} /> },
+  { id: 'm', label: 'Medium covers', icon: <Grid2x2 size={15} /> },
+  { id: 'l', label: 'Large covers', icon: <Square size={14} /> },
+]
+
 export function BookShelf({ onPick }: { onPick: () => void }) {
+  const [size, setSizeState] = useState<CoverSize>(loadSize)
+  const setSize = (v: CoverSize) => { setSizeState(v); localStorage.setItem(SIZE_KEY, v) }
   const st = useStore(books)
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<Sort>('recent')
@@ -109,11 +121,16 @@ export function BookShelf({ onPick }: { onPick: () => void }) {
           </div>
           <div className="lib-sort">
             <span className="muted small">{shown.length} book{shown.length === 1 ? '' : 's'}</span>
-            <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort books">
-              <option value="recent">Recently read</option><option value="added">Recently added</option><option value="title">Title</option><option value="author">Author</option><option value="progress">Progress</option>
-            </select>
+            <div className="lib-sort-r">
+              <div className="cover-size" role="radiogroup" aria-label="Cover size">
+                {SIZES.map((z) => <button key={z.id} role="radio" aria-checked={size === z.id} aria-label={z.label} title={z.label} className={size === z.id ? 'on' : ''} onClick={() => setSize(z.id)}>{z.icon}</button>)}
+              </div>
+              <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort books">
+                <option value="recent">Recently read</option><option value="added">Recently added</option><option value="title">Title</option><option value="author">Author</option><option value="progress">Progress</option>
+              </select>
+            </div>
           </div>
-          <div className="shelf-grid">
+          <div className={`shelf-grid size-${size}`}>
             {shown.map((b) => <BookTile key={b.id} b={b} onMore={() => setMenu(b)} />)}
             <button className="shelf-add" onClick={onPick} aria-label="Import a book"><BookPlus size={26} /><span>Import</span></button>
           </div>
