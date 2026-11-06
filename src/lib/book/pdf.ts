@@ -317,15 +317,22 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
   const titleGuess = blocks.find((b) => b.pg === 1 && b.k === 'h1' && b.t.length < 150)?.t
   if (bounds?.[0]?.title?.startsWith('Pages ')) chapters.forEach((c) => { c.gen = true })
 
+  // Cover: the first page that isn't blank (scans often open on an empty white page).
   let cover: Blob | undefined
   try {
-    const page = await doc.getPage(1)
-    const vp0 = page.getViewport({ scale: 1 })
-    const vp = page.getViewport({ scale: 360 / vp0.width })
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height)
-    await page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: vp }).promise
-    cover = await new Promise<Blob | undefined>((r) => canvas.toBlob((b) => r(b ?? undefined), 'image/jpeg', 0.82))
+    for (let pg = 1; pg <= Math.min(N, 4) && !cover; pg++) {
+      const page = await doc.getPage(pg)
+      const vp0 = page.getViewport({ scale: 1 })
+      const vp = page.getViewport({ scale: 360 / vp0.width })
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height)
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+      await page.render({ canvas, canvasContext: ctx, viewport: vp }).promise
+      const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+      let ink = 0, n = 0
+      for (let i = 0; i < px.length; i += 4 * 37) { n++; if ((px[i] + px[i + 1] + px[i + 2]) / 3 < 200) ink++ }
+      if (ink / n > 0.012) cover = await new Promise<Blob | undefined>((r) => canvas.toBlob((b) => r(b ?? undefined), 'image/jpeg', 0.82))
+    }
   } catch { /* the shelf draws a cover */ }
   void task.destroy()
 

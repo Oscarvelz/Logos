@@ -88,6 +88,14 @@ const PAGE_RE = /\b(p[áa]gs?\.|p[áa]ginas?|pages?|pp?\.)\s*(\d{1,4})\b/giu
 const overlaps = (b: Block, s: number, e: number) => b.l?.some((x) => x.s < e && x.e > s) ?? false
 const addLink = (b: Block, s: number, e: number, to: string) => { (b.l ??= []).push({ s, e, to }); b.l.sort((x, y) => x.s - y.s) }
 
+/** "James, William, 1842-1910" → "William James". */
+function tidyAuthor(a: string): string {
+  const t = a.trim().replace(/\s+/g, ' ')
+  const m = /^([^,;]+),\s*([^,;\d]+?)(?:,\s*[\d\s?.\-–]+)?\.?$/.exec(t)
+  if (!m || m[1].trim().split(' ').length > 2 || /\b(and|y)\b|&/i.test(t)) return t
+  return `${m[2].trim()} ${m[1].trim()}`
+}
+
 export function finishBook(raw: RawBook, file: File, format: string): { meta: BookMeta; content: BookContent } {
   const chapters: Chapter[] = raw.chapters.filter((c) => c.blocks.length).map((c, i) => {
     const head = c.blocks.slice(0, 4).find((b) => HEAD(b.k))
@@ -211,7 +219,7 @@ export function finishBook(raw: RawBook, file: File, format: string): { meta: Bo
   const meta: BookMeta = {
     id,
     title: (raw.title?.trim() || (/\p{L}{3,}\s+\S*\p{L}{3,}/u.test(fileTitle) && !/^(scan|img|doc|book|file|download)[\s\d-]*$/i.test(fileTitle) ? fileTitle : '') || raw.titleGuess?.trim() || fileTitle || 'Untitled').slice(0, 200),
-    author: (raw.author ?? '').trim().slice(0, 160),
+    author: tidyAuthor(raw.author ?? '').slice(0, 160),
     format,
     lang: /^(en|es)/i.test(raw.lang ?? '') ? raw.lang!.slice(0, 2).toLowerCase() : detectLang(sample).lang,
     addedAt: Date.now(),

@@ -165,7 +165,7 @@ export function BookPage() {
       <header className="bk-head">
         <button className="icon-btn" onClick={() => { location.hash = '#/library?books' }} aria-label="Back to Library"><ArrowLeft size={21} /></button>
         <div className="bk-head-t">
-          <div className="bk-head-book">{meta.title}</div>
+          <div className="bk-head-book">{meta.title.split(/\s*[:—–]\s+|\s*:\s*/)[0] || meta.title}</div>
           <div className="bk-head-ch">{shortTitle(chapter.title)}</div>
         </div>
         <button className="icon-btn" onClick={() => setSheet('search')} aria-label="Search this book"><Search size={20} /></button>
