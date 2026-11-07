@@ -1,3 +1,24 @@
+# Logos for Android: every push to «source» that touches android/** builds the
+# shell and publishes release android-<run>, where <run> is this workflows run
+# number (it is also the shells versionCode: App info shows version 1.<run>).
+#
+# Signing happens INSIDE the gradle build (android/app/build.gradle.kts reads
+# android/logos.p12 with alias «logos» and the KS_PASS environment variable)
+# and is impossible without the key: the build fails when the secrets are
+# missing, by design -- there is no unsigned fallback. The decoded .p12 only
+# exists inside the runner and is removed in the same job.
+#
+# The secrets LOGOS_KS_B64 (base64 of the keystore .p12) and LOGOS_KS_PASS
+# live as ENVIRONMENT secrets of the environments «release» -- loaded by
+# Oscar himself from the master key archive, never through chat -- and the
+# release environment requires Oscars approval, so the job waits for his tap
+# in the Actions UI before checkout even starts: no push can turn into a
+# signed release by itself. This also repairs a pipeline that had not run in
+# a long while: every recent run (10-14) died BEFORE any job started because
+# the signing steps name carried an unquoted colon, which the workflow
+# parser rejects -- and the secrets were never loaded either, so android-2
+# stayed the last published shell release. The step name is quoted now.
+#
 name: Logos for Android
 on:
   push:
@@ -8,6 +29,7 @@ permissions:
   contents: write
 jobs:
   build:
+    environment: release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,7 +37,7 @@ jobs:
         with: { distribution: temurin, java-version: '17' }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: '8.9' }
-      - name: Signing key from secrets (no fallback: the build fails without them)
+      - name: "Signing key from secrets (no fallback -- the build fails without them)"
         env:
           KS_B64: ${{ secrets.LOGOS_KS_B64 }}
           KS_PASS: ${{ secrets.LOGOS_KS_PASS }}
