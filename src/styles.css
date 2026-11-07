@@ -577,8 +577,11 @@ html[data-immersive] .play-btn { box-shadow: 0 22px 46px -14px var(--accent-glow
 .lf-n { font-size: 11px; font-weight: 700; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; display: inline-grid; place-items: center; background: var(--surface-3); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .chip.accent .lf-n { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
 .lib-sort { display: flex; align-items: center; justify-content: space-between; margin: 8px 2px 12px; }
-.lib-sort select { appearance: none; -webkit-appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); font: inherit; font-size: 13px; font-weight: 600; height: 32px; padding: 0 28px 0 12px; border-radius: 99px; outline: 0;
-  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: calc(100% - 15px) 14px, calc(100% - 10px) 14px; background-size: 5px 5px; background-repeat: no-repeat; }
+/* 1.4.49: the sort control is a button opening the app's Sheet (MenuSelect), not a native <select>. */
+.menu-select { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); font: inherit; font-size: 13px; font-weight: 600; height: 32px; padding: 0 10px 0 12px; border-radius: 99px; outline: 0; cursor: pointer; }
+.menu-select svg { opacity: .65; flex: none; }
+.menu-list button .pick-check { margin-left: auto; color: var(--accent); }
+.menu-list button.on { font-weight: 600; }
 .clip { position: relative; transition: border-color .25s, background .25s, opacity .25s, transform .18s var(--ease); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .clip.sel { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 7%, var(--bg-3)); }
 .clip.is-done .clip-title { color: var(--text-2); }
