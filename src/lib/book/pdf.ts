@@ -29,6 +29,56 @@ const SMALL = new Set(['a', 'an', 'the', 'of', 'and', 'or', 'in', 'on', 'to', 'f
 const titleCase = (t: string) => (t === t.toUpperCase() && /\p{Lu}{3}/u.test(t) ? t.split(' ').map((W, i) => { if (/^[IVXLC]+\.?$/.test(W)) return W; const w = W.toLowerCase(); return i && SMALL.has(w) && !/^[IVXLC\d]+\.?$/.test(t.split(' ')[i - 1]) ? w : w.charAt(0).toUpperCase() + w.slice(1) }).join(' ') : t)
 const median = (a: number[]) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] }
 
+/* OCR fallback — ONLY for pages whose text layer is empty or nearly empty
+   (scanned pages); typed pages never pay for it. One Tesseract worker
+   (English + Spanish; engine and language data vendored under public/ocr, so
+   it also works offline once fetched) is created lazily on the first page
+   that needs it and terminated when parsing ends. OCR lines are converted
+   into the same Line shape the text layer produces, so segmentation,
+   headings, chapters and the cover-title pass treat a scanned book exactly
+   like a typed one. Checkbox grids and seals still come out rough — this is
+   the rescue for otherwise unreadable files, not a replacement layer. */
+type TessWorker = { recognize: (img: unknown, opts?: unknown, out?: unknown) => Promise<{ data: any }>; terminate: () => Promise<unknown> }
+let tess: Promise<TessWorker> | null = null
+const ocrWorker = () => (tess ??= (async () => {
+  const { createWorker } = (await import('tesseract.js')) as unknown as { createWorker: (...a: any[]) => Promise<TessWorker> }
+  const base = `${import.meta.env.BASE_URL}ocr/`
+  return createWorker('eng+spa', 1, { workerPath: `${base}worker.min.js`, corePath: base, langPath: base, logger: () => {} })
+})())
+const endOcr = () => { if (tess) { const t = tess; tess = null; void t.then((w) => w.terminate()).catch(() => {}) } }
+
+async function ocrLines(page: any, p: number): Promise<Line[]> {
+  const scale = 3
+  const vp = page.getViewport({ scale })
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height)
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+  await page.render({ canvas, canvasContext: ctx, viewport: vp }).promise
+  // A truly blank page is not worth seconds of OCR.
+  const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+  let ink = 0, n = 0
+  for (let i = 0; i < px.length; i += 4 * 37) { n++; if ((px[i] + px[i + 1] + px[i + 2]) / 3 < 200) ink++ }
+  if (ink / n < 0.002) return []
+  const w = await ocrWorker()
+  const { data } = await w.recognize(canvas, {}, { blocks: true })
+  const pageH = vp.height / scale, pageW = vp.width / scale
+  const out: Line[] = []
+  for (const b of data.blocks ?? []) for (const par of b.paragraphs ?? []) for (const ln of par.lines ?? []) {
+    const words = (ln.words ?? []).filter((x: any) => x.text && x.confidence >= 25)
+    if (!words.length) continue
+    const line: Line = { text: '', x: ln.bbox.x0 / scale, xEnd: ln.bbox.x1 / scale, y: pageH - ln.bbox.y1 / scale, h: Math.max(4, (ln.bbox.y1 - ln.bbox.y0) / scale), items: [], page: p }
+    for (const wd of words) { if (line.text) line.text += ' '; const s = line.text.length; line.text += wd.text; line.items.push({ s, e: line.text.length, x0: wd.bbox.x0 / scale, x1: wd.bbox.x1 / scale }) }
+    if (line.text.trim()) out.push(line)
+  }
+  if (!out.length && data.text?.trim()) {
+    // No geometry came back: keep the words, laid out plainly, rather than lose the page.
+    let y = pageH - 72
+    for (const t of data.text.split('\n')) { const text = t.trim(); if (!text) continue; out.push({ text, x: 54, xEnd: pageW - 54, y, h: 12, items: [{ s: 0, e: text.length, x0: 54, x1: pageW - 54 }], page: p }); y -= 15 }
+  }
+  return out
+}
+
 export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number, total: number) => void): Promise<RawBook> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
   const worker = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default
@@ -80,6 +130,11 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
     }
     if (cur && cur.text.trim()) lines.push(cur)
     for (const l of lines) { const lead = l.text.length - l.text.trimStart().length; l.text = l.text.trim(); if (lead) l.items.forEach((i) => { i.s = Math.max(0, i.s - lead); i.e = Math.max(0, i.e - lead) }) }
+    // Scanned page? When the text layer gave (almost) nothing, read the page
+    // with OCR instead — and only then; the rest of the pipeline can't tell.
+    if (lines.reduce((n2, l) => n2 + l.text.length, 0) < 30) {
+      try { step('Reading scanned pages (OCR)', p - 1, N); const o = await ocrLines(page, p); if (o.length) { lines.length = 0; lines.push(...o) } } catch { /* the page keeps whatever the text layer had */ }
+    }
     // Drop caps ("W" + "hen I was…") join their line; OCR noise lines go.
     const kept: Line[] = []
     for (let i = 0; i < lines.length; i++) {
@@ -105,9 +160,10 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
     page.cleanup()
   }
 
+  endOcr()
   const all = pages.flat()
   const chars = all.reduce((n, l) => n + l.text.length, 0)
-  if (chars < Math.max(200, N * 40)) throw new Error('This PDF is scanned pictures of pages, so it has no text to read.')
+  if (chars < Math.max(200, N * 40)) throw new Error('This PDF is scanned pictures of pages, and no text could be read from them.')
 
   // Running heads and feet: the same words at the top or bottom of many pages, even when
   // OCR garbles them a little ("24 I HOW THE MIND WORKS", "The M i d i Eye 231"). Page numbers: read, then dropped.
