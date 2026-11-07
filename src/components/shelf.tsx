@@ -192,7 +192,7 @@ function BookTile({ b, sort, onMore }: { b: BookMeta; sort: Sort; onMore: () => 
         <BookCover meta={b} />
         <span className="book-fmt">{b.format.toUpperCase()}</span>
         {b.fav && <span className="book-fav"><Star size={13} fill="currentColor" /></span>}
-        <span className={`book-temp ${b.temp ? 'is-temp' : ''}`} role="button" aria-label={b.temp ? `Keep ${b.title}` : `Keep ${b.title} only for now`} title={b.temp ? 'Keep this book' : 'Only for now — removed when you move to another book'} onClick={(e) => { e.stopPropagation(); void updateBook(b.id, { temp: !b.temp }) }}>{b.temp ? <><Pin size={11} /> Keep</> : <><Clock size={11} /> For now</>}</span>
+        <span className={`book-temp ${b.temp ? 'is-temp' : ''}`} role="button" aria-label={b.temp ? `Keep ${b.title}` : `Keep ${b.title} only once`} title={b.temp ? 'Keep this book' : 'Only once — removed when you move to another book'} onClick={(e) => { e.stopPropagation(); void updateBook(b.id, { temp: !b.temp }) }}>{b.temp ? <><Pin size={11} /> Keep</> : <><Clock size={11} /> Once</>}</span>
         <span className="book-prog"><i style={{ width: `${b.done ? 100 : pct}%` }} /></span>
       </button>
       <div className="book-tile-info">
@@ -226,10 +226,10 @@ export function KeepAskSheet() {
   const one = ask.titles.length === 1
   return (
     <Sheet open onClose={forNow} title={one ? 'Keep this book?' : `Keep these ${ask.titles.length} books?`}>
-      <p className="keepask-body">{one ? <>“{ask.titles[0]}” is here <b>for now</b> — it will be removed when you move to another book.</> : <>These books are here <b>for now</b> — each will be removed when you move to another book.</>}</p>
+      <p className="keepask-body"><b>Keep</b> saves it. <b>Once</b> removes it when you move to another book.</p>
       <div className="keepask-bar"><i key={ask.ids.join(',')} style={{ animationDuration: '5s' }} /></div>
       <div className="row" style={{ gap: 8 }}>
-        <button className="btn ghost grow" onClick={forNow}>For now · {left}</button>
+        <button className="btn ghost grow" onClick={forNow}>Once · {left}</button>
         <button className="btn primary grow" onClick={keep}><Pin size={16} /> Keep</button>
       </div>
     </Sheet>
@@ -248,7 +248,7 @@ function BookMenu({ b, onClose, onRename }: { b: BookMeta | null; onClose: () =>
       <div className="menu-list">
         <button onClick={run(() => openBook(b.id))}><BookOpen size={20} /> {b.progress > 0.002 ? 'Continue reading' : 'Start reading'}</button>
         <button onClick={run(() => updateBook(b.id, { fav: !b.fav }, false))}><Star size={20} /> {b.fav ? 'Remove from favorites' : 'Add to favorites'}</button>
-        <button onClick={run(() => updateBook(b.id, { temp: !b.temp }, false))}>{b.temp ? <Pin size={20} /> : <Clock size={20} />} {b.temp ? 'Keep this book' : 'Only for now'}</button>
+        <button onClick={run(() => updateBook(b.id, { temp: !b.temp }, false))}>{b.temp ? <Pin size={20} /> : <Clock size={20} />} {b.temp ? 'Keep this book' : 'Only once'}</button>
         <button onClick={run(() => updateBook(b.id, b.done ? { done: false } : { done: true, progress: 1 }, false))}><CircleCheck size={20} /> {b.done ? 'Mark as not finished' : 'Mark as finished'}</button>
         {b.progress > 0 && <button onClick={run(() => updateBook(b.id, { pos: { ch: 0, b: 0 }, progress: 0, done: false }, false))}><BookOpen size={20} /> Start over</button>}
         <button onClick={() => onRename(b)}><Pencil size={20} /> Rename</button>
