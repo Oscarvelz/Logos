@@ -11,7 +11,7 @@ import { settings } from '../lib/settings.ts'
 import { drafts } from '../lib/drafts.ts'
 import { navigate } from '../lib/router.ts'
 import { loadText, play as listenPlay } from '../player/listen.ts'
-import { Sheet, Seg, toast, useMediaQuery } from '../components/ui.tsx'
+import { MenuSelect, Sheet, Seg, toast, useMediaQuery } from '../components/ui.tsx'
 import { BookShelf, useBookPicker, importMany } from '../components/shelf.tsx'
 import { takeSharedFiles } from '../lib/book/import.ts'
 import { books } from '../lib/books.ts'
@@ -130,9 +130,7 @@ export function LibraryPage() {
           </div>
           <div className="lib-sort">
             <span className="muted small">{shown.length} shown</span>
-            <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort">
-              {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
+            <MenuSelect value={sort} onChange={setSort} label="Sort" options={SORTS.map((s) => ({ value: s.id, label: s.label }))} />
           </div>
         </>
       )}

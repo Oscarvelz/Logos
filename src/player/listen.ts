@@ -9,6 +9,7 @@ import { encodeWav, envelope, silence, trimSilence, concat } from '../lib/audio.
 import { engine, ensureModel, synthesize, promote } from '../engine/engine.ts'
 import { speakDevice, cancelDevice, deviceSpeechAvailable } from '../engine/device-voice.ts'
 import { stopClipPlayer, onClipPlay } from './clip.ts'
+import { nowReadingFor } from '../lib/book/nowreading.ts'
 import { alignWords } from './wordsync.ts'
 
 type Rendered = { blob: Blob; env: Float32Array; duration: number; voice: string }
@@ -669,14 +670,18 @@ function updateMediaSession() {
   const ms = navigator.mediaSession
   const v = voiceById(s.voices[s.current])
   const base = import.meta.env.BASE_URL
+  // 1.4.49 (Oscar): Android draws the notification / lock-screen card from this metadata —
+  // the app cannot style the card itself, only feed it. Title is the book's title when the
+  // text came from a book (the current sentence scrolled a random heading across the card),
+  // and the artwork is a dedicated full-bleed warm-charcoal-and-gold piece at absolute URLs,
+  // so the card takes the app's theme instead of a generic system blue.
+  const book = nowReadingFor(s.text)
+  const art = (file: string, sizes: string) => ({ src: new URL(`${base}${file}`, location.href).href, sizes, type: 'image/png' })
   ms.metadata = new MediaMetadata({
-    title: s.segments[s.current]?.text.slice(0, 90) ?? 'Logos',
+    title: book?.title ?? s.segments[s.current]?.text.slice(0, 90) ?? 'Logos',
     artist: `Logos · ${v?.name ?? 'Voice'}`,
     album: `Sentence ${s.current + 1} of ${s.segments.length}`,
-    artwork: [
-      { src: `${base}icon-192.png`, sizes: '192x192', type: 'image/png' },
-      { src: `${base}icon-512.png`, sizes: '512x512', type: 'image/png' },
-    ],
+    artwork: [art('media-artwork-512.png', '512x512'), art('media-artwork.png', '1024x1024')],
   })
   ms.playbackState = s.playing ? 'playing' : 'paused'
 }

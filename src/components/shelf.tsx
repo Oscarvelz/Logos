@@ -6,7 +6,7 @@ import { importBook, BOOK_ACCEPT } from '../lib/book/import.ts'
 import { setNowReading } from '../lib/book/nowreading.ts'
 import { drafts } from '../lib/drafts.ts'
 import { loadText, play } from '../player/listen.ts'
-import { Sheet, toast } from './ui.tsx'
+import { MenuSelect, Sheet, toast } from './ui.tsx'
 import { BookCover } from './bookcover.tsx'
 
 type Sort = 'recent' | 'added' | 'title' | 'author' | 'progress'
@@ -148,9 +148,9 @@ export function BookShelf({ onPick }: { onPick: () => void }) {
               <div className="cover-size" role="radiogroup" aria-label="Cover size">
                 {SIZES.map((z) => <button key={z.id} role="radio" aria-checked={size === z.id} aria-label={z.label} title={z.label} className={size === z.id ? 'on' : ''} onClick={() => setSize(z.id)}>{z.icon}</button>)}
               </div>
-              <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort books">
-                <option value="recent">Recently read</option><option value="added">Recently added</option><option value="title">Title</option><option value="author">Author</option><option value="progress">Progress</option>
-              </select>
+              <MenuSelect value={sort} onChange={setSort} label="Sort books" options={[
+                { value: 'recent', label: 'Recently read' }, { value: 'added', label: 'Recently added' }, { value: 'title', label: 'Title' }, { value: 'author', label: 'Author' }, { value: 'progress', label: 'Progress' },
+              ]} />
             </div>
           </div>
           <div className={`shelf-grid size-${size}`}>

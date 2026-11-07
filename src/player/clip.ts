@@ -41,7 +41,9 @@ export async function playClip(key: string, source: Blob | string, meta?: { titl
   if (startAt > 0) a.addEventListener('loadedmetadata', () => { if (isFinite(a.duration) && startAt < a.duration - 2) a.currentTime = startAt }, { once: true })
   if (meta && 'mediaSession' in navigator) {
     const base = import.meta.env.BASE_URL
-    navigator.mediaSession.metadata = new MediaMetadata({ title: meta.title, artist: meta.artist ?? 'Logos', artwork: [{ src: `${base}icon-512.png`, sizes: '512x512', type: 'image/png' }] })
+    // 1.4.49: same themed artwork as Listen (see listen.ts) — warm charcoal and gold, absolute URLs.
+    const art = (file: string, sizes: string) => ({ src: new URL(`${base}${file}`, location.href).href, sizes, type: 'image/png' })
+    navigator.mediaSession.metadata = new MediaMetadata({ title: meta.title, artist: meta.artist ?? 'Logos', artwork: [art('media-artwork-512.png', '512x512'), art('media-artwork.png', '1024x1024')] })
   }
   await a.play().catch(() => clipPlayer.set({ playing: false }))
 }

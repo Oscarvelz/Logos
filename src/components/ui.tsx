@@ -1,5 +1,5 @@
 import { isOriginalFavorite } from '../lib/settings.ts'
-import { Star } from 'lucide-react'
+import { Check, ChevronDown, Star } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { createStore, useStore } from '../lib/store.ts'
@@ -48,6 +48,34 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
       </div>
     </>,
     document.body,
+  )
+}
+
+/**
+ * A select that opens in the app's own Sheet instead of the platform's native
+ * menu (1.4.49, Oscar: Android's gray option sheet does not belong in a premium
+ * app). The closed control keeps the pill look the native select had.
+ */
+export function MenuSelect<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
+  const [open, setOpen] = useState(false)
+  const current = options.find((o) => o.value === value)
+  return (
+    <>
+      <button type="button" className="menu-select" aria-haspopup="dialog" aria-expanded={open} aria-label={label} onClick={() => setOpen(true)}>
+        <span>{current?.label ?? ''}</span>
+        <ChevronDown size={14} />
+      </button>
+      <Sheet open={open} onClose={() => setOpen(false)} title={label}>
+        <div className="menu-list" role="radiogroup" aria-label={label}>
+          {options.map((o) => (
+            <button key={o.value} type="button" role="radio" aria-checked={o.value === value} className={o.value === value ? 'on' : ''} onClick={() => { onChange(o.value); setOpen(false) }}>
+              <span>{o.label}</span>
+              {o.value === value && <Check size={18} className="pick-check" />}
+            </button>
+          ))}
+        </div>
+      </Sheet>
+    </>
   )
 }
 
