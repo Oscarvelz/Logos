@@ -319,15 +319,14 @@ function BottomBar({ meta, chapters, ch, progress, onPrev, onNext, onToc, onList
   }
   return (
     <div className="bk-bar">
-      <div className="bk-prog" ref={progRef} role="slider" aria-label="Book position" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(shown * 100)} tabIndex={0}
+      <div className="bk-prog" role="slider" aria-label="Book position" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(shown * 100)} tabIndex={0}
         onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); setDragF(fracFromEvent(e)) }}
         onPointerMove={(e) => { if (dragF !== null) setDragF(fracFromEvent(e)) }}
         onPointerUp={(e) => { if (dragF === null) return; const p = posAtProgress(meta, chapters, fracFromEvent(e)); setDragF(null); onSeek(p) }}
         onPointerCancel={() => setDragF(null)}
         onKeyDown={(e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); onSeek(posAtProgress(meta, chapters, progress + (e.key === 'ArrowRight' ? 0.05 : -0.05))) } }}>
-        <div className="bk-prog-track"><i style={{ width: `${shown * 100}%` }} /></div>
-        <span className="bk-prog-thumb" style={{ left: `${shown * 100}%` }} />
-        {dragF !== null && seekPos && <div className="bk-seek-tip" style={{ left: `clamp(58px, ${dragF * 100}%, calc(100% - 58px))` }}>{Math.round(dragF * 100)}% · {shortTitle(chapters[seekPos.ch].title)}</div>}
+        <div className="bk-prog-track" ref={progRef}><i style={{ width: `${shown * 100}%` }} /><span className="bk-prog-thumb" style={{ left: `${shown * 100}%` }} /></div>
+        {dragF !== null && seekPos && <div className="bk-seek-tip" style={{ left: `clamp(58px, calc(14px + ${dragF * 100}% - ${dragF * 28}px), calc(100% - 58px))` }}>{Math.round(dragF * 100)}% · {shortTitle(chapters[seekPos.ch].title)}</div>}
       </div>
       <button className="icon-btn" onClick={onPrev} disabled={ch === 0} aria-label="Previous chapter"><ChevronLeft size={22} /></button>
       <button className="bk-bar-mid" onClick={onToc}>
