@@ -160,6 +160,40 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
   for (const lines of pages) for (let i = 1; i < lines.length; i++) { const g = lines[i - 1].y - lines[i].y; if (g > 0 && Math.abs(lines[i].h - body) < body * 0.2) gaps.push(g) }
   const lineGap = median(gaps) || body * 1.3
 
+  // Cover title: the title as the book itself prints it, in the biggest type on its
+  // first pages. Read it straight from the lines, grouped by size — the block builder
+  // merges and renames too much to trust for this. A lone short word in the biggest
+  // type is the publisher's mark, not the title, so it never counts on its own.
+  const coverTitle = ((): string | undefined => {
+    const generic = /^(contents|table of contents|índice|indice|contenido|contenidos|sumario|preface|prefacio|introduction|introducción|foreword|prólogo|acknowledg\w+|bibliography|bibliografía|references|referencias|appendix|apéndice|copyright|edition|edición)$/i
+    for (let p = 0; p < Math.min(N, 3); p++) {
+      let lines = pages[p].filter((l) => l.h >= body * 1.8 && l.text.length >= 2 && l.text.length <= 110 && quality(l.text) >= 0.75 && !isHead(l.text) && !/^[\d\s.,–—-]+$/.test(l.text))
+      if (!lines.length) continue
+      // The publisher's mark can be the biggest type on the page, over the title:
+      // a lone short word, strictly bigger than everything else, is not the title.
+      const maxH = Math.max(...lines.map((l) => l.h))
+      if (lines.length > 1 && lines.some((l) => l.h < maxH)) lines = lines.filter((l) => l.h !== maxH || /\s/.test(l.text) || l.text.length > 6)
+      if (!lines.length) continue
+      const groups: Line[][] = []
+      for (const l of lines) {
+        const g = groups[groups.length - 1]
+        if (g && l.h >= g[0].h * 0.6 && l.h <= g[0].h * 1.6) g.push(l)
+        else groups.push([l])
+      }
+      let best: string | undefined, bestH = 0
+      for (const g of groups) {
+        const text = g.map((l) => l.text).join(' ').replace(/\s+/g, ' ').trim()
+        if (text.length < 4 || text.length > 150) continue
+        if (!/\s/.test(text) && text.length <= 6) continue   // a lone short word is the publisher's mark
+        if ((text.match(/\p{L}/gu) ?? []).length < 3) continue
+        if (generic.test(text.replace(/[.:]+$/, ''))) continue
+        if (g[0].h > bestH) { best = titleCase(text); bestH = g[0].h }
+      }
+      if (best) return best
+    }
+    return undefined
+  })()
+
   const blocks: Block[] = []
   let para: Block | null = null
   let prev: Line | null = null
@@ -387,5 +421,5 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
   void task.destroy()
 
   const metaTitle = info.Title && !/^(untitled|microsoft word|document|scan|\s*$)|\.(pdf|docx?|indd|qxd)$/i.test(info.Title.trim()) && quality(info.Title) >= 0.6 ? info.Title.trim() : undefined
-  return { title: metaTitle ?? headTitle, titleGuess, author: info.Author, lang: info.Language, cover, pages: N, chapters, anchors, toc: toc.filter((t) => t.to.startsWith('x:')), printed }
+  return { title: metaTitle ?? coverTitle ?? headTitle, titleGuess, author: info.Author, lang: info.Language, cover, pages: N, chapters, anchors, toc: toc.filter((t) => t.to.startsWith('x:')), printed }
 }
