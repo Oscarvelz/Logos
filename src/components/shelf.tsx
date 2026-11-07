@@ -131,7 +131,7 @@ export function BookShelf({ onPick }: { onPick: () => void }) {
             </div>
           </div>
           <div className={`shelf-grid size-${size}`}>
-            {shown.map((b) => <BookTile key={b.id} b={b} onMore={() => setMenu(b)} />)}
+            {shown.map((b) => <BookTile key={b.id} b={b} sort={sort} onMore={() => setMenu(b)} />)}
             <button className="shelf-add" onClick={onPick} aria-label="Import a book"><BookPlus size={26} /><span>Import</span></button>
           </div>
         </>
@@ -143,7 +143,17 @@ export function BookShelf({ onPick }: { onPick: () => void }) {
   )
 }
 
-function BookTile({ b, onMore }: { b: BookMeta; onMore: () => void }) {
+/** When a book was last read (or added): "Today", "Yesterday", "3 d ago", or "Nov 2". */
+const whenRead = (ts: number) => {
+  const d = new Date(ts); const now = new Date()
+  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000)
+  if (days <= 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 7) return `${days} d ago`
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+function BookTile({ b, sort, onMore }: { b: BookMeta; sort: Sort; onMore: () => void }) {
   const press = useRef<number | null>(null)
   const long = useRef(false)
   const start = () => { long.current = false; press.current = window.setTimeout(() => { long.current = true; onMore() }, 480) }
@@ -161,7 +171,7 @@ function BookTile({ b, onMore }: { b: BookMeta; onMore: () => void }) {
       <div className="book-tile-info">
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="book-tile-title">{b.title}</div>
-          <div className="book-tile-sub">{b.done ? 'Finished' : pct > 0 ? `${pct}%` : 'New'}{b.author ? ` · ${b.author}` : ''}</div>
+          <div className="book-tile-sub">{b.done ? 'Finished' : pct > 0 ? `${pct}%` : 'New'}{sort === 'recent' ? ` · ${whenRead(b.openedAt ?? b.addedAt)}` : ''}{b.author ? ` · ${b.author}` : ''}</div>
         </div>
         <button className="icon-btn book-more" onClick={onMore} aria-label={`More for ${b.title}`}><MoreHorizontal size={18} /></button>
       </div>
