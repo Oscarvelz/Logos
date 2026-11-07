@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, BookPlus, Grid2x2, Grid3x3, Square, CircleCheck, MoreHorizontal, Pencil, Search, Star, Trash2, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
-import { books, refreshBooks, updateBook, deleteBook, putBook, type BookMeta } from '../lib/books.ts'
+import { books, refreshBooks, updateBook, deleteBook, putBook, getContent, type BookMeta, type Pos } from '../lib/books.ts'
 import { importBook, BOOK_ACCEPT } from '../lib/book/import.ts'
+import { setNowReading } from '../lib/book/nowreading.ts'
+import { drafts } from '../lib/drafts.ts'
+import { loadText, play } from '../player/listen.ts'
 import { Sheet, toast } from './ui.tsx'
 import { BookCover } from './bookcover.tsx'
 
@@ -18,7 +21,7 @@ const FILTERS: { id: Filter; label: string; test: (b: BookMeta) => boolean }[] =
 
 export const openBook = (id: string) => { location.hash = `#/book/${encodeURIComponent(id)}` }
 
-/** Import one or more book files, one after another; opens the book when there is only one. */
+/** Import one or more book files, one after another; a single imported book opens in Listen and starts reading aloud. */
 export async function importMany(list: File[]) {
   let last: BookMeta | null = null
   let added = 0
@@ -26,7 +29,27 @@ export async function importMany(list: File[]) {
     try { last = await importBook(f, list.length > 1 ? `${i + 1} of ${list.length}` : undefined); added++; if (list.length === 1) toast(`Added ${last.title}`) } catch (e) { toast((e as Error).message || `Couldn’t read ${f.name}`, undefined, 6000) }
   }
   if (list.length > 1 && added) toast(`Added ${added} book${added === 1 ? '' : 's'}`)
-  if (last && list.length === 1) openBook(last.id)
+  if (last && list.length === 1) void playImported(last)
+}
+
+/** Take a freshly imported book straight to Listen and read it from the beginning, text following along. */
+async function playImported(meta: BookMeta) {
+  const content = await getContent(meta.id)
+  const chapters = content?.chapters ?? []
+  const parts: string[] = []
+  const where: Pos[] = []
+  let n = 0
+  for (let c = 0; c < chapters.length && n < 40000; c++) {
+    const blocks = chapters[c].blocks
+    for (let i = 0; i < blocks.length && n < 40000; i++) { parts.push(blocks[i].t); where.push({ ch: c, b: i }); n += blocks[i].t.length }
+  }
+  const text = parts.join('\n\n')
+  if (!text.trim()) { openBook(meta.id); return }
+  setNowReading(meta.id, meta.title, parts, where)
+  drafts.set({ listen: text })
+  loadText(text)
+  void play()
+  location.hash = '#/listen'
 }
 
 /** Pick and import one or more book files. */
