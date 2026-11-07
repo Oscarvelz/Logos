@@ -743,9 +743,9 @@ html[data-immersive] .play-btn { box-shadow: 0 22px 46px -14px var(--accent-glow
 .bk-end-glyph { font-family: var(--font-display); font-size: 54px; color: var(--accent); }
 .bk-end-t { font-family: var(--font-display); font-size: 24px; margin: 4px 0 18px; }
 
-.bk-bar { position: fixed; z-index: 34; left: 10px; right: 10px; bottom: calc(var(--safe-b) + 10px); display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 4px; border-radius: 22px;
+.bk-bar { position: fixed; z-index: 34; left: 10px; right: 10px; bottom: calc(var(--safe-b) + 10px); display: flex; align-items: center; gap: 4px; padding: 18px 6px 6px 4px; border-radius: 22px;
   background: var(--glass); backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4); border: 1px solid var(--line-2); box-shadow: 0 18px 40px -18px rgba(0,0,0,.8); overflow: hidden; animation: miniIn .4s var(--ease) both; }
-.bk-prog { position: absolute; left: 0; right: 0; top: 0; height: 24px; touch-action: none; cursor: pointer; z-index: 2; outline: none; }
+.bk-prog { position: absolute; left: 0; right: 0; top: 0; height: 20px; touch-action: none; cursor: pointer; z-index: 2; outline: none; }
 .bk-prog-track { position: absolute; left: 14px; right: 14px; top: 8px; height: 4px; border-radius: 99px; background: var(--surface-2); }
 .bk-prog-track i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); box-shadow: 0 0 10px var(--accent-glow); }
 .bk-prog-thumb { position: absolute; top: 50%; width: 13px; height: 13px; border-radius: 50%; background: var(--accent); transform: translate(-50%, -50%); box-shadow: 0 1px 6px rgba(0,0,0,.5); pointer-events: none; }
@@ -755,7 +755,7 @@ html[data-immersive] .play-btn { box-shadow: 0 22px 46px -14px var(--accent-glow
 .bk-bar-mid span { font-size: 11px; color: var(--muted); font-weight: 600; white-space: nowrap; }
 .bk-listen { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px 0 12px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); font-weight: 750; font-size: 14px; flex: none; box-shadow: 0 6px 20px -8px var(--accent-glow); }
 .bk-listen:active { transform: scale(.95); }
-[data-book] .mini { bottom: calc(var(--safe-b) + 78px); }
+[data-book] .mini { bottom: calc(var(--safe-b) + 90px); }
 .bk-actions { position: fixed; z-index: 36; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + 80px); display: flex; align-items: center; gap: 4px; padding: 6px; border-radius: 99px;
   background: var(--glass); border: 1px solid var(--line-2); backdrop-filter: blur(22px); box-shadow: 0 18px 40px -16px rgba(0,0,0,.85); animation: popUp .28s var(--ease) both; white-space: nowrap; }
 @keyframes popUp { from { opacity: 0; transform: translate(-50%, 10px); } }
