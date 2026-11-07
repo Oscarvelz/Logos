@@ -7,6 +7,8 @@ import { isModelCached, ensureModel, lastLoadCrashed, removeLegacyEngine } from 
 import { refreshLibrary } from './lib/library.ts'
 import { BottomNav, SideRail, StatusPill, MiniPlayer, BrandMark } from './components/chrome.tsx'
 import { Toasts } from './components/ui.tsx'
+import { sweepTempBooks } from './lib/books.ts'
+import { KeepAskSheet } from './components/shelf.tsx'
 import { ListenPage } from './pages/ListenPage.tsx'
 import { CreatePage } from './pages/CreatePage.tsx'
 import { LibraryPage } from './pages/LibraryPage.tsx'
@@ -33,6 +35,7 @@ export default function App() {
   useEffect(() => {
     installMediaSession()
     void refreshLibrary()
+    void sweepTempBooks()
     // Model already on this device? Warm it up in the background (offline-ready).
     // Skipped when the last start never finished (the tab crashed), so a bad
     // load can never turn into a reload loop; play still loads it on demand.
@@ -87,6 +90,7 @@ export default function App() {
       <MiniPlayer />
       <BottomNav />
       <Toasts />
+      <KeepAskSheet />
     </>
   )
 }

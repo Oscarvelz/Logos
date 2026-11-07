@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, AudioLines, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, CornerUpLeft, ListTree, Loader2, Pause, Play, Search, Type, X } from 'lucide-react'
-import { getBook, getContent, updateBook, progressAt, posAtProgress, type BookMeta, type Block, type Chapter, type Pos } from '../lib/books.ts'
+import { getBook, getContent, updateBook, progressAt, posAtProgress, sweepTempBooks, type BookMeta, type Block, type Chapter, type Pos } from '../lib/books.ts'
 import { drafts } from '../lib/drafts.ts'
 import { loadText, play, listen, toggle } from '../player/listen.ts'
 import { useStore } from '../lib/store.ts'
@@ -53,6 +53,7 @@ export function BookPage() {
       const start = { ch: Math.min(m.pos.ch, c.chapters.length - 1), b: m.pos.b }
       setCh(start.ch); setPos(start); setGoal({ b: start.b, n: Date.now() })
       void updateBook(id, { openedAt: Date.now() }, false)
+      void sweepTempBooks()
     })()
     return () => { live = false }
   }, [id])
@@ -137,6 +138,7 @@ export function BookPage() {
     }
     const text = parts.join('\n\n')
     setNowReading(meta.id, meta.title, parts, where)
+    void sweepTempBooks()
     drafts.set({ listen: text })
     loadText(text)
     void play()

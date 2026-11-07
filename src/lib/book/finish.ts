@@ -223,6 +223,7 @@ export function finishBook(raw: RawBook, file: File, format: string): { meta: Bo
     format,
     lang: /^(en|es)/i.test(raw.lang ?? '') ? raw.lang!.slice(0, 2).toLowerCase() : detectLang(sample).lang,
     addedAt: Date.now(),
+    temp: true, // born "for now": the import sheet offers Keep; unkept, a book lives only while it holds the floor
     pos: { ch: 0, b: 0 },
     progress: 0,
     words,

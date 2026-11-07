@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, BookPlus, Grid2x2, Grid3x3, Square, CircleCheck, MoreHorizontal, Pencil, Search, Star, Trash2, X } from 'lucide-react'
+import { BookOpen, BookPlus, Grid2x2, Grid3x3, Square, CircleCheck, MoreHorizontal, Pencil, Search, Star, Trash2, X, Pin, Clock } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
-import { books, refreshBooks, updateBook, deleteBook, putBook, getContent, type BookMeta, type Pos } from '../lib/books.ts'
+import { books, refreshBooks, updateBook, deleteBook, putBook, getContent, sweepTempBooks, type BookMeta, type Pos } from '../lib/books.ts'
 import { importBook, BOOK_ACCEPT } from '../lib/book/import.ts'
 import { setNowReading } from '../lib/book/nowreading.ts'
+import { keepAsk, askKeep } from '../lib/book/keepask.ts'
 import { drafts } from '../lib/drafts.ts'
 import { loadText, play } from '../player/listen.ts'
 import { MenuSelect, Sheet, toast } from './ui.tsx'
@@ -24,12 +25,13 @@ export const openBook = (id: string) => { location.hash = `#/book/${encodeURICom
 /** Import one or more book files, one after another; a single imported book opens in Listen and starts reading aloud. */
 export async function importMany(list: File[]) {
   let last: BookMeta | null = null
-  let added = 0
+  const addedList: BookMeta[] = []
   for (const [i, f] of list.entries()) {
-    try { last = await importBook(f, list.length > 1 ? `${i + 1} of ${list.length}` : undefined); added++; if (list.length === 1) toast(`Added ${last.title}`) } catch (e) { toast((e as Error).message || `Couldn’t read ${f.name}`, undefined, 6000) }
+    try { last = await importBook(f, list.length > 1 ? `${i + 1} of ${list.length}` : undefined); addedList.push(last); if (list.length === 1) toast(`Added ${last.title}`) } catch (e) { toast((e as Error).message || `Couldn’t read ${f.name}`, undefined, 6000) }
   }
-  if (list.length > 1 && added) toast(`Added ${added} book${added === 1 ? '' : 's'}`)
+  if (list.length > 1 && addedList.length) toast(`Added ${addedList.length} book${addedList.length === 1 ? '' : 's'}`)
   if (last && list.length === 1) void playImported(last)
+  askKeep(addedList)
 }
 
 /** Take a freshly imported book straight to Listen and read it from the beginning, text following along. */
@@ -46,6 +48,7 @@ async function playImported(meta: BookMeta) {
   const text = parts.join('\n\n')
   if (!text.trim()) { openBook(meta.id); return }
   setNowReading(meta.id, meta.title, parts, where)
+  void sweepTempBooks()
   drafts.set({ listen: text })
   loadText(text)
   void play()
@@ -189,6 +192,7 @@ function BookTile({ b, sort, onMore }: { b: BookMeta; sort: Sort; onMore: () => 
         <BookCover meta={b} />
         <span className="book-fmt">{b.format.toUpperCase()}</span>
         {b.fav && <span className="book-fav"><Star size={13} fill="currentColor" /></span>}
+        <span className={`book-temp ${b.temp ? 'is-temp' : ''}`} role="button" aria-label={b.temp ? `Keep ${b.title}` : `Keep ${b.title} only for now`} title={b.temp ? 'Keep this book' : 'Only for now — removed when you move to another book'} onClick={(e) => { e.stopPropagation(); void updateBook(b.id, { temp: !b.temp }) }}>{b.temp ? <><Pin size={11} /> Keep</> : <><Clock size={11} /> For now</>}</span>
         <span className="book-prog"><i style={{ width: `${b.done ? 100 : pct}%` }} /></span>
       </button>
       <div className="book-tile-info">
@@ -199,6 +203,36 @@ function BookTile({ b, sort, onMore }: { b: BookMeta; sort: Sort; onMore: () => 
         <button className="icon-btn book-more" onClick={onMore} aria-label={`More for ${b.title}`}><MoreHorizontal size={18} /></button>
       </div>
     </div>
+  )
+}
+
+/** After an import: five seconds to say Keep, or the books stay "for now". */
+export function KeepAskSheet() {
+  const { ask } = useStore(keepAsk)
+  const [left, setLeft] = useState(5)
+  useEffect(() => {
+    if (!ask) return
+    setLeft(5)
+    const t0 = Date.now()
+    const iv = setInterval(() => {
+      const s = 5 - Math.floor((Date.now() - t0) / 1000)
+      if (s <= 0) { clearInterval(iv); keepAsk.set({ ask: null }) } else setLeft(s)
+    }, 200)
+    return () => clearInterval(iv)
+  }, [ask])
+  if (!ask) return null
+  const keep = () => { for (const id of ask.ids) void updateBook(id, { temp: false }, false); void refreshBooks(); keepAsk.set({ ask: null }) }
+  const forNow = () => keepAsk.set({ ask: null })
+  const one = ask.titles.length === 1
+  return (
+    <Sheet open onClose={forNow} title={one ? 'Keep this book?' : `Keep these ${ask.titles.length} books?`}>
+      <p className="keepask-body">{one ? <>“{ask.titles[0]}” is here <b>for now</b> — it will be removed when you move to another book.</> : <>These books are here <b>for now</b> — each will be removed when you move to another book.</>}</p>
+      <div className="keepask-bar"><i key={ask.ids.join(',')} style={{ animationDuration: '5s' }} /></div>
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn ghost grow" onClick={forNow}>For now · {left}</button>
+        <button className="btn primary grow" onClick={keep}><Pin size={16} /> Keep</button>
+      </div>
+    </Sheet>
   )
 }
 
@@ -214,6 +248,7 @@ function BookMenu({ b, onClose, onRename }: { b: BookMeta | null; onClose: () =>
       <div className="menu-list">
         <button onClick={run(() => openBook(b.id))}><BookOpen size={20} /> {b.progress > 0.002 ? 'Continue reading' : 'Start reading'}</button>
         <button onClick={run(() => updateBook(b.id, { fav: !b.fav }, false))}><Star size={20} /> {b.fav ? 'Remove from favorites' : 'Add to favorites'}</button>
+        <button onClick={run(() => updateBook(b.id, { temp: !b.temp }, false))}>{b.temp ? <Pin size={20} /> : <Clock size={20} />} {b.temp ? 'Keep this book' : 'Only for now'}</button>
         <button onClick={run(() => updateBook(b.id, b.done ? { done: false } : { done: true, progress: 1 }, false))}><CircleCheck size={20} /> {b.done ? 'Mark as not finished' : 'Mark as finished'}</button>
         {b.progress > 0 && <button onClick={run(() => updateBook(b.id, { pos: { ch: 0, b: 0 }, progress: 0, done: false }, false))}><BookOpen size={20} /> Start over</button>}
         <button onClick={() => onRename(b)}><Pencil size={20} /> Rename</button>
