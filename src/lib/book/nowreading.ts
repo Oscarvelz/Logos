@@ -13,6 +13,11 @@ export function setNowReading(id: string, title: string, paras: string[], pos: P
   try { localStorage.setItem(KEY, JSON.stringify({ id, title, key: keyOf(paras.join('\n\n')), starts, pos })) } catch { /* full */ }
 }
 
+/** The id of the book at the play position, whatever text is loaded now. */
+export function nowReadingId(): string | null {
+  try { return (JSON.parse(localStorage.getItem(KEY) ?? 'null') as NowReading | null)?.id ?? null } catch { return null }
+}
+
 /** The book behind this Listen text, if it came from one. */
 export function nowReadingFor(text: string): NowReading | null {
   try {

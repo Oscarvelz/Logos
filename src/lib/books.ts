@@ -1,6 +1,7 @@
 // Books: imported EPUB, PDF, Word, FB2, text and web files, kept on this device
 // (IndexedDB "logos-books": `books` holds what the shelf shows, `content` the text).
 import { createStore } from './store.ts'
+import { nowReadingId } from './book/nowreading.ts'
 
 export type Kind = 'h1' | 'h2' | 'h3' | 'p' | 'q' | 'li' | 'pre'
 /** A link inside a block: `to` is "ch:b" (a place in this book) or an http(s) address. */
@@ -27,6 +28,8 @@ export type BookMeta = {
   cover?: Blob
   fav?: boolean
   done?: boolean
+  /** Imported "for now": removed once another book holds the floor, unless kept. */
+  temp?: boolean
   size: number
   pages?: number
   bookmarks?: { ch: number; b: number; at: number; text: string }[]
@@ -93,6 +96,20 @@ export async function deleteBook(id: string): Promise<{ meta: BookMeta; content:
   await run('content', 'readwrite', (s) => s.delete(id))
   await refreshBooks()
   return meta && content ? { meta, content } : null
+}
+
+/** Temporary books — imported "for now" — are removed once another book holds
+    the floor. The floor is the book at the play position (Listen) together with
+    the book most recently opened; every other temporary book goes. Runs when
+    the current book changes and when the app starts. */
+export async function sweepTempBooks(): Promise<void> {
+  if (!books.get().loaded) await refreshBooks()
+  const list = books.get().list
+  const keep = new Set<string>()
+  const nr = nowReadingId(); if (nr) keep.add(nr)
+  const current = [...list].sort((a, b) => (b.openedAt ?? b.addedAt) - (a.openedAt ?? a.addedAt))[0]
+  if (current) keep.add(current.id)
+  for (const b of list) if (b.temp && !keep.has(b.id)) { try { await deleteBook(b.id) } catch { /* already gone */ } }
 }
 
 export const wordsIn = (t: string) => (t.match(/[\p{L}\p{N}]+(?:['’][\p{L}]+)*/gu) ?? []).length
