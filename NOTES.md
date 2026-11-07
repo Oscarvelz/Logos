@@ -159,3 +159,7 @@ Oscar's OCR'd PDF (How the Mind Works) imported badly: blurb as title, running h
 
 ## 1.4.40 (2026-11-06)
 - Listen Paste button now loads the clipboard text and starts playing at once (was: open editor and only prepare). Test test/pastetest.mjs (stubs LogosAndroid.clipboard). Android signing moved to secrets LOGOS_KS_B64/LOGOS_KS_PASS, key v2 (v1 was public).
+
+## 1.4.41 (2026-11-06, Muse, at Oscar's request)
+- Books shelf grid: tile titles clamped to two lines with an ellipsis and a fixed two-line height, words no longer break mid-word (was overflow-wrap: anywhere, unlimited lines, uneven cards). Full title still shows in the reader and the book menu.
+- Recently read sort: the tile sub-line now also says when the book was last read (Today / Yesterday / N d ago / date), so the order is visible on the cards.
