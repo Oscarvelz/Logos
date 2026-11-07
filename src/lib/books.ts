@@ -106,3 +106,21 @@ export function progressAt(meta: Pick<BookMeta, 'chWords' | 'words'>, chapters: 
   if (ch) for (let i = 0; i < Math.min(p.b, ch.blocks.length); i++) before += wordsIn(ch.blocks[i].t)
   return Math.min(1, before / meta.words)
 }
+
+/** The place a share of the book (0..1) lands on, by words: the inverse of progressAt. */
+export function posAtProgress(meta: Pick<BookMeta, 'chWords' | 'words'>, chapters: Chapter[], f: number): Pos {
+  if (!meta.words || !chapters.length) return { ch: 0, b: 0 }
+  let within = Math.max(0, Math.min(1, f)) * meta.words
+  for (let c = 0; c < chapters.length; c++) {
+    const cw = meta.chWords[c] ?? 0
+    if (within > cw && c < chapters.length - 1) { within -= cw; continue }
+    const ch = chapters[c]
+    for (let b = 0; b < ch.blocks.length; b++) {
+      const bw = wordsIn(ch.blocks[b].t)
+      if (within <= bw || b === ch.blocks.length - 1) return { ch: c, b }
+      within -= bw
+    }
+    return { ch: c, b: 0 }
+  }
+  return { ch: chapters.length - 1, b: 0 }
+}

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, AudioLines, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, CornerUpLeft, ListTree, Loader2, Pause, Play, Search, Type, X } from 'lucide-react'
-import { getBook, getContent, updateBook, progressAt, type BookMeta, type Block, type Chapter, type Pos } from '../lib/books.ts'
+import { getBook, getContent, updateBook, progressAt, posAtProgress, type BookMeta, type Block, type Chapter, type Pos } from '../lib/books.ts'
 import { drafts } from '../lib/drafts.ts'
 import { loadText, play, listen, toggle } from '../player/listen.ts'
 import { useStore } from '../lib/store.ts'
@@ -215,7 +215,7 @@ export function BookPage() {
             </div>
           )}
           <BottomBar meta={meta} chapters={chapters} ch={ch} progress={progress} onPrev={() => jump({ ch: ch - 1, b: 0 })} onNext={() => jump({ ch: ch + 1, b: 0 })}
-            onToc={() => setSheet('toc')} onListen={() => listenFrom(pos.ch === ch ? pos.b : 0)} />
+            onToc={() => setSheet('toc')} onListen={() => listenFrom(pos.ch === ch ? pos.b : 0)} onSeek={(p) => jump(p, { push: true })} />
         </>,
         document.body,
       )}
@@ -302,19 +302,37 @@ function ChapterEnd({ chapters, ch, meta, onNext, onFinish }: { chapters: Chapte
   )
 }
 
-function BottomBar({ meta, chapters, ch, progress, onPrev, onNext, onToc, onListen }: { meta: BookMeta; chapters: Chapter[]; ch: number; progress: number; onPrev: () => void; onNext: () => void; onToc: () => void; onListen: () => void }) {
+function BottomBar({ meta, chapters, ch, progress, onPrev, onNext, onToc, onListen, onSeek }: { meta: BookMeta; chapters: Chapter[]; ch: number; progress: number; onPrev: () => void; onNext: () => void; onToc: () => void; onListen: () => void; onSeek: (p: Pos) => void }) {
   const s = useStore(listen)
-  const left = Math.max(0, meta.words * (1 - progress))
+  const [dragF, setDragF] = useState<number | null>(null)
+  const progRef = useRef<HTMLDivElement>(null)
+  const shown = dragF ?? progress
+  const left = Math.max(0, meta.words * (1 - shown))
   const mins = Math.round(left / 230)
   const fromHere = s.active && nowReadingFor(s.text)?.id === meta.id
   const timeLeft = mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min left` : `${Math.max(1, mins)} min left`
+  const seekPos = dragF !== null ? posAtProgress(meta, chapters, dragF) : null
+  const fracFromEvent = (e: React.PointerEvent) => {
+    const el = progRef.current; if (!el) return 0
+    const r = el.getBoundingClientRect()
+    return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))
+  }
   return (
     <div className="bk-bar">
-      <div className="bk-prog"><i style={{ width: `${progress * 100}%` }} /></div>
+      <div className="bk-prog" ref={progRef} role="slider" aria-label="Book position" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(shown * 100)} tabIndex={0}
+        onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); setDragF(fracFromEvent(e)) }}
+        onPointerMove={(e) => { if (dragF !== null) setDragF(fracFromEvent(e)) }}
+        onPointerUp={(e) => { if (dragF === null) return; const p = posAtProgress(meta, chapters, fracFromEvent(e)); setDragF(null); onSeek(p) }}
+        onPointerCancel={() => setDragF(null)}
+        onKeyDown={(e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); onSeek(posAtProgress(meta, chapters, progress + (e.key === 'ArrowRight' ? 0.05 : -0.05))) } }}>
+        <div className="bk-prog-track"><i style={{ width: `${shown * 100}%` }} /></div>
+        <span className="bk-prog-thumb" style={{ left: `${shown * 100}%` }} />
+        {dragF !== null && seekPos && <div className="bk-seek-tip" style={{ left: `clamp(58px, ${dragF * 100}%, calc(100% - 58px))` }}>{Math.round(dragF * 100)}% · {shortTitle(chapters[seekPos.ch].title)}</div>}
+      </div>
       <button className="icon-btn" onClick={onPrev} disabled={ch === 0} aria-label="Previous chapter"><ChevronLeft size={22} /></button>
       <button className="bk-bar-mid" onClick={onToc}>
-        <b>{Math.round(progress * 100)}%</b>
-        <span>{progress >= 0.995 ? 'Finished' : timeLeft} · {ch + 1}/{chapters.length}</span>
+        <b>{Math.round(shown * 100)}%</b>
+        <span>{seekPos ? `${seekPos.ch + 1}/${chapters.length}` : progress >= 0.995 ? 'Finished' : `${timeLeft} · ${ch + 1}/${chapters.length}`}</span>
       </button>
       {fromHere
         ? <div className="bk-duo">
