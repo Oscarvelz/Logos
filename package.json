@@ -1,7 +1,7 @@
 {
   "name": "logos",
   "private": true,
-  "version": "1.4.47",
+  "version": "1.4.48",
   "description": "Logos — a fast, private, phone-first text-to-speech PWA with PocketTTS voices. Based on BetterTTS by SysAdminDoc (MIT).",
   "type": "module",
   "scripts": {
@@ -15,6 +15,8 @@
     "@fontsource-variable/manrope": "^5.3.0",
     "@fontsource/instrument-serif": "^5.3.0",
     "@mozilla/readability": "^0.6.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/spa": "^1.0.0",
     "jszip": "^3.10.2",
     "lucide-react": "^1.66.0",
     "mammoth": "^1.13.0",
@@ -22,7 +24,8 @@
     "phonon-tts": "^0.6.0",
     "pocket-tts-onnx": "0.1.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "tesseract.js": "^5.1.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
