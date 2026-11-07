@@ -724,7 +724,7 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
 // Android app: keep the phone's media notification (and the app awake while reading) in step with playback,
 // and take play/pause/next/previous from that notification.
 {
-  type Droid = { playing(on: boolean, title: string, text: string): void }
+  type Droid = { playing(on: boolean, title: string, text: string): void; media?: (on: boolean, book: string, artist: string, text: string) => void }
   const droid = (window as unknown as { LogosAndroid?: Droid }).LogosAndroid
   if (droid?.playing) {
     let last = ''
@@ -737,10 +737,18 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
       if (!started) return
       if (!s.active) started = false
       const v = voiceById(s.voices[s.current])
-      const key = `${on}|${s.current}|${s.active}`
+      const book = nowReadingFor(s.text)
+      const sentence = s.active ? (s.segments[s.current]?.text.slice(0, 120) ?? '') : ''
+      const key = `${on}|${s.current}|${s.active}|${book?.title ?? ''}`
       if (key === last) return
       last = key
-      try { droid.playing(on, `Logos · ${v?.name ?? 'Voice'}`, s.active ? (s.segments[s.current]?.text.slice(0, 120) ?? '') : '') } catch { /* old shell */ }
+      // Shell 17+ gets the book's title and the artist line separately, so its media card heads
+      // with the book and wears the bundled charcoal-and-gold artwork; older shells keep the
+      // original call (their card scrolls the current sentence — the 1.4.49 complaint).
+      try {
+        if (droid.media) droid.media(on, book?.title ?? '', `Logos · ${v?.name ?? 'Voice'}`, sentence)
+        else droid.playing(on, `Logos · ${v?.name ?? 'Voice'}`, sentence)
+      } catch { /* old shell */ }
     })
     addEventListener('logosandroid-toggle', () => toggle())
     addEventListener('logosandroid-next', () => next())

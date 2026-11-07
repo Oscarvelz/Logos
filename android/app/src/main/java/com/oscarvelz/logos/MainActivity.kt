@@ -250,6 +250,16 @@ class MainActivity : Activity() {
                 runCatching { startForegroundService(i) }
             }
         }
+
+        /** Shell 17: the same state with the book's title and the artist line kept apart, so the
+         *  media card can head with the book (and wear the bundled artwork) instead of scrolling
+         *  the current sentence. Older pages keep using playing() above. */
+        @JavascriptInterface fun media(on: Boolean, book: String, artist: String, text: String) {
+            val i = Intent(this@MainActivity, PlaybackService::class.java).putExtra("playing", on).putExtra("book", book).putExtra("artist", artist).putExtra("text", text)
+            runOnUiThread {
+                runCatching { startForegroundService(i) }
+            }
+        }
     }
 
     /** The app updates itself: if GitHub has a newer android-N build, offer it and install it in place. */

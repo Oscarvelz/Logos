@@ -10,6 +10,9 @@ import android.content.pm.ServiceInfo
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.drawable.Icon
 import android.os.IBinder
 import android.os.PowerManager
@@ -51,16 +54,19 @@ class PlaybackService : Service() {
             "stop" -> { stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf(); return START_NOT_STICKY }
         }
         val playing = intent?.getBooleanExtra("playing", false) ?: false
-        val title = intent?.getStringExtra("title") ?: "Logos"
+        // Shell 17's page sends book + artist separately; the older playing() call folded the
+        // artist line into "title" and the current sentence into "text".
+        val artist = intent?.getStringExtra("artist") ?: intent?.getStringExtra("title") ?: "Logos"
+        val book = intent?.getStringExtra("book") ?: ""
         val text = intent?.getStringExtra("text") ?: ""
         if (!playing && text.isBlank()) {
             // Nothing loaded any more: put the notification away (after the start Android requires).
-            startForeground(1, build(false, title, ""), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            startForeground(1, build(false, "", artist, ""), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
             stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf()
             return START_NOT_STICKY
         }
         // Stay a foreground service while paused too, so play from the lock screen always works.
-        startForeground(1, build(playing, title, text), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        startForeground(1, build(playing, book, artist, text), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         if (playing) wake?.acquire(3 * 60 * 60 * 1000L) else wake?.let { if (it.isHeld) it.release() }
         return START_NOT_STICKY
     }
@@ -68,17 +74,37 @@ class PlaybackService : Service() {
     private fun pi(action: String, rq: Int): PendingIntent =
         PendingIntent.getService(this, rq, Intent(this, PlaybackService::class.java).setAction(action), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
-    private fun build(playing: Boolean, title: String, text: String): Notification {
+    private var artBmp: Bitmap? = null
+    /** The card's face: the app's warm-charcoal-and-gold artwork, bundled in the APK. Without a
+     *  bitmap anywhere, Android paints the media card a stock system colour (a plain blue pill)
+     *  that has nothing to do with Logos — Oscar's complaint, shell 17. */
+    private fun artBmp(): Bitmap {
+        if (artBmp == null) artBmp = BitmapFactory.decodeResource(resources, R.drawable.media_art)
+        return artBmp!!
+    }
+
+    private fun build(playing: Boolean, book: String, artist: String, text: String): Notification {
         val s = session!!
-        s.setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, text.ifBlank { title }).putString(MediaMetadata.METADATA_KEY_ARTIST, title).build())
+        // The card heads with the book's title (the current sentence scrolling across it was the
+        // 1.4.49 complaint); pasted text without a book falls back to the sentence itself.
+        val heading = book.ifBlank { text }
+        val bmp = artBmp()
+        s.setMetadata(MediaMetadata.Builder()
+            .putString(MediaMetadata.METADATA_KEY_TITLE, heading)
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
+            .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bmp)
+            .putBitmap(MediaMetadata.METADATA_KEY_ART, bmp)
+            .build())
         s.setPlaybackState(PlaybackState.Builder()
             .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS)
             .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f).build())
         val open = PendingIntent.getActivity(this, 9, Intent(this, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CH)
             .setSmallIcon(R.drawable.ic_note)
-            .setContentTitle(text.ifBlank { title })
-            .setContentText(title)
+            .setLargeIcon(bmp)
+            .setColor(Color.rgb(23, 19, 16))
+            .setContentTitle(heading)
+            .setContentText(if (book.isNotBlank()) text else artist)
             .setContentIntent(open)
             .setDeleteIntent(pi("stop", 4))
             .setOngoing(playing)
