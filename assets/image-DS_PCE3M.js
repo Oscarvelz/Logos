@@ -1,0 +1,2 @@
+import{parseText as a}from"./formats-BeEuB26f.js";import{ocrImageText as p}from"./pdf-SaS-UPg7.js";import"./index-eXP6kOgG.js";import"./html-B8iR3KD2.js";async function u(r,o,m){m("Reading the image (OCR)",0,1);const s=o.type||"image/png",n=await p(r,s),t=a(n,!1);if(t.cover=new Blob([r],{type:s}),!t.titleGuess){const e=n.split(`
+`).map(i=>i.trim()).find(i=>i.length>=12&&/\p{L}{3}/u.test(i));e&&(t.titleGuess=e.length>80?`${e.slice(0,77)}…`:e)}return t}export{u as parseImage};
