@@ -47,14 +47,11 @@ const ocrWorker = () => (tess ??= (async () => {
 })())
 const endOcr = () => { if (tess) { const t = tess; tess = null; void t.then((w) => w.terminate()).catch(() => {}) } }
 
-async function ocrLines(page: any, p: number): Promise<Line[]> {
-  const scale = 3
-  const vp = page.getViewport({ scale })
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height)
+/** OCR one already-rendered canvas into Lines (page space: y up from the
+    bottom, coordinates divided by the render scale). Shared by scanned PDF
+    pages and by photos or screenshots imported as books. */
+async function ocrCanvasLines(canvas: HTMLCanvasElement, scale: number, pageW: number, pageH: number, p: number): Promise<Line[]> {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height)
-  await page.render({ canvas, canvasContext: ctx, viewport: vp }).promise
   // A truly blank page is not worth seconds of OCR.
   const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data
   let ink = 0, n = 0
@@ -62,7 +59,6 @@ async function ocrLines(page: any, p: number): Promise<Line[]> {
   if (ink / n < 0.002) return []
   const w = await ocrWorker()
   const { data } = await w.recognize(canvas, {}, { blocks: true })
-  const pageH = vp.height / scale, pageW = vp.width / scale
   const out: Line[] = []
   for (const b of data.blocks ?? []) for (const par of b.paragraphs ?? []) for (const ln of par.lines ?? []) {
     const words = (ln.words ?? []).filter((x: any) => x.text && x.confidence >= 25)
@@ -77,6 +73,47 @@ async function ocrLines(page: any, p: number): Promise<Line[]> {
     for (const t of data.text.split('\n')) { const text = t.trim(); if (!text) continue; out.push({ text, x: 54, xEnd: pageW - 54, y, h: 12, items: [{ s: 0, e: text.length, x0: 54, x1: pageW - 54 }], page: p }); y -= 15 }
   }
   return out
+}
+
+async function ocrLines(page: any, p: number): Promise<Line[]> {
+  const scale = 3
+  const vp = page.getViewport({ scale })
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height)
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+  await page.render({ canvas, canvasContext: ctx, viewport: vp }).promise
+  return ocrCanvasLines(canvas, scale, vp.width / scale, vp.height / scale, p)
+}
+
+/** A photo or screenshot imported as a book: OCR its words into plain text,
+    breaking paragraphs where the gap between lines widens. Same engine and
+    worker lifecycle as the scanned-PDF rescue. */
+export async function ocrImageText(buf: ArrayBuffer, mime: string): Promise<string> {
+  let bmp: ImageBitmap
+  try { bmp = await createImageBitmap(new Blob([buf], { type: mime })) } catch { throw new Error('That image couldn’t be read.') }
+  try {
+    // Aim near the resolution the PDF path renders at (a page at 3×): upscale
+    // small screenshots, cap very large photos — Tesseract gains nothing past it.
+    const longest = Math.max(bmp.width, bmp.height)
+    const f = Math.min(3, Math.max(0.5, 2400 / longest))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bmp.width * f); canvas.height = Math.round(bmp.height * f)
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    const lines = await ocrCanvasLines(canvas, f, bmp.width, bmp.height, 1)
+    const top = [...lines].sort((a, b) => b.y - a.y)
+    const paras: string[] = []
+    let cur: string[] = [], prev: Line | null = null
+    for (const ln of top) {
+      if (prev && prev.y - ln.y > Math.max(prev.h, ln.h) * 1.9 && cur.length) { paras.push(cur.join(' ')); cur = [] }
+      const t = ln.text.trim(); if (t) cur.push(t)
+      prev = ln
+    }
+    if (cur.length) paras.push(cur.join(' '))
+    return paras.join('\n\n')
+  } finally { bmp.close(); endOcr() }
 }
 
 export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number, total: number) => void): Promise<RawBook> {

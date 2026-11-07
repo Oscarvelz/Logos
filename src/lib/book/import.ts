@@ -2,15 +2,17 @@
 import { books, putBook, type BookMeta } from '../books.ts'
 import { finishBook, type RawBook } from './finish.ts'
 
-export const BOOK_ACCEPT = '.epub,.pdf,.docx,.fb2,.txt,.md,.markdown,.html,.htm,.xhtml,.rtf,application/epub+zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,application/rtf'
+export const BOOK_ACCEPT = '.epub,.pdf,.docx,.fb2,.txt,.md,.markdown,.html,.htm,.xhtml,.rtf,.png,.jpg,.jpeg,.webp,.gif,.bmp,application/epub+zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,application/rtf,image/png,image/jpeg,image/webp'
 
 export function formatOf(file: File): string | null {
   const ext = (file.name.split('.').pop() ?? '').toLowerCase()
   if (ext === 'markdown') return 'md'
   if (ext === 'htm' || ext === 'xhtml') return 'html'
   if (['epub', 'pdf', 'docx', 'fb2', 'txt', 'md', 'html', 'rtf'].includes(ext)) return ext
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) return 'image'
   if (file.type === 'application/pdf') return 'pdf'
   if (file.type === 'application/epub+zip') return 'epub'
+  if (file.type.startsWith('image/')) return 'image'
   if (file.type.startsWith('text/')) return 'txt'
   if (/^(mobi|azw3?|kfx|djvu|doc|odt|pages|cbz|cbr)$/.test(ext)) throw new Error(`${ext.toUpperCase()} files can’t be read yet. Save it as EPUB or PDF and import that.`)
   return null
@@ -26,6 +28,7 @@ export async function importBook(file: File, batch?: string): Promise<BookMeta> 
     let raw: RawBook
     if (format === 'epub') raw = await (await import('./epub.ts')).parseEpub(buf, step)
     else if (format === 'pdf') raw = await (await import('./pdf.ts')).parsePdf(buf, step)
+    else if (format === 'image') raw = await (await import('./image.ts')).parseImage(buf, file, step)
     else {
       const f = await import('./formats.ts')
       if (format === 'docx') raw = await f.parseDocx(buf)
