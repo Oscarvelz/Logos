@@ -120,6 +120,11 @@ button:disabled { cursor: default; opacity: .45; }
   background: linear-gradient(var(--bg) 30%, transparent);
 }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+.brand-name-link { text-decoration: none; color: inherit; display: flex; align-items: center; }
+/* The λ as the bubble's own switch: quiet as a mark, a gold dot while it floats. */
+.brand-mark-btn { position: relative; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; border-radius: 9px; -webkit-tap-highlight-color: transparent; }
+.brand-mark-btn.on .brand-mark { box-shadow: 0 0 0 2px var(--accent), 0 6px 20px -6px var(--accent-glow); }
+.brand-mark-btn .bm-dot { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
 .brand-mark { width: 30px; height: 30px; border-radius: 9px; display: block; box-shadow: 0 0 0 1px var(--line-2), 0 6px 20px -8px var(--accent-glow); }
 .brand-name { font-family: var(--font-display); font-size: 31px; letter-spacing: .015em; line-height: 1; padding: 2px 2px 3px 0;
   background: linear-gradient(180deg, var(--text) 18%, var(--accent-2) 62%, var(--accent) 100%); -webkit-background-clip: text; background-clip: text; color: transparent;

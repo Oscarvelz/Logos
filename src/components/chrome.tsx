@@ -6,7 +6,8 @@ import { listen, toggle, next } from '../player/listen.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
 import { useEffect, useState } from 'react'
 import { VOICES, favoriteVoices, type Lang, type Voice } from '../lib/voices.ts'
-import { Avatar, FavStar, ProgressRing, Sheet, voiceHue } from './ui.tsx'
+import { Avatar, FavStar, ProgressRing, Sheet, toast, voiceHue } from './ui.tsx'
+import { bubbleNativeState, bubbleSupported, openBubblePermission, setBubble, type BubbleNativeState } from '../lib/bubble.ts'
 import { formatBytes } from '../lib/audio.ts'
 import { clipPlayer, playClip, stopClipPlayer } from '../player/clip.ts'
 import { pause as pauseListen } from '../player/listen.ts'
@@ -40,6 +41,44 @@ export function BrandMark({ size = 30 }: { size?: number }) {
   return <img className="brand-mark" src={`${import.meta.env.BASE_URL}icon-192.png`} width={size} height={size} alt="" />
 }
 
+/** The λ itself is the bubble's switch (Oscar: the Settings card buries it —
+ *  one tap on the mark floats Logos and the listening continues through the
+ *  bubble; a gold dot on the mark says the bubble is out). In a plain browser
+ *  the mark stays a mark. */
+export function BubbleMark({ size = 30 }: { size?: number }) {
+  const st = useStore(settings)
+  const [native, setNative] = useState<BubbleNativeState | null>(null)
+  const supported = bubbleSupported()
+  useEffect(() => {
+    if (!supported) return
+    const tick = () => {
+      const n = bubbleNativeState()
+      setNative((p) => (JSON.stringify(p) === JSON.stringify(n) ? p : n))
+    }
+    tick()
+    const iv = setInterval(tick, 2500)
+    return () => clearInterval(iv)
+  }, [supported])
+  if (!supported) return <BrandMark size={size} />
+  const on = native ? native.running : st.bubbleOn
+  return (
+    <button
+      type="button"
+      className={`brand-mark-btn ${on ? 'on' : ''}`}
+      aria-pressed={on}
+      title={on ? 'The bubble is floating — tap to bring it in' : 'Float Logos — tap to let the bubble out'}
+      onClick={() => {
+        if (!on && native && !native.permission) { openBubblePermission(); toast('Allow Logos to display over other apps, then tap the λ again'); return }
+        setBubble(!on)
+        toast(on ? 'Bubble in' : 'Bubble out — keep listening anywhere')
+      }}
+    >
+      <BrandMark size={size} />
+      {on && <span className="bm-dot" aria-hidden="true" />}
+    </button>
+  )
+}
+
 export function NavItems() {
   const route = useRoute()
   return (
@@ -61,7 +100,7 @@ export function BottomNav() {
 export function SideRail() {
   return (
     <nav className="rail" aria-label="Main">
-      <a className="brand" href="#/listen"><BrandMark size={42} /><span className="brand-name">Logos</span></a>
+      <div className="brand"><BubbleMark size={42} /><a className="brand-name-link" href="#/listen" aria-label="Logos home"><span className="brand-name">Logos</span></a></div>
       <div className="rail-status"><StatusPill compact /></div>
       <NavItems />
     </nav>
