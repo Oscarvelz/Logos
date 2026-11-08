@@ -51,6 +51,13 @@ export function ListenPage() {
     void play()
   }, [d.sharedAt])
 
+  // The floating bubble loaded a clipboard text: the player takes the stage.
+  useEffect(() => {
+    const h = () => setEditing(false)
+    addEventListener('logos-bubble-clip', h)
+    return () => removeEventListener('logos-bubble-clip', h)
+  }, [])
+
   const setText = (t: string) => { drafts.set({ listen: t }); saveLastText(t) }
   const detected = useMemo(() => detectLang(text.slice(0, 4000)), [text])
   const mixed = useMemo(() => {

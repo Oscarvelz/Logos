@@ -16,6 +16,10 @@ export type Settings = {
   sentencePauseMs: number
   autoDownload: boolean
   deviceFallback: boolean
+  /** Floating bubble over other apps (Logos app, shell android-18+). */
+  bubbleOn: boolean
+  /** The bubble's lever: ON = the bubble plays what's copied; OFF = it only controls playback. */
+  bubbleAuto: boolean
   highlight: boolean
   /** Word highlight timing nudge in ms (+ = earlier). For Bluetooth delay. */
   wordLeadMs: number
@@ -41,6 +45,8 @@ const DEFAULTS: Settings = {
   sentencePauseMs: 220,
   autoDownload: true,
   deviceFallback: false,
+  bubbleOn: false,
+  bubbleAuto: true,
   highlight: true,
   wordLeadMs: 90,
 }
