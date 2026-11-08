@@ -546,10 +546,23 @@ class BubbleService : Service() {
         "glow" to Color.argb(64, 233, 189, 114), "div" to Color.rgb(58, 50, 40)
     )
     private fun pal(): Map<String, Int> = if (panelLight) lightPal else darkPal
-    /** The explainer cards wear the family's OTHER pole (Oscar): a cream card
-     *  laid on the dark player, a dark note on the light one — never the
-     *  player's own tone, so a pop-up can never be mistaken for the player. */
-    private fun cardPal(): Map<String, Int> = if (panelLight) darkPal else lightPal
+    /** The explainer cards step ONE tone away from the player (Oscar, refined):
+     *  a warm charcoal — a dark gray that never nears pure black — on the dark
+     *  player, a deeper parchment on the light one. The full pole-swap was too
+     *  stark; the player's own tone was invisible. Never Android gray. */
+    private fun cardPal(): Map<String, Int> = if (panelLight) mapOf(
+        "bg1" to Color.rgb(238, 227, 199), "bg2" to Color.rgb(226, 210, 172),
+        "line" to Color.rgb(178, 152, 100), "ink" to Color.rgb(34, 28, 18),
+        "muted" to Color.rgb(110, 96, 72), "disc" to Color.rgb(255, 255, 255),
+        "discLine" to Color.rgb(200, 180, 140), "gold" to Color.rgb(154, 102, 20),
+        "glow" to Color.argb(46, 233, 189, 114), "div" to Color.rgb(200, 184, 148)
+    ) else mapOf(
+        "bg1" to Color.rgb(79, 70, 58), "bg2" to Color.rgb(60, 53, 44),
+        "line" to Color.rgb(158, 132, 84), "ink" to Color.rgb(246, 240, 228),
+        "muted" to Color.rgb(203, 191, 168), "disc" to Color.rgb(90, 81, 68),
+        "discLine" to Color.rgb(120, 106, 82), "gold" to gold,
+        "glow" to Color.argb(64, 233, 189, 114), "div" to Color.rgb(96, 86, 70)
+    )
 
     private fun openPanel() {
         val w = wm ?: return
