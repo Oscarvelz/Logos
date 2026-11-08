@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
-import { AudioLines, BookOpen, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Moon, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
+import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Moon, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
 import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, RATE_STEPS, setSleepTimer, refreshVoices, relangSession, voiceFor, endSession, sentenceProgress, seekFraction, wordClock, seekWord } from '../player/listen.ts'
+import { markAndToast } from '../lib/marks.ts'
+import { ContinueRow } from '../components/continue.tsx'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
 import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
@@ -124,6 +126,8 @@ export function ListenPage() {
     <div className="page wide listen-page">
       <ListenHead text={reading ? s.text : text} lang={lang} playing={s.playing && reading} remaining={remaining} />
 
+      <ContinueRow />
+
       <div className="listen-grid">
         <div className="card" style={{ overflow: 'hidden' }}>
           {reading ? (
@@ -192,7 +196,7 @@ export function ListenPage() {
               <span className="pb-icon" key={s.buffering ? 'b' : s.playing ? 'p' : 'l'}>{s.buffering ? <Loader2 size={32} className="spin" /> : s.playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" style={{ marginLeft: 4 }} />}</span>
             </button>
             <button className="icon-btn filled" onClick={next} disabled={!reading} aria-label="Next sentence"><SkipForward size={22} /></button>
-            <span aria-hidden />
+            <button className="icon-btn" onClick={() => void markAndToast()} disabled={!reading} aria-label="Mark this moment" title="Mark this moment"><Bookmark size={20} /></button>
           </div>
 
           {s.mode === 'device' && s.playing && (

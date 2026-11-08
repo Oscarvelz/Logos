@@ -6,11 +6,13 @@
 // playing, always with an Undo, so no text is ever lost to it.
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
-import { listen, loadText, play, endSession, stepRate } from '../player/listen.ts'
+import { listen, loadText, play, endSession, stepRate, seek, seekFraction, refreshVoices, voiceFor, sentenceProgress } from '../player/listen.ts'
 import { readClipboard } from './clipboard.ts'
 import { describeText } from './describe.ts'
 import { detectLang } from './text.ts'
+import { VOICES, favoriteVoices } from './voices.ts'
 import { nowReadingFor } from './book/nowreading.ts'
+import { markAndToast } from './marks.ts'
 import { toast } from '../components/ui.tsx'
 
 type DroidBubble = {
@@ -22,6 +24,7 @@ type DroidBubble = {
   bubbleNow?: (json: string) => void
   bubbleClip?: () => string
   bubbleWantClip?: () => boolean
+  bubbleSeek?: () => string
 }
 const droid = () => (window as unknown as { LogosAndroid?: DroidBubble }).LogosAndroid
 
@@ -51,10 +54,31 @@ function seenClip(t: string) {
   try { localStorage.setItem('logos.bubble.lastClip', lastClip) } catch { /* ignore */ }
 }
 
+// Return-to-book (Oscar's ask): a clip that interrupts a session leaves a card
+// behind; when the clip ENDS, what was interrupted resumes where it was — the
+// interruption heals itself. A second clip keeps the original card; anything
+// Oscar loads by hand cancels it.
+type ResumeCard = { text: string; idx: number; title: string }
+let resumeCard: ResumeCard | null = (() => { try { return JSON.parse(localStorage.getItem('logos.bubble.resume') ?? 'null') as ResumeCard | null } catch { return null } })()
+let stageKey = ''
+function saveResume() {
+  try {
+    if (resumeCard) localStorage.setItem('logos.bubble.resume', JSON.stringify(resumeCard))
+    else localStorage.removeItem('logos.bubble.resume')
+  } catch { /* ignore */ }
+}
+const sessionTitle = (text: string) => nowReadingFor(text)?.title || describeText(text.slice(0, 12000), detectLang(text.slice(0, 2000)).lang).title || 'your text'
+
 /** A clipboard text takes the stage: it replaces what was playing, with an Undo. */
 export function playClipboardText(raw: string) {
   const text = raw.trim()
   if (!text) return
+  const s0 = listen.get()
+  if (s0.active && clipKey(s0.text) !== clipKey(text) && clipKey(s0.text) !== stageKey) {
+    resumeCard = { text: s0.text, idx: s0.current, title: sessionTitle(s0.text) }
+    saveResume()
+  }
+  stageKey = clipKey(text)
   seenClip(text)
   const prevText = drafts.get().listen
   drafts.set({ listen: text })
@@ -107,6 +131,42 @@ export function initBubble() {
   // The panel's − / + keys: one step along the same ladder the Listen sheet uses.
   addEventListener('logosandroid-slower', () => stepRate(-1))
   addEventListener('logosandroid-faster', () => stepRate(1))
+  // The panel's seek bar: the shell holds the fraction, the page pulls it.
+  addEventListener('logosandroid-seek', () => {
+    try { const f = parseFloat(d.bubbleSeek?.() ?? ''); if (Number.isFinite(f)) seekFraction(f) } catch { /* ignore */ }
+  })
+  // The panel's bookmark key, and the bubble's long-press voice wheel.
+  addEventListener('logosandroid-mark', () => void markAndToast())
+  addEventListener('logosandroid-voice', () => {
+    const s = listen.get()
+    const lang = s.active ? (s.segments[s.current]?.lang ?? detectLang(s.text.slice(0, 2000)).lang) : detectLang(drafts.get().listen.slice(0, 2000)).lang
+    const favs = favoriteVoices(settings.get().favorites).filter((v) => v.lang === lang)
+    const pool = favs.length ? favs : VOICES.filter((v) => v.lang === lang)
+    if (!pool.length) return
+    const cur = s.active ? s.voices[s.current] : voiceFor(lang)
+    const nextV = pool[(pool.findIndex((v) => v.id === cur) + 1) % pool.length]
+    settings.set({ voiceOverride: nextV.id })
+    refreshVoices()
+  })
+  // Return-to-book: watch the stage. The clip finishing restores its card;
+  // Oscar loading anything else by hand retires it.
+  listen.subscribe(() => {
+    if (!stageKey) return
+    const s = listen.get()
+    if (!s.active) return
+    if (clipKey(s.text) === stageKey) {
+      if (s.finished && resumeCard) {
+        const r = resumeCard
+        stageKey = ''; resumeCard = null; saveResume()
+        loadText(r.text)
+        if (r.idx > 0) seek(r.idx)
+        void play(r.idx)
+        toast(`Back to ${r.title}`, undefined, 3500)
+      }
+    } else {
+      stageKey = ''; resumeCard = null; saveResume()
+    }
+  })
   addEventListener('logosandroid-clip', () => {
     try {
       const raw = d.bubbleClip?.() ?? ''
@@ -139,6 +199,7 @@ export function initBubble() {
     const info = {
       playing: s.playing || s.buffering,
       active: s.active,
+      frac: s.active && s.segments.length ? Math.min(1, (s.current + sentenceProgress()) / s.segments.length) : 0,
       light,
       title: titleOf(s.active, text) || 'Logos',
       sub: s.active ? `Sentence ${s.current + 1} of ${s.segments.length} · ${fmtRate(settings.get().listenSpeed)}` : 'Ready',

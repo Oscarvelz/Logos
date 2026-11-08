@@ -16,6 +16,7 @@ import { BookShelf, useBookPicker, importMany } from '../components/shelf.tsx'
 import { takeSharedFiles } from '../lib/book/import.ts'
 import { books } from '../lib/books.ts'
 import { WebImport } from '../components/webimport.tsx'
+import { MarksSection } from '../components/marks.tsx'
 
 type Filter = 'all' | 'later' | 'new' | 'progress' | 'fav' | 'done'
 type Sort = 'new' | 'old' | 'long' | 'short' | 'az'
@@ -102,6 +103,7 @@ export function LibraryPage() {
   }
 
   const savedPart = (<>
+      <MarksSection />
       {job.status === 'running' && (
         <div className="card render-card">
           <span className="keep-ic"><AudioLines size={20} /></span>
