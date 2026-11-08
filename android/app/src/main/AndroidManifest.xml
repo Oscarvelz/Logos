@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- The floating bubble (shell android-18): drawn over other apps, only when Oscar switches it on. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <application
         android:label="Logos"
         android:icon="@mipmap/ic_launcher"
@@ -65,5 +67,17 @@
             android:name=".PlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+        <service
+            android:name=".BubbleService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+        <!-- The bubble's invisible clipboard reader: takes the focus for a blink, reads, finishes. -->
+        <activity
+            android:name=".ClipActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:launchMode="singleInstance" />
     </application>
 </manifest>

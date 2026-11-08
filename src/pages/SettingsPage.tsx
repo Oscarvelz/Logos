@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Cpu, Download, HardDrive, Loader2, Mic, Palette, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { Cpu, Download, HardDrive, Loader2, Mic, Palette, PictureInPicture2, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, applyTheme, type Theme } from '../lib/settings.ts'
+import { bubbleSupported, bubbleNativeState, setBubble, openBubblePermission, type BubbleNativeState } from '../lib/bubble.ts'
 import { keep } from '../engine/keep.ts'
 import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHONON_SIZE_MB, modelCacheBytes } from '../engine/engine.ts'
 import { formatBytes } from '../lib/audio.ts'
@@ -9,7 +10,7 @@ import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.62'
+const VERSION = '1.4.63'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -53,6 +54,17 @@ export function SettingsPage() {
 
   const warming = e.status === 'loading' && e.phase === 'warm'
 
+  // The floating bubble's native truth (permission + service), refreshed while
+  // this page is open so returning from the system's permission screen lands.
+  const [bState, setBState] = useState<BubbleNativeState | null>(null)
+  useEffect(() => {
+    if (!bubbleSupported()) return
+    const tick = () => setBState(bubbleNativeState())
+    tick()
+    const iv = setInterval(tick, 1200)
+    document.addEventListener('visibilitychange', tick)
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', tick) }
+  }, [])
   const [pron, setPron] = useState<PronEntry[]>(() => pronEntries())
   const [pFrom, setPFrom] = useState('')
   const [pTo, setPTo] = useState('')
@@ -191,6 +203,37 @@ export function SettingsPage() {
         <div className="list-row col">
           <div className="t">Theme</div>
           <Seg value={st.theme} label="Theme" onChange={(t: Theme) => { settings.set({ theme: t }); applyTheme(t) }} options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }, { value: 'system', label: 'System' }]} />
+        </div>
+      </div>
+      </SetCard>
+      </section>
+      <section className="set-group">
+      <SetCard icon={<PictureInPicture2 size={19} />} title="Floating player" sub="A small λ that floats over your other apps.">
+      <div className="list">
+        <div className="list-row">
+          <div className="grow">
+            <div className="t">Floating bubble</div>
+            <div className="d">{!IN_APP
+              ? 'Only in the Logos app.'
+              : !bubbleSupported()
+                ? 'Comes with the newest Logos app — update the app and it appears here.'
+                : bState && !bState.permission
+                  ? 'Needs Android’s permission to display over other apps — switch it on to be taken there.'
+                  : 'Drag it anywhere. Tap it for play, previous and next — and for what you copied.'}</div>
+          </div>
+          <Switch label="Floating bubble" on={bState ? bState.running : st.bubbleOn} onChange={(v) => {
+            if (!bubbleSupported()) return
+            if (v && bState && !bState.permission) { openBubblePermission(); toast('Allow Logos to display over other apps, then switch the bubble on again'); return }
+            setBubble(v)
+            setTimeout(() => setBState(bubbleNativeState()), 450)
+          }} />
+        </div>
+        <div className="list-row">
+          <div className="grow">
+            <div className="t">Play the clipboard</div>
+            <div className="d">The lever. On: copy text anywhere, tap the bubble, and it plays — replacing what was playing, with an Undo so nothing is lost; opening Logos right after copying plays it too. Off: the bubble only controls playback, and pasting stays manual, as now. Android only lets Logos look at the clipboard at that tap — never in secret.</div>
+          </div>
+          <Switch label="Play the clipboard" on={st.bubbleAuto} onChange={(v) => settings.set({ bubbleAuto: v })} />
         </div>
       </div>
       </SetCard>

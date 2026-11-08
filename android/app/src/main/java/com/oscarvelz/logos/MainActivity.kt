@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.util.Base64
 import android.view.ViewGroup
 import android.view.WindowInsets
@@ -67,6 +68,11 @@ class MainActivity : Activity() {
         setContentView(root)
         window.decorView.setBackgroundColor(bg)
         PlaybackService.onAction = { a -> runOnUiThread { web.evaluateJavascript("dispatchEvent(new Event('logosandroid-$a'))", null) } }
+        // The floating bubble speaks to the page through the same event door.
+        BubbleService.poke = { cmd -> runOnUiThread { web.evaluateJavascript("dispatchEvent(new Event('logosandroid-$cmd'))", null) } }
+        // If Oscar left the bubble on, it comes back with the app (e.g. after an update).
+        if (BubbleService.prefs(this).getBoolean("on", false) && !BubbleService.running && Settings.canDrawOverlays(this))
+            runCatching { startForegroundService(Intent(this, BubbleService::class.java)) }
         val target = shareUrl(intent)
         when {
             target != null -> web.loadUrl(target)
@@ -260,6 +266,46 @@ class MainActivity : Activity() {
                 runCatching { startForegroundService(i) }
             }
         }
+
+        // ── The floating bubble (shell android-18) ──────────────────────────
+        /** The bubble's native truth for the Settings card: permission + service. */
+        @JavascriptInterface fun bubbleState(): String =
+            JSONObject().put("permission", Settings.canDrawOverlays(this@MainActivity)).put("running", BubbleService.running).toString()
+
+        @JavascriptInterface fun bubble(on: Boolean) {
+            BubbleService.prefs(this@MainActivity).edit().putBoolean("on", on).apply()
+            runOnUiThread {
+                val i = Intent(this@MainActivity, BubbleService::class.java)
+                if (on) runCatching { startForegroundService(i) }
+                else startService(i.setAction("hide"))
+            }
+        }
+
+        @JavascriptInterface fun bubblePermission() {
+            runOnUiThread {
+                runCatching { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }
+            }
+        }
+
+        /** The lever, kept natively too: the bubble must know it even with the page asleep. */
+        @JavascriptInterface fun bubblePrefs(auto: Boolean) {
+            BubbleService.prefs(this@MainActivity).edit().putBoolean("auto", auto).apply()
+        }
+        @JavascriptInterface fun bubbleAuto(): Boolean = BubbleService.lever(this@MainActivity)
+
+        /** Player state for the bubble's panel (title, sentence, play state). */
+        @JavascriptInterface fun bubbleNow(json: String) {
+            BubbleService.nowJson = json
+            BubbleService.onNow?.invoke()
+        }
+
+        /** The clipboard text the bubble caught, pulled once by the page. */
+        @JavascriptInterface fun bubbleClip(): String {
+            val t = BubbleService.clipText ?: return ""
+            val m = BubbleService.clipManual
+            BubbleService.clipText = null
+            return JSONObject().put("t", t).put("m", m).toString()
+        }
     }
 
     /** The app updates itself: if GitHub has a newer android-N build, offer it and install it in place. */
@@ -341,6 +387,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         PlaybackService.onAction = null
+        BubbleService.poke = null
         runCatching { startService(Intent(this, PlaybackService::class.java).setAction("stop")) }
         super.onDestroy()
     }
