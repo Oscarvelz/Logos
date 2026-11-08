@@ -23,7 +23,6 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Handler
-import android.os.Looper
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
