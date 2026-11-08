@@ -28,6 +28,7 @@ type DroidBubble = {
   bubbleWantClip?: () => boolean
   bubbleSeek?: () => string
   bubbleProbe?: (on: boolean) => void
+  bubblePendingCmd?: () => string
 }
 const droid = () => (window as unknown as { LogosAndroid?: DroidBubble }).LogosAndroid
 
@@ -133,6 +134,18 @@ export function initBubble() {
   }
   pushProbe()
   settings.subscribe(pushProbe)
+  // A panel key pressed while this page was asleep is remembered natively and
+  // collected now, as the page wakes — the press is never silently lost.
+  const collectPending = () => {
+    try {
+      const cmd = d.bubblePendingCmd?.()
+      if (!cmd) return
+      if ((cmd === 'toggle' || cmd === 'prev' || cmd === 'next') && !listen.get().active) return
+      dispatchEvent(new Event(`logosandroid-${cmd}`))
+    } catch { /* ignore */ }
+  }
+  setTimeout(collectPending, 700)
+  setTimeout(collectPending, 2200)
   // …and theirs is pulled up when the bubble's switch moves.
   addEventListener('logosandroid-lever', () => {
     try {
