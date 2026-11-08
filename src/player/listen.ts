@@ -117,9 +117,18 @@ let token = 0
 // ourselves and ignore exactly that many; anything else is a system pause.
 let internalPauses = 0
 // Measured speed of the voice engine on this device (render time per second of audio).
-let synthMs = 0
-let synthSec = 0
-const deviceRtf = () => (synthSec > 3 ? synthMs / 1000 / synthSec : engine.get().lastRtf ?? 0)
+// Render speed (seconds of compute per second of audio), measured over the
+// last few sentences only. The first synthesis after a model loads can take
+// ten times as long as the rest; the old lifetime average let that one
+// warm-up poison every later estimate, and the cushion then demanded nearly
+// the whole text rendered before the first sound — minutes of 'Processing…'
+// that were not a hang at all, just an invisible, oversized head start.
+const rtfWindow: { ms: number; sec: number }[] = []
+const deviceRtf = () => {
+  const ms = rtfWindow.reduce((a, r) => a + r.ms, 0)
+  const sec = rtfWindow.reduce((a, r) => a + r.sec, 0)
+  return sec > 3 ? ms / 1000 / sec : engine.get().lastRtf ?? 0
+}
 
 // ── Background keep-alive ──
 // Android freezes a page that is in the background and not playing sound, which
@@ -269,8 +278,8 @@ function render(i: number, priority: number): Promise<Rendered> {
     const res = spoken
       ? await synthesize(spoken, voice, 1, { priority, signal: ctrl.signal })
       : { samples: silence(300, 24000), sampleRate: 24000, ms: 0 }
-    synthMs += res.ms
-    synthSec += res.samples.length / res.sampleRate
+    rtfWindow.push({ ms: res.ms, sec: res.samples.length / res.sampleRate })
+    if (rtfWindow.length > 8) rtfWindow.shift()
     const trimmed = trimSilence(res.samples, res.sampleRate)
     const pauseMs = pauseAfter(seg, settings.get().sentencePauseMs)
     const joined = concat([trimmed, silence(pauseMs, res.sampleRate)])
@@ -414,6 +423,7 @@ async function buildCushion(i: number, my: number): Promise<boolean> {
   let estReady = 0 // word-based estimate of the same sentences (to calibrate)
   let j = i
   const wake = await keepAwake()
+  const t0 = Date.now()
   try {
     for (;;) {
       if (j >= segs.length) break
@@ -439,6 +449,11 @@ async function buildCushion(i: number, my: number): Promise<boolean> {
         estReady += estOf(j)
       } catch { break }
       if (!still()) return false
+      // The first sound may not be held hostage: after this long, play with
+      // whatever head start exists and keep rendering ahead during playback.
+      // Running dry later shows an honest per-sentence Processing… — never
+      // one endless silence up front.
+      if (Date.now() - t0 > 25_000) break
       j++
     }
     return still()
