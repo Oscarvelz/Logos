@@ -495,10 +495,10 @@ class BubbleService : Service() {
             setTextColor(c["ink"]!!); textSize = 17f; typeface = Typeface.SERIF
             setTypeface(typeface, Typeface.BOLD)
             maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         subV = TextView(this).apply { setTextColor(c["muted"]!!); textSize = 12f }
         val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        titleV.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         titleRow.addView(titleV)
         val markB = TextView(this).apply {
             text = "⚑"; setTextColor(c["gold"]!!); textSize = 14f; gravity = Gravity.CENTER
