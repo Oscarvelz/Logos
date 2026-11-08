@@ -27,7 +27,6 @@ type DroidBubble = {
   bubbleClip?: () => string
   bubbleWantClip?: () => boolean
   bubbleSeek?: () => string
-  bubbleProbe?: (on: boolean) => void
   bubblePendingCmd?: () => string
 }
 const droid = () => (window as unknown as { LogosAndroid?: DroidBubble }).LogosAndroid
@@ -124,16 +123,6 @@ export function initBubble() {
   }
   pushPrefs()
   settings.subscribe(pushPrefs)
-  // The copy experiment rides the same rail: Settings flips it, the shell obeys.
-  let pushedProbe: boolean | null = null
-  const pushProbe = () => {
-    const p = settings.get().bubbleProbe
-    if (p === pushedProbe) return
-    pushedProbe = p
-    try { d.bubbleProbe?.(p) } catch { /* ignore */ }
-  }
-  pushProbe()
-  settings.subscribe(pushProbe)
   // A panel key pressed while this page was asleep is remembered natively and
   // collected now, as the page wakes — the press is never silently lost.
   const collectPending = () => {

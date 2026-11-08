@@ -11,7 +11,7 @@ import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.72'
+const VERSION = '1.4.73'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -276,13 +276,6 @@ export function SettingsPage() {
             <div className="d">The lever. On: copy text anywhere, tap the bubble, and it plays — replacing what was playing, with an Undo so nothing is lost; opening Logos right after copying plays it too. Off: the bubble only controls playback, and pasting stays manual, as now. Android only lets Logos look at the clipboard at that tap — never in secret.</div>
           </div>
           <Switch label="Play the clipboard" on={st.bubbleAuto} onChange={(v) => settings.set({ bubbleAuto: v })} />
-        </div>
-        <div className="list-row">
-          <div className="grow">
-            <div className="t">Copy experiment</div>
-            <div className="d">A short test, off by default. On: the bubble holds window focus and listens for copies made in other apps — the one door research could not settle without a real device. While it is on, typing in other apps may not connect until you tap a text field; turn it off when the test is done. If the signal gets through, the bubble waves, the receipt lands in “Last clipboard try” below — and it tries to read and play the copy.</div>
-          </div>
-          <Switch label="Copy experiment" on={st.bubbleProbe} onChange={(v) => settings.set({ bubbleProbe: v })} />
         </div>
       </div>
       {bState?.last ? <div className="muted small" style={{ marginTop: 10, padding: '0 4px' }}>Last clipboard try: {bState.last}</div> : null}
