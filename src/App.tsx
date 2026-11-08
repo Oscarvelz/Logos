@@ -6,7 +6,7 @@ import { listen, installMediaSession } from './player/listen.ts'
 import { initBubble } from './lib/bubble.ts'
 import { isModelCached, ensureModel, lastLoadCrashed, removeLegacyEngine } from './engine/engine.ts'
 import { refreshLibrary } from './lib/library.ts'
-import { BottomNav, SideRail, StatusPill, MiniPlayer, BrandMark } from './components/chrome.tsx'
+import { BottomNav, SideRail, StatusPill, MiniPlayer, BubbleMark } from './components/chrome.tsx'
 import { Toasts } from './components/ui.tsx'
 import { sweepTempBooks } from './lib/books.ts'
 import { KeepAskSheet } from './components/shelf.tsx'
@@ -80,7 +80,7 @@ export default function App() {
         <SideRail />
         <div className="main">
           <header className="topbar">
-            <a className="brand" href="#/listen" aria-label="Logos home"><BrandMark /><span className="brand-name">Logos</span></a>
+            <div className="brand"><BubbleMark /><a className="brand-name-link" href="#/listen" aria-label="Logos home"><span className="brand-name">Logos</span></a></div>
             <div className="spacer" />
             <StatusPill />
           </header>
