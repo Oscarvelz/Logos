@@ -6,7 +6,7 @@
 // playing, always with an Undo, so no text is ever lost to it.
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
-import { listen, loadText, play, endSession } from '../player/listen.ts'
+import { listen, loadText, play, endSession, stepRate } from '../player/listen.ts'
 import { readClipboard } from './clipboard.ts'
 import { describeText } from './describe.ts'
 import { detectLang } from './text.ts'
@@ -44,6 +44,7 @@ export function openBubblePermission() {
 }
 
 const clipKey = (t: string) => `${t.length}:${t.slice(0, 48)}:${t.slice(-48)}`
+const fmtRate = (r: number) => `${Math.round(r * 100) / 100}×`
 let lastClip = (() => { try { return localStorage.getItem('logos.bubble.lastClip') ?? '' } catch { return '' } })()
 function seenClip(t: string) {
   lastClip = clipKey(t)
@@ -103,6 +104,9 @@ export function initBubble() {
     } catch { /* ignore */ }
   })
   addEventListener('logosandroid-bubbleoff', () => settings.set({ bubbleOn: false }))
+  // The panel's − / + keys: one step along the same ladder the Listen sheet uses.
+  addEventListener('logosandroid-slower', () => stepRate(-1))
+  addEventListener('logosandroid-faster', () => stepRate(1))
   addEventListener('logosandroid-clip', () => {
     try {
       const raw = d.bubbleClip?.() ?? ''
@@ -137,7 +141,7 @@ export function initBubble() {
       active: s.active,
       light,
       title: titleOf(s.active, text) || 'Logos',
-      sub: s.active ? `Sentence ${s.current + 1} of ${s.segments.length}` : 'Ready',
+      sub: s.active ? `Sentence ${s.current + 1} of ${s.segments.length} · ${fmtRate(settings.get().listenSpeed)}` : 'Ready',
     }
     const key = JSON.stringify(info)
     if (key === last) return

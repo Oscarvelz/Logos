@@ -6,7 +6,7 @@ import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
-import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, setSleepTimer, refreshVoices, relangSession, voiceFor, endSession, sentenceProgress, seekFraction, wordClock, seekWord } from '../player/listen.ts'
+import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, RATE_STEPS, setSleepTimer, refreshVoices, relangSession, voiceFor, endSession, sentenceProgress, seekFraction, wordClock, seekWord } from '../player/listen.ts'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
 import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
@@ -22,7 +22,7 @@ import { EngineNote, StatusPill, VoicePicker } from '../components/chrome.tsx'
 import { Range, Sheet, toast, useMediaQuery } from '../components/ui.tsx'
 import { TabletDesk, TextMap } from '../components/desk.tsx'
 
-const SPEEDS = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
+const SPEEDS = RATE_STEPS
 
 export function ListenPage() {
   const d = useStore(drafts)
