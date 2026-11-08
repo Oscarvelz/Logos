@@ -1,6 +1,6 @@
 // Import a book file into the shelf.
 import { books, putBook, type BookMeta } from '../books.ts'
-import { finishBook, type RawBook } from './finish.ts'
+import { finishBook, isMachineName, type RawBook } from './finish.ts'
 
 export const BOOK_ACCEPT = '.epub,.pdf,.docx,.fb2,.txt,.md,.markdown,.html,.htm,.xhtml,.rtf,.png,.jpg,.jpeg,.webp,.gif,.bmp,application/epub+zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,application/rtf,image/png,image/jpeg,image/webp'
 
@@ -21,7 +21,10 @@ export function formatOf(file: File): string | null {
 export async function importBook(file: File, batch?: string): Promise<BookMeta> {
   const format = formatOf(file)
   if (!format) throw new Error(`${file.name} isn’t a book file Logos can read.`)
-  const step = (s: string, done: number, total: number) => books.set({ importing: { name: file.name, step: s, done, total, batch } })
+  // A machine-named file (a share hash, a camera name) is labelled by what it
+  // is, not by the string Android invented for it.
+  const shown = isMachineName(file.name) ? (format === 'image' ? 'Shared image' : 'Shared file') : file.name
+  const step = (s: string, done: number, total: number) => books.set({ importing: { name: shown, step: s, done, total, batch } })
   step('Opening', 0, 1)
   try {
     const buf = await file.arrayBuffer()
