@@ -69,7 +69,14 @@ class MainActivity : Activity() {
         window.decorView.setBackgroundColor(bg)
         PlaybackService.onAction = { a -> runOnUiThread { web.evaluateJavascript("dispatchEvent(new Event('logosandroid-$a'))", null) } }
         // The floating bubble speaks to the page through the same event door.
-        BubbleService.poke = { cmd -> runOnUiThread { web.evaluateJavascript("dispatchEvent(new Event('logosandroid-$cmd'))", null) } }
+        BubbleService.poke = { cmd ->
+            runOnUiThread {
+                // 'reload' is the shell's last rung, not a page event: the
+                // page is the corpse, so the activity revives it natively.
+                if (cmd == "reload") web.reload()
+                else web.evaluateJavascript("dispatchEvent(new Event('logosandroid-$cmd'))", null)
+            }
+        }
         // If Oscar left the bubble on, it comes back with the app (e.g. after an update).
         if (BubbleService.prefs(this).getBoolean("on", false) && !BubbleService.running && Settings.canDrawOverlays(this))
             runCatching { startForegroundService(Intent(this, BubbleService::class.java)) }
@@ -171,8 +178,14 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
         if (intent.action == "logos.INSTALL") { installResult(intent); return }
         shareUrl(intent)?.let { web.loadUrl(it) }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
     }
 
     private fun nameOf(u: Uri): Pair<String, Long> {
