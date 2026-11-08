@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, BookPlus, Grid2x2, Grid3x3, Square, CircleCheck, MoreHorizontal, Pencil, Search, Star, Trash2, X, Pin, Clock } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
-import { books, refreshBooks, updateBook, deleteBook, putBook, getContent, sweepTempBooks, type BookMeta, type Pos } from '../lib/books.ts'
+import { books, refreshBooks, updateBook, deleteBook, putBook, type BookMeta } from '../lib/books.ts'
 import { importBook, BOOK_ACCEPT } from '../lib/book/import.ts'
-import { setNowReading } from '../lib/book/nowreading.ts'
+import { playBook } from '../lib/book/playbook.ts'
 import { keepAsk, askKeep } from '../lib/book/keepask.ts'
-import { drafts } from '../lib/drafts.ts'
-import { loadText, play } from '../player/listen.ts'
 import { MenuSelect, Sheet, toast } from './ui.tsx'
 import { BookCover } from './bookcover.tsx'
 
@@ -38,24 +36,7 @@ export async function importMany(list: File[]) {
 
 /** Take a freshly imported book straight to Listen and read it from the beginning, text following along. */
 async function playImported(meta: BookMeta) {
-  const content = await getContent(meta.id)
-  const chapters = content?.chapters ?? []
-  const parts: string[] = []
-  const where: Pos[] = []
-  // 1.4.57: the whole book loads as one session (the old 40,000-char cap cut long
-  // books off mid-way); the player keeps its rendered-audio cache bounded instead.
-  for (let c = 0; c < chapters.length; c++) {
-    const blocks = chapters[c].blocks
-    for (let i = 0; i < blocks.length; i++) { parts.push(blocks[i].t); where.push({ ch: c, b: i }) }
-  }
-  const text = parts.join('\n\n')
-  if (!text.trim()) { openBook(meta.id); return }
-  setNowReading(meta.id, meta.title, parts, where)
-  void sweepTempBooks()
-  drafts.set({ listen: text })
-  loadText(text)
-  void play()
-  location.hash = '#/listen'
+  await playBook(meta)
 }
 
 /** Pick and import one or more book files. */

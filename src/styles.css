@@ -981,3 +981,22 @@ html, body { overflow-x: clip; }
   .lh-status .status-pill { max-width: none; height: 34px; padding: 0 14px; }
   html:has(.listen-head) .rail-status { display: none; }
 }
+
+/* 1.4.68: Continue listening + marks */
+.continue-card { padding: 10px 14px 6px; margin-bottom: 14px; }
+.continue-h { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); font-weight: 700; margin-bottom: 4px; }
+.continue-row { width: 100%; display: flex; align-items: center; gap: 11px; padding: 8px 2px; background: none; border: none; border-top: 1px solid var(--line); color: var(--text); text-align: left; cursor: pointer; }
+.continue-row:first-of-type { border-top: none; }
+.continue-ic { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--gold-soft, rgba(201,162,39,.14)); color: var(--gold); flex: none; }
+.continue-tx { display: flex; flex-direction: column; min-width: 0; }
+.continue-t { font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.continue-s { font-size: 12px; color: var(--muted); }
+.continue-play { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--gold); color: var(--gold); flex: none; }
+.mark-row { display: flex; gap: 11px; align-items: flex-start; width: 100%; padding: 10px 2px; background: none; border: none; border-top: 1px solid var(--line); color: var(--text); text-align: left; cursor: pointer; }
+.mark-row:first-of-type { border-top: none; }
+.mark-ic { color: var(--gold); flex: none; margin-top: 2px; }
+.mark-tx { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mark-t { font-weight: 600; font-size: 14px; }
+.mark-s { font-size: 12.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mark-when { font-size: 11px; color: var(--muted); }
+.mark-del { flex: none; background: none; border: none; color: var(--muted); padding: 4px; cursor: pointer; }

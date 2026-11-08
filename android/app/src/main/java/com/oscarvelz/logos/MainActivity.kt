@@ -280,6 +280,13 @@ class MainActivity : Activity() {
             return w
         }
 
+        /** The panel's seek bar: the chosen fraction, pulled once by the page. */
+        @JavascriptInterface fun bubbleSeek(): String {
+            val f = BubbleService.seekFrac
+            BubbleService.seekFrac = -1.0
+            return if (f >= 0) f.toString() else ""
+        }
+
         @JavascriptInterface fun bubble(on: Boolean) {
             BubbleService.prefs(this@MainActivity).edit().putBoolean("on", on).apply()
             runOnUiThread {
@@ -380,6 +387,14 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() { super.onPause(); CookieManager.getInstance().flush() }
+
+    /** Leaving Logos — often on the way to copy something: the bubble waves once,
+     *  "I'm here when you're ready." (Android lets no app watch the clipboard
+     *  from the background; this is the true moment nearest to the copy.) */
+    override fun onStop() {
+        super.onStop()
+        runCatching { BubbleService.inviteHook?.invoke() }
+    }
 
     override fun onSaveInstanceState(out: Bundle) { super.onSaveInstanceState(out); web.saveState(out) }
 

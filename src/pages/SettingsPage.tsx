@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { exportBackup, importBackup } from '../lib/backup.ts'
 import { Cpu, Download, HardDrive, Loader2, Mic, Palette, PictureInPicture2, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, applyTheme, type Theme } from '../lib/settings.ts'
@@ -10,7 +11,7 @@ import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.67'
+const VERSION = '1.4.68'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -21,6 +22,37 @@ const IN_APP = /LogosAndroid/.test(navigator.userAgent)
  * topic owns lives inside its card, under a header that says what it holds,
  * so the eye finds things by their icons.
  */
+/** The library's safety net: export one file with the books, marks, dictionary
+ * and settings; import it on a new phone and everything is home again. */
+function BackupCard() {
+  const [busy, setBusy] = useState('')
+  const file = useRef<HTMLInputElement>(null)
+  const run = async () => {
+    setBusy('out')
+    try { const n = await exportBackup(); toast(`Backup saved · ${n} book${n === 1 ? '' : 's'} inside`) }
+    catch { toast('The backup could not be made') }
+    setBusy('')
+  }
+  const onFile = async (f: File | undefined) => {
+    if (!f) return
+    setBusy('in')
+    try { const n = await importBackup(f); toast(`Restored · ${n} book${n === 1 ? '' : 's'} back on the shelf`) }
+    catch { toast('That file is not a Logos backup') }
+    setBusy('')
+    if (file.current) file.current.value = ''
+  }
+  return (
+    <SetCard icon={<HardDrive size={19} />} title="Backup" sub="Your books, marks, dictionary and settings in one file">
+      <div className="set-actions">
+        <button className="btn" onClick={() => void run()} disabled={!!busy}>{busy === 'out' ? <Loader2 size={15} className="spin" /> : <Download size={15} />} Export backup</button>
+        <button className="btn ghost" onClick={() => file.current?.click()} disabled={!!busy}>{busy === 'in' ? <Loader2 size={15} className="spin" /> : <Plus size={15} />} Import backup</button>
+        <input ref={file} type="file" accept=".json,application/json" hidden onChange={(e) => void onFile(e.target.files?.[0])} />
+      </div>
+      <p className="muted small" style={{ margin: '8px 0 0' }}>Audio clips are not inside — they can always be made again from the books. Settings themselves stay as they are on this phone.</p>
+    </SetCard>
+  )
+}
+
 function SetCard({ icon, title, sub, children }: { icon: ReactNode; title: string; sub: string; children: ReactNode }) {
   return (
     <div className="card set-card">
@@ -250,6 +282,7 @@ export function SettingsPage() {
       </SetCard>
       </section>
       <section className="set-group">
+      <BackupCard />
       <SetCard icon={<img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="" />} title="About Logos" sub={`Version ${VERSION} · private, on-device text-to-speech`}>
       <div className="credits">
         <p><strong>Based on <a href="https://github.com/SysAdminDoc/BetterTTS" target="_blank" rel="noreferrer">BetterTTS</a> by SysAdminDoc</strong> (MIT License). Logos is a simplified, phone-first rebuild; its listening player, export and service-worker isolation grew out of it.</p>

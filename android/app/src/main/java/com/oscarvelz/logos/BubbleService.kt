@@ -25,6 +25,9 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.SeekBar
+import android.graphics.drawable.ClipDrawable
+import android.graphics.drawable.LayerDrawable
 import android.view.animation.DecelerateInterpolator
 import android.widget.Button
 import android.widget.FrameLayout
@@ -59,6 +62,11 @@ class BubbleService : Service() {
         /** Set when Paste & play could not read from the bubble: the page reads it itself as Logos opens. */
         var wantClip = false
         var deliveries = 0
+        @Volatile var lastDeliveryAt = 0L
+        /** A seek chosen on the panel's bar, pulled once by the page. */
+        @Volatile var seekFrac = -1.0
+        /** Set by the service: wave the bubble (leaving-Logos trigger). */
+        var inviteHook: (() -> Unit)? = null
         private var lastKey = 0
         private var pendingManual = false
         private var lastTrampoline = 0L
@@ -88,6 +96,7 @@ class BubbleService : Service() {
             if (!manual && key == lastKey) return
             lastKey = key
             deliveries++
+            lastDeliveryAt = System.currentTimeMillis()
             noteTry(c, "read ${text.length} chars via $trySource")
             clipText = text
             clipManual = manual
@@ -123,6 +132,12 @@ class BubbleService : Service() {
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var halo: View? = null
     private var haloAnim: ObjectAnimator? = null
+    private var seekBar: SeekBar? = null
+    private var seekHeld = false
+    private var playingNow = false
+    private var lastInvite = 0L
+    private var lastDeliverySeen = 0
+    private var rippleAnims: List<ObjectAnimator> = emptyList()
     private var panel: View? = null
     private var panelParams: WindowManager.LayoutParams? = null
     private var titleV: TextView? = null
@@ -135,6 +150,32 @@ class BubbleService : Service() {
         val b = bubble ?: return@Runnable
         if (panel != null || dragTargets.isNotEmpty()) return@Runnable
         b.animate().alpha(0.15f).setDuration(700).start()
+    }
+
+    private fun invite(times: Int = 3, force: Boolean = false) {
+        val root = bubble ?: return
+        if (panel != null || dragTargets.isNotEmpty() || playingNow) return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastInvite < 12000) return
+        lastInvite = now
+        val h = halo ?: return
+        rippleAnims.forEach { it.cancel() }
+        if (root.alpha < 1f) root.animate().alpha(1f).setDuration(220).start()
+        h.visibility = View.VISIBLE
+        val sx = ObjectAnimator.ofFloat(h, "scaleX", 1f, 1.55f).apply { duration = 780; repeatCount = times - 1 }
+        val sy = ObjectAnimator.ofFloat(h, "scaleY", 1f, 1.55f).apply { duration = 780; repeatCount = times - 1 }
+        val al = ObjectAnimator.ofFloat(h, "alpha", 0.7f, 0f).apply {
+            duration = 780; repeatCount = times - 1
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(a: android.animation.Animator) {
+                    if (!playingNow) h.visibility = View.INVISIBLE
+                    h.scaleX = 1f; h.scaleY = 1f
+                    handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 900)
+                }
+            })
+        }
+        rippleAnims = listOf(sx, sy, al)
+        rippleAnims.forEach { it.start() }
     }
 
     private fun wakeBubble(schedule: Boolean = true) {
@@ -153,6 +194,7 @@ class BubbleService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("bubble", "Floating bubble", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
         onNow = { refreshPanel() }
+        inviteHook = { invite(3) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -246,16 +288,27 @@ class BubbleService : Service() {
         root.alpha = 0f; root.scaleX = 0.5f; root.scaleY = 0.5f
         root.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(240).setInterpolator(DecelerateInterpolator()).start()
         handler.postDelayed(fadeRun, 4000)
+        handler.postDelayed({ invite(2, force = true) }, 420)
     }
 
     private fun attachDrag(v: View, p: WindowManager.LayoutParams) {
         var downX = 0f; var downY = 0f; var startX = 0; var startY = 0; var moved = false
+        var longHit = false
+        val longRun = Runnable {
+            if (!moved && panel == null) {
+                longHit = true
+                poke?.invoke("voice")
+                v.animate().scaleX(1.13f).scaleY(1.13f).setDuration(90)
+                    .withEndAction { v.animate().scaleX(1f).scaleY(1f).setDuration(160).start() }.start()
+            }
+        }
         v.setOnTouchListener { _, e ->
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> { wakeBubble(); downX = e.rawX; downY = e.rawY; startX = p.x; startY = p.y; moved = false; true }
+                MotionEvent.ACTION_DOWN -> { wakeBubble(); longHit = false; handler.postDelayed(longRun, 500); downX = e.rawX; downY = e.rawY; startX = p.x; startY = p.y; moved = false; true }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = e.rawX - downX; val dy = e.rawY - downY
                     if (Math.abs(dx) + Math.abs(dy) > dp(9)) moved = true
+                    if (moved) handler.removeCallbacks(longRun)
                     if (moved) {
                         // Holding the bubble raises the two top gates (Oscar's other
                         // app does this, and now so does Logos): Remove, or Open.
@@ -267,9 +320,11 @@ class BubbleService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
+                    handler.removeCallbacks(longRun)
                     val target = hoverTarget
                     hideTargets()
                     when {
+                        longHit -> { longHit = false }
                         !moved -> togglePanel()
                         target == 0 -> stopBubble()
                         target == 1 -> {
@@ -280,7 +335,7 @@ class BubbleService : Service() {
                     }
                     true
                 }
-                MotionEvent.ACTION_CANCEL -> { hideTargets(); if (moved) snapEdge(v, p); true }
+                MotionEvent.ACTION_CANCEL -> { handler.removeCallbacks(longRun); hideTargets(); if (moved) snapEdge(v, p); true }
                 else -> false
             }
         }
@@ -442,7 +497,18 @@ class BubbleService : Service() {
             maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
         }
         subV = TextView(this).apply { setTextColor(c["muted"]!!); textSize = 12f }
-        card.addView(titleV)
+        val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        titleV.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        titleRow.addView(titleV)
+        val markB = TextView(this).apply {
+            text = "⚑"; setTextColor(c["gold"]!!); textSize = 14f; gravity = Gravity.CENTER
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
+            contentDescription = "Mark this moment"
+            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
+            setOnClickListener { poke?.invoke("mark") }
+        }
+        titleRow.addView(markB)
+        card.addView(titleRow)
         card.addView(subV)
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -482,6 +548,25 @@ class BubbleService : Service() {
         fastB.layoutParams = (fastB.layoutParams as LinearLayout.LayoutParams).apply { marginEnd = 0 }
         controls.addView(slowB); controls.addView(prevB); controls.addView(toggleB); controls.addView(nextB); controls.addView(fastB)
         card.addView(controls)
+        val seekW = SeekBar(this).apply {
+            max = 1000
+            val trackD = GradientDrawable().apply { setColor(c["div"]!!); cornerRadius = dp(2).toFloat() }
+            val fillD = ClipDrawable(GradientDrawable().apply { setColor(c["gold"]!!); cornerRadius = dp(2).toFloat() }, Gravity.START, ClipDrawable.HORIZONTAL)
+            val ld = LayerDrawable(arrayOf(trackD, fillD))
+            ld.setId(0, android.R.id.background); ld.setId(1, android.R.id.progress)
+            ld.setLayerInset(0, 0, dp(10), 0, dp(10)); ld.setLayerInset(1, 0, dp(10), 0, dp(10))
+            progressDrawable = ld
+            thumb = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["gold"]!!); setSize(dp(12), dp(12)) }
+            setPadding(dp(2), 0, dp(2), 0)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(24)).apply { topMargin = dp(4) }
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, pr: Int, fromUser: Boolean) {}
+                override fun onStartTrackingTouch(sb: SeekBar?) { seekHeld = true }
+                override fun onStopTrackingTouch(sb: SeekBar?) { seekHeld = false; seekFrac = (sb?.progress ?: 0) / 1000.0; poke?.invoke("seek") }
+            })
+        }
+        seekBar = seekW
+        card.addView(seekW)
         val div = View(this).apply {
             setBackgroundColor(c["div"]!!)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply { topMargin = dp(8); bottomMargin = dp(12) }
@@ -562,14 +647,18 @@ class BubbleService : Service() {
             bp.x + dp(29) < sw2 / 2 -> dp(10)
             else -> (sw2 - pw - dp(10)).coerceAtLeast(dp(10))
         }
-        p.y = (bp.y + dp(64)).coerceAtMost(sh2 - dp(240))
+        p.y = (bp.y + dp(64)).coerceAtMost(sh2 - dp(290))
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
 
     private fun collapsePanel(now: Boolean = false) {
         val v = panel
-        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null
+        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false
         if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
+        if (!now && deliveries != lastDeliverySeen) {
+            lastDeliverySeen = deliveries
+            if (System.currentTimeMillis() - lastDeliveryAt < 20000) handler.postDelayed({ invite(2, force = true) }, 250)
+        }
         if (v == null) return
         if (now) { runCatching { wm?.removeView(v) }; return }
         v.animate().alpha(0f).scaleX(0.93f).scaleY(0.93f).setDuration(120)
@@ -583,6 +672,8 @@ class BubbleService : Service() {
             titleV?.text = j?.optString("title")?.ifBlank { "Logos" } ?: "Logos"
             subV?.text = j?.optString("sub")?.ifBlank { "Ready" } ?: "Ready"
             toggleB?.setImageResource(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
+            playingNow = playing
+            seekBar?.let { if (!seekHeld) it.progress = ((j?.optDouble("frac", 0.0) ?: 0.0) * 1000).toInt() }
             val h = halo
             if (playing && h != null) {
                 if (h.visibility != View.VISIBLE) {

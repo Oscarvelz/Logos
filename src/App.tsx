@@ -4,6 +4,7 @@ import { useStore } from './lib/store.ts'
 import { settings, applyTheme } from './lib/settings.ts'
 import { listen, installMediaSession } from './player/listen.ts'
 import { initBubble } from './lib/bubble.ts'
+import { initResumeTracking } from './lib/resume.ts'
 import { isModelCached, ensureModel, lastLoadCrashed, removeLegacyEngine } from './engine/engine.ts'
 import { refreshLibrary } from './lib/library.ts'
 import { BottomNav, SideRail, StatusPill, MiniPlayer, BubbleMark } from './components/chrome.tsx'
@@ -36,6 +37,7 @@ export default function App() {
   useEffect(() => {
     installMediaSession()
     initBubble()
+    initResumeTracking()
     void refreshLibrary()
     void sweepTempBooks()
     // Model already on this device? Warm it up in the background (offline-ready).
