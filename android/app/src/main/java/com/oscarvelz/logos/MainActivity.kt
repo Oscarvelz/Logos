@@ -318,6 +318,7 @@ class MainActivity : Activity() {
         /** Player state for the bubble's panel (title, sentence, play state). */
         @JavascriptInterface fun bubbleNow(json: String) {
             BubbleService.nowJson = json
+            BubbleService.nowAt = System.currentTimeMillis()
             BubbleService.onNow?.invoke()
         }
 
