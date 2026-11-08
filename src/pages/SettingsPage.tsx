@@ -11,7 +11,7 @@ import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.81'
+const VERSION = '1.4.82'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -279,6 +279,7 @@ export function SettingsPage() {
         </div>
       </div>
       {bState?.last ? <div className="muted small" style={{ marginTop: 10, padding: '0 4px' }}>Last clipboard try: {bState.last}</div> : null}
+      {(() => { try { const j = JSON.parse(localStorage.getItem('logos.stage.journal') ?? '[]') as string[]; return j.length ? <div className="muted small" style={{ marginTop: 6, padding: '0 4px' }}>Stage moves: {j.slice(-4).join(' · ')}</div> : null } catch { return null } })()}
       </SetCard>
       </section>
       <section className="set-group">
