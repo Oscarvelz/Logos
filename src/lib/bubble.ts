@@ -6,7 +6,7 @@
 // playing, always with an Undo, so no text is ever lost to it.
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
-import { listen, loadText, play, endSession, stepRate, seek, seekFraction, refreshVoices, voiceFor, sentenceProgress } from '../player/listen.ts'
+import { listen, loadText, play, endSession, stepRate, seek, seekFraction, refreshVoices, voiceFor, sentenceProgress, levels } from '../player/listen.ts'
 import { readClipboard } from './clipboard.ts'
 import { describeText } from './describe.ts'
 import { detectLang } from './text.ts'
@@ -191,6 +191,7 @@ export function initBubble() {
     titleCached = book?.title ?? (text.trim() ? describeText(text.slice(0, 12000), detectLang(text.slice(0, 2000)).lang).title : '')
     return titleCached
   }
+  const barTmp = new Float32Array(18)
   const push = () => {
     const s = listen.get()
     const text = s.active ? s.text : drafts.get().listen
@@ -200,6 +201,7 @@ export function initBubble() {
       playing: s.playing || s.buffering,
       active: s.active,
       frac: s.active && s.segments.length ? Math.min(1, (s.current + sentenceProgress()) / s.segments.length) : 0,
+      bars: s.active && levels(18, barTmp) ? Array.from(barTmp, (v) => Math.round(Math.max(0, Math.min(1, v)) * 100)) : null,
       light,
       title: titleOf(s.active, text) || 'Logos',
       sub: s.active ? `Sentence ${s.current + 1} of ${s.segments.length} · ${fmtRate(settings.get().listenSpeed)}` : 'Ready',
@@ -210,6 +212,9 @@ export function initBubble() {
     try { d.bubbleNow?.(key) } catch { /* ignore */ }
   }
   listen.subscribe(push)
+  // While playing, feed the panel's spectrum a few times a second — push()
+  // dedupes unchanged states, so this costs nothing at rest.
+  setInterval(() => { if (listen.get().playing) push() }, 250)
   drafts.subscribe(push)
   settings.subscribe(push)
   push()

@@ -12,7 +12,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.Typeface
@@ -133,6 +135,7 @@ class BubbleService : Service() {
     private var halo: View? = null
     private var haloAnim: ObjectAnimator? = null
     private var seekBar: SeekBar? = null
+    private var spectrum: SpectrumView? = null
     private var seekHeld = false
     private var playingNow = false
     private var lastInvite = 0L
@@ -144,6 +147,47 @@ class BubbleService : Service() {
     private var subV: TextView? = null
     private var toggleB: ImageButton? = null
     private val handler = Handler(Looper.getMainLooper())
+
+    /** The player's mirrored spectrum, drawn the way Listen draws it: bars ease
+     *  toward the levels the page pushes (the real envelope around the playhead),
+     *  so a few pushes a second still move like water. */
+    private class SpectrumView(ctx: android.content.Context, gold: Int) : View(ctx) {
+        private val targets = FloatArray(18)
+        private val shown = FloatArray(18) { 0.05f }
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = gold }
+        private var ticking = false
+        private val tick = object : Runnable {
+            override fun run() {
+                var moving = false
+                for (i in shown.indices) {
+                    val d = targets[i] - shown[i]
+                    shown[i] += d * 0.35f
+                    if (Math.abs(d) > 0.008f) moving = true
+                }
+                invalidate()
+                if (moving) postDelayed(this, 33) else ticking = false
+            }
+        }
+        fun setTargets(t: FloatArray) {
+            for (i in targets.indices) targets[i] = if (i < t.size) t[i] else 0.05f
+            if (!ticking) { ticking = true; post(tick) }
+        }
+        fun rest() { setTargets(FloatArray(18) { 0.05f }) }
+        override fun onDetachedFromWindow() { ticking = false; removeCallbacks(tick); super.onDetachedFromWindow() }
+        override fun onDraw(canvas: Canvas) {
+            val w = width.toFloat(); val h = height.toFloat()
+            if (w == 0f || h == 0f) return
+            val n = shown.size; val gap = w / n; val bw = Math.max(2f, gap * 0.52f)
+            for (i in 0 until n) {
+                val center = 1f - Math.abs(i - n / 2f) / (n / 2f)
+                val amp = Math.max(0.05f, shown[i]) * (0.55f + 0.45f * center)
+                val bh = Math.max(3f, amp * (h - 4f))
+                paint.alpha = (70 + 185 * Math.min(1f, shown[i])).toInt()
+                val x = i * gap + (gap - bw) / 2f
+                canvas.drawRoundRect(x, (h - bh) / 2f, x + bw, (h + bh) / 2f, bw / 2f, bw / 2f, paint)
+            }
+        }
+    }
 
     // The ghost rest: four seconds untouched and the bubble fades to a whisper.
     private val fadeRun = Runnable {
@@ -510,6 +554,10 @@ class BubbleService : Service() {
         titleRow.addView(markB)
         card.addView(titleRow)
         card.addView(subV)
+        val spec = SpectrumView(this, c["gold"]!!)
+        spec.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)).apply { topMargin = dp(8) }
+        spectrum = spec
+        card.addView(spec)
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -647,13 +695,13 @@ class BubbleService : Service() {
             bp.x + dp(29) < sw2 / 2 -> dp(10)
             else -> (sw2 - pw - dp(10)).coerceAtLeast(dp(10))
         }
-        p.y = (bp.y + dp(64)).coerceAtMost(sh2 - dp(290))
+        p.y = (bp.y + dp(64)).coerceAtMost(sh2 - dp(330))
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
 
     private fun collapsePanel(now: Boolean = false) {
         val v = panel
-        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false
+        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null
         if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
         if (!now && deliveries != lastDeliverySeen) {
             lastDeliverySeen = deliveries
@@ -674,6 +722,15 @@ class BubbleService : Service() {
             toggleB?.setImageResource(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
             playingNow = playing
             seekBar?.let { if (!seekHeld) it.progress = ((j?.optDouble("frac", 0.0) ?: 0.0) * 1000).toInt() }
+            spectrum?.let { sp ->
+                val arr = j?.optJSONArray("bars")
+                if (arr == null) sp.rest()
+                else {
+                    val t = FloatArray(arr.length())
+                    for (i in 0 until arr.length()) t[i] = (arr.optDouble(i, 0.0) / 100.0).toFloat()
+                    sp.setTargets(t)
+                }
+            }
             val h = halo
             if (playing && h != null) {
                 if (h.visibility != View.VISIBLE) {
