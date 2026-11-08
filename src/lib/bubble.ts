@@ -112,16 +112,27 @@ export function initBubble() {
   })
 
   // What the bubble's panel shows: the title, the sentence, the play state.
+  // 1.4.64: the title is computed ONCE per text and cached — the first version
+  // re-analysed the whole text (keywords, names) on every player tick, and the
+  // main thread paid for it everywhere: switches and the nav felt drunk.
   let last = ''
+  let titleForText = ''
+  let titleCached = ''
+  const titleOf = (active: boolean, text: string): string => {
+    const k = `${text.length}:${text.slice(0, 64)}`
+    if (k === titleForText) return titleCached
+    titleForText = k
+    const book = active ? nowReadingFor(text) : null
+    titleCached = book?.title ?? (text.trim() ? describeText(text.slice(0, 12000), detectLang(text.slice(0, 2000)).lang).title : '')
+    return titleCached
+  }
   const push = () => {
     const s = listen.get()
     const text = s.active ? s.text : drafts.get().listen
-    const book = s.active ? nowReadingFor(s.text) : null
-    const title = book?.title ?? (text.trim() ? describeText(text, detectLang(text.slice(0, 2000)).lang).title : '')
     const info = {
       playing: s.playing || s.buffering,
       active: s.active,
-      title: title || 'Logos',
+      title: titleOf(s.active, text) || 'Logos',
       sub: s.active ? `Sentence ${s.current + 1} of ${s.segments.length}` : 'Ready',
     }
     const key = JSON.stringify(info)

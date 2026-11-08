@@ -10,7 +10,7 @@ import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.63'
+const VERSION = '1.4.64'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -56,15 +56,24 @@ export function SettingsPage() {
 
   // The floating bubble's native truth (permission + service), refreshed while
   // this page is open so returning from the system's permission screen lands.
+  // 1.4.64: the switch answers the finger instantly (optimistic) instead of
+  // waiting for the next poll to agree, and the poll only re-renders on change.
   const [bState, setBState] = useState<BubbleNativeState | null>(null)
+  const [bubbleUi, setBubbleUi] = useState<boolean | null>(null)
   useEffect(() => {
     if (!bubbleSupported()) return
-    const tick = () => setBState(bubbleNativeState())
+    const tick = () => {
+      const n = bubbleNativeState()
+      setBState((p) => (JSON.stringify(p) === JSON.stringify(n) ? p : n))
+    }
     tick()
     const iv = setInterval(tick, 1200)
     document.addEventListener('visibilitychange', tick)
     return () => { clearInterval(iv); document.removeEventListener('visibilitychange', tick) }
   }, [])
+  useEffect(() => {
+    if (bubbleUi !== null && bState && bState.running === bubbleUi) setBubbleUi(null)
+  }, [bState, bubbleUi])
   const [pron, setPron] = useState<PronEntry[]>(() => pronEntries())
   const [pFrom, setPFrom] = useState('')
   const [pTo, setPTo] = useState('')
@@ -221,9 +230,10 @@ export function SettingsPage() {
                   ? 'Needs Android’s permission to display over other apps — switch it on to be taken there.'
                   : 'Drag it anywhere. Tap it for play, previous and next — and for what you copied.'}</div>
           </div>
-          <Switch label="Floating bubble" on={bState ? bState.running : st.bubbleOn} onChange={(v) => {
+          <Switch label="Floating bubble" on={bubbleUi ?? (bState ? bState.running : st.bubbleOn)} onChange={(v) => {
             if (!bubbleSupported()) return
             if (v && bState && !bState.permission) { openBubblePermission(); toast('Allow Logos to display over other apps, then switch the bubble on again'); return }
+            setBubbleUi(v)
             setBubble(v)
             setTimeout(() => setBState(bubbleNativeState()), 450)
           }} />
