@@ -268,9 +268,17 @@ class MainActivity : Activity() {
         }
 
         // ── The floating bubble (shell android-18) ──────────────────────────
-        /** The bubble's native truth for the Settings card: permission + service. */
+        /** The bubble's native truth for the Settings card: permission + service + the last clipboard try. */
         @JavascriptInterface fun bubbleState(): String =
-            JSONObject().put("permission", Settings.canDrawOverlays(this@MainActivity)).put("running", BubbleService.running).toString()
+            JSONObject().put("permission", Settings.canDrawOverlays(this@MainActivity)).put("running", BubbleService.running)
+                .put("last", BubbleService.prefs(this@MainActivity).getString("lastTry", "") ?: "").toString()
+
+        /** Paste & play asked by hand and the bubble could not read: the page reads it itself as Logos opens. */
+        @JavascriptInterface fun bubbleWantClip(): Boolean {
+            val w = BubbleService.wantClip
+            BubbleService.wantClip = false
+            return w
+        }
 
         @JavascriptInterface fun bubble(on: Boolean) {
             BubbleService.prefs(this@MainActivity).edit().putBoolean("on", on).apply()
