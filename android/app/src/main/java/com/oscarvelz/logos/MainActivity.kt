@@ -322,6 +322,7 @@ class MainActivity : Activity() {
         @JavascriptInterface fun bubbleNow(json: String) {
             BubbleService.nowJson = json
             BubbleService.nowAt = System.currentTimeMillis()
+            BubbleService.syncWakeLock(this@MainActivity)
             BubbleService.onNow?.invoke()
         }
 

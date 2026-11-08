@@ -22,6 +22,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
@@ -56,6 +57,35 @@ class BubbleService : Service() {
         var poke: ((String) -> Unit)? = null
         /** A transport press that found the page asleep; the page collects it as it wakes. */
         @Volatile var pendingCmd: String? = null
+        @Volatile private var wakeLock: PowerManager.WakeLock? = null
+
+        /** Oscar's law: one tap, then the icon does the work — even with the
+         *  screen off. The vulnerable stretch is the render: no audio is
+         *  playing yet, so nothing else keeps the processor awake, and the
+         *  device sleeps mid-synthesis. While the pushed state says the engine
+         *  is working or playing, hold a partial wakelock; release it the
+         *  moment the state rests. Bounded at ten minutes per hold, refreshed
+         *  by every state push, so a dead page can never drain the battery. */
+        fun syncWakeLock(c: Context) {
+            val j = runCatching { JSONObject(nowJson) }.getOrNull()
+            val active = j != null && (j.optBoolean("playing") || j.optBoolean("busy")) &&
+                System.currentTimeMillis() - nowAt < 90_000
+            if (active) {
+                val pm = c.getSystemService(Context.POWER_SERVICE) as PowerManager
+                val wl = wakeLock ?: pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "logos:stage").apply { setReferenceCounted(false) }
+                wakeLock = wl
+                @Suppress("WakelockTimeout") wl.acquire(10 * 60 * 1000L)
+            } else {
+                wakeLock?.let { if (it.isHeld) it.release() }
+                wakeLock = null
+            }
+        }
+
+        fun releaseWakeLock() {
+            wakeLock?.let { if (it.isHeld) it.release() }
+            wakeLock = null
+        }
+
         /** The stage lock (Oscar): while on, a fresh copy cannot evict what's playing. */
         fun isLocked(c: Context) = prefs(c).getBoolean("lock", false)
         fun setLocked(c: Context, on: Boolean) { prefs(c).edit().putBoolean("lock", on).apply() }
@@ -1003,6 +1033,7 @@ class BubbleService : Service() {
     }
 
     override fun onDestroy() {
+        releaseWakeLock()
         handler.removeCallbacks(fadeRun)
         hideTargets()
         collapsePanel(now = true)
