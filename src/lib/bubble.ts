@@ -27,6 +27,7 @@ type DroidBubble = {
   bubbleClip?: () => string
   bubbleWantClip?: () => boolean
   bubbleSeek?: () => string
+  bubbleProbe?: (on: boolean) => void
 }
 const droid = () => (window as unknown as { LogosAndroid?: DroidBubble }).LogosAndroid
 
@@ -122,6 +123,16 @@ export function initBubble() {
   }
   pushPrefs()
   settings.subscribe(pushPrefs)
+  // The copy experiment rides the same rail: Settings flips it, the shell obeys.
+  let pushedProbe: boolean | null = null
+  const pushProbe = () => {
+    const p = settings.get().bubbleProbe
+    if (p === pushedProbe) return
+    pushedProbe = p
+    try { d.bubbleProbe?.(p) } catch { /* ignore */ }
+  }
+  pushProbe()
+  settings.subscribe(pushProbe)
   // …and theirs is pulled up when the bubble's switch moves.
   addEventListener('logosandroid-lever', () => {
     try {
