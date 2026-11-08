@@ -286,6 +286,13 @@ class MainActivity : Activity() {
             runOnUiThread { BubbleService.probeHook?.invoke(on) }
         }
 
+        /** A transport press that arrived while the page was asleep, pulled once as it wakes. */
+        @JavascriptInterface fun bubblePendingCmd(): String {
+            val c = BubbleService.pendingCmd
+            BubbleService.pendingCmd = null
+            return c ?: ""
+        }
+
         /** The panel's seek bar: the chosen fraction, pulled once by the page. */
         @JavascriptInterface fun bubbleSeek(): String {
             val f = BubbleService.seekFrac

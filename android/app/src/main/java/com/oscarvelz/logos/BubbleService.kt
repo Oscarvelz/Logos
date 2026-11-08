@@ -54,6 +54,8 @@ class BubbleService : Service() {
     companion object {
         /** Set by MainActivity: an event name for the page ("toggle", "prev", "next", "clip", "lever", "bubbleoff"). */
         var poke: ((String) -> Unit)? = null
+        /** A transport press that found the page asleep; the page collects it as it wakes. */
+        @Volatile var pendingCmd: String? = null
         /** A clipboard text waiting for the page to pull it through the bridge. */
         var clipText: String? = null
         var clipManual = false
@@ -272,6 +274,17 @@ class BubbleService : Service() {
             np.x = ox; np.y = oy
             bubble?.let { runCatching { wm?.updateViewLayout(it, np) } }
         }
+    }
+
+    /** A panel transport key: hand it to the page — or, when Android has
+     *  retired the activity behind the service (the keys go silent), remember
+     *  the press and bring Logos forward so the page collects it as it wakes. */
+    private fun pokeOrWake(cmd: String) {
+        val p = poke
+        if (p != null) { p(cmd); return }
+        pendingCmd = cmd
+        noteTry(this, "panel key woke Logos")
+        runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 
     private fun wakeBubble(schedule: Boolean = true) {
@@ -663,7 +676,7 @@ class BubbleService : Service() {
             }
             contentDescription = label
             layoutParams = LinearLayout.LayoutParams(dp(size), dp(size)).apply { marginEnd = dp(10) }
-            setOnClickListener { poke?.invoke(cmd); handler.postDelayed({ refreshPanel() }, 350) }
+            setOnClickListener { pokeOrWake(cmd); handler.postDelayed({ refreshPanel() }, 350) }
         }
         controls.gravity = Gravity.CENTER
         fun speedBtn(glyph: String, label: String, cmd: String): TextView = TextView(this).apply {
@@ -676,7 +689,7 @@ class BubbleService : Service() {
             }
             contentDescription = label
             layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(10) }
-            setOnClickListener { poke?.invoke(cmd); handler.postDelayed({ refreshPanel() }, 350) }
+            setOnClickListener { pokeOrWake(cmd); handler.postDelayed({ refreshPanel() }, 350) }
         }
         val slowB = speedBtn("−", "Slower", "slower")
         val prevB = mediaBtn(android.R.drawable.ic_media_previous, "Previous sentence", "prev", 46, c["discLine"]!!)
