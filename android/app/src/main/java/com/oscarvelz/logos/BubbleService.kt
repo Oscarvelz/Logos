@@ -23,6 +23,7 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Handler
+import android.os.Looper
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
@@ -110,12 +111,19 @@ class BubbleService : Service() {
             put32(16, 16); put16(20, 1); put16(22, 1); put32(24, sr); put32(28, sr * 2); put16(32, 2); put16(34, 16)
             putStr(36, "data"); put32(40, n * 2)
             val rnd = java.util.Random(42)
-            for (i in 0 until n) { val v = rnd.nextInt(7) - 3; bytes[44 + i * 2] = v.toByte(); bytes[45 + i * 2] = 0 }
+            for (i in 0 until n) { val v = rnd.nextInt(3) - 1; bytes[44 + i * 2] = v.toByte(); bytes[45 + i * 2] = 0 }
             f.writeBytes(bytes)
             return f.absolutePath
         }
 
+        private var holdCtx: Context? = null
+        private val holdClock = Handler(Looper.getMainLooper())
+        private val holdExpiry = Runnable { holdCtx?.let { stopHold(it) } }
+
         private fun startHold(c: Context) {
+            holdCtx = c.applicationContext
+            holdClock.removeCallbacks(holdExpiry)
+            holdClock.postDelayed(holdExpiry, 60_000)
             runCatching {
                 val am = c.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                 if (!holdFocus) holdFocus = am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
@@ -133,6 +141,7 @@ class BubbleService : Service() {
         }
 
         fun stopHold(c: Context) {
+            holdClock.removeCallbacks(holdExpiry)
             runCatching {
                 holdPlayer?.let { if (it.isPlaying) it.pause() }
                 if (holdFocus) {
@@ -395,6 +404,48 @@ class BubbleService : Service() {
         watchNowAt = nowAt
         runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         handler.postDelayed({ deliveryCheck(n, at, 2) }, 3500)
+    }
+
+    /** The stall watch (Oscar, 2026-11-08, with the native hold already
+     *  aboard and audible): press play, close the window or lock the phone,
+     *  and the render froze mid-work — white noise forever, the panel
+     *  confessing 'Waiting for Logos…'. The hold keeps the PROCESS alive;
+     *  a hidden page's workers can still be frozen by the browser, and a
+     *  frozen page sends no pushes. So the watch is pulse-based: while the
+     *  state says the page is WORKING (rendering a sentence, or building
+     *  its head start), eight seconds without a single new push is a
+     *  stall — bring Logos forward, where the same render takes seconds;
+     *  six more silent seconds after that, and the page is reloaded as it
+     *  arrives. A page whose pulse advances is working, however slowly,
+     *  and is left alone. */
+    private var stallPulse = 0L
+    private val stallRung2 = Runnable {
+        val j = runCatching { JSONObject(nowJson) }.getOrNull()
+        if (!workingNow(j)) return@Runnable
+        if (nowAt > stallPulse) return@Runnable // the wake worked; it breathes again
+        noteTry(this, "the render needed a reload")
+        wantReload = true
+        runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+    private val stallRung1 = Runnable {
+        val j = runCatching { JSONObject(nowJson) }.getOrNull()
+        if (!workingNow(j)) return@Runnable
+        if (nowAt > stallPulse) { armStallWatch(); return@Runnable } // alive — keep watching
+        noteTry(this, "the render needed a wake")
+        stallPulse = nowAt
+        runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        handler.postDelayed(stallRung2, 6000)
+    }
+    private fun workingNow(j: JSONObject?): Boolean =
+        j?.optBoolean("busy") == true || (j?.optString("sub")?.startsWith("Preparing") == true)
+    private fun armStallWatch() {
+        handler.removeCallbacks(stallRung1)
+        stallPulse = nowAt
+        handler.postDelayed(stallRung1, 8000)
+    }
+    private fun disarmStallWatch() {
+        handler.removeCallbacks(stallRung1)
+        handler.removeCallbacks(stallRung2)
     }
 
     /** A panel transport key: hand it to the page — or, when Android has
@@ -1073,9 +1124,10 @@ class BubbleService : Service() {
         val playing = j?.optBoolean("playing") ?: false
         handler.post {
             titleV?.text = j?.optString("title")?.ifBlank { "Logos" } ?: "Logos"
-            subV?.text = if (j?.optBoolean("busy") == true) {
-                if (System.currentTimeMillis() - nowAt > 20_000) "Waiting for Logos…" else "Processing…"
-            } else j?.optString("sub")?.ifBlank { "Ready" } ?: "Ready"
+            if (workingNow(j)) armStallWatch() else disarmStallWatch()
+            subV?.text = if (workingNow(j) && System.currentTimeMillis() - nowAt > 20_000) "Waiting for Logos…"
+                else if (j?.optBoolean("busy") == true) "Processing…"
+                else j?.optString("sub")?.ifBlank { "Ready" } ?: "Ready"
             lockBtn?.text = if (isLocked(this@BubbleService)) "🔒" else "🔓"
             toggleB?.setImageResource(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
             playingNow = playing
