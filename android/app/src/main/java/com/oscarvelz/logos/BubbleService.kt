@@ -531,19 +531,25 @@ class BubbleService : Service() {
     private var panelLight = false
     private var lastFocusTry = 0L
 
-    private fun pal(): Map<String, Int> = if (panelLight) mapOf(
+    private val lightPal = mapOf(
         "bg1" to Color.rgb(251, 247, 238), "bg2" to Color.rgb(240, 232, 214),
         "line" to Color.rgb(206, 188, 148), "ink" to Color.rgb(34, 28, 18),
         "muted" to Color.rgb(122, 108, 85), "disc" to Color.rgb(255, 255, 255),
         "discLine" to Color.rgb(216, 201, 168), "gold" to Color.rgb(154, 102, 20),
         "glow" to Color.argb(46, 233, 189, 114), "div" to Color.rgb(224, 211, 182)
-    ) else mapOf(
+    )
+    private val darkPal = mapOf(
         "bg1" to Color.rgb(34, 29, 23), "bg2" to Color.rgb(19, 16, 13),
         "line" to Color.rgb(96, 80, 54), "ink" to Color.rgb(245, 239, 227),
         "muted" to Color.rgb(173, 161, 141), "disc" to Color.rgb(46, 40, 32),
         "discLine" to Color.rgb(74, 64, 51), "gold" to gold,
         "glow" to Color.argb(64, 233, 189, 114), "div" to Color.rgb(58, 50, 40)
     )
+    private fun pal(): Map<String, Int> = if (panelLight) lightPal else darkPal
+    /** The explainer cards wear the family's OTHER pole (Oscar): a cream card
+     *  laid on the dark player, a dark note on the light one — never the
+     *  player's own tone, so a pop-up can never be mistaken for the player. */
+    private fun cardPal(): Map<String, Int> = if (panelLight) darkPal else lightPal
 
     private fun openPanel() {
         val w = wm ?: return
@@ -801,7 +807,7 @@ class BubbleService : Service() {
     private fun showHintCard(title: String, body: String, confirmLabel: String, cancelLabel: String, action: () -> Unit) {
         dismissSaveHint()
         val w = wm ?: return
-        val c = pal()
+        val c = cardPal()
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(16), dp(18), dp(14))
