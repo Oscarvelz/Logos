@@ -219,9 +219,10 @@ class BubbleService : Service() {
             val p = poke
             if (p != null) p("clip")
             else if (manual) {
-                // The page is gone: bring Logos forward; the page pulls the clip as it opens.
+                // The page is gone: a ghost visit revives it; the page
+                // pulls the clip as it wakes, and Oscar stays where he is.
                 runCatching {
-                    c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true))
                 }
             }
         }
@@ -395,13 +396,13 @@ class BubbleService : Service() {
             if (clipText == null && j?.optBoolean("busy") != true) return
             noteTry(this, "the catch needed a reload")
             wantReload = true
-            runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            ghostWake()
             return
         }
         if (clipText == null || (alive && nowAt >= at)) return // confirmed
-        noteTry(this, "the catch needed a wake")
+        noteTry(this, "the catch needed a visit")
         watchNowAt = nowAt
-        runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        ghostWake()
         handler.postDelayed({ deliveryCheck(n, at, 2) }, 3500)
     }
 
@@ -424,15 +425,15 @@ class BubbleService : Service() {
         if (nowAt > stallPulse) return@Runnable // the wake worked; it breathes again
         noteTry(this, "the render needed a reload")
         wantReload = true
-        runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        ghostWake()
     }
     private val stallRung1 = Runnable {
         val j = runCatching { JSONObject(nowJson) }.getOrNull()
         if (!workingNow(j)) return@Runnable
         if (nowAt > stallPulse) { armStallWatch(); return@Runnable } // alive — keep watching
-        noteTry(this, "the render needed a wake")
+        noteTry(this, "the render needed a visit")
         stallPulse = nowAt
-        runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        ghostWake()
         handler.postDelayed(stallRung2, 6000)
     }
     private fun workingNow(j: JSONObject?): Boolean =
@@ -454,8 +455,16 @@ class BubbleService : Service() {
         val p = poke
         if (p != null && !force) { p(cmd); return }
         pendingCmd = cmd
-        noteTry(this, "panel key woke Logos")
-        runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        noteTry(this, "panel key visited Logos")
+        ghostWake()
+    }
+
+    /** Bring Logos forward WITHOUT taking Oscar anywhere (1.4.88): the
+     *  activity resumes as a ghost — transparent, touch-through — only
+     *  until the page breathes again, then leaves on its own. The bubble
+     *  is a shortcut; a rescue that lands him inside the app is no rescue. */
+    private fun ghostWake() {
+        runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true)) }
     }
 
     private fun wakeBubble(schedule: Boolean = true) {

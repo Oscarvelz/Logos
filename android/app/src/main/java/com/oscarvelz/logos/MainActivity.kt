@@ -12,6 +12,8 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.MediaStore
@@ -19,6 +21,7 @@ import android.provider.OpenableColumns
 import android.provider.Settings
 import android.util.Base64
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.WindowInsets
 import android.webkit.*
 import android.widget.FrameLayout
@@ -41,6 +44,18 @@ class MainActivity : Activity() {
     private val home = "https://oscarvelz.github.io/Logos/"
     private val bg = Color.parseColor("#0A0A0F")
     private var fileCb: ValueCallback<Array<Uri>>? = null
+    // The ghost visit (1.4.88, Oscar): the watches used to bring Logos
+    // forward to unfreeze its page — which dragged him INTO the app when
+    // all he wanted was the bubble to do its work. Now a wake arrives as
+    // a ghost: this activity resumes transparent and touch-through, the
+    // page breathes and finishes its render, and the visit leaves on its
+    // own the moment the state says sound is flowing. He never lands here.
+    private var ghost = false
+    private var ghostLeaving = false
+    private var resumed = false
+    private var ghostBegan = 0L
+    private val ghostHandler = Handler(Looper.getMainLooper())
+    private val ghostLeave = Runnable { leaveGhost() }
     private val crashes = ArrayList<Long>()
     /** Files shared into Logos, waiting for the page to read them. */
     private var shared: List<Uri> = emptyList()
@@ -49,6 +64,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        if (intent?.getBooleanExtra("logos.ghost", false) == true) enterGhost()
         window.setDecorFitsSystemWindows(false)
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
@@ -67,6 +83,7 @@ class MainActivity : Activity() {
         }
         setContentView(root)
         window.decorView.setBackgroundColor(bg)
+        if (ghost) { web.alpha = 0f; root.setBackgroundColor(Color.TRANSPARENT); window.decorView.setBackgroundColor(Color.TRANSPARENT) }
         PlaybackService.onAction = { a -> runOnUiThread { web.evaluateJavascript("dispatchEvent(new Event('logosandroid-$a'))", null) } }
         // The floating bubble speaks to the page through the same event door.
         BubbleService.poke = { cmd ->
@@ -178,6 +195,8 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (intent.getBooleanExtra("logos.ghost", false)) { if (!resumed && !ghost) enterGhost() }
+        else if (ghost) exitGhost()
         if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
         if (intent.action == "logos.INSTALL") { installResult(intent); return }
         shareUrl(intent)?.let { web.loadUrl(it) }
@@ -185,7 +204,51 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        resumed = true
         if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
+    }
+
+    private fun enterGhost() {
+        ghost = true
+        ghostLeaving = false
+        ghostBegan = System.currentTimeMillis()
+        window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        if (::web.isInitialized) { web.alpha = 0f; root.setBackgroundColor(Color.TRANSPARENT); window.decorView.setBackgroundColor(Color.TRANSPARENT) }
+        overridePendingTransition(0, 0)
+        ghostHandler.removeCallbacks(ghostLeave)
+        ghostHandler.postDelayed(ghostLeave, 25_000)
+    }
+
+    /** A real arrival (his tap on the icon, a share) while a visit is on:
+     *  the visit simply becomes his stay — screen back, flags off. */
+    private fun exitGhost() {
+        ghost = false
+        ghostHandler.removeCallbacks(ghostLeave)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        if (::web.isInitialized) { web.alpha = 1f; root.setBackgroundColor(bg); window.decorView.setBackgroundColor(bg) }
+    }
+
+    private fun leaveGhost() {
+        if (!ghost) return
+        ghost = false
+        ghostHandler.removeCallbacks(ghostLeave)
+        finish()
+        overridePendingTransition(0, 0)
+    }
+
+    /** Every state push lands here during a visit: sound flowing — or
+     *  nothing coming after a fair wait — means the errand is done. */
+    private fun ghostPulse() {
+        if (!ghost || ghostLeaving) return
+        val raw = BubbleService.nowJson ?: return
+        val j = runCatching { JSONObject(raw) }.getOrNull() ?: return
+        val playing = j.optBoolean("playing")
+        val busy = j.optBoolean("busy")
+        if (playing || (!busy && System.currentTimeMillis() - ghostBegan > 3_000)) {
+            ghostLeaving = true
+            ghostHandler.removeCallbacks(ghostLeave)
+            ghostHandler.postDelayed(ghostLeave, 900)
+        }
     }
 
     private fun nameOf(u: Uri): Pair<String, Long> {
@@ -337,6 +400,7 @@ class MainActivity : Activity() {
             BubbleService.nowAt = System.currentTimeMillis()
             BubbleService.syncWakeLock(this@MainActivity)
             BubbleService.onNow?.invoke()
+            ghostPulse()
         }
 
         /** The clipboard text the bubble caught, pulled once by the page. */
@@ -411,7 +475,7 @@ class MainActivity : Activity() {
         fileCb?.onReceiveValue(res); fileCb = null
     }
 
-    override fun onPause() { super.onPause(); CookieManager.getInstance().flush() }
+    override fun onPause() { super.onPause(); resumed = false; CookieManager.getInstance().flush() }
 
     /** Leaving Logos — often on the way to copy something: the bubble waves once,
      *  "I'm here when you're ready." (Android lets no app watch the clipboard

@@ -1,3 +1,25 @@
+## 1.4.88 — The ghost visit: the bubble stops dragging you into the app
+
+Oscar's verdict on the watches: they cured the frozen voice by opening
+the application, and the application then made the voice run — but that
+forces the user to go to the app when he never expected to. The bubble
+exists precisely to avoid that trip; it is a shortcut. He is right, and
+the watches now rescue differently. Every automatic wake — the delivery
+watch, the stall watch, and a panel key press that finds the page gone —
+now arrives as a GHOST VISIT: MainActivity resumes transparent and
+touch-through (FLAG_NOT_TOUCHABLE + FLAG_NOT_FOCUSABLE, WebView alpha
+0, no transition), the page breathes and finishes its render, and the
+moment its state says sound is flowing (or nothing is coming after a
+fair wait) the visit leaves by itself, with a 25 s hard cap. His app
+underneath stays usable the whole time; he never lands in Logos. A real
+arrival mid-visit (his tap on the icon, a share) simply turns the visit
+into his stay — screen back, flags off. The only full openings left are
+the ones his own hand explicitly asks for: the λ Open Logos drag gate,
+tapping the app, and the rare Paste-now floor that must open the app to
+read the clipboard at all. Receipts renamed honestly: "needed a visit",
+"panel key visited Logos". Shell + web version strings; the web code
+itself is unchanged.
+
 ## 1.4.87 — Nothing is deleted by a single tap (with 1.4.86 inside)
 
 Oscar's ask, verbatim in spirit: a confirmation window before deleting
