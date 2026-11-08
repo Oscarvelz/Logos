@@ -5,7 +5,7 @@ import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
 import { segmentText, speakable, estimateSeconds, pauseAfter, type Segment } from '../lib/text.ts'
 import { voiceById, type Lang } from '../lib/voices.ts'
-import { encodeWav, envelope, silence, trimSilence, concat } from '../lib/audio.ts'
+import { encodeWav, envelope, silence, trimSilence, concat, applyGain, levelGain } from '../lib/audio.ts'
 import { engine, ensureModel, synthesize, promote } from '../engine/engine.ts'
 import { speakDevice, cancelDevice, deviceSpeechAvailable } from '../engine/device-voice.ts'
 import { stopClipPlayer, onClipPlay } from './clip.ts'
@@ -95,11 +95,13 @@ export type ListenState = {
   finished: boolean
   /** while preparing audio before playback: seconds ready vs. needed, and estimated seconds left */
   cushion: { have: number; need: number; eta: number | null; done: number; total: number } | null
+  /** sleep timer: seconds left, or null when off */
+  sleepLeft: number | null
 }
 
 export const listen = createStore<ListenState>({
   active: false, text: '', segments: [], voices: [], current: 0, playing: false,
-  buffering: false, mode: null, rendered: [], error: null, finished: false, cushion: null,
+  buffering: false, mode: null, rendered: [], error: null, finished: false, cushion: null, sleepLeft: null,
 })
 
 const LISTEN_PRIORITY = 1000
@@ -197,6 +199,7 @@ function resetCache() {
 /** Prepare a new listening session from text (does not start playback). */
 export function loadText(text: string) {
   stop()
+  setSleepTimer(null)
   resetCache()
   session++
   const segments = segmentText(text, settings.get().langMode)
@@ -254,12 +257,21 @@ function render(i: number, priority: number): Promise<Rendered> {
   const ctrl = new AbortController()
   const mySession = session
   const promise = (async () => {
-    const res = await synthesize(speakable(seg.text, seg.lang) || seg.text, voice, 1, { priority, signal: ctrl.signal })
+    // What the voice actually says: the sentence cleaned for speech (codes named,
+    // not spelled; machine file names dropped) and run through the reader's
+    // pronunciation dictionary. A sentence that was only a code becomes a breath
+    // of silence instead of a spelling bee.
+    const spoken = speakable(seg.text, seg.lang)
+    const res = spoken
+      ? await synthesize(spoken, voice, 1, { priority, signal: ctrl.signal })
+      : { samples: silence(300, 24000), sampleRate: 24000, ms: 0 }
     synthMs += res.ms
     synthSec += res.samples.length / res.sampleRate
     const trimmed = trimSilence(res.samples, res.sampleRate)
     const pauseMs = pauseAfter(seg, settings.get().sentencePauseMs)
-    const full = concat([trimmed, silence(pauseMs, res.sampleRate)])
+    const joined = concat([trimmed, silence(pauseMs, res.sampleRate)])
+    // Level each sentence toward a common loudness, so a long book sounds even.
+    const full = applyGain(joined, levelGain(joined))
     const r: Rendered = {
       blob: encodeWav(full, res.sampleRate),
       env: envelope(full, res.sampleRate, 60),
@@ -277,10 +289,11 @@ function render(i: number, priority: number): Promise<Rendered> {
   return promise
 }
 
-// Prepare the whole text in the background (sentence by sentence, in a worker),
-// so audio keeps piling up while you listen, pause, or wait.
+// Prepare audio ahead of the playhead in the background (sentence by sentence,
+// in a worker), in a bounded window that follows the playhead — whole-book
+// sessions would otherwise try to hold hours of rendered audio in memory.
 function lookahead() {
-  return 5000
+  return 400
 }
 
 function prefetch(from: number) {
@@ -323,6 +336,10 @@ async function playIndex(i: number, startFrac = 0, startWord?: { w: number; word
   listen.set({ current: i, playing: true, mode: 'neural', finished: false, error: null, buffering: stalled })
   updateMediaSession()
   if (!neuralUsable()) ensureModel().catch((e) => { if (my === token) listen.set({ playing: false, buffering: false, error: (e as Error).message }) })
+  // Whole-book sessions: bound the rendered cache — drop sentences far behind
+  // the playhead (30 stay for stepping back) and far beyond the lookahead.
+  // Stepping back to a dropped sentence simply renders it again.
+  for (const k of [...cache.keys()]) if (k < i - 30 || k > i + 460) cache.delete(k)
   prefetch(i)
   let r: Rendered
   try {
@@ -593,6 +610,7 @@ export function stop() {
 
 export function endSession() {
   stop()
+  setSleepTimer(null)
   resetCache()
   session++
   listen.set({ active: false, segments: [], voices: [], rendered: [], current: 0, finished: false, error: null })
@@ -602,6 +620,27 @@ export function endSession() {
 export function setRate(rate: number) {
   settings.set({ listenSpeed: rate })
   if (audio) audio.playbackRate = rate
+}
+
+// ── Sleep timer ──
+// Counts down in the store (the Listen page shows the minutes left); the last
+// ten seconds fade the volume down to silence, then playback pauses and full
+// volume is restored, so a faded book never stays quiet by accident.
+let sleepId: ReturnType<typeof setInterval> | null = null
+let sleepEnd = 0
+
+export function setSleepTimer(minutes: number | null) {
+  if (sleepId) { clearInterval(sleepId); sleepId = null }
+  if (audio) audio.volume = 1
+  if (!minutes || minutes <= 0) { listen.set({ sleepLeft: null }); return }
+  sleepEnd = Date.now() + minutes * 60000
+  listen.set({ sleepLeft: minutes * 60 })
+  sleepId = setInterval(() => {
+    const left = Math.max(0, (sleepEnd - Date.now()) / 1000)
+    listen.set({ sleepLeft: Math.ceil(left) })
+    if (audio && listen.get().playing) audio.volume = left <= 10 ? Math.max(0, left / 10) : 1
+    if (left <= 0) { setSleepTimer(null); pause() }
+  }, 500)
 }
 
 /** Visualizer feed: `count` levels around the playhead (0..1). */

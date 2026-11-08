@@ -106,6 +106,34 @@ async function androidSave(d: DroidSave, blob: Blob, filename: string, share: bo
   d.saveDone(filename, blob.type || 'application/octet-stream', share)
 }
 
+/**
+ * 1.4.57 loudness levelling: the gain that brings a sentence toward a common
+ * loudness (target RMS), gently capped both ways and never so high that a peak
+ * would clip — so a long book sounds produced, not louder/softer per sentence.
+ */
+export function levelGain(samples: Float32Array, target = 0.16): number {
+  let sum = 0
+  let peak = 0
+  for (let i = 0; i < samples.length; i++) {
+    const v = samples[i]
+    sum += v * v
+    const a = Math.abs(v)
+    if (a > peak) peak = a
+  }
+  if (!samples.length || peak === 0) return 1
+  const rms = Math.sqrt(sum / samples.length)
+  if (rms < 1e-4) return 1
+  return Math.min(1.5, Math.max(0.6, Math.min(target / rms, 0.97 / peak)))
+}
+
+/** A gained copy of the samples (the original, untouched, when the gain is 1). */
+export function applyGain(samples: Float32Array, g: number): Float32Array {
+  if (g === 1) return samples
+  const out = new Float32Array(samples.length)
+  for (let i = 0; i < samples.length; i++) out[i] = samples[i] * g
+  return out
+}
+
 export function downloadBlob(blob: Blob, filename: string, share = false) {
   const droid = (window as unknown as { LogosAndroid?: DroidSave }).LogosAndroid
   if (droid?.saveChunk) { void androidSave(droid, blob, filename, share); return }

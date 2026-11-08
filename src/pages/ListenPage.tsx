@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
-import { AudioLines, BookOpen, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
+import { AudioLines, BookOpen, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Moon, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
-import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, refreshVoices, relangSession, voiceFor, endSession, sentenceProgress, seekFraction, wordClock, seekWord } from '../player/listen.ts'
+import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, setSleepTimer, refreshVoices, relangSession, voiceFor, endSession, sentenceProgress, seekFraction, wordClock, seekWord } from '../player/listen.ts'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
 import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
@@ -32,6 +32,7 @@ export function ListenPage() {
   const [editing, setEditing] = useState(() => !listen.get().active)
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [speedOpen, setSpeedOpen] = useState(false)
+  const [sleepOpen, setSleepOpen] = useState(false)
   const [keepOpen, setKeepOpen] = useState(false)
   const [webUrl, setWebUrl] = useState<string | null>(null)
   const text = d.listen
@@ -157,6 +158,7 @@ export function ListenPage() {
               <span className="chip-txt">{st.langMode === 'auto' ? <>Auto · {mixed ? 'EN + ES' : detected.lang.toUpperCase()}</> : LANG_LABEL[st.langMode]}</span>
             </button>
             <div className="player-top-r">
+              <button className={`chip ${s.sleepLeft != null ? 'accent' : ''}`} onClick={() => setSleepOpen(true)} aria-label="Sleep timer"><Moon size={15} />{s.sleepLeft != null ? formatDuration(s.sleepLeft) : null}</button>
               <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={`Playback speed ${fmtSpeed(st.listenSpeed)}`}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
               <button className="chip accent voice-chip" onClick={() => setVoiceOpen(true)} aria-label="Voice">
                 <span className="dot" /><span className="chip-txt">{currentVoice?.name ?? ''}</span>
@@ -222,6 +224,14 @@ export function ListenPage() {
         </div>
         <Range label="Speed" min={0.5} max={2.5} step={0.05} value={st.listenSpeed} onChange={setRate} />
         <p className="muted small" style={{ margin: '8px 4px 0' }}>Changes apply instantly, pitch preserved.</p>
+      </Sheet>
+
+      <Sheet open={sleepOpen} onClose={() => setSleepOpen(false)} title="Sleep timer">
+        <div className="speed-row" style={{ marginBottom: 14 }}>
+          <button className={s.sleepLeft == null ? 'on' : ''} onClick={() => setSleepTimer(null)}>Off</button>
+          {[10, 15, 20, 30, 45, 60].map((m) => <button key={m} onClick={() => setSleepTimer(m)}>{m} min</button>)}
+        </div>
+        <p className="muted small" style={{ margin: '8px 4px 0' }}>The last ten seconds fade down gently, then it pauses.</p>
       </Sheet>
     </div>
   )

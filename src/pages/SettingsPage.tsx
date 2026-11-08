@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Cpu, Download, HardDrive, Loader2, Trash2 } from 'lucide-react'
+import { Cpu, Download, HardDrive, Loader2, Plus, Trash2, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, applyTheme, type Theme } from '../lib/settings.ts'
 import { keep } from '../engine/keep.ts'
@@ -7,8 +7,9 @@ import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHON
 import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
+import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.56'
+const VERSION = '1.4.57'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -30,6 +31,19 @@ export function SettingsPage() {
   }, [e.status])
 
   const warming = e.status === 'loading' && e.phase === 'warm'
+
+  const [pron, setPron] = useState<PronEntry[]>(() => pronEntries())
+  const [pFrom, setPFrom] = useState('')
+  const [pTo, setPTo] = useState('')
+  const savePron = (list: PronEntry[]) => { setPron(list); savePronEntries(list) }
+  const addPron = () => {
+    const from = pFrom.trim()
+    const to = pTo.trim()
+    if (!from || !to) return
+    savePron([...pron.filter((x) => x.from.toLowerCase() !== from.toLowerCase()), { from, to }])
+    setPFrom(''); setPTo('')
+    toast(`“${from}” will be read as “${to}”`)
+  }
 
   return (
     <div className="page settings-page">
@@ -128,6 +142,26 @@ export function SettingsPage() {
             <button className="btn sm ghost" aria-label="Highlight earlier" onClick={() => settings.set({ wordLeadMs: Math.min(450, st.wordLeadMs + 30) })}>+</button>
           </div>
         </div>
+      </div>
+
+      </section>
+      <section className="set-group">
+      <div className="section-label">Pronunciation</div>
+      <div className="list">
+        <div className="list-row col">
+          <div className="grow"><div className="t">Say it your way</div><div className="d">Words the voice should pronounce differently — names, places, terms of art. Applies to listening and to exported audio, in every book. Codes and links are already named, not spelled out.</div></div>
+          <div className="row" style={{ gap: 8, marginTop: 10 }}>
+            <input className="text-input" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder="Word in the book" value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
+            <input className="text-input" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder="Say it as" value={pTo} onChange={(e) => setPTo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPron() }} />
+            <button className="btn primary" onClick={addPron} disabled={!pFrom.trim() || !pTo.trim()}><Plus size={17} /> Add</button>
+          </div>
+        </div>
+        {pron.map((e) => (
+          <div className="list-row" key={e.from}>
+            <div className="grow"><div className="t">{e.from}</div><div className="d">read as “{e.to}”</div></div>
+            <button className="btn sm ghost" aria-label={`Remove ${e.from}`} onClick={() => savePron(pron.filter((x) => x !== e))}><X size={16} /></button>
+          </div>
+        ))}
       </div>
 
       </section>
