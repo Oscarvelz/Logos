@@ -53,6 +53,23 @@ export function chapterize(blocks: Block[], given?: { at: number; title?: string
   return { chapters, locate }
 }
 
+/** File names invented by machines — an Android share hash ("share-media-<64 hex>.png"),
+    a camera roll name ("IMG_2041") — say nothing about a book. They must never become
+    its title or its importing label: the words inside the file are the only title an
+    image import has. */
+export const isMachineName = (name: string): boolean => {
+  const b = name.replace(/\.[^.]+$/, '').trim()
+  return /share[-_ ]?media/i.test(b) || /[0-9a-f]{20,}/i.test(b) || /^(img|image|screenshot|photo|pxl|mvimg|dsc)[-_ ]?\d+$/i.test(b)
+}
+
+/** A title built from a text's own first strong line, cut at a word boundary. */
+export const titleFromText = (text: string): string => {
+  const first = text.split('\n').map((l) => l.trim()).find((l) => l.length >= 12 && /\p{L}{3}/u.test(l))
+  if (!first) return ''
+  const cut = first.length > 84 ? first.slice(0, 84).replace(/\s+\S*$/, '') : first
+  return cut.replace(/[\s,;:—–-]+$/, '').trim()
+}
+
 const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 const norm = (s: string) => fold(s).replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 const firstLine = (t: string) => t.split('\n')[0].trim()
@@ -216,7 +233,7 @@ export function finishBook(raw: RawBook, file: File, format: string): { meta: Bo
   const words = chWords.reduce((a, b) => a + b, 0)
   const links = chapters.reduce((s, c) => s + c.blocks.reduce((t, b) => t + (b.l?.filter((x) => /^\d+:\d+$/.test(x.to)).length ?? 0), 0), 0)
   const sample = chapters.flatMap((c) => c.blocks).slice(0, 400).map((b) => b.t).join(' ').slice(0, 6000)
-  const fileTitle = file.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const fileTitle = isMachineName(file.name) ? '' : file.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim()
   const id = crypto.randomUUID?.() ?? String(Date.now())
   const meta: BookMeta = {
     id,
