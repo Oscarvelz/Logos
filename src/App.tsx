@@ -8,7 +8,7 @@ import { initResumeTracking } from './lib/resume.ts'
 import { isModelCached, ensureModel, lastLoadCrashed, removeLegacyEngine } from './engine/engine.ts'
 import { refreshLibrary } from './lib/library.ts'
 import { BottomNav, SideRail, StatusPill, MiniPlayer, BubbleMark } from './components/chrome.tsx'
-import { Toasts } from './components/ui.tsx'
+import { Toasts, ConfirmHost } from './components/ui.tsx'
 import { sweepTempBooks } from './lib/books.ts'
 import { KeepAskSheet } from './components/shelf.tsx'
 import { ListenPage } from './pages/ListenPage.tsx'
@@ -95,6 +95,7 @@ export default function App() {
       <BottomNav />
       <Toasts />
       <KeepAskSheet />
+      <ConfirmHost />
     </>
   )
 }

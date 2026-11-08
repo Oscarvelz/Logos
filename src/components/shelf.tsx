@@ -5,7 +5,7 @@ import { books, refreshBooks, updateBook, deleteBook, putBook, type BookMeta } f
 import { importBook, BOOK_ACCEPT } from '../lib/book/import.ts'
 import { playBook } from '../lib/book/playbook.ts'
 import { keepAsk, askKeep } from '../lib/book/keepask.ts'
-import { MenuSelect, Sheet, toast } from './ui.tsx'
+import { MenuSelect, Sheet, toast, confirmDelete } from './ui.tsx'
 import { BookCover } from './bookcover.tsx'
 
 type Sort = 'recent' | 'added' | 'title' | 'author' | 'progress'
@@ -224,6 +224,8 @@ function BookMenu({ b, onClose, onRename }: { b: BookMeta | null; onClose: () =>
   if (!b) return null
   const run = (fn: () => void | Promise<void>) => () => { onClose(); void fn() }
   const remove = async () => {
+    const shown = b.title.length > 90 ? b.title.slice(0, 90) + '…' : b.title
+    if (!await confirmDelete('Delete this book?', `“${shown}” will be removed from your library.`)) return
     const gone = await deleteBook(b.id)
     if (gone) toast('Book deleted', { label: 'Undo', run: () => { void putBook(gone.meta, gone.content) } }, 6000)
   }
