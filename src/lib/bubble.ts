@@ -7,6 +7,7 @@
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
 import { listen, loadText, play, endSession, stepRate, seek, seekFraction, refreshVoices, voiceFor, sentenceProgress, levels } from '../player/listen.ts'
+import { cancelDevice } from '../engine/device-voice.ts'
 import { readClipboard } from './clipboard.ts'
 import { describeText } from './describe.ts'
 import { detectLang } from './text.ts'
@@ -129,6 +130,13 @@ export function initBubble() {
       localStorage.setItem(key, JSON.stringify(arr.slice(-24)))
     } catch { /* ignore */ }
   })
+  // A page being torn down (a watchdog reload, a destroyed activity) must
+  // not leave its device voice behind: system speech outlives a dead page
+  // in the speech service's queue and speaks on with no stop switch, while
+  // the fresh page starts the same session in the neural voice — two
+  // different audios at once, one of them unstoppable. Neural audio dies
+  // with the page on its own; the device voice is dismissed by hand.
+  window.addEventListener('pagehide', () => { try { cancelDevice() } catch { /* dying anyway */ } })
   if (inited) return
   inited = true
   const d = droid()

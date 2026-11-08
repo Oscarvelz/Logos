@@ -7,11 +7,11 @@ import { bubbleSupported, bubbleNativeState, setBubble, openBubblePermission, ty
 import { keep } from '../engine/keep.ts'
 import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHONON_SIZE_MB, modelCacheBytes } from '../engine/engine.ts'
 import { formatBytes } from '../lib/audio.ts'
-import { Range, Seg, Switch, toast } from '../components/ui.tsx'
+import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.85'
+const VERSION = '1.4.87'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -159,7 +159,7 @@ export function SettingsPage() {
               {e.status === 'loading' ? <Loader2 size={18} className="spin" /> : <Download size={18} />} {e.cached ? 'Load now' : 'Download now'}
             </button>
           )}
-          <button className="btn danger" onClick={async () => { endSession(); await deleteModel(); refresh(); toast('Voice model removed from this device') }} disabled={e.status === 'loading' || (!modelBytes && !e.cached)}>
+          <button className="btn danger" onClick={async () => { if (!await confirmDelete('Delete the voice model?', 'The downloaded neural voice will be removed from this device. You can download it again whenever you want.')) return; endSession(); await deleteModel(); refresh(); toast('Voice model removed from this device') }} disabled={e.status === 'loading' || (!modelBytes && !e.cached)}>
             <Trash2 size={18} /> Delete model
           </button>
         </div>

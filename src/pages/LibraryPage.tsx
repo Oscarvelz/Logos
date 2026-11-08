@@ -11,7 +11,7 @@ import { settings } from '../lib/settings.ts'
 import { drafts } from '../lib/drafts.ts'
 import { navigate } from '../lib/router.ts'
 import { loadText, play as listenPlay } from '../player/listen.ts'
-import { MenuSelect, Sheet, Seg, toast, useMediaQuery } from '../components/ui.tsx'
+import { MenuSelect, Sheet, Seg, toast, useMediaQuery, confirmDelete } from '../components/ui.tsx'
 import { BookShelf, useBookPicker, importMany } from '../components/shelf.tsx'
 import { takeSharedFiles } from '../lib/book/import.ts'
 import { books } from '../lib/books.ts'
@@ -33,12 +33,14 @@ const SORTS: { id: Sort; label: string }[] = [
   { id: 'new', label: 'Newest' }, { id: 'old', label: 'Oldest' }, { id: 'long', label: 'Longest' }, { id: 'short', label: 'Shortest' }, { id: 'az', label: 'A–Z' },
 ]
 
-async function removeWithUndo(ids: string[]) {
+async function removeWithUndo(ids: string[], askTitle: string, askBody?: string): Promise<boolean> {
+  if (!await confirmDelete(askTitle, askBody)) return false
   const key = clipPlayer.get().key
   if (key && ids.includes(key.slice(5))) pauseClip()
   ids.forEach((id) => cancelItem(id))
   const gone = await deleteClips(ids)
   if (gone.length) toast(`${gone.length === 1 ? 'Deleted' : `${gone.length} deleted`}`, { label: 'Undo', run: () => { void restoreClips(gone) } }, 6000)
+  return gone.length > 0
 }
 
 function makeAudio(c: ClipMeta) {
@@ -164,7 +166,7 @@ export function LibraryPage() {
           <span className="sel-n">{sel.size} selected</span>
           <button className="icon-btn" disabled={!sel.size} onClick={() => void bulk({ fav: true })} aria-label="Add to favorites" title="Favorite"><Star size={20} /></button>
           <button className="icon-btn" disabled={!sel.size} onClick={() => void bulk({ done: true, pos: 0 })} aria-label="Mark finished" title="Mark finished"><CheckCheck size={20} /></button>
-          <button className="icon-btn" disabled={!sel.size} style={{ color: 'var(--danger)' }} onClick={() => { void removeWithUndo([...sel]); endSelect() }} aria-label="Delete selected" title="Delete"><Trash2 size={20} /></button>
+          <button className="icon-btn" disabled={!sel.size} style={{ color: 'var(--danger)' }} onClick={() => { const n = sel.size; void removeWithUndo([...sel], n === 1 ? 'Delete this file?' : `Delete ${n} files?`, 'The selected files will be removed from your library.').then((ok) => { if (ok) endSelect() }) }} aria-label="Delete selected" title="Delete"><Trash2 size={20} /></button>
         </div>
       )}
 
@@ -305,7 +307,7 @@ function ItemMenu({ clip, onClose, onRename }: { clip: ClipMeta | null; onClose:
         <button onClick={() => onRename(clip)}><Pencil size={20} /> Rename</button>
         {!isText && <button onClick={run(download)}><ArrowDownToLine size={20} /> Download {clip.format.toUpperCase()}</button>}
         {!isText && <button onClick={run(share)}><Share2 size={20} /> Share</button>}
-        <button className="danger" onClick={run(() => removeWithUndo([clip.id]))}><Trash2 size={20} /> Delete</button>
+        <button className="danger" onClick={run(async () => { await removeWithUndo([clip.id], 'Delete this file?', `“${clip.title.length > 90 ? clip.title.slice(0, 90) + '…' : clip.title}” will be removed from your library.`) })}><Trash2 size={20} /> Delete</button>
       </div>
     </Sheet>
   )

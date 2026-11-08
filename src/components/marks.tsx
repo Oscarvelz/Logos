@@ -5,7 +5,7 @@ import { Bookmark, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { books, updateBook } from '../lib/books.ts'
 import { loadMarks, removeLooseMark, playLooseMark, playBookMark, type LooseMark } from '../lib/marks.ts'
-import { toast } from './ui.tsx'
+import { toast, confirmDelete } from './ui.tsx'
 
 type Row =
   | { kind: 'book'; at: number; bookId: string; bookTitle: string; ch: number; b: number; sentence: string }
@@ -48,7 +48,7 @@ export function MarksSection() {
             <span className="mark-s">{r.kind === 'book' ? r.sentence : r.mark.sentence}</span>
             <span className="mark-when">{when(r.at)}</span>
           </span>
-          <button className="mark-del" aria-label="Remove mark" onClick={(e) => { e.stopPropagation(); void drop(r) }}><Trash2 size={15} /></button>
+          <button className="mark-del" aria-label="Remove mark" onClick={(e) => { e.stopPropagation(); const s = r.kind === 'book' ? r.sentence : r.mark.sentence; void confirmDelete('Remove this mark?', s.length > 90 ? s.slice(0, 90) + '…' : s).then((ok) => { if (ok) void drop(r) }) }}><Trash2 size={15} /></button>
         </div>
       ))}
     </div>

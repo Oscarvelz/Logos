@@ -1,3 +1,39 @@
+## 1.4.87 — Nothing is deleted by a single tap (with 1.4.86 inside)
+
+Oscar's ask, verbatim in spirit: a confirmation window before deleting
+any file. One window for the whole app — confirmDelete/ConfirmHost in
+ui.tsx, a Sheet in the app's own finish naming the file and what will
+happen, Cancel / Delete — and every deletion in the app now passes
+through it: a book from its menu, a Library file from its menu, a
+multi-select delete from the toolbar (selection mode survives a Cancel,
+so a second thought costs nothing), the Saved Marks trash (the one
+delete that had no Undo at all), and Settings' Delete model. The Undo
+toasts stay where they existed, as a second net. The automatic Once
+sweep is untouched — it is not a deletion the user taps, it is the
+Once law itself. This release also carries 1.4.86 (below), built
+minutes earlier and never published on its own: the pagehide dismissal
+of the device voice.
+
+## 1.4.86 — The dying page dismisses its voice
+
+Oscar: the main app and the floating icon ran two completely different
+audios at once, and one of them could not be stopped even after closing
+the bubble. His Settings evidence convicted the mechanism: the receipt
+read "panel key woke Logos · 3:23 PM" (the phone had destroyed the app's
+page while the panel stayed alive, so a key press had to resurrect it),
+and the stage journal showed the NEW session stepping healthily in the
+neural voice (13→14→15→16→17, no device tags). The overlap was the OLD
+session's device voice: system speech is handed to the phone's speech
+service, whose queue can outlive the page that queued it — speaking a
+text nobody can stop, because every stop switch lives in the dead page —
+while the resurrected page starts the same session in the neural voice.
+Web only: on pagehide the page now cancels its device voice first, so a
+watchdog reload or any orderly teardown leaves no orphan speaking.
+Neural audio needs no such dismissal; it dies with the page. Honest
+residue: if the phone kills a page without warning mid-sentence, up to
+that one sentence can still finish on its own — it always ends by
+itself, and a force-stop ends it instantly.
+
 # Logos — notes
 
 Logos is a phone-first, private text-to-speech PWA. It is a simplified rebuild of

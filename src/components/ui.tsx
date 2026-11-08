@@ -1,5 +1,5 @@
 import { isOriginalFavorite } from '../lib/settings.ts'
-import { Check, ChevronDown, Star } from 'lucide-react'
+import { Check, ChevronDown, Star, Trash2 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { createStore, useStore } from '../lib/store.ts'
@@ -48,6 +48,33 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
       </div>
     </>,
     document.body,
+  )
+}
+
+// ── Delete confirmation ──
+// Oscar (1.4.87): nothing is deleted by a single tap. Every file deletion
+// in the app asks first, in this one window, so the question always looks
+// the same wherever it is asked. Resolves true only on an explicit Delete.
+type ConfirmReq = { title: string; body?: string; resolve: (ok: boolean) => void }
+const confirmStore = createStore<{ req: ConfirmReq | null }>({ req: null })
+export function confirmDelete(title: string, body?: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    confirmStore.get().req?.resolve(false)
+    confirmStore.set({ req: { title, body, resolve } })
+  })
+}
+export function ConfirmHost() {
+  const { req } = useStore(confirmStore)
+  if (!req) return null
+  const done = (ok: boolean) => { confirmStore.set({ req: null }); req.resolve(ok) }
+  return (
+    <Sheet open onClose={() => done(false)} title={req.title}>
+      {req.body && <p className="keepask-body">{req.body}</p>}
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn ghost grow" onClick={() => done(false)}>Cancel</button>
+        <button className="btn danger grow" onClick={() => done(true)}><Trash2 size={16} /> Delete</button>
+      </div>
+    </Sheet>
   )
 }
 
