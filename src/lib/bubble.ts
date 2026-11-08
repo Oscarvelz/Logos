@@ -13,6 +13,8 @@ import { detectLang } from './text.ts'
 import { VOICES, favoriteVoices } from './voices.ts'
 import { nowReadingFor } from './book/nowreading.ts'
 import { markAndToast } from './marks.ts'
+import { saveForLater } from './library.ts'
+import { estimateSeconds } from './text.ts'
 import { toast } from '../components/ui.tsx'
 
 type DroidBubble = {
@@ -137,6 +139,23 @@ export function initBubble() {
   })
   // The panel's bookmark key, and the bubble's long-press voice wheel.
   addEventListener('logosandroid-mark', () => void markAndToast())
+  // The panel's save key: the copied text that is only visiting becomes a
+  // permanent Library resident (a Listen-later text; audio is made on demand).
+  addEventListener('logosandroid-save', () => {
+    const s = listen.get()
+    const text = (s.active ? s.text : drafts.get().listen).trim()
+    if (!text) { toast('Nothing to save yet'); return }
+    if (nowReadingFor(text)) { toast('Already in your library — it’s a book'); return }
+    const lang = detectLang(text.slice(0, 2000)).lang
+    const info = describeText(text.slice(0, 12000), lang)
+    void saveForLater(text, {
+      title: info.title || 'Copied text',
+      summary: info.summary,
+      lang,
+      voice: s.active ? (s.voices[s.current] ?? '') : '',
+      duration: estimateSeconds(text, 1),
+    }).then(() => toast('Saved to Library — it stays now'))
+  })
   addEventListener('logosandroid-voice', () => {
     const s = listen.get()
     const lang = s.active ? (s.segments[s.current]?.lang ?? detectLang(s.text.slice(0, 2000)).lang) : detectLang(drafts.get().listen.slice(0, 2000)).lang
