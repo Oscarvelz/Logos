@@ -130,6 +130,20 @@ class BubbleService : Service() {
     private var toggleB: ImageButton? = null
     private val handler = Handler(Looper.getMainLooper())
 
+    // The ghost rest: four seconds untouched and the bubble fades to a whisper.
+    private val fadeRun = Runnable {
+        val b = bubble ?: return@Runnable
+        if (panel != null || dragTargets.isNotEmpty()) return@Runnable
+        b.animate().alpha(0.15f).setDuration(700).start()
+    }
+
+    private fun wakeBubble(schedule: Boolean = true) {
+        handler.removeCallbacks(fadeRun)
+        val b = bubble ?: return
+        if (b.alpha < 1f) b.animate().alpha(1f).setDuration(140).start()
+        if (schedule) handler.postDelayed(fadeRun, 4000)
+    }
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     override fun onBind(i: Intent?): IBinder? = null
@@ -231,13 +245,14 @@ class BubbleService : Service() {
         bubble = root
         root.alpha = 0f; root.scaleX = 0.5f; root.scaleY = 0.5f
         root.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(240).setInterpolator(DecelerateInterpolator()).start()
+        handler.postDelayed(fadeRun, 4000)
     }
 
     private fun attachDrag(v: View, p: WindowManager.LayoutParams) {
         var downX = 0f; var downY = 0f; var startX = 0; var startY = 0; var moved = false
         v.setOnTouchListener { _, e ->
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; startX = p.x; startY = p.y; moved = false; true }
+                MotionEvent.ACTION_DOWN -> { wakeBubble(); downX = e.rawX; downY = e.rawY; startX = p.x; startY = p.y; moved = false; true }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = e.rawX - downX; val dy = e.rawY - downY
                     if (Math.abs(dx) + Math.abs(dy) > dp(9)) moved = true
@@ -523,6 +538,8 @@ class BubbleService : Service() {
         runCatching { w.addView(stage, p) }
         panel = stage
         positionPanel()
+        handler.removeCallbacks(fadeRun)
+        bubble?.let { if (it.alpha < 1f) { it.animate().cancel(); it.alpha = 1f } }
         // A short, smooth birth: the panel grows out of the λ's own position.
         val bp2 = bubbleParams
         if (bp2 != null) stage.pivotX = (bp2.x + dp(29) - p.x).coerceIn(0, dp(302)).toFloat()
@@ -552,6 +569,7 @@ class BubbleService : Service() {
     private fun collapsePanel(now: Boolean = false) {
         val v = panel
         panel = null; panelParams = null; titleV = null; subV = null; toggleB = null
+        if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
         if (v == null) return
         if (now) { runCatching { wm?.removeView(v) }; return }
         v.animate().alpha(0f).scaleX(0.93f).scaleY(0.93f).setDuration(120)
@@ -625,6 +643,7 @@ class BubbleService : Service() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(fadeRun)
         hideTargets()
         collapsePanel(now = true)
         bubble?.let { runCatching { wm?.removeView(it) } }
