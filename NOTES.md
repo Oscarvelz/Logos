@@ -190,6 +190,10 @@ Oscar's OCR'd PDF (How the Mind Works) imported badly: blurb as title, running h
 ## 1.4.44 (2026-11-06, Muse, at Oscar's request)
 - Reader bottom bar: the progress track no longer rides the bar's top border, where the bar's rounded corners and overflow clipped it (and sliced the thumb in half at 0%/100%). The track now sits inside the bar (14px insets, 8px down, rounded ends, 4px tall) with the thumb riding inside it; drag fractions are measured against the inset track itself, so the thumb stays exactly under the finger, and the seek tooltip follows the same inset.
 
+## 1.4.61 (2026-11-08, Muse — a fine adjustment to the Listen header, at Oscar's feeling: "le hace falta un ajuste fino, poquito")
+
+He loves the eyebrow ("Ready to read") and the words line; the title and the lines under it wanted a small, fine adjustment. What the screenshot actually showed: the summary printed the pasted text's markdown bones — a literal "**" before its first word — and ran ragged over three lines. Three small things, nothing moved: (1) the header's title and summary are now display prose — `plainText` in describe.ts strips **, __, ~~, backticks and link syntax before anything is analysed or shown (saved clips' titles are cleaned by the same pass; the on-device AI headline gets it too); (2) the summary is held to two lines; (3) the title's type is tightened a notch (line-height 1.15, a breath of negative tracking, one more pixel of air above the summary). Verified in Node on his screenshot's own text: the summary comes back "Es W3 (Pack D: «empty intensifiers») en el motor de elección de palabras." — bones gone.
+
 ## 1.4.60 (2026-11-07, Muse, from Oscar's screenshot)
 
 The line under the player named the voice a second time ("Noa · ES · 3:03 left") when the voice chip above already says Noa. His word: unnecessary. The line now carries only what the chip cannot say — the time left, and "Device voice" when the phone's own voice is standing in (a state no chip shows). One fact, one home.

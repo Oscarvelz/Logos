@@ -115,8 +115,19 @@ function bestSentence(text: string, lang: Lang, maxLen = 108): string | undefine
   return best?.s.replace(/^[«"“'‘]+|[»"”'’]+$/g, '').trim()
 }
 
+/**
+ * 1.4.61: display prose — the text with its markdown bones removed, so the
+ * header (and a saved clip's title) never shows ** or backticks to the reader.
+ */
+export function plainText(text: string): string {
+  return text
+    .replace(/\*\*|__|~~|`+/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^[ \t]*>[ \t]?/gm, '')
+}
+
 export function describeText(text: string, lang: Lang): TextInfo {
-  const clean = text.trim()
+  const clean = plainText(text.trim())
   if (!clean) return { title: '', generated: false }
   const head = headingLine(clean)
   if (head) return { title: head, generated: false }
@@ -147,7 +158,7 @@ export async function aiDescribe(text: string): Promise<{ title?: string; summar
     const t = await S.create({ type: 'tldr', length: 'short', format: 'plain-text' })
     const [title, summary] = await Promise.all([h.summarize(sample), t.summarize(sample)])
     h.destroy?.(); t.destroy?.()
-    const one = (s: string) => s.replace(/\s+/g, ' ').replace(/^["“]|["”]$/g, '').trim()
+    const one = (s: string) => plainText(s.replace(/\s+/g, ' ').replace(/^["“]|["”]$/g, '').trim())
     return { title: title ? one(title).replace(/[.]$/, '') : undefined, summary: summary ? one(summary).split(/(?<=[.!?])\s/)[0] : undefined }
   } catch { return null }
 }
