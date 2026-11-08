@@ -271,7 +271,7 @@ export function initBubble() {
     const light = th === 'light' || (th === 'system' && !window.matchMedia('(prefers-color-scheme: dark)').matches)
     const info = {
       playing: s.playing || s.buffering,
-      busy: s.buffering,
+      busy: s.buffering && !s.cushion,
       // Whether what is playing already lives in the Library — the ⚑ asks this
       // before it marks, so no mark is ever left on unsaved audio.
       saved: s.active && (!!nowReadingFor(s.text) || library.get().clips.some((c) => c.kind === 'text' && !!c.text && c.text.trim() === s.text.trim())),
@@ -280,7 +280,7 @@ export function initBubble() {
       bars: s.active && levels(18, barTmp) ? Array.from(barTmp, (v) => Math.round(Math.max(0, Math.min(1, v)) * 100)) : null,
       light,
       title: titleOf(s.active, text) || 'Logos',
-      sub: s.active ? `Sentence ${s.current + 1} of ${s.segments.length} · ${fmtRate(settings.get().listenSpeed)}` : 'Ready',
+      sub: s.active ? (s.cushion ? `Preparing… ${s.cushion.done} of ${s.cushion.total} to start` : `Sentence ${s.current + 1} of ${s.segments.length} · ${fmtRate(settings.get().listenSpeed)}`) : 'Ready',
     }
     const key = JSON.stringify(info)
     if (key === last) return
