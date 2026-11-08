@@ -14,6 +14,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
@@ -180,21 +181,31 @@ class BubbleService : Service() {
     private fun showBubble() {
         val w = getSystemService(WindowManager::class.java)
         wm = w
-        val size = dp(68) // the window carries a halo ring around the 56dp face
+        val size = dp(58) // the window carries a halo ring around the 46dp face
         val root = FrameLayout(this)
         val haloV = View(this).apply {
             background = oval(gold, 0, 0, -1f).apply { alpha = 70 }
-            layoutParams = FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(dp(52), dp(52), Gravity.CENTER)
             visibility = View.INVISIBLE
         }
         val face = FrameLayout(this).apply {
-            background = oval(charcoal, gold, dp(2), -1f)
-            layoutParams = FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER)
+            // A small jewel, not a coin (Oscar: smaller and prettier): a warm
+            // radial sheen falling from the top-left, the gold ring, a soft shadow.
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                gradientType = GradientDrawable.RADIAL_GRADIENT
+                gradientRadius = dp(30).toFloat()
+                setGradientCenter(0.35f, 0.3f)
+                colors = intArrayOf(Color.rgb(58, 49, 35), Color.rgb(21, 17, 13))
+                setStroke(dp(2), gold)
+            }
+            elevation = dp(5).toFloat()
+            layoutParams = FrameLayout.LayoutParams(dp(46), dp(46), Gravity.CENTER)
         }
         val lambda = TextView(this).apply {
             text = "λ"
             setTextColor(gold)
-            textSize = 27f
+            textSize = 22f
             typeface = Typeface.SERIF
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
@@ -228,24 +239,108 @@ class BubbleService : Service() {
                     val dx = e.rawX - downX; val dy = e.rawY - downY
                     if (Math.abs(dx) + Math.abs(dy) > dp(9)) moved = true
                     if (moved) {
+                        // Holding the bubble raises the two top gates (Oscar's other
+                        // app does this, and now so does Logos): Remove, or Open.
+                        if (dragTargets.isEmpty()) { collapsePanel(); showTargets() }
                         p.x = (startX + dx).toInt(); p.y = (startY + dy).toInt()
                         runCatching { wm?.updateViewLayout(v, p) }
-                        if (panel != null) positionPanel()
+                        updateHover(p)
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (moved) snapEdge(v, p) else togglePanel()
+                    val target = hoverTarget
+                    hideTargets()
+                    when {
+                        !moved -> togglePanel()
+                        target == 0 -> stopBubble()
+                        target == 1 -> {
+                            snapEdge(v, p)
+                            runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)) }
+                        }
+                        else -> snapEdge(v, p)
+                    }
                     true
                 }
+                MotionEvent.ACTION_CANCEL -> { hideTargets(); if (moved) snapEdge(v, p); true }
                 else -> false
             }
         }
     }
 
+    // --- The drag gates: two pills at the top of the screen while the bubble is held ---
+    private class DragTarget(val view: View, val rect: Rect, val idle: GradientDrawable, val hot: GradientDrawable)
+
+    private var dragTargets: List<DragTarget> = emptyList()
+    private var hoverTarget = -1
+
+    private fun pill(fill: Int, stroke: Int) = GradientDrawable().apply {
+        cornerRadius = dp(99).toFloat(); setColor(fill); setStroke(dp(1), stroke)
+    }
+
+    private fun showTargets() {
+        val w = wm ?: return
+        val sw2 = resources.displayMetrics.widthPixels
+        val tw = dp(134); val th = dp(52); val gap = dp(12)
+        val x0 = (sw2 - (tw * 2 + gap)) / 2
+        val y0 = dp(40)
+        fun target(idx: Int, glyph: String, glyphInk: Int, label: String, hotFill: Int, hotStroke: Int, hotInk: Int): DragTarget {
+            val idle = pill(Color.argb(238, 26, 22, 18), Color.rgb(96, 80, 54))
+            val hot = pill(hotFill, hotStroke)
+            val g = TextView(this).apply { text = glyph; textSize = 16f; setTextColor(glyphInk); setTypeface(typeface, Typeface.BOLD) }
+            val t = TextView(this).apply {
+                text = label; textSize = 13.5f; setTextColor(ink); setTypeface(typeface, Typeface.BOLD)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(7) }
+            }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                background = idle
+                elevation = dp(10).toFloat()
+                tag = arrayOf<Any>(g, t, glyphInk, hotInk)
+            }
+            row.addView(g); row.addView(t)
+            val lp = WindowManager.LayoutParams(tw, th, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, PixelFormat.TRANSLUCENT
+            ).apply { gravity = Gravity.TOP or Gravity.START; x = x0 + idx * (tw + gap); y = y0 }
+            runCatching { w.addView(row, lp) }
+            row.alpha = 0f; row.translationY = -dp(12).toFloat()
+            row.animate().alpha(1f).translationY(0f).setDuration(160).start()
+            return DragTarget(row, Rect(lp.x, lp.y, lp.x + tw, lp.y + th), idle, hot)
+        }
+        dragTargets = listOf(
+            target(0, "✕", ink, "Remove", Color.rgb(128, 36, 26), Color.rgb(214, 102, 82), Color.WHITE),
+            target(1, "λ", gold, "Open Logos", gold, gold, charcoal)
+        )
+        hoverTarget = -1
+    }
+
+    private fun updateHover(p: WindowManager.LayoutParams) {
+        val cx = p.x + dp(29); val cy = p.y + dp(29)
+        val idx = dragTargets.indexOfFirst { it.rect.contains(cx, cy) }
+        if (idx == hoverTarget) return
+        hoverTarget = idx
+        dragTargets.forEachIndexed { i, t ->
+            val hot = i == idx
+            t.view.background = if (hot) t.hot else t.idle
+            t.view.scaleX = if (hot) 1.1f else 1f
+            t.view.scaleY = if (hot) 1.1f else 1f
+            val parts = t.view.tag as Array<*>
+            val gInk = if (hot) parts[3] as Int else parts[2] as Int
+            (parts[0] as TextView).setTextColor(gInk)
+            (parts[1] as TextView).setTextColor(if (hot) parts[3] as Int else ink)
+        }
+    }
+
+    private fun hideTargets() {
+        dragTargets.forEach { t -> runCatching { wm?.removeView(t.view) } }
+        dragTargets = emptyList()
+        hoverTarget = -1
+    }
+
     private fun snapEdge(v: View, p: WindowManager.LayoutParams) {
         val sw2 = resources.displayMetrics.widthPixels
-        val target = if (p.x + dp(34) < sw2 / 2) dp(4) else sw2 - dp(68) - dp(4)
+        val target = if (p.x + dp(29) < sw2 / 2) dp(4) else sw2 - dp(58) - dp(4)
         val anim = ValueAnimator.ofInt(p.x, target).apply {
             duration = 180
             addUpdateListener { p.x = it.animatedValue as Int; runCatching { wm?.updateViewLayout(v, p) }; if (panel != null) positionPanel() }
@@ -429,10 +524,10 @@ class BubbleService : Service() {
         val sh2 = resources.displayMetrics.heightPixels
         val pw = dp(302)
         p.x = when {
-            bp.x + dp(28) < sw2 / 2 -> dp(10)
+            bp.x + dp(29) < sw2 / 2 -> dp(10)
             else -> (sw2 - pw - dp(10)).coerceAtLeast(dp(10))
         }
-        p.y = (bp.y + dp(74)).coerceAtMost(sh2 - dp(240))
+        p.y = (bp.y + dp(64)).coerceAtMost(sh2 - dp(240))
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
 
@@ -508,6 +603,7 @@ class BubbleService : Service() {
     }
 
     override fun onDestroy() {
+        hideTargets()
         collapsePanel()
         bubble?.let { runCatching { wm?.removeView(it) } }
         bubble = null
