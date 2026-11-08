@@ -25,6 +25,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageButton
@@ -228,6 +229,8 @@ class BubbleService : Service() {
         attachDrag(root, p)
         runCatching { w.addView(root, p) }
         bubble = root
+        root.alpha = 0f; root.scaleX = 0.5f; root.scaleY = 0.5f
+        root.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(240).setInterpolator(DecelerateInterpolator()).start()
     }
 
     private fun attachDrag(v: View, p: WindowManager.LayoutParams) {
@@ -444,11 +447,25 @@ class BubbleService : Service() {
             setOnClickListener { poke?.invoke(cmd); handler.postDelayed({ refreshPanel() }, 350) }
         }
         controls.gravity = Gravity.CENTER
-        val prevB = mediaBtn(android.R.drawable.ic_media_previous, "Previous sentence", "prev", 50, c["discLine"]!!)
-        toggleB = mediaBtn(android.R.drawable.ic_media_play, "Play or pause", "toggle", 58, c["gold"]!!)
-        val nextB = mediaBtn(android.R.drawable.ic_media_next, "Next sentence", "next", 50, c["discLine"]!!)
-        nextB.layoutParams = (nextB.layoutParams as LinearLayout.LayoutParams).apply { marginEnd = 0 }
-        controls.addView(prevB); controls.addView(toggleB); controls.addView(nextB)
+        fun speedBtn(glyph: String, label: String, cmd: String): TextView = TextView(this).apply {
+            text = glyph; setTextColor(c["muted"]!!); textSize = 18f; gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(c["disc"]!!)
+                setStroke(dp(1), c["discLine"]!!)
+            }
+            contentDescription = label
+            layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(10) }
+            setOnClickListener { poke?.invoke(cmd); handler.postDelayed({ refreshPanel() }, 350) }
+        }
+        val slowB = speedBtn("−", "Slower", "slower")
+        val prevB = mediaBtn(android.R.drawable.ic_media_previous, "Previous sentence", "prev", 46, c["discLine"]!!)
+        toggleB = mediaBtn(android.R.drawable.ic_media_play, "Play or pause", "toggle", 54, c["gold"]!!)
+        val nextB = mediaBtn(android.R.drawable.ic_media_next, "Next sentence", "next", 46, c["discLine"]!!)
+        val fastB = speedBtn("+", "Faster", "faster")
+        fastB.layoutParams = (fastB.layoutParams as LinearLayout.LayoutParams).apply { marginEnd = 0 }
+        controls.addView(slowB); controls.addView(prevB); controls.addView(toggleB); controls.addView(nextB); controls.addView(fastB)
         card.addView(controls)
         val div = View(this).apply {
             setBackgroundColor(c["div"]!!)
@@ -506,6 +523,12 @@ class BubbleService : Service() {
         runCatching { w.addView(stage, p) }
         panel = stage
         positionPanel()
+        // A short, smooth birth: the panel grows out of the λ's own position.
+        val bp2 = bubbleParams
+        if (bp2 != null) stage.pivotX = (bp2.x + dp(29) - p.x).coerceIn(0, dp(302)).toFloat()
+        stage.pivotY = 0f
+        stage.scaleX = 0.86f; stage.scaleY = 0.86f; stage.alpha = 0f
+        stage.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(190).setInterpolator(DecelerateInterpolator()).start()
         refreshPanel()
         // The tap that opened the panel is the moment Android allows: with the
         // lever on, what was just copied takes the stage.
@@ -526,9 +549,13 @@ class BubbleService : Service() {
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
 
-    private fun collapsePanel() {
-        panel?.let { runCatching { wm?.removeView(it) } }
+    private fun collapsePanel(now: Boolean = false) {
+        val v = panel
         panel = null; panelParams = null; titleV = null; subV = null; toggleB = null
+        if (v == null) return
+        if (now) { runCatching { wm?.removeView(v) }; return }
+        v.animate().alpha(0f).scaleX(0.93f).scaleY(0.93f).setDuration(120)
+            .withEndAction { runCatching { wm?.removeView(v) } }.start()
     }
 
     private fun refreshPanel() {
@@ -599,7 +626,7 @@ class BubbleService : Service() {
 
     override fun onDestroy() {
         hideTargets()
-        collapsePanel()
+        collapsePanel(now = true)
         bubble?.let { runCatching { wm?.removeView(it) } }
         bubble = null
         haloAnim?.cancel()

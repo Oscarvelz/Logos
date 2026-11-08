@@ -622,6 +622,22 @@ export function setRate(rate: number) {
   if (audio) audio.playbackRate = rate
 }
 
+/** The one speed ladder — the Listen sheet and the floating bubble step along it. */
+export const RATE_STEPS = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
+
+/** One step slower or faster along the ladder (the bubble's − / + keys). */
+export function stepRate(dir: 1 | -1) {
+  const cur = settings.get().listenSpeed
+  let i = RATE_STEPS.findIndex((v) => Math.abs(v - cur) < 0.001)
+  if (i < 0) { // the slider can land between steps: step from the nearest one
+    let best = 0
+    RATE_STEPS.forEach((v, j) => { if (Math.abs(v - cur) < Math.abs(RATE_STEPS[best] - cur)) best = j })
+    i = best
+  }
+  const n = Math.min(RATE_STEPS.length - 1, Math.max(0, i + dir))
+  setRate(RATE_STEPS[n])
+}
+
 // ── Sleep timer ──
 // Counts down in the store (the Listen page shows the minutes left); the last
 // ten seconds fade the volume down to silence, then playback pauses and full
