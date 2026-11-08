@@ -52,6 +52,8 @@ class MainActivity : Activity() {
     // own the moment the state says sound is flowing. He never lands here.
     private var ghost = false
     private var ghostLeaving = false
+    private var ghostSeq = 0
+    private var intentDriven = false
     private var resumed = false
     private var ghostBegan = 0L
     private val ghostHandler = Handler(Looper.getMainLooper())
@@ -64,6 +66,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        intentDriven = true
         if (intent?.getBooleanExtra("logos.ghost", false) == true) enterGhost()
         window.setDecorFitsSystemWindows(false)
         window.statusBarColor = Color.TRANSPARENT
@@ -195,6 +198,7 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        intentDriven = true
         if (intent.getBooleanExtra("logos.ghost", false)) { if (!resumed && !ghost) enterGhost() }
         else if (ghost) exitGhost()
         if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
@@ -205,11 +209,17 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        // Back without any intent behind it — he opened the task himself
+        // (Recents, a notification): a visit still wearing its ghost
+        // clothes simply becomes his stay.
+        if (ghost && !intentDriven) exitGhost()
+        intentDriven = false
         if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
     }
 
     private fun enterGhost() {
         ghost = true
+        ghostSeq++
         ghostLeaving = false
         ghostBegan = System.currentTimeMillis()
         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
@@ -224,6 +234,10 @@ class MainActivity : Activity() {
     private fun exitGhost() {
         ghost = false
         ghostHandler.removeCallbacks(ghostLeave)
+        unGhost()
+    }
+
+    private fun unGhost() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
         if (::web.isInitialized) { web.alpha = 1f; root.setBackgroundColor(bg); window.decorView.setBackgroundColor(bg) }
     }
@@ -232,8 +246,14 @@ class MainActivity : Activity() {
         if (!ghost) return
         ghost = false
         ghostHandler.removeCallbacks(ghostLeave)
-        finish()
-        overridePendingTransition(0, 0)
+        // To the BACK, never finish() (1.4.89): finishing destroys the
+        // only activity there is — and the WebView with it — so the page
+        // the visit just revived would die as the visit leaves, and the
+        // playback with it. To the back, the activity merely stops:
+        // page alive, session alive, his app in front again.
+        moveTaskToBack(true)
+        val seq = ghostSeq
+        ghostHandler.postDelayed({ if (seq == ghostSeq && !ghost) unGhost() }, 350)
     }
 
     /** Every state push lands here during a visit: sound flowing — or
