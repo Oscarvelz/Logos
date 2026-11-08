@@ -27,9 +27,11 @@ export async function importMany(list: File[]) {
   let last: BookMeta | null = null
   const addedList: BookMeta[] = []
   for (const [i, f] of list.entries()) {
-    try { last = await importBook(f, list.length > 1 ? `${i + 1} of ${list.length}` : undefined); addedList.push(last); if (list.length === 1) toast(`Added ${last.title}`) } catch (e) { toast((e as Error).message || `Couldn’t read ${f.name}`, undefined, 6000) }
+    try { last = await importBook(f, list.length > 1 ? `${i + 1} of ${list.length}` : undefined); addedList.push(last); if (list.length === 1 && !last.warn) toast(`Added ${last.title}`) } catch (e) { toast((e as Error).message || `Couldn’t read ${f.name}`, undefined, 6000) }
   }
-  if (list.length > 1 && addedList.length) toast(`Added ${addedList.length} book${addedList.length === 1 ? '' : 's'}`)
+  const warn = addedList.find((b) => b.warn)?.warn
+  if (warn) toast(warn, undefined, 9000)
+  else if (list.length > 1 && addedList.length) toast(`Added ${addedList.length} book${addedList.length === 1 ? '' : 's'}`)
   if (last && list.length === 1) void playImported(last)
   askKeep(addedList)
 }
