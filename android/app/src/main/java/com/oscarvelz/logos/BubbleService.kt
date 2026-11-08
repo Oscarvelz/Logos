@@ -56,6 +56,10 @@ class BubbleService : Service() {
         var poke: ((String) -> Unit)? = null
         /** A transport press that found the page asleep; the page collects it as it wakes. */
         @Volatile var pendingCmd: String? = null
+        /** The stage lock (Oscar): while on, a fresh copy cannot evict what's playing. */
+        fun isLocked(c: Context) = prefs(c).getBoolean("lock", false)
+        fun setLocked(c: Context, on: Boolean) { prefs(c).edit().putBoolean("lock", on).apply() }
+
         /** A clipboard text waiting for the page to pull it through the bridge. */
         var clipText: String? = null
         var clipManual = false
@@ -98,6 +102,7 @@ class BubbleService : Service() {
          *  The same text twice in a row does not restart itself (unless Oscar asked by hand). */
         fun deliver(c: Context, text: String, manual: Boolean) {
             if (text.isEmpty()) return
+            if (!manual && isLocked(c)) { noteTry(c, "the lock held a copy back"); return }
             val key = text.length * 31 + text.hashCode()
             if (!manual && key == lastKey) return
             lastKey = key
@@ -141,6 +146,7 @@ class BubbleService : Service() {
     private var seekBar: SeekBar? = null
     private var saveHint: View? = null
     private var saveHintRun: Runnable? = null
+    private var lockBtn: TextView? = null
     private var spectrum: SpectrumView? = null
     private var seekHeld = false
     private var playingNow = false
@@ -593,7 +599,7 @@ class BubbleService : Service() {
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
             contentDescription = "Mark this moment"
             layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
-            setOnClickListener { poke?.invoke("mark") }
+            setOnClickListener { showMarkHint() }
         }
         titleRow.addView(markB)
         // The save key (Oscar's scenario): a copied text is playing temporarily
@@ -605,9 +611,26 @@ class BubbleService : Service() {
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
             contentDescription = "Save this text to the Library"
             layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
-            setOnClickListener { showSaveHint() }
+            setOnClickListener {
+                showHintCard("Save to Library", "Keeps the text playing now in your Library, so you can hear it again whenever you like.", "Save", "Not now") {
+                    poke?.invoke("save")
+                    Toast.makeText(this@BubbleService, "Saved to Library", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
         titleRow.addView(saveB)
+        // The stage lock: while it holds, a fresh copy cannot evict what's
+        // playing — the audiobook keeps the stage (Oscar's scenario).
+        val lockB = TextView(this).apply {
+            text = if (isLocked(this@BubbleService)) "🔒" else "🔓"
+            setTextColor(c["gold"]!!); textSize = 13f; gravity = Gravity.CENTER
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
+            contentDescription = "Lock the stage"
+            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
+            setOnClickListener { showLockHint() }
+        }
+        lockBtn = lockB
+        titleRow.addView(lockB)
         card.addView(titleRow)
         card.addView(subV)
         val spec = SpectrumView(this, c["gold"]!!)
@@ -773,9 +796,9 @@ class BubbleService : Service() {
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
 
-    /** The + key explains itself first (Oscar): a small floating card naming
-     *  what saving means, with the deed one clear tap away. */
-    private fun showSaveHint() {
+    /** The panel's buttons explain themselves first (Oscar): a small floating
+     *  card naming what the button does, the deed one clear tap away. */
+    private fun showHintCard(title: String, body: String, confirmLabel: String, cancelLabel: String, action: () -> Unit) {
         dismissSaveHint()
         val w = wm ?: return
         val c = pal()
@@ -789,12 +812,12 @@ class BubbleService : Service() {
             elevation = dp(16).toFloat()
         }
         card.addView(TextView(this).apply {
-            text = "Save to Library"
+            text = title
             setTextColor(c["ink"]!!); textSize = 15f; typeface = Typeface.SERIF
             setTypeface(typeface, Typeface.BOLD)
         })
         card.addView(TextView(this).apply {
-            text = "Keeps the text playing now in your Library, so you can hear it again whenever you like."
+            text = body
             setTextColor(c["muted"]!!); textSize = 12.5f
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) }
         })
@@ -802,20 +825,16 @@ class BubbleService : Service() {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) }
         }
-        row.addView(TextView(this).apply {
-            text = "Not now"; setTextColor(c["muted"]!!); textSize = 13f; gravity = Gravity.CENTER
+        if (cancelLabel.isNotEmpty()) row.addView(TextView(this).apply {
+            text = cancelLabel; setTextColor(c["muted"]!!); textSize = 13f; gravity = Gravity.CENTER
             setPadding(dp(12), dp(8), dp(12), dp(8))
             setOnClickListener { dismissSaveHint() }
         })
         row.addView(TextView(this).apply {
-            text = "Save"; setTextColor(c["gold"]!!); textSize = 13f; gravity = Gravity.CENTER
+            text = confirmLabel; setTextColor(c["gold"]!!); textSize = 13f; gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
             setPadding(dp(12), dp(8), dp(4), dp(8))
-            setOnClickListener {
-                dismissSaveHint()
-                poke?.invoke("save")
-                Toast.makeText(this@BubbleService, "Saved to Library", Toast.LENGTH_SHORT).show()
-            }
+            setOnClickListener { dismissSaveHint(); action() }
         })
         card.addView(row)
         val p = WindowManager.LayoutParams(dp(300), WindowManager.LayoutParams.WRAP_CONTENT,
@@ -827,6 +846,42 @@ class BubbleService : Service() {
         val r = Runnable { dismissSaveHint() }
         saveHintRun = r
         handler.postDelayed(r, 9000)
+    }
+
+    /** The lock explains itself, like every panel button: what it holds, and
+     *  what letting go restores. Paste now (a hand ask) is never locked out. */
+    private fun showLockHint() {
+        if (isLocked(this)) {
+            showHintCard("Unlock the stage", "Copies can take the stage again — a fresh copy will replace what is playing, as before.", "Unlock", "Keep locked") {
+                setLocked(this@BubbleService, false)
+                lockBtn?.text = "🔓"
+            }
+        } else {
+            showHintCard("Lock the stage", "While locked, copying a text will not replace what you are hearing — your book keeps the stage. Paste now still works when you ask for it.", "Lock", "Not now") {
+                setLocked(this@BubbleService, true)
+                lockBtn?.text = "🔒"
+            }
+        }
+    }
+
+    /** The ⚑ asks where its mark would live (Oscar): on saved content it marks
+     *  at once (a moment cannot wait for a card) and teaches itself a single
+     *  time; on a text that is not in the Library it refuses kindly and offers
+     *  the save first — marks on unsaved audio would be lost in the dark. */
+    private fun showMarkHint() {
+        val saved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
+        if (saved) {
+            poke?.invoke("mark")
+            if (!prefs(this).getBoolean("markTaught", false)) {
+                prefs(this).edit().putBoolean("markTaught", true).apply()
+                showHintCard("Marked", "The ⚑ keeps a mark on what you are hearing — you will find it in Library, under Saved Marks.", "Got it", "") { }
+            }
+        } else {
+            showHintCard("Not in your Library yet", "Marks live with their audio — on an unsaved text, its marks would be hard to find later. Save it to your Library first, and the ⚑ is yours.", "Save to Library", "Not now") {
+                poke?.invoke("save")
+                Toast.makeText(this@BubbleService, "Saved to Library", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun dismissSaveHint() {
@@ -856,6 +911,7 @@ class BubbleService : Service() {
         handler.post {
             titleV?.text = j?.optString("title")?.ifBlank { "Logos" } ?: "Logos"
             subV?.text = if (j?.optBoolean("busy") == true) "Processing…" else j?.optString("sub")?.ifBlank { "Ready" } ?: "Ready"
+            lockBtn?.text = if (isLocked(this@BubbleService)) "🔒" else "🔓"
             toggleB?.setImageResource(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
             playingNow = playing
             seekBar?.let { if (!seekHeld) it.progress = ((j?.optDouble("frac", 0.0) ?: 0.0) * 1000).toInt() }

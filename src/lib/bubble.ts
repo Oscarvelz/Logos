@@ -32,6 +32,7 @@ type DroidBubble = {
   bubbleWantClip?: () => boolean
   bubbleSeek?: () => string
   bubblePendingCmd?: () => string
+  bubbleLock?: () => boolean
 }
 const droid = () => (window as unknown as { LogosAndroid?: DroidBubble }).LogosAndroid
 
@@ -271,6 +272,9 @@ export function initBubble() {
     const info = {
       playing: s.playing || s.buffering,
       busy: s.buffering,
+      // Whether what is playing already lives in the Library — the ⚑ asks this
+      // before it marks, so no mark is ever left on unsaved audio.
+      saved: s.active && (!!nowReadingFor(s.text) || library.get().clips.some((c) => c.kind === 'text' && !!c.text && c.text.trim() === s.text.trim())),
       active: s.active,
       frac: s.active && s.segments.length ? Math.min(1, (s.current + sentenceProgress()) / s.segments.length) : 0,
       bars: s.active && levels(18, barTmp) ? Array.from(barTmp, (v) => Math.round(Math.max(0, Math.min(1, v)) * 100)) : null,
@@ -310,6 +314,8 @@ export function initBubble() {
     let want = false
     try { want = d.bubbleWantClip?.() === true } catch { /* old shell */ }
     if (!want && !settings.get().bubbleAuto) return
+    // The stage lock: an automatic arrival read honours it; a hand ask (want) lands.
+    if (!want) { try { if (d.bubbleLock?.()) return } catch { /* old shell */ } }
     void readClipboard().then((t) => {
       const text = t.trim()
       if (!text) return

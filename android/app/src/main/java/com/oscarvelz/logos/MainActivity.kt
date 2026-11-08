@@ -280,6 +280,9 @@ class MainActivity : Activity() {
             return w
         }
 
+        /** The stage lock, so the page's own automatic reads honour it too. */
+        @JavascriptInterface fun bubbleLock(): Boolean = BubbleService.isLocked(this@MainActivity)
+
         /** A transport press that arrived while the page was asleep, pulled once as it wakes. */
         @JavascriptInterface fun bubblePendingCmd(): String {
             val c = BubbleService.pendingCmd
