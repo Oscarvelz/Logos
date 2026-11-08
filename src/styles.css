@@ -339,13 +339,14 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 .player-progress > b { position: absolute; inset: 0 auto 0 0; background: var(--surface-3); }
 .transport { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr); align-items: center; gap: 14px; margin: 14px 0 6px; }
 .player-top { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; min-width: 0; }
-.player-top-r { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; }
+.player-sub { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; }
+.player-sub .chip { height: 36px; font-size: 13.5px; }
 .player-top .chip { min-width: 0; }
 .player-top .chip svg, .player-top .chip .dot { flex: none; }
 .player-top .chip-txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .lang-chip { flex: 0 1 auto; }
 .speed-chip { flex: none; padding: 0 12px; gap: 6px; font-variant-numeric: tabular-nums; }
-.voice-chip { flex: 0 1 auto; max-width: 150px; }
+.voice-chip { flex: 0 1 auto; max-width: 210px; }
 .transport .t-left { justify-self: start; }
 .transport .t-right { justify-self: end; }
 @media (max-width: 839px) {

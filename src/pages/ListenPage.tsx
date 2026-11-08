@@ -152,18 +152,21 @@ export function ListenPage() {
 
         <div className="listen-side">
         <div className="card player-card">
+          {/* 1.4.58: two rows, nothing truncated — identity (language, voice) on
+              top at full size; playback (sleep, speed) below, a touch smaller.
+              Four chips in one row starved each other into ellipses. */}
           <div className="player-top">
             <button className={`chip lang-chip ${st.langMode === 'auto' ? '' : 'accent'}`} onClick={cycleLang} aria-label="Language">
               <Languages size={16} />
               <span className="chip-txt">{st.langMode === 'auto' ? <>Auto · {mixed ? 'EN + ES' : detected.lang.toUpperCase()}</> : LANG_LABEL[st.langMode]}</span>
             </button>
-            <div className="player-top-r">
-              <button className={`chip ${s.sleepLeft != null ? 'accent' : ''}`} onClick={() => setSleepOpen(true)} aria-label="Sleep timer"><Moon size={15} />{s.sleepLeft != null ? formatDuration(s.sleepLeft) : null}</button>
-              <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={`Playback speed ${fmtSpeed(st.listenSpeed)}`}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
-              <button className="chip accent voice-chip" onClick={() => setVoiceOpen(true)} aria-label="Voice">
-                <span className="dot" /><span className="chip-txt">{currentVoice?.name ?? ''}</span>
-              </button>
-            </div>
+            <button className="chip accent voice-chip" onClick={() => setVoiceOpen(true)} aria-label="Voice">
+              <span className="dot" /><span className="chip-txt">{currentVoice?.name ?? ''}</span>
+            </button>
+          </div>
+          <div className="player-sub">
+            <button className={`chip ${s.sleepLeft != null ? 'accent' : ''}`} onClick={() => setSleepOpen(true)} aria-label="Sleep timer"><Moon size={15} />{s.sleepLeft != null ? formatDuration(s.sleepLeft) : null}</button>
+            <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={`Playback speed ${fmtSpeed(st.listenSpeed)}`}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
           </div>
 
           <Visualizer />
