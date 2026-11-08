@@ -12,8 +12,12 @@ import { describeText } from './describe.ts'
 import { detectLang } from './text.ts'
 import { VOICES, favoriteVoices } from './voices.ts'
 import { nowReadingFor } from './book/nowreading.ts'
-import { markAndToast } from './marks.ts'
-import { saveForLater } from './library.ts'
+import { markAndToast, textKey } from './marks.ts'
+import { saveForLater, library, getClipBlob } from './library.ts'
+import { books } from './books.ts'
+import { playBook } from './book/playbook.ts'
+import { playClip } from '../player/clip.ts'
+import { loadSessionResume } from './resume.ts'
 import { estimateSeconds } from './text.ts'
 import { toast } from '../components/ui.tsx'
 
@@ -124,13 +128,48 @@ export function initBubble() {
   pushPrefs()
   settings.subscribe(pushPrefs)
   // A panel key pressed while this page was asleep is remembered natively and
-  // collected now, as the page wakes — the press is never silently lost.
+  // collected now, as the page wakes — the press is never silently lost. And
+  // when the page died outright, the session died with it: rebuild what was
+  // playing from its own tracks (the same three legs Continue listening uses,
+  // newest first) and let the press land on the restored session.
+  const recoverSession = async (): Promise<boolean> => {
+    try {
+      const cands: { at: number; run: () => void }[] = []
+      const book = [...books.get().list]
+        .filter((b) => !b.done && b.progress > 0.01 && b.progress < 0.985 && (b.openedAt ?? 0) > 0)
+        .sort((a, b) => (b.openedAt ?? 0) - (a.openedAt ?? 0))[0]
+      if (book) cands.push({ at: book.openedAt ?? 0, run: () => { void playBook(book, { pos: book.pos }) } })
+      const clip = [...library.get().clips]
+        .filter((c) => !c.done && (c.pos ?? 0) > 5 && (c.playedAt ?? 0) > 0)
+        .sort((a, b) => (b.playedAt ?? 0) - (a.playedAt ?? 0))[0]
+      if (clip) cands.push({ at: clip.playedAt ?? 0, run: () => {
+        if (clip.kind === 'text' || !clip.format) { loadText(clip.text); void play(); return }
+        void getClipBlob(clip.id).then((blob) => { if (blob) void playClip(`clip:${clip.id}`, blob, { title: clip.title, artist: clip.voice }, clip.pos ?? 0) })
+      } })
+      const r = loadSessionResume()
+      const draft = drafts.get().listen
+      if (r && r.idx > 0 && draft.trim() && textKey(draft) === r.key) {
+        cands.push({ at: r.at, run: () => { loadText(draft); void play(r.idx) } })
+      }
+      const top = cands.sort((a, b) => b.at - a.at)[0]
+      if (!top) return false
+      top.run()
+      return true
+    } catch { return false }
+  }
   const collectPending = () => {
     try {
       const cmd = d.bubblePendingCmd?.()
       if (!cmd) return
-      if ((cmd === 'toggle' || cmd === 'prev' || cmd === 'next') && !listen.get().active) return
-      dispatchEvent(new Event(`logosandroid-${cmd}`))
+      if (cmd === 'slower' || cmd === 'faster' || listen.get().active) {
+        dispatchEvent(new Event(`logosandroid-${cmd}`))
+        return
+      }
+      void recoverSession().then((ok) => {
+        if (ok && (cmd === 'prev' || cmd === 'next')) {
+          setTimeout(() => dispatchEvent(new Event(`logosandroid-${cmd}`)), 900)
+        }
+      })
     } catch { /* ignore */ }
   }
   setTimeout(collectPending, 700)
