@@ -5,7 +5,7 @@ import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
 import { segmentText, pauseAfter, speakable } from '../lib/text.ts'
 import { voiceById, type Lang } from '../lib/voices.ts'
-import { concat, createMp3Encoder, encodeWav, silence, trimSilence } from '../lib/audio.ts'
+import { concat, createMp3Encoder, encodeWav, silence, trimSilence, applyGain, levelGain } from '../lib/audio.ts'
 import { synthesize } from '../engine/engine.ts'
 import { saveClip, updateClip, getClip, type ClipMeta } from '../lib/library.ts'
 
@@ -72,7 +72,12 @@ export async function runExport(text: string, opts: ExportOpts) {
     // Keep two requests queued so the worker never idles between sentences.
     const inflight: Promise<{ samples: Float32Array; sampleRate: number }>[] = []
     const request = (i: number) => {
-      const p = synthesize(speakable(segments[i].text, segments[i].lang) || segments[i].text, pick(segments[i].lang), opts.speed, { priority: 0, signal })
+      const spoken = speakable(segments[i].text, segments[i].lang)
+      // A sentence that was only a code or a machine file name becomes a breath,
+      // not a spelling bee (same rule as live listening).
+      const p = spoken
+        ? synthesize(spoken, pick(segments[i].lang), opts.speed, { priority: 0, signal })
+        : Promise.resolve({ samples: silence(300, SR), sampleRate: SR })
       p.catch(() => {})
       return p
     }
@@ -80,7 +85,9 @@ export async function runExport(text: string, opts: ExportOpts) {
     for (let i = 0; i < segments.length; i++) {
       const res = await inflight[i]
       if (i + 2 < segments.length) inflight.push(request(i + 2))
-      const body = trimSilence(res.samples, res.sampleRate)
+      const trimmed = trimSilence(res.samples, res.sampleRate)
+      // Level each sentence toward a common loudness, like live listening.
+      const body = applyGain(trimmed, levelGain(trimmed))
       const gap = silence(pauseAfter(segments[i], st.sentencePauseMs) / opts.speed, res.sampleRate)
       const lead = i === 0 ? silence(150, res.sampleRate) : null
       const chunk = concat(lead ? [lead, body, gap] : [body, gap])

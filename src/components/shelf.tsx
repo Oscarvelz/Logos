@@ -42,10 +42,11 @@ async function playImported(meta: BookMeta) {
   const chapters = content?.chapters ?? []
   const parts: string[] = []
   const where: Pos[] = []
-  let n = 0
-  for (let c = 0; c < chapters.length && n < 40000; c++) {
+  // 1.4.57: the whole book loads as one session (the old 40,000-char cap cut long
+  // books off mid-way); the player keeps its rendered-audio cache bounded instead.
+  for (let c = 0; c < chapters.length; c++) {
     const blocks = chapters[c].blocks
-    for (let i = 0; i < blocks.length && n < 40000; i++) { parts.push(blocks[i].t); where.push({ ch: c, b: i }); n += blocks[i].t.length }
+    for (let i = 0; i < blocks.length; i++) { parts.push(blocks[i].t); where.push({ ch: c, b: i }) }
   }
   const text = parts.join('\n\n')
   if (!text.trim()) { openBook(meta.id); return }

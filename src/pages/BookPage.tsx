@@ -8,6 +8,8 @@ import { useStore } from '../lib/store.ts'
 import { Sheet, Seg, toast, useMediaQuery } from '../components/ui.tsx'
 import { BookCover } from '../components/bookcover.tsx'
 import { setNowReading, nowReadingFor } from '../lib/book/nowreading.ts'
+import { settings } from '../lib/settings.ts'
+import { queueExport, exportJob } from '../player/exporter.ts'
 
 const bookIdFromHash = () => decodeURIComponent(location.hash.replace(/^#\/?book\/?/, '').split(/[/?]/)[0] ?? '')
 type Type = { size: number; font: 'serif' | 'sans'; spacing: 'snug' | 'airy' }
@@ -131,10 +133,10 @@ export function BookPage() {
     if (!chapters || !meta) return
     const parts: string[] = []
     const where: Pos[] = []
-    let n = 0
-    for (let c = ch; c < chapters.length && n < 40000; c++) {
+    // 1.4.57: from here to the end of the book, not a 40,000-char slice.
+    for (let c = ch; c < chapters.length; c++) {
       const blocks = chapters[c].blocks
-      for (let i = c === ch ? b : 0; i < blocks.length && n < 40000; i++) { parts.push(blocks[i].t); where.push({ ch: c, b: i }); n += blocks[i].t.length }
+      for (let i = c === ch ? b : 0; i < blocks.length; i++) { parts.push(blocks[i].t); where.push({ ch: c, b: i }) }
     }
     const text = parts.join('\n\n')
     setNowReading(meta.id, meta.title, parts, where)
@@ -355,6 +357,17 @@ function BookInfo({ meta, chapters, ch, progress, onGo, onSearch, onType, onList
   const fmt = (w: number) => { const m = Math.round(w / 230); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${Math.max(1, m)} min` }
   const marks = [...(meta.bookmarks ?? [])].sort((a, b) => b.at - a.at)
   const pct = Math.round(progress * 100)
+  const job = useStore(exportJob)
+  const making = job.status === 'running' && job.title === meta.title
+  // 1.4.57: render the whole book to a stored audiobook in the background
+  // (the Create/export engine, pointed at a book). It lands in Library.
+  const makeAudiobook = () => {
+    const text = chapters.map((c) => c.blocks.map((b) => b.t).join('\n\n')).join('\n\n')
+    if (!text.trim()) { toast('This book has no readable text'); return }
+    const st = settings.get()
+    const r = queueExport(text, { voice: null, speed: st.exportSpeed, format: st.format, title: meta.title, origin: 'listen' })
+    toast(r === 'started' ? 'Making the audiobook in the background — find it in Library when it’s ready' : 'Queued — the audiobook starts after the audio being made now', undefined, 6000)
+  }
   return (
     <aside className="bk-info" aria-label="About this book">
       <div className="card bi-prog">
@@ -368,6 +381,7 @@ function BookInfo({ meta, chapters, ch, progress, onGo, onSearch, onType, onList
       </div>
       <div className="card bi-actions">
         <button className="btn primary block" onClick={onListen}><Play size={16} fill="currentColor" /> Listen from here</button>
+        <button className="btn block" onClick={makeAudiobook} disabled={making}><AudioLines size={16} /> {making ? `Making audiobook · ${job.done} of ${job.total}` : 'Make audiobook'}</button>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn grow" onClick={onSearch}><Search size={16} /> Search</button>
           <button className="btn grow" onClick={onType}><Type size={16} /> Text</button>

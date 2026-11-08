@@ -1,6 +1,7 @@
 // Sentence segmentation tuned for streaming TTS (English + Spanish), and a
 // lightweight English/Spanish language detector.
 import type { Lang } from './voices.ts'
+import { applyPron } from './pronounce.ts'
 
 export type Segment = {
   index: number
@@ -58,9 +59,12 @@ export function segmentText(source: string, langMode: Lang | 'auto' = 'auto'): S
     .filter((s) => /[\p{L}\p{N}]/u.test(s.text))
     .map(({ paraLang, ...s }, index) => {
       let lang: Lang = paraLang
-      if (langMode === 'auto' && s.text.length > 40) {
+      // 1.4.57: finer switching for mixed-language texts — a clearly-other-language
+      // sentence now changes voice from ~24 characters up (a short quoted sentence
+      // in a Spanish document used to be read with Spanish phonetics, and back).
+      if (langMode === 'auto' && s.text.length > 24) {
         const d = detectLang(s.text)
-        if (d.confidence >= 0.7) lang = d.lang
+        if (d.confidence >= 0.6) lang = d.lang
       }
       return { ...s, index, lang }
     })
@@ -205,7 +209,11 @@ export function expandAbbrev(text: string, lang?: Lang): string {
 }
 
 export function speakable(text: string, lang?: Lang): string {
-  return expandAbbrev(text, lang)
+  // 1.4.57 pronunciation layer: a code the voice would spell out character by
+  // character for ten seconds is named once ("code"), never read — and machine
+  // file names (share-media-<hash>.png, IMG_2044.jpg) are dropped entirely.
+  const CODE = lang === 'es' ? ' código ' : ' code '
+  const out = expandAbbrev(text, lang)
     .replace(/\*\*|__|~~|`+/g, '')
     .replace(/(^|\s)[*_](?=\S)|(?<=\S)[*_](?=\s|$|[.,;:!?])/g, '$1')
     .replace(/(^|\s)#{1,6}\s+/g, '$1')
@@ -213,6 +221,11 @@ export function speakable(text: string, lang?: Lang): string {
     .replace(/(^|\s)[•▪◦]\s+/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/https?:\/\/\S+/g, 'link')
+    .replace(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/gi, CODE)
+    .replace(/\S*[0-9a-f]{16,}\S*/gi, (tok) => (/\.(?:png|jpe?g|gif|webp|svg)$/i.test(tok) ? ' ' : CODE))
+    .replace(/\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{8,15}\b/gi, CODE)
+    .replace(/\b[\w-]*(?:\d|_)[\w-]*\.(?:png|jpe?g|gif|webp|mp3|mp4|wav|pdf|epub|docx?|txt|zip)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+  return applyPron(out)
 }
