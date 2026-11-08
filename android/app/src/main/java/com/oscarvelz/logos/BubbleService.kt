@@ -579,6 +579,21 @@ class BubbleService : Service() {
             setOnClickListener { poke?.invoke("mark") }
         }
         titleRow.addView(markB)
+        // The save key (Oscar's scenario): a copied text is playing temporarily
+        // and the wish strikes — one tap turns the temporary into a permanent
+        // Library resident. It sits by the title, where the text is named.
+        val saveB = TextView(this).apply {
+            text = "+"; setTextColor(c["gold"]!!); textSize = 18f; gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
+            contentDescription = "Save this text to the Library"
+            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
+            setOnClickListener {
+                poke?.invoke("save")
+                Toast.makeText(this@BubbleService, "Saved to Library", Toast.LENGTH_SHORT).show()
+            }
+        }
+        titleRow.addView(saveB)
         card.addView(titleRow)
         card.addView(subV)
         val spec = SpectrumView(this, c["gold"]!!)

@@ -190,6 +190,10 @@ Oscar's OCR'd PDF (How the Mind Works) imported badly: blurb as title, running h
 ## 1.4.44 (2026-11-06, Muse, at Oscar's request)
 - Reader bottom bar: the progress track no longer rides the bar's top border, where the bar's rounded corners and overflow clipped it (and sliced the thumb in half at 0%/100%). The track now sits inside the bar (14px insets, 8px down, rounded ends, 4px tall) with the thumb riding inside it; drag fractions are measured against the inset track itself, so the thumb stays exactly under the finger, and the seek tooltip follows the same inset.
 
+## 1.4.70 + shell (2026-11-08, Muse — Oscar's scenario: the copied text is playing, and the wish to KEEP it strikes)
+
+A **+** key joins the ⚑ on the panel's title row — beside the text's name, where the wish occurs. One tap while a copied text plays: the page saves the session's text into the Library as a Listen-later resident (`logosandroid-save` → saveForLater with the text's own title, language, current voice and estimated length) — temporary becomes permanent without leaving the bubble. The shell answers with its own "Saved to Library" toast (the page's toast can't be seen from another app). A book session is refused kindly ("Already in your library — it's a book"). Also carries the catch-wave: when the tap on the bubble lands a fresh delivery, the bubble answers with two halo rings — "¡lo tengo!" — the wave at the one moment Android lets it know (commit 8e0f31d).
+
 ## 1.4.69 + shell (2026-11-08, Muse — Oscar: the pretty spectrum belongs in the floating player too)
 
 The panel gains the player's own spectrum: eighteen mirrored gold bars under the sub line, drawn from the SAME levels feed as Listen's Visualizer (`levels()` — the real envelope around the playhead, centre bar = now). The page pushes bar heights inside the state JSON a few times a second while playing (push dedupes at rest); the native SpectrumView eases toward them at ~30 fps, so four pushes a second move like water. At rest the bars settle to the same faint line the big player idles at. Carries the run-24 compile fix (title layoutParams inside its apply block, commit ccd965b).
