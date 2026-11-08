@@ -30,6 +30,8 @@ export type BookMeta = {
   done?: boolean
   /** Imported "for now": removed once another book holds the floor, unless kept. */
   temp?: boolean
+  /** A warning shown at import time (e.g. a shared image that arrived cut off). */
+  warn?: string
   size: number
   pages?: number
   bookmarks?: { ch: number; b: number; at: number; text: string }[]

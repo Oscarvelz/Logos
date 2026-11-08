@@ -47,30 +47,42 @@ const ocrWorker = () => (tess ??= (async () => {
 })())
 const endOcr = () => { if (tess) { const t = tess; tess = null; void t.then((w) => w.terminate()).catch(() => {}) } }
 
+type OcrLinePx = { text: string; x0: number; x1: number; y0: number; y1: number; items: { s: number; e: number; x0: number; x1: number }[] }
+/** Recognise one canvas and return its lines in canvas pixels (y down from
+    the top), words under 25% confidence dropped. A blank canvas is not worth
+    seconds of OCR and returns nothing. */
+async function recognizePx(canvas: HTMLCanvasElement): Promise<{ lines: OcrLinePx[]; text: string }> {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+  const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+  let ink = 0, n = 0
+  for (let i = 0; i < px.length; i += 4 * 37) { n++; if ((px[i] + px[i + 1] + px[i + 2]) / 3 < 200) ink++ }
+  if (ink / n < 0.002) return { lines: [], text: '' }
+  const w = await ocrWorker()
+  const { data } = await w.recognize(canvas, {}, { blocks: true })
+  const lines: OcrLinePx[] = []
+  for (const b of data.blocks ?? []) for (const par of b.paragraphs ?? []) for (const ln of par.lines ?? []) {
+    const words = (ln.words ?? []).filter((x: any) => x.text && x.confidence >= 25)
+    if (!words.length) continue
+    const line: OcrLinePx = { text: '', x0: ln.bbox.x0, x1: ln.bbox.x1, y0: ln.bbox.y0, y1: ln.bbox.y1, items: [] }
+    for (const wd of words) { if (line.text) line.text += ' '; const s = line.text.length; line.text += wd.text; line.items.push({ s, e: line.text.length, x0: wd.bbox.x0, x1: wd.bbox.x1 }) }
+    if (line.text.trim()) lines.push(line)
+  }
+  return { lines, text: data.text ?? '' }
+}
+
 /** OCR one already-rendered canvas into Lines (page space: y up from the
     bottom, coordinates divided by the render scale). Shared by scanned PDF
     pages and by photos or screenshots imported as books. */
 async function ocrCanvasLines(canvas: HTMLCanvasElement, scale: number, pageW: number, pageH: number, p: number): Promise<Line[]> {
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
-  // A truly blank page is not worth seconds of OCR.
-  const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data
-  let ink = 0, n = 0
-  for (let i = 0; i < px.length; i += 4 * 37) { n++; if ((px[i] + px[i + 1] + px[i + 2]) / 3 < 200) ink++ }
-  if (ink / n < 0.002) return []
-  const w = await ocrWorker()
-  const { data } = await w.recognize(canvas, {}, { blocks: true })
-  const out: Line[] = []
-  for (const b of data.blocks ?? []) for (const par of b.paragraphs ?? []) for (const ln of par.lines ?? []) {
-    const words = (ln.words ?? []).filter((x: any) => x.text && x.confidence >= 25)
-    if (!words.length) continue
-    const line: Line = { text: '', x: ln.bbox.x0 / scale, xEnd: ln.bbox.x1 / scale, y: pageH - ln.bbox.y1 / scale, h: Math.max(4, (ln.bbox.y1 - ln.bbox.y0) / scale), items: [], page: p }
-    for (const wd of words) { if (line.text) line.text += ' '; const s = line.text.length; line.text += wd.text; line.items.push({ s, e: line.text.length, x0: wd.bbox.x0 / scale, x1: wd.bbox.x1 / scale }) }
-    if (line.text.trim()) out.push(line)
-  }
-  if (!out.length && data.text?.trim()) {
+  const { lines: pxLines, text } = await recognizePx(canvas)
+  const out: Line[] = pxLines.map((ln) => ({
+    text: ln.text, x: ln.x0 / scale, xEnd: ln.x1 / scale, y: pageH - ln.y1 / scale, h: Math.max(4, (ln.y1 - ln.y0) / scale),
+    items: ln.items.map((it) => ({ s: it.s, e: it.e, x0: it.x0 / scale, x1: it.x1 / scale })), page: p,
+  }))
+  if (!out.length && text.trim()) {
     // No geometry came back: keep the words, laid out plainly, rather than lose the page.
     let y = pageH - 72
-    for (const t of data.text.split('\n')) { const text = t.trim(); if (!text) continue; out.push({ text, x: 54, xEnd: pageW - 54, y, h: 12, items: [{ s: 0, e: text.length, x0: 54, x1: pageW - 54 }], page: p }); y -= 15 }
+    for (const t of text.split('\n')) { const line = t.trim(); if (!line) continue; out.push({ text: line, x: 54, xEnd: pageW - 54, y, h: 12, items: [{ s: 0, e: line.length, x0: 54, x1: pageW - 54 }], page: p }); y -= 15 }
   }
   return out
 }
@@ -88,27 +100,59 @@ async function ocrLines(page: any, p: number): Promise<Line[]> {
 
 /** A photo or screenshot imported as a book: OCR its words into plain text,
     breaking paragraphs where the gap between lines widens. Same engine and
-    worker lifecycle as the scanned-PDF rescue. */
+    worker lifecycle as the scanned-PDF rescue.
+    Tall images are read in overlapping horizontal bands, at a scale set by
+    the picture's WIDTH: the old single pass scaled by the longest side, so
+    the taller a screenshot was, the smaller its letters became — the bottom
+    of a long conversation arrived shrunken and half-read. Each band keeps
+    the letters at full reading size, and lines read twice in an overlap are
+    kept once. */
 export async function ocrImageText(buf: ArrayBuffer, mime: string): Promise<string> {
   let bmp: ImageBitmap
   try { bmp = await createImageBitmap(new Blob([buf], { type: mime })) } catch { throw new Error('That image couldn’t be read.') }
   try {
-    // Aim near the resolution the PDF path renders at (a page at 3×): upscale
-    // small screenshots, cap very large photos — Tesseract gains nothing past it.
-    const longest = Math.max(bmp.width, bmp.height)
-    const f = Math.min(3, Math.max(0.5, 2400 / longest))
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.round(bmp.width * f); canvas.height = Math.round(bmp.height * f)
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })!
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height)
-    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height)
-    const lines = await ocrCanvasLines(canvas, f, bmp.width, bmp.height, 1)
-    const top = [...lines].sort((a, b) => b.y - a.y)
+    const s = Math.min(3, Math.max(0.6, 2000 / bmp.width))
+    const W = Math.round(bmp.width * s), H = Math.round(bmp.height * s)
+    const BAND = 1500, OVER = 220
+    type IL = { text: string; top: number; h: number }
+    const all: IL[] = []
+    const key = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+    for (let y0 = 0; y0 < H; y0 += BAND - OVER) {
+      const bh = Math.min(BAND, H - y0)
+      const canvas = document.createElement('canvas')
+      canvas.width = W; canvas.height = bh
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, bh)
+      const sy = y0 / s, sh = Math.min(bmp.height - sy, bh / s)
+      if (sh > 0) ctx.drawImage(bmp, 0, sy, bmp.width, sh, 0, 0, W, bh)
+      const { lines, text } = await recognizePx(canvas)
+      if (lines.length) {
+        const hasNext = y0 + bh < H
+        for (const ln of lines) {
+          // A line sliced by this band's edge is read whole by the band it
+          // overlaps into; keeping the slice would add a garbled fragment.
+          if (hasNext && ln.y1 > bh - 6) continue
+          if (y0 > 0 && ln.y0 < 6) continue
+          const top = (y0 + ln.y0) / s, h = Math.max(4, (ln.y1 - ln.y0) / s)
+          const t = ln.text.trim(); if (!t) continue
+          // The same line already read in the overlap with the previous band?
+          if (all.some((a) => Math.abs(a.top - top) < Math.max(a.h, h) * 0.6 && key(a.text) === key(t))) continue
+          all.push({ text: t, top, h })
+        }
+      } else if (text.trim()) {
+        // No geometry came back for this band: spread its words evenly over
+        // the band rather than lose that stretch of the picture.
+        const ls = text.split('\n').map((t) => t.trim()).filter(Boolean)
+        ls.forEach((t, i) => all.push({ text: t, top: (y0 + ((i + 0.5) * bh) / ls.length) / s, h: Math.max(4, bh / Math.max(1, ls.length) / s * 0.6) }))
+      }
+      if (y0 + bh >= H) break
+    }
+    all.sort((a, b) => a.top - b.top)
     const paras: string[] = []
-    let cur: string[] = [], prev: Line | null = null
-    for (const ln of top) {
-      if (prev && prev.y - ln.y > Math.max(prev.h, ln.h) * 1.9 && cur.length) { paras.push(cur.join(' ')); cur = [] }
-      const t = ln.text.trim(); if (t) cur.push(t)
+    let cur: string[] = [], prev: IL | null = null
+    for (const ln of all) {
+      if (prev && ln.top - prev.top > Math.max(prev.h, ln.h) * 1.9 && cur.length) { paras.push(cur.join(' ')); cur = [] }
+      cur.push(ln.text)
       prev = ln
     }
     if (cur.length) paras.push(cur.join(' '))

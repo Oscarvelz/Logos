@@ -19,6 +19,8 @@ export type RawBook = {
   toc?: RawToc[]
   /** Printed page number → PDF page, read from the page numbers on each page. */
   printed?: Map<number, number>
+  /** A warning worth showing the reader about this import (e.g. a shared image that arrived cut off). */
+  warn?: string
 }
 
 const HEAD = (k: string) => k === 'h1' || k === 'h2' || k === 'h3'
@@ -233,6 +235,7 @@ export function finishBook(raw: RawBook, file: File, format: string): { meta: Bo
     cover: raw.cover,
     size: file.size,
     pages: raw.pages,
+    warn: raw.warn,
   }
   return { meta, content: { id, chapters } }
 }
