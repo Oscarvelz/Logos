@@ -280,6 +280,12 @@ class MainActivity : Activity() {
             return w
         }
 
+        /** The copy-detection experiment: the page flips it, the service obeys. */
+        @JavascriptInterface fun bubbleProbe(on: Boolean) {
+            getSharedPreferences("bubble", MODE_PRIVATE).edit().putBoolean("probe", on).apply()
+            runOnUiThread { BubbleService.probeHook?.invoke(on) }
+        }
+
         /** The panel's seek bar: the chosen fraction, pulled once by the page. */
         @JavascriptInterface fun bubbleSeek(): String {
             val f = BubbleService.seekFrac

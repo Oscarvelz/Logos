@@ -69,6 +69,11 @@ class BubbleService : Service() {
         @Volatile var seekFrac = -1.0
         /** Set by the service: wave the bubble (leaving-Logos trigger). */
         var inviteHook: (() -> Unit)? = null
+        /** The copy experiment: how many clip-change signals reached us, and when. */
+        @Volatile var clipSignals = 0
+        @Volatile var lastSignalAt = 0L
+        @Volatile var probe = false
+        var probeHook: ((Boolean) -> Unit)? = null
         private var lastKey = 0
         private var pendingManual = false
         private var lastTrampoline = 0L
@@ -135,6 +140,7 @@ class BubbleService : Service() {
     private var halo: View? = null
     private var haloAnim: ObjectAnimator? = null
     private var seekBar: SeekBar? = null
+    private var clipListener: ClipboardManager.OnPrimaryClipChangedListener? = null
     private var spectrum: SpectrumView? = null
     private var seekHeld = false
     private var playingNow = false
@@ -249,6 +255,25 @@ class BubbleService : Service() {
         rippleAnims.forEach { it.start() }
     }
 
+    /** Flip the experiment: persist it and rebuild the bubble window with (or
+     *  without) its focusable flag, in the same spot. */
+    private fun applyProbe(on: Boolean) {
+        probe = on
+        runCatching { prefs(this).edit().putBoolean("probe", on).apply() }
+        if (bubble == null) return
+        val ox = bubbleParams?.x; val oy = bubbleParams?.y
+        collapsePanel()
+        haloAnim?.cancel(); haloAnim = null
+        runCatching { wm?.removeView(bubble) }
+        bubble = null; bubbleParams = null; halo = null
+        showBubble()
+        val np = bubbleParams
+        if (np != null && ox != null && oy != null) {
+            np.x = ox; np.y = oy
+            bubble?.let { runCatching { wm?.updateViewLayout(it, np) } }
+        }
+    }
+
     private fun wakeBubble(schedule: Boolean = true) {
         handler.removeCallbacks(fadeRun)
         val b = bubble ?: return
@@ -266,6 +291,29 @@ class BubbleService : Service() {
         nm.createNotificationChannel(NotificationChannel("bubble", "Floating bubble", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
         onNow = { refreshPanel() }
         inviteHook = { invite(3) }
+        // The copy experiment (Oscar demanded the doubt be closed 100%): the
+        // system has an ear for clip changes, but the docs say it only speaks
+        // to the focused window or the default keyboard. We register and count
+        // — the receipt lands in Settings' "Last clipboard try". In probe mode
+        // the bubble window itself holds focus, and a heard signal also tries
+        // the read: if the text comes through, it plays. His phone decides.
+        probe = prefs(this).getBoolean("probe", false)
+        probeHook = { on -> applyProbe(on) }
+        runCatching {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val l = ClipboardManager.OnPrimaryClipChangedListener {
+                clipSignals++; lastSignalAt = System.currentTimeMillis()
+                noteTry(this@BubbleService, "copy signal received")
+                invite(3, force = true)
+                if (probe) {
+                    val t = readClipboard(this@BubbleService)
+                    if (t.isNotEmpty()) { noteTry(this@BubbleService, "probe read OK — playing it"); deliver(this@BubbleService, t, false) }
+                    else noteTry(this@BubbleService, "signal heard, read denied")
+                }
+            }
+            clipListener = l
+            cm.addPrimaryClipChangedListener(l)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -344,7 +392,7 @@ class BubbleService : Service() {
         halo = haloV
         val p = WindowManager.LayoutParams(
             size, size, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
+            if (probe) 0 else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             val sw2 = resources.displayMetrics.widthPixels
@@ -838,6 +886,8 @@ class BubbleService : Service() {
     }
 
     override fun onDestroy() {
+        runCatching { clipListener?.let { (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).removePrimaryClipChangedListener(it) } }
+        probeHook = null
         handler.removeCallbacks(fadeRun)
         hideTargets()
         collapsePanel(now = true)
