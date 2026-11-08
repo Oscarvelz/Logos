@@ -54,9 +54,19 @@ class BubbleService : Service() {
         var nowJson = ""
         var onNow: (() -> Unit)? = null
         var running = false
+        /** Set when Paste & play could not read from the bubble: the page reads it itself as Logos opens. */
+        var wantClip = false
+        var deliveries = 0
         private var lastKey = 0
         private var pendingManual = false
         private var lastTrampoline = 0L
+        private var trySource = "panel"
+
+        /** A line for the Settings card, so a failed read is evidence, not a mystery. */
+        fun noteTry(c: Context, what: String) {
+            val t = java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date())
+            prefs(c).edit().putString("lastTry", "$what · $t").apply()
+        }
 
         fun prefs(c: Context) = c.getSharedPreferences("bubble", Context.MODE_PRIVATE)
         fun lever(c: Context) = prefs(c).getBoolean("auto", true)
@@ -75,6 +85,8 @@ class BubbleService : Service() {
             val key = text.length * 31 + text.hashCode()
             if (!manual && key == lastKey) return
             lastKey = key
+            deliveries++
+            noteTry(c, "read ${text.length} chars via $trySource")
             clipText = text
             clipManual = manual
             val p = poke
@@ -90,9 +102,11 @@ class BubbleService : Service() {
         /** ClipActivity read the clipboard under its brief focus: hand it over. */
         fun deliverFromClip(c: Context, text: String) {
             if (text.isEmpty()) {
+                noteTry(c, "the blink found the clipboard empty")
                 if (pendingManual) Toast.makeText(c, "Clipboard is empty", Toast.LENGTH_SHORT).show()
                 return
             }
+            trySource = "the blink"
             deliver(c, text, pendingManual)
         }
     }
@@ -107,7 +121,7 @@ class BubbleService : Service() {
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var halo: View? = null
     private var haloAnim: ObjectAnimator? = null
-    private var panel: LinearLayout? = null
+    private var panel: View? = null
     private var panelParams: WindowManager.LayoutParams? = null
     private var titleV: TextView? = null
     private var subV: TextView? = null
@@ -244,37 +258,90 @@ class BubbleService : Service() {
         openPanel()
     }
 
-    private fun panelCard(): GradientDrawable = GradientDrawable().apply {
-        cornerRadius = dp(20).toFloat()
-        setColor(Color.rgb(16, 14, 12))
-        setStroke(dp(1), Color.rgb(84, 70, 48))
-    }
+    // The panel wears the app's own spectrum (Oscar: "que el panel siga la app.
+    // No true black. El acabado premium con el spectrum del reproductor"): the
+    // player's warm charcoal gradient with its soft gold glow on top — or, when
+    // Logos itself is in its light theme, the warm paper of that room.
+    private var panelLight = false
+    private var lastFocusTry = 0L
+
+    private fun pal(): Map<String, Int> = if (panelLight) mapOf(
+        "bg1" to Color.rgb(251, 247, 238), "bg2" to Color.rgb(240, 232, 214),
+        "line" to Color.rgb(206, 188, 148), "ink" to Color.rgb(34, 28, 18),
+        "muted" to Color.rgb(122, 108, 85), "disc" to Color.rgb(255, 255, 255),
+        "discLine" to Color.rgb(216, 201, 168), "gold" to Color.rgb(154, 102, 20),
+        "glow" to Color.argb(46, 233, 189, 114), "div" to Color.rgb(224, 211, 182)
+    ) else mapOf(
+        "bg1" to Color.rgb(34, 29, 23), "bg2" to Color.rgb(19, 16, 13),
+        "line" to Color.rgb(96, 80, 54), "ink" to Color.rgb(245, 239, 227),
+        "muted" to Color.rgb(173, 161, 141), "disc" to Color.rgb(46, 40, 32),
+        "discLine" to Color.rgb(74, 64, 51), "gold" to gold,
+        "glow" to Color.argb(64, 233, 189, 114), "div" to Color.rgb(58, 50, 40)
+    )
 
     private fun openPanel() {
         val w = wm ?: return
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = panelCard()
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+        panelLight = runCatching { JSONObject(nowJson).optBoolean("light") }.getOrDefault(false)
+        val c = pal()
+        // The panel is a small stage: gradient card, a gold glow lying on its top
+        // like the player's, then the content.
+        val stage = FrameLayout(this)
+        val cardBg = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c["bg1"]!!, c["bg2"]!!)).apply {
+            cornerRadius = dp(24).toFloat()
+            setStroke(dp(1), c["line"]!!)
         }
+        stage.background = cardBg
+        stage.elevation = dp(14).toFloat()
+        val glow = View(this).apply {
+            background = GradientDrawable().apply {
+                gradientType = GradientDrawable.RADIAL_GRADIENT
+                gradientRadius = dp(190).toFloat()
+                colors = intArrayOf(c["glow"]!!, Color.TRANSPARENT)
+            }
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(120), Gravity.TOP)
+        }
+        stage.addView(glow)
+        val card = object : LinearLayout(this) {
+            override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+                super.onWindowFocusChanged(hasWindowFocus)
+                // The panel holding the window's focus is one of the moments
+                // Android lets an app look at the clipboard: with the lever on,
+                // gaining focus re-reads (debounced), so copying and then
+                // touching the bubble is never a missed chance.
+                if (hasWindowFocus && lever(this@BubbleService)) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastFocusTry > 1200) { lastFocusTry = now; handler.postDelayed({ readClip(false, allowBlink = false) }, 120) }
+                }
+            }
+        }.apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(16))
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        }
+        stage.addView(card)
         titleV = TextView(this).apply {
-            setTextColor(ink); textSize = 15.5f; setTypeface(typeface, Typeface.BOLD)
+            setTextColor(c["ink"]!!); textSize = 17f; typeface = Typeface.SERIF
+            setTypeface(typeface, Typeface.BOLD)
             maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
         }
-        subV = TextView(this).apply { setTextColor(muted); textSize = 12f }
+        subV = TextView(this).apply { setTextColor(c["muted"]!!); textSize = 12f }
         card.addView(titleV)
         card.addView(subV)
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(10), 0, dp(4))
+            setPadding(0, dp(12), 0, dp(4))
         }
         fun mediaBtn(res: Int, label: String, cmd: String): ImageButton = ImageButton(this).apply {
             setImageResource(res)
-            setColorFilter(if (cmd == "toggle") gold else ink)
-            background = null
+            setColorFilter(if (cmd == "toggle") c["gold"]!! else c["ink"]!!)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(c["disc"]!!)
+                setStroke(dp(1), c["discLine"]!!)
+            }
             contentDescription = label
-            layoutParams = LinearLayout.LayoutParams(dp(52), dp(48))
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(8) }
             setOnClickListener { poke?.invoke(cmd); handler.postDelayed({ refreshPanel() }, 350) }
         }
         val prevB = mediaBtn(android.R.drawable.ic_media_previous, "Previous sentence", "prev")
@@ -284,15 +351,15 @@ class BubbleService : Service() {
         val spacer = View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) }
         controls.addView(spacer)
         val closeB = TextView(this).apply {
-            text = "✕"; setTextColor(muted); textSize = 17f; gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(dp(40), dp(48))
+            text = "✕"; setTextColor(c["muted"]!!); textSize = 16f; gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(dp(38), dp(48))
             setOnClickListener { collapsePanel() }
         }
         controls.addView(closeB)
         card.addView(controls)
         val div = View(this).apply {
-            setBackgroundColor(Color.rgb(52, 45, 36))
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply { topMargin = dp(6); bottomMargin = dp(10) }
+            setBackgroundColor(c["div"]!!)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply { topMargin = dp(8); bottomMargin = dp(12) }
         }
         card.addView(div)
         val clipRow = LinearLayout(this).apply {
@@ -304,19 +371,25 @@ class BubbleService : Service() {
             setTextColor(charcoal)
             textSize = 13.5f
             setTypeface(typeface, Typeface.BOLD)
-            background = GradientDrawable().apply { cornerRadius = dp(99).toFloat(); setColor(gold) }
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(40))
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.rgb(243, 212, 146), Color.rgb(222, 175, 92))).apply { cornerRadius = dp(99).toFloat() }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42))
             setOnClickListener { readClip(true) }
         }
         clipRow.addView(pasteB)
         val leverLabel = TextView(this).apply {
             text = "Auto"
-            setTextColor(muted); textSize = 12.5f
+            setTextColor(c["muted"]!!); textSize = 12.5f
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(14) }
         }
         clipRow.addView(leverLabel)
         val leverS = Switch(this).apply {
             isChecked = lever(this@BubbleService)
+            val goldStates = android.content.res.ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(c["gold"]!!, Color.rgb(140, 130, 115))
+            )
+            thumbTintList = goldStates
+            trackTintList = goldStates
             setOnCheckedChangeListener { _, on ->
                 prefs(this@BubbleService).edit().putBoolean("auto", on).apply()
                 poke?.invoke("lever")
@@ -328,7 +401,7 @@ class BubbleService : Service() {
         clipRow.addView(spacer2)
         val hideB = TextView(this).apply {
             text = "Hide bubble"
-            setTextColor(muted); textSize = 12.5f
+            setTextColor(c["muted"]!!); textSize = 12.5f
             setOnClickListener { collapsePanel(); stopBubble() }
         }
         clipRow.addView(hideB)
@@ -339,9 +412,9 @@ class BubbleService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START }
         panelParams = p
-        card.setOnTouchListener { _, e -> if (e.action == MotionEvent.ACTION_OUTSIDE) { collapsePanel(); true } else false }
-        runCatching { w.addView(card, p) }
-        panel = card
+        stage.setOnTouchListener { _, e -> if (e.action == MotionEvent.ACTION_OUTSIDE) { collapsePanel(); true } else false }
+        runCatching { w.addView(stage, p) }
+        panel = stage
         positionPanel()
         refreshPanel()
         // The tap that opened the panel is the moment Android allows: with the
@@ -360,7 +433,7 @@ class BubbleService : Service() {
             else -> (sw2 - pw - dp(10)).coerceAtLeast(dp(10))
         }
         p.y = (bp.y + dp(74)).coerceAtMost(sh2 - dp(240))
-        runCatching { wm?.updateViewLayout(panel, p) }
+        panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
 
     private fun collapsePanel() {
@@ -389,17 +462,32 @@ class BubbleService : Service() {
         }
     }
 
-    private fun readClip(manual: Boolean) {
+    private fun readClip(manual: Boolean, allowBlink: Boolean = true) {
+        trySource = "the panel"
         val direct = readClipboard(this)
         if (direct.isNotEmpty()) {
             deliver(this, direct, manual)
             if (manual) collapsePanel()
             return
         }
+        if (!allowBlink) return // focus retries read directly only — never a blink loop
         val now = System.currentTimeMillis()
-        if (!manual && now - lastTrampoline < 2500) return
+        if (!manual && now - lastTrampoline < 2500) { noteTry(this, "the panel saw the clipboard empty"); return }
         lastTrampoline = now
         pendingManual = manual
+        if (manual) {
+            // The guaranteed floor: if neither the panel nor the blink could read
+            // within a second, open Logos — the page, in front and focused, reads
+            // the clipboard itself (wantClip tells it this was asked by hand).
+            val before = deliveries
+            handler.postDelayed({
+                if (deliveries == before) {
+                    wantClip = true
+                    noteTry(this, "opened Logos to read it")
+                    runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }
+            }, 1000)
+        }
         // Android 14's sanctioned route for a background start: a pending intent
         // that explicitly allows it. ClipActivity blinks, reads under its brief
         // focus, and is gone.

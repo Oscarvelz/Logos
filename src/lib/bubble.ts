@@ -21,13 +21,14 @@ type DroidBubble = {
   bubbleAuto?: () => boolean
   bubbleNow?: (json: string) => void
   bubbleClip?: () => string
+  bubbleWantClip?: () => boolean
 }
 const droid = () => (window as unknown as { LogosAndroid?: DroidBubble }).LogosAndroid
 
 /** True only in the Logos app with a shell new enough to carry the bubble. */
 export const bubbleSupported = () => typeof droid()?.bubbleState === 'function'
 
-export type BubbleNativeState = { permission: boolean; running: boolean }
+export type BubbleNativeState = { permission: boolean; running: boolean; last?: string }
 export function bubbleNativeState(): BubbleNativeState | null {
   try {
     const raw = droid()?.bubbleState?.()
@@ -129,9 +130,12 @@ export function initBubble() {
   const push = () => {
     const s = listen.get()
     const text = s.active ? s.text : drafts.get().listen
+    const th = settings.get().theme
+    const light = th === 'light' || (th === 'system' && !window.matchMedia('(prefers-color-scheme: dark)').matches)
     const info = {
       playing: s.playing || s.buffering,
       active: s.active,
+      light,
       title: titleOf(s.active, text) || 'Logos',
       sub: s.active ? `Sentence ${s.current + 1} of ${s.segments.length}` : 'Ready',
     }
@@ -142,6 +146,7 @@ export function initBubble() {
   }
   listen.subscribe(push)
   drafts.subscribe(push)
+  settings.subscribe(push)
   push()
 
   // A clip the bubble caught before this page existed (Paste & play opened the app).
@@ -154,13 +159,19 @@ export function initBubble() {
     } catch { /* ignore */ }
   }, 1200)
 
-  // Arriving in Logos with the lever on: a new clipboard plays itself — the app
-  // is in front now, so it is allowed to look.
+  // Arriving in Logos: with the lever on, a new clipboard plays itself — the app
+  // is in front now, so it is allowed to look. And when Paste & play was pressed
+  // by hand and the bubble could not read, the shell flags it (bubbleWantClip)
+  // and the page reads it here regardless of the lever: a hand ask always lands.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || !settings.get().bubbleAuto) return
+    if (document.visibilityState !== 'visible') return
+    let want = false
+    try { want = d.bubbleWantClip?.() === true } catch { /* old shell */ }
+    if (!want && !settings.get().bubbleAuto) return
     void readClipboard().then((t) => {
       const text = t.trim()
-      if (!text || clipKey(text) === lastClip) return
+      if (!text) return
+      if (!want && clipKey(text) === lastClip) return
       if (text === drafts.get().listen.trim()) { seenClip(text); return }
       playClipboardText(text)
     }).catch(() => { /* clipboard blocked */ })
