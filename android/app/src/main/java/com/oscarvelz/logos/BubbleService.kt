@@ -222,6 +222,33 @@ class BubbleService : Service() {
         rippleAnims.forEach { it.start() }
     }
 
+    private var lastCheer = 0L
+    private fun cheer() {
+        val root = bubble ?: return
+        val h = halo ?: return
+        val now = System.currentTimeMillis()
+        if (now - lastCheer < 1500) return
+        lastCheer = now
+        rippleAnims.forEach { it.cancel() }
+        haloAnim?.cancel(); haloAnim = null
+        if (root.alpha < 1f) root.animate().alpha(1f).setDuration(200).start()
+        h.visibility = View.VISIBLE
+        val sx = ObjectAnimator.ofFloat(h, "scaleX", 1f, 1.55f).apply { duration = 620; repeatCount = 1 }
+        val sy = ObjectAnimator.ofFloat(h, "scaleY", 1f, 1.55f).apply { duration = 620; repeatCount = 1 }
+        val al = ObjectAnimator.ofFloat(h, "alpha", 0.7f, 0f).apply {
+            duration = 620; repeatCount = 1
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(a: android.animation.Animator) {
+                    if (!playingNow) h.visibility = View.INVISIBLE
+                    h.scaleX = 1f; h.scaleY = 1f
+                    refreshPanel()
+                }
+            })
+        }
+        rippleAnims = listOf(sx, sy, al)
+        rippleAnims.forEach { it.start() }
+    }
+
     private fun wakeBubble(schedule: Boolean = true) {
         handler.removeCallbacks(fadeRun)
         val b = bubble ?: return
@@ -683,6 +710,11 @@ class BubbleService : Service() {
         // The tap that opened the panel is the moment Android allows: with the
         // lever on, what was just copied takes the stage.
         if (lever(this)) handler.postDelayed({ readClip(false) }, 260)
+        // And when the catch lands, the bubble itself answers with its rings —
+        // "¡lo tengo!" — the wave at the one moment Android lets it know.
+        val deliveriesBefore = deliveries
+        handler.postDelayed({ if (deliveries != deliveriesBefore) cheer() }, 900)
+        handler.postDelayed({ if (deliveries != deliveriesBefore) cheer() }, 1900)
     }
 
     private fun positionPanel() {
@@ -733,7 +765,7 @@ class BubbleService : Service() {
             }
             val h = halo
             if (playing && h != null) {
-                if (h.visibility != View.VISIBLE) {
+                if (haloAnim == null) {
                     h.visibility = View.VISIBLE
                     haloAnim = ObjectAnimator.ofFloat(h, "alpha", 0.25f, 0.85f).apply {
                         duration = 1100; repeatMode = ValueAnimator.REVERSE; repeatCount = ValueAnimator.INFINITE; start()
