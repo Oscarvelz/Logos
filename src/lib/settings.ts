@@ -20,8 +20,6 @@ export type Settings = {
   bubbleOn: boolean
   /** The bubble's lever: ON = the bubble plays what's copied; OFF = it only controls playback. */
   bubbleAuto: boolean
-  /** the copy-detection experiment: bubble holds focus and listens for copies */
-  bubbleProbe: boolean
   highlight: boolean
   /** Word highlight timing nudge in ms (+ = earlier). For Bluetooth delay. */
   wordLeadMs: number
@@ -49,7 +47,6 @@ const DEFAULTS: Settings = {
   deviceFallback: false,
   bubbleOn: false,
   bubbleAuto: true,
-  bubbleProbe: false,
   highlight: true,
   wordLeadMs: 90,
 }

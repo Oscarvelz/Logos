@@ -280,12 +280,6 @@ class MainActivity : Activity() {
             return w
         }
 
-        /** The copy-detection experiment: the page flips it, the service obeys. */
-        @JavascriptInterface fun bubbleProbe(on: Boolean) {
-            getSharedPreferences("bubble", MODE_PRIVATE).edit().putBoolean("probe", on).apply()
-            runOnUiThread { BubbleService.probeHook?.invoke(on) }
-        }
-
         /** A transport press that arrived while the page was asleep, pulled once as it wakes. */
         @JavascriptInterface fun bubblePendingCmd(): String {
             val c = BubbleService.pendingCmd

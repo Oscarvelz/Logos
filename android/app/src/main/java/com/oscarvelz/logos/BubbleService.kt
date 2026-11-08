@@ -71,11 +71,6 @@ class BubbleService : Service() {
         @Volatile var seekFrac = -1.0
         /** Set by the service: wave the bubble (leaving-Logos trigger). */
         var inviteHook: (() -> Unit)? = null
-        /** The copy experiment: how many clip-change signals reached us, and when. */
-        @Volatile var clipSignals = 0
-        @Volatile var lastSignalAt = 0L
-        @Volatile var probe = false
-        var probeHook: ((Boolean) -> Unit)? = null
         private var lastKey = 0
         private var pendingManual = false
         private var lastTrampoline = 0L
@@ -142,7 +137,8 @@ class BubbleService : Service() {
     private var halo: View? = null
     private var haloAnim: ObjectAnimator? = null
     private var seekBar: SeekBar? = null
-    private var clipListener: ClipboardManager.OnPrimaryClipChangedListener? = null
+    private var saveHint: View? = null
+    private var saveHintRun: Runnable? = null
     private var spectrum: SpectrumView? = null
     private var seekHeld = false
     private var playingNow = false
@@ -257,25 +253,6 @@ class BubbleService : Service() {
         rippleAnims.forEach { it.start() }
     }
 
-    /** Flip the experiment: persist it and rebuild the bubble window with (or
-     *  without) its focusable flag, in the same spot. */
-    private fun applyProbe(on: Boolean) {
-        probe = on
-        runCatching { prefs(this).edit().putBoolean("probe", on).apply() }
-        if (bubble == null) return
-        val ox = bubbleParams?.x; val oy = bubbleParams?.y
-        collapsePanel()
-        haloAnim?.cancel(); haloAnim = null
-        runCatching { wm?.removeView(bubble) }
-        bubble = null; bubbleParams = null; halo = null
-        showBubble()
-        val np = bubbleParams
-        if (np != null && ox != null && oy != null) {
-            np.x = ox; np.y = oy
-            bubble?.let { runCatching { wm?.updateViewLayout(it, np) } }
-        }
-    }
-
     /** A panel transport key: hand it to the page — or, when Android has
      *  retired the activity behind the service (the keys go silent), remember
      *  the press and bring Logos forward so the page collects it as it wakes. */
@@ -304,29 +281,6 @@ class BubbleService : Service() {
         nm.createNotificationChannel(NotificationChannel("bubble", "Floating bubble", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
         onNow = { refreshPanel() }
         inviteHook = { invite(3) }
-        // The copy experiment (Oscar demanded the doubt be closed 100%): the
-        // system has an ear for clip changes, but the docs say it only speaks
-        // to the focused window or the default keyboard. We register and count
-        // — the receipt lands in Settings' "Last clipboard try". In probe mode
-        // the bubble window itself holds focus, and a heard signal also tries
-        // the read: if the text comes through, it plays. His phone decides.
-        probe = prefs(this).getBoolean("probe", false)
-        probeHook = { on -> applyProbe(on) }
-        runCatching {
-            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val l = ClipboardManager.OnPrimaryClipChangedListener {
-                clipSignals++; lastSignalAt = System.currentTimeMillis()
-                noteTry(this@BubbleService, "copy signal received")
-                invite(3, force = true)
-                if (probe) {
-                    val t = readClipboard(this@BubbleService)
-                    if (t.isNotEmpty()) { noteTry(this@BubbleService, "probe read OK — playing it"); deliver(this@BubbleService, t, false) }
-                    else noteTry(this@BubbleService, "signal heard, read denied")
-                }
-            }
-            clipListener = l
-            cm.addPrimaryClipChangedListener(l)
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -405,7 +359,7 @@ class BubbleService : Service() {
         halo = haloV
         val p = WindowManager.LayoutParams(
             size, size, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            if (probe) 0 else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             val sw2 = resources.displayMetrics.widthPixels
@@ -649,10 +603,7 @@ class BubbleService : Service() {
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
             contentDescription = "Save this text to the Library"
             layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
-            setOnClickListener {
-                poke?.invoke("save")
-                Toast.makeText(this@BubbleService, "Saved to Library", Toast.LENGTH_SHORT).show()
-            }
+            setOnClickListener { showSaveHint() }
         }
         titleRow.addView(saveB)
         card.addView(titleRow)
@@ -807,7 +758,70 @@ class BubbleService : Service() {
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
 
+    /** The + key explains itself first (Oscar): a small floating card naming
+     *  what saving means, with the deed one clear tap away. */
+    private fun showSaveHint() {
+        dismissSaveHint()
+        val w = wm ?: return
+        val c = pal()
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(14))
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c["bg1"]!!, c["bg2"]!!)).apply {
+                cornerRadius = dp(20).toFloat()
+                setStroke(dp(1), c["line"]!!)
+            }
+            elevation = dp(16).toFloat()
+        }
+        card.addView(TextView(this).apply {
+            text = "Save to Library"
+            setTextColor(c["ink"]!!); textSize = 15f; typeface = Typeface.SERIF
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        card.addView(TextView(this).apply {
+            text = "Keeps the text playing now in your Library, so you can hear it again whenever you like."
+            setTextColor(c["muted"]!!); textSize = 12.5f
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) }
+        })
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) }
+        }
+        row.addView(TextView(this).apply {
+            text = "Not now"; setTextColor(c["muted"]!!); textSize = 13f; gravity = Gravity.CENTER
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setOnClickListener { dismissSaveHint() }
+        })
+        row.addView(TextView(this).apply {
+            text = "Save"; setTextColor(c["gold"]!!); textSize = 13f; gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(12), dp(8), dp(4), dp(8))
+            setOnClickListener {
+                dismissSaveHint()
+                poke?.invoke("save")
+                Toast.makeText(this@BubbleService, "Saved to Library", Toast.LENGTH_SHORT).show()
+            }
+        })
+        card.addView(row)
+        val p = WindowManager.LayoutParams(dp(300), WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT).apply { gravity = Gravity.CENTER }
+        runCatching { w.addView(card, p) }
+        saveHint = card
+        card.alpha = 0f; card.animate().alpha(1f).setDuration(160).start()
+        val r = Runnable { dismissSaveHint() }
+        saveHintRun = r
+        handler.postDelayed(r, 9000)
+    }
+
+    private fun dismissSaveHint() {
+        saveHintRun?.let { handler.removeCallbacks(it) }; saveHintRun = null
+        saveHint?.let { v -> runCatching { wm?.removeView(v) } }
+        saveHint = null
+    }
+
     private fun collapsePanel(now: Boolean = false) {
+        dismissSaveHint()
         val v = panel
         panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null
         if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
@@ -899,8 +913,6 @@ class BubbleService : Service() {
     }
 
     override fun onDestroy() {
-        runCatching { clipListener?.let { (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).removePrimaryClipChangedListener(it) } }
-        probeHook = null
         handler.removeCallbacks(fadeRun)
         hideTargets()
         collapsePanel(now = true)
