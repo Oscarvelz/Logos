@@ -893,16 +893,25 @@ class BubbleService : Service() {
         // not moved, the bridge is a zombie — escalate to the full wake, with
         // the session recovery behind it.
         toggleB?.setOnClickListener {
+            // A press is a definite intent, never a bare toggle (1.4.89):
+            // the pushed state says what is true NOW, so his finger means
+            // PAUSE when it says playing and PLAY when it says paused. A
+            // stored press keeps that meaning across any wake — before
+            // this, a pause stored against a dead page was 'fulfilled' by
+            // the recovery PLAYING the session: the pause became a play,
+            // and every fresh press re-ran the same inversion.
             val before = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(false)
-            pokeOrWake("toggle")
+            val intent = if (before) "pause" else "play"
+            pokeOrWake(intent)
             handler.postDelayed({ refreshPanel() }, 350)
             handler.postDelayed({
                 val after = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(before)
-                if (after == before) pokeOrWake("toggle", force = true)
+                if (after == before) pokeOrWake(intent, force = true)
             }, 1200)
             // The last rung: even the wake changed nothing — the page itself
-            // is a corpse. Reload it in place; the session and any waiting
-            // catch are recovered by the fresh page on its own.
+            // is a corpse. Reload it in place; the fresh page collects the
+            // stored INTENT (a pause stays a pause — silence needs no
+            // resurrection), and any waiting catch is recovered on its own.
             handler.postDelayed({
                 val after2 = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(before)
                 if (after2 == before) poke?.invoke("reload")

@@ -6,7 +6,7 @@
 // playing, always with an Undo, so no text is ever lost to it.
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
-import { listen, loadText, play, endSession, stepRate, seek, seekFraction, refreshVoices, voiceFor, sentenceProgress, levels } from '../player/listen.ts'
+import { listen, loadText, play, pause, endSession, stepRate, seek, seekFraction, refreshVoices, voiceFor, sentenceProgress, levels } from '../player/listen.ts'
 import { cancelDevice } from '../engine/device-voice.ts'
 import { readClipboard } from './clipboard.ts'
 import { describeText } from './describe.ts'
@@ -187,6 +187,12 @@ export function initBubble() {
     try {
       const cmd = d.bubblePendingCmd?.()
       if (!cmd) return
+      // A stored PAUSE (1.4.89): against a dead page, silence is already
+      // the truth. The one thing it must never do is summon playback —
+      // the recovery used to 'fulfil' it by playing the session, and his
+      // pause became a play, visit after visit.
+      if (cmd === 'pause') { if (listen.get().playing) pause(); return }
+      if (cmd === 'play') { dispatchEvent(new Event('logosandroid-play')); return }
       if (cmd === 'slower' || cmd === 'faster' || listen.get().active) {
         dispatchEvent(new Event(`logosandroid-${cmd}`))
         return
@@ -208,6 +214,15 @@ export function initBubble() {
     } catch { /* ignore */ }
   })
   addEventListener('logosandroid-bubbleoff', () => settings.set({ bubbleOn: false }))
+  // The panel's definite transport intents (1.4.89): the shell reads the
+  // pushed state at press time and sends PLAY or PAUSE, never a bare
+  // toggle, so a press keeps its meaning however it travels.
+  addEventListener('logosandroid-pause', () => { if (listen.get().playing) pause() })
+  addEventListener('logosandroid-play', () => {
+    const s = listen.get()
+    if (s.active) { if (!s.playing) void play() }
+    else void recoverSession()
+  })
   // The panel's − / + keys: one step along the same ladder the Listen sheet uses.
   addEventListener('logosandroid-slower', () => stepRate(-1))
   addEventListener('logosandroid-faster', () => stepRate(1))

@@ -1,3 +1,35 @@
+## 1.4.89 — A pause is a pause, and a visit no longer kills the page
+
+Oscar answered the open question himself, with screenshots: shell 1.41
+and web 1.4.88 were both aboard when he recorded the failure — so the
+ghost build itself misbehaved, and the code shows two compounding
+defects, matching his account beat for beat ('quiero parar el audio y
+no me deja; me envía a la aplicación, me saca, me envía; tuve que
+arrastrar la burbuja para cerrarla'):
+
+1. THE INVERTED PAUSE. The panel sent a bare 'toggle'. Pressed against
+   a dead page, the press was stored, the visit revived the page, and
+   collectPending 'fulfilled' the toggle by RECOVERING THE SESSION —
+   which plays it. His pause became a play. Now a press carries a
+   definite intent, read from the pushed state at press time: PAUSE
+   when it says playing, PLAY when it says paused, through the poke,
+   the watchdog rungs and the stored command alike. collectPending
+   honours a stored pause as silence (it never summons playback); a
+   stored play routes through the same event road as a live press.
+   Headset/media 'toggle' keeps its old handler — it acts on a living
+   page, where a toggle is honest.
+
+2. THE VISIT KILLED ITS OWN PATIENT. leaveGhost() called finish() —
+   which destroys the only activity, and the WebView with it, so the
+   page the visit had just revived died as the visit left, playback
+   and all; the next press started the whole cycle from a corpse. A
+   visit now leaves via moveTaskToBack(true): the activity merely
+   stops, page and session alive, his app in front. The ghost look is
+   restored 350 ms later, guarded by a visit counter so a fresh visit
+   is never stripped by the previous one's cleanup; and a return with
+   no intent behind it (Recents) turns any lingering visit into his
+   stay in onResume.
+
 ## 1.4.88 — The ghost visit: the bubble stops dragging you into the app
 
 Oscar's verdict on the watches: they cured the frozen voice by opening
