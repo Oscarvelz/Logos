@@ -1,3 +1,16 @@
+## 1.4.90 — Subtraction: the stage hold is deleted
+
+Oscar: a white noise behind every load and Processing — new, and not
+there in the simple early versions. He was right about the cause's
+address: something added along the way. It was the native stage hold
+(1.4.84): a loop the shell played while the page rendered. Its samples
+were written {255, 0, 1} instead of {-1, 0, 1} — the -1 lost its high
+byte — so the 'near-silent' file crackled audibly. The whole mechanism
+is now deleted (player, audio focus, file retired), not quietened.
+What remains on guard is silent: the wakelock, the watches, the ghost
+visit (with 1.4.89's intent and moveTaskToBack fixes inside). Nothing
+in the shell makes sound anymore except his books.
+
 ## 1.4.89 — A pause is a pause, and a visit no longer kills the page
 
 Oscar answered the open question himself, with screenshots: shell 1.41
