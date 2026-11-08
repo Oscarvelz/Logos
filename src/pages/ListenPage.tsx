@@ -174,7 +174,8 @@ export function ListenPage() {
 
           <div className="player-meta">
             <span>{reading ? `Sentence ${s.current + 1} of ${s.segments.length}` : 'Ready'}</span>
-            <span>{s.mode === 'device' ? 'Device voice' : currentVoice ? `${currentVoice.name} · ${currentVoice.accent}` : ''} · {formatDuration(remaining)} left</span>
+            {/* 1.4.60: the voice's name lives in the chip above — naming it again here was pure repetition (Oscar). Only the device-voice state, which the chip cannot show, is still said. */}
+            <span>{s.mode === 'device' ? 'Device voice · ' : ''}{formatDuration(remaining)} left</span>
           </div>
 
           <div className="transport">
