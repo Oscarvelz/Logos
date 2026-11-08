@@ -190,6 +190,10 @@ Oscar's OCR'd PDF (How the Mind Works) imported badly: blurb as title, running h
 ## 1.4.44 (2026-11-06, Muse, at Oscar's request)
 - Reader bottom bar: the progress track no longer rides the bar's top border, where the bar's rounded corners and overflow clipped it (and sliced the thumb in half at 0%/100%). The track now sits inside the bar (14px insets, 8px down, rounded ends, 4px tall) with the thumb riding inside it; drag fractions are measured against the inset track itself, so the thumb stays exactly under the finger, and the seek tooltip follows the same inset.
 
+## 1.4.78 + shell (2026-11-08, Muse — the cards soften: one tone away, not the other pole)
+
+Oscar's refinement of.77, in his words: 'El contraste está demasiado marcado. ¿Qué tal un charcoal o un gris oscuro que no se acerque al negro puro para poder demarcar contraste, pero permanecer cerca del tema del reproductor?' The full pole-swap (cream on dark) shouted. cardPal() is now its own gentle step: on the dark player, a WARM CHARCOAL (79,70,58 → 60,53,44 — a dark gray that never nears pure black) with a fine gold edge; on the light player, a deeper parchment. Demarcated, close to the player's theme, never Android gray.
+
 ## 1.4.77 + shell (2026-11-08, Muse — the explainer cards wear the other pole)
 
 Oscar liked the round but caught the blend: 'the pop-up windows should be a different tone so they don't get mixed up with the player… I don't want the Android gray. I despise that design. I want something premium, but at a different tone, keeping everything cohesive with the beauty of logos.' The hint card drew from the panel's own palette, so card and player merged into one surface. The palettes are now two named members of the family (lightPal / darkPal), and the explainer cards take the OTHER pole: a cream card laid on the dark player, a dark note on the light one — unmistakably a separate sheet, still entirely Logos. No gray, nothing foreign.
