@@ -228,7 +228,7 @@ export function KeepAskSheet() {
   const one = ask.titles.length === 1
   return (
     <Sheet open onClose={forNow} title={one ? 'Keep this book?' : `Keep these ${ask.titles.length} books?`}>
-      <p className="keepask-body"><b>Keep</b> saves it. <b>Once</b> removes it when you move to another book.</p>
+      <p className="keepask-body"><b>Keep</b> saves {one ? 'it' : 'them'}.<br /><b>Once</b> removes {one ? 'it' : 'them'} later.</p>
       <div className="keepask-bar"><i key={ask.ids.join(',')} style={{ animationDuration: '5s' }} /></div>
       <div className="row" style={{ gap: 8 }}>
         <button className="btn ghost grow" onClick={forNow}>Once · {left}</button>
