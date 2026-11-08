@@ -34,6 +34,17 @@ const instances = new Map<PhononLang, Tts>()
 const loads = new Map<PhononLang, Promise<void>>()
 const queue: Job[] = []
 let inFlight: Job | null = null
+const loadSince = new Map<PhononLang, number>()
+// The same law as the pocket engine: a synthesis or a load that goes silent
+// is dead, not slow — and it must never jam the queue into eternal Processing.
+const JOB_TIMEOUT_MS = 45_000
+const LOAD_TIMEOUT_MS = 120_000
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new DOMException('The voice engine stopped answering.', 'TimeoutError')), ms)
+    promise.then((v) => { clearTimeout(t); resolve(v) }, (e) => { clearTimeout(t); reject(e) })
+  })
+}
 let nextId = 1
 /** Called before a model loads, so the other engine can free memory. */
 let beforeLoad: (lang: PhononLang) => void = () => {}
@@ -66,6 +77,7 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
   if (running) return running
   beforeLoad(lang)
   setLang(lang, { status: 'loading', loaded: 0, total: 0, error: null })
+  loadSince.set(lang, Date.now())
   phonon.set({ active: lang })
   const t0 = performance.now()
   const files: Record<string, [number, number, boolean]> = {}
@@ -83,6 +95,7 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
         defaultVoice: 'default',
       },
       onProgress: ({ file, loaded, total, cached }: { file: string; loaded: number; total?: number | null; cached?: boolean }) => {
+        loadSince.set(lang, Date.now())
         files[file] = [loaded, total || loaded, Boolean(cached)]
         const v = Object.values(files)
         setLang(lang, { loaded: v.reduce((a, b) => a + b[0], 0), total: v.reduce((a, b) => a + b[1], 0), fromCache: v.every((x) => x[2]) })
@@ -98,7 +111,7 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
       failQueued(lang, err.message)
       throw err
     })
-    .finally(() => loads.delete(lang))
+    .finally(() => { loads.delete(lang); loadSince.delete(lang) })
   loads.set(lang, p)
   return p
 }
@@ -123,6 +136,16 @@ function pump() {
   if (!job) return
   const tts = instances.get(job.lang)
   if (!tts || phonon.get().langs[job.lang].status !== 'ready') {
+    if (phonon.get().langs[job.lang].status === 'loading') {
+      const since = loadSince.get(job.lang)
+      if (since && Date.now() - since > LOAD_TIMEOUT_MS) {
+        const msg = 'The voice model stopped loading.'
+        loads.delete(job.lang); loadSince.delete(job.lang)
+        setLang(job.lang, { status: 'error', error: msg })
+        failQueued(job.lang, msg)
+        return
+      }
+    }
     if (!loads.has(job.lang) && phonon.get().langs[job.lang].status !== 'error') phononEnsure(job.lang).catch(() => {})
     return
   }
@@ -136,14 +159,23 @@ async function run(job: Job, tts: Tts) {
   try {
     const v = voiceById(job.voice)
     const name = job.voice.replace(/^ph_/, '')
-    if (!tts.voices.includes(name)) await tts.addVoice(name, VOICES + (v?.file ?? `voices/${name}.safetensors`))
-    const samples = await tts.synth(job.text, { voice: name, signal: job.signal })
+    const samples = await withTimeout((async () => {
+      if (!tts.voices.includes(name)) await tts.addVoice(name, VOICES + (v?.file ?? `voices/${name}.safetensors`))
+      return tts.synth(job.text, { voice: name, signal: job.signal })
+    })(), JOB_TIMEOUT_MS)
     const ms = performance.now() - t0
     const dur = samples.length / tts.sampleRate
     if (dur > 0.5) phonon.set({ lastRtf: ms / 1000 / dur })
     job.resolve({ samples, sampleRate: tts.sampleRate, ms })
   } catch (err) {
     const e = err as Error
+    // A timed-out instance is wedged, not tired: bury it so the next job
+    // raises a fresh one instead of queueing behind the corpse.
+    if (e?.name === 'TimeoutError') {
+      try { instances.get(job.lang)?.dispose() } catch { /* ignore */ }
+      instances.delete(job.lang)
+      setLang(job.lang, { status: 'idle' })
+    }
     job.reject(e?.name === 'AbortError' || job.signal?.aborted ? new DOMException('Aborted', 'AbortError') : e)
   } finally {
     inFlight = null

@@ -108,6 +108,9 @@ const LISTEN_PRIORITY = 1000
 let audio: HTMLAudioElement | null = null
 let cache = new Map<number, Rendered>()
 let pending = new Map<number, { promise: Promise<Rendered>; ctrl: AbortController }>()
+// Sentences the device voice already rescued once this session — a wedged
+// neural engine earns one rescue per sentence, never a loop.
+const fellBack = new Set<number>()
 let session = 0
 let token = 0
 // 'pause' events are dispatched asynchronously, so count the pauses we cause
@@ -194,6 +197,7 @@ function resetCache() {
   pending = new Map()
   dropTrack()
   cache = new Map()
+  fellBack.clear()
 }
 
 /** Prepare a new listening session from text (does not start playback). */
@@ -346,6 +350,14 @@ async function playIndex(i: number, startFrac = 0, startWord?: { w: number; word
     r = await render(i, PLAYHEAD_PRIORITY)
   } catch (err) {
     if (my !== token || (err as Error).name === 'AbortError') return
+    if (!listen.get().playing) return
+    // A wedged voice engine must never leave the listener in silence: the
+    // device voice reads this sentence while the engine heals itself.
+    if (settings.get().deviceFallback && deviceSpeechAvailable() && !fellBack.has(i)) {
+      fellBack.add(i)
+      void playDevice(i)
+      return
+    }
     listen.set({ playing: false, buffering: false, error: (err as Error).message })
     return
   }

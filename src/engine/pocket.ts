@@ -25,6 +25,16 @@ const workers = new Map<PocketLang, Worker>()
 const waiters = new Map<PocketLang, { resolve: () => void; reject: (e: Error) => void }[]>()
 const queue: Job[] = []
 let inFlight: Job | null = null
+let inFlightTimer: ReturnType<typeof setTimeout> | null = null
+const loadSince = new Map<PocketLang, number>()
+// One sentence's synthesis takes seconds on this phone; forty-five seconds of
+// silence from the worker is not slowness, it is death — and a model load that
+// stops reporting even progress is the same corpse. Both used to jam the
+// single-file queue forever: the eternal 'Processing…' (Oscar, in front of
+// the panel, the app untouched).
+const JOB_TIMEOUT_MS = 45_000
+const LOAD_TIMEOUT_MS = 120_000
+const clearFlightTimer = () => { if (inFlightTimer) { clearTimeout(inFlightTimer); inFlightTimer = null } }
 let nextId = 1
 
 function setLang(lang: PocketLang, patch: Partial<LangState>) {
@@ -46,7 +56,7 @@ function dropWorker(lang: PocketLang) {
   workers.get(lang)?.terminate()
   workers.delete(lang)
   setLang(lang, { status: 'idle' })
-  if (inFlight?.lang === lang) { queue.unshift(inFlight); inFlight = null }
+  if (inFlight?.lang === lang) { clearFlightTimer(); queue.unshift(inFlight); inFlight = null }
 }
 
 function spawn(lang: PocketLang): Worker {
@@ -66,7 +76,7 @@ function spawn(lang: PocketLang): Worker {
     workers.delete(lang)
     setLang(lang, { status: 'error', error: msg })
     flushWaiters(lang, new Error(msg))
-    if (inFlight?.lang === lang) { inFlight.reject(new Error(msg)); inFlight = null }
+    if (inFlight?.lang === lang) { clearFlightTimer(); inFlight.reject(new Error(msg)); inFlight = null }
     pump()
   })
   return w
@@ -81,9 +91,11 @@ function flushWaiters(lang: PocketLang, err?: Error) {
 function onMessage(lang: PocketLang, m: PocketResponse) {
   switch (m.type) {
     case 'progress':
+      loadSince.set(lang, Date.now())
       setLang(lang, { loaded: m.loaded, total: m.total, fromCache: m.cached })
       break
     case 'ready':
+      loadSince.delete(lang)
       setLang(lang, { status: 'ready', error: null, loadMs: m.ms, loaded: pocket.get().langs[lang].total, fromCache: true })
       pocket.set({ active: lang })
       keepStorage()
@@ -91,6 +103,7 @@ function onMessage(lang: PocketLang, m: PocketResponse) {
       pump()
       break
     case 'loadError':
+      loadSince.delete(lang)
       workers.get(lang)?.terminate()
       workers.delete(lang)
       setLang(lang, { status: 'error', error: m.message })
@@ -102,6 +115,7 @@ function onMessage(lang: PocketLang, m: PocketResponse) {
       const job = inFlight
       if (!job || job.id !== m.id) break
       inFlight = null
+      clearFlightTimer()
       if (m.type === 'spoken') {
         const dur = m.samples.length / m.sampleRate
         if (dur > 0.5) pocket.set({ lastRtf: m.ms / 1000 / dur })
@@ -127,6 +141,7 @@ export function pocketEnsure(lang: PocketLang): Promise<void> {
   })
   if (pocket.get().langs[lang].status !== 'loading' || !workers.has(lang)) {
     setLang(lang, { status: 'loading', loaded: 0, total: 0, error: null })
+    loadSince.set(lang, Date.now())
     pocket.set({ active: lang })
     spawn(lang).postMessage({ type: 'load', language: POCKET_LANGUAGE[lang], threads: threads() } satisfies PocketRequest)
   }
@@ -154,11 +169,36 @@ function pump() {
   if (!job) return
   const st = pocket.get().langs[job.lang]
   if (st.status !== 'ready' || !workers.has(job.lang)) {
-    if (st.status !== 'loading') pocketEnsure(job.lang).catch(() => {})
+    if (st.status === 'loading') {
+      // A load that has reported nothing — not even progress — for two
+      // minutes is not loading; it is wedged. Kill it and fail the waiters
+      // honestly, so the listener hears the truth instead of Processing…
+      const since = loadSince.get(job.lang)
+      if (since && Date.now() - since > LOAD_TIMEOUT_MS) {
+        const msg = 'The voice model stopped loading.'
+        loadSince.delete(job.lang)
+        dropWorker(job.lang)
+        flushWaiters(job.lang, new Error(msg))
+        failQueued(job.lang, msg)
+      }
+    } else pocketEnsure(job.lang).catch(() => {})
     return
   }
   queue.shift()
   inFlight = job
+  // The dispatch watchdog: if the worker never answers, this job — and the
+  // whole single-file queue behind it — used to hang forever. Fail the job,
+  // bury the worker, and let the next job raise a fresh one.
+  clearFlightTimer()
+  const dispatched = job
+  inFlightTimer = setTimeout(() => {
+    if (inFlight !== dispatched) return
+    inFlight = null
+    inFlightTimer = null
+    dispatched.reject(new DOMException('The voice engine stopped answering.', 'TimeoutError'))
+    dropWorker(dispatched.lang)
+    pump()
+  }, JOB_TIMEOUT_MS)
   workers.get(job.lang)!.postMessage({ type: 'speak', id: job.id, text: job.text, voice: job.voice } satisfies PocketRequest)
 }
 
