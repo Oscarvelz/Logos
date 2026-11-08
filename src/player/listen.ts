@@ -76,7 +76,12 @@ function syncCurrent() {
   const idx = track!.start + k
   const s = listen.get()
   if (idx !== s.current && s.mode === 'neural') {
-    listen.set({ current: idx })
+    // Time following the audio may only STEP to the next sentence, never
+    // leap: the playhead crosses boundaries one at a time. (Oscar's video,
+    // 2026-11-08: the panel's counter sprinted 4 → 12 while the app stood
+    // at 4 — somewhere the position teleported. A leap is now impossible
+    // on this road whatever clock or offset glitch asks for it.)
+    listen.set({ current: idx > s.current ? Math.min(idx, s.current + 1) : idx })
     updateMediaSession()
   }
 }
@@ -171,7 +176,10 @@ function el(): HTMLAudioElement {
   audio.addEventListener('ended', () => {
     const s = listen.get()
     if (s.mode !== 'neural' || !s.playing) return
-    if (track && audio?.src === track.url && s.current !== track.end - 1) listen.set({ current: track.end - 1 })
+    // No catch-up teleport here: this handler used to snap the position to
+    // the track's last sentence in one step — the same leap the clamp in
+    // syncCurrent now forbids. advance() steps from where the playhead
+    // honestly is.
     advance()
   })
   audio.addEventListener('pause', () => {

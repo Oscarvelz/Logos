@@ -112,6 +112,23 @@ export function playClipboardText(raw: string) {
 
 let inited = false
 export function initBubble() {
+  // The stage journal: every move the playhead makes, with the clock and the
+  // mode, kept in a small ring. If the panel and the app ever disagree
+  // again, Settings shows exactly how the position travelled.
+  let jPrev = -1
+  listen.subscribe(() => {
+    const s = listen.get()
+    if (s.current === jPrev) return
+    const from = jPrev
+    jPrev = s.current
+    if (from < 0 || !s.active) return
+    try {
+      const key = 'logos.stage.journal'
+      const arr = JSON.parse(localStorage.getItem(key) ?? '[]') as string[]
+      arr.push(`${new Date().toLocaleTimeString('en-GB')} ${from}→${s.current}${s.mode === 'device' ? ' · device' : ''}`)
+      localStorage.setItem(key, JSON.stringify(arr.slice(-24)))
+    } catch { /* ignore */ }
+  })
   if (inited) return
   inited = true
   const d = droid()
