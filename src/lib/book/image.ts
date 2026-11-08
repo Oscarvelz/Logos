@@ -18,6 +18,13 @@ export async function parseImage(buf: ArrayBuffer, file: File, step: (s: string,
   // it were whole.
   let cut = false
   const lines = text.split('\n').filter((l) => !/^\s*(from|de|desde)\s+[\p{L} ]{1,24}\bapp\b\.?\s*$/iu.test(l))
+  // A chat app's logo at the top of its card (Muse's blue mark) OCRs as a
+  // lone "Mm" — and the plain-text parser then mistakes it for a Roman-
+  // numeral chapter heading, so the book opens under a chapter called "Mm".
+  // A first line that is only that glyph, with real text after it, is the
+  // logo, not a word: drop it.
+  const firstIdx = lines.findIndex((l) => l.trim())
+  if (firstIdx >= 0 && /^m{1,3}\.?$/i.test(lines[firstIdx].trim()) && lines.slice(firstIdx + 1).some((l) => l.trim().length >= 12)) lines.splice(firstIdx, 1)
   for (let i = lines.length - 1; i >= 0; i--) {
     const t = lines[i].trim()
     if (!t) continue
