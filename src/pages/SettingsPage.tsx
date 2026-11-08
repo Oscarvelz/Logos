@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Cpu, Download, HardDrive, Loader2, Plus, Trash2, X } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Cpu, Download, HardDrive, Loader2, Mic, Palette, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, applyTheme, type Theme } from '../lib/settings.ts'
 import { keep } from '../engine/keep.ts'
@@ -9,10 +9,31 @@ import { Range, Seg, Switch, toast } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.61'
+const VERSION = '1.4.62'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
+
+/**
+ * 1.4.62: one card per topic, each with its icon — Settings used to scatter
+ * (a label floating over a card here, a bare list there). Now everything a
+ * topic owns lives inside its card, under a header that says what it holds,
+ * so the eye finds things by their icons.
+ */
+function SetCard({ icon, title, sub, children }: { icon: ReactNode; title: string; sub: string; children: ReactNode }) {
+  return (
+    <div className="card set-card">
+      <div className="set-card-h">
+        <span className="set-ic">{icon}</span>
+        <div className="grow">
+          <div className="set-card-t">{title}</div>
+          <div className="set-card-s">{sub}</div>
+        </div>
+      </div>
+      {children}
+    </div>
+  )
+}
 
 export function SettingsPage() {
   const st = useStore(settings)
@@ -56,8 +77,8 @@ export function SettingsPage() {
 
       <div className="set-cols">
       <section className="set-group">
-      <div className="section-label">Neural voice</div>
-      <div className="card engine-card stack">
+      <SetCard icon={<Cpu size={19} />} title="Neural voice" sub="The reading voice — it lives on this device, downloads once, then works offline.">
+      <div className="engine-card stack">
         <div className="row between">
           <div>
             <div className="big">{e.status === 'ready' || warming ? 'Ready' : e.status === 'loading' ? 'Downloading' : e.status === 'error' ? 'Needs attention' : e.cached ? 'Downloaded' : 'Not downloaded'}</div>
@@ -71,7 +92,6 @@ export function SettingsPage() {
                     : `PocketTTS by Kyutai · ~${POCKET_SIZE_MB} MB per language, then offline`}
             </div>
           </div>
-          <div style={{ color: 'var(--accent)' }}><Cpu size={30} /></div>
         </div>
         {e.status === 'loading' && !warming && (
           <div>
@@ -91,8 +111,8 @@ export function SettingsPage() {
           </button>
         </div>
       </div>
-
-      <div className="list" style={{ marginTop: 12 }}>
+      <div className="set-div" />
+      <div className="list">
         <div className="list-row">
           <HardDrive size={20} className="muted" />
           <div className="grow">
@@ -117,10 +137,10 @@ export function SettingsPage() {
         </div>
         )}
       </div>
-
+      </SetCard>
       </section>
       <section className="set-group">
-      <div className="section-label">Playback</div>
+      <SetCard icon={<SlidersHorizontal size={19} />} title="Playback" sub="How listening feels, sentence by sentence.">
       <div className="list">
         <div className="list-row col">
           <div className="row between"><div className="t">Listening speed</div><span className="mono muted">{st.listenSpeed.toFixed(2)}×</span></div>
@@ -143,13 +163,13 @@ export function SettingsPage() {
           </div>
         </div>
       </div>
-
+      </SetCard>
       </section>
       <section className="set-group">
-      <div className="section-label">Pronunciation</div>
+      <SetCard icon={<Mic size={19} />} title="Pronunciation" sub="Words said your way — names, places, terms of art.">
       <div className="list">
         <div className="list-row col">
-          <div className="grow"><div className="t">Say it your way</div><div className="d">Words the voice should pronounce differently — names, places, terms of art. Applies to listening and to exported audio, in every book. Codes and links are already named, not spelled out.</div></div>
+          <div className="grow"><div className="t">Say it your way</div><div className="d">Applies to listening and to exported audio, in every book. Codes and links are already named, not spelled out.</div></div>
           <div className="row" style={{ gap: 8, marginTop: 10 }}>
             <input className="text-input" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder="Word in the book" value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
             <input className="text-input" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder="Say it as" value={pTo} onChange={(e) => setPTo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPron() }} />
@@ -163,34 +183,28 @@ export function SettingsPage() {
           </div>
         ))}
       </div>
-
+      </SetCard>
       </section>
       <section className="set-group">
-      <div className="section-label">Appearance</div>
+      <SetCard icon={<Palette size={19} />} title="Appearance" sub="The light of the room.">
       <div className="list">
         <div className="list-row col">
           <div className="t">Theme</div>
           <Seg value={st.theme} label="Theme" onChange={(t: Theme) => { settings.set({ theme: t }); applyTheme(t) }} options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }, { value: 'system', label: 'System' }]} />
         </div>
       </div>
-
+      </SetCard>
       </section>
       <section className="set-group">
-      <div className="section-label">About</div>
-      <div className="card card-pad credits">
-        <div className="row" style={{ marginBottom: 12 }}>
-          <img src={`${import.meta.env.BASE_URL}icon-192.png`} width={52} height={52} style={{ borderRadius: 14 }} alt="" />
-          <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 30, lineHeight: 1 }}>Logos</div>
-            <div className="muted small">Version {VERSION} · private, on-device text-to-speech</div>
-          </div>
-        </div>
+      <SetCard icon={<img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="" />} title="About Logos" sub={`Version ${VERSION} · private, on-device text-to-speech`}>
+      <div className="credits">
         <p><strong>Based on <a href="https://github.com/SysAdminDoc/BetterTTS" target="_blank" rel="noreferrer">BetterTTS</a> by SysAdminDoc</strong> (MIT License). Logos is a simplified, phone-first rebuild; its listening player, export and service-worker isolation grew out of it.</p>
         <p>Voices: <a href="https://huggingface.co/gradium/phonon-40m-multilingual" target="_blank" rel="noreferrer">Phonon 40m multilingual</a> by Gradium, CC BY-NC 4.0 (non-commercial), with voices from <a href="https://huggingface.co/gradium/phonon-voices" target="_blank" rel="noreferrer">gradium/phonon-voices</a> (Apache 2.0), run with phonon-tts (MIT/Apache 2.0).</p>
         <p>Also <a href="https://github.com/kyutai-labs/pocket-tts" target="_blank" rel="noreferrer">Pocket TTS</a> by Kyutai (Manu Orsini, Simon Rouard, Gabriel De Marmiesse, Václav Volhejn, Neil Zeghidour, Alexandre Défossez), CC BY 4.0, run in the browser with <a href="https://github.com/thewh1teagle/pocket-tts-onnx" target="_blank" rel="noreferrer">pocket-tts-onnx</a> by thewh1teagle (CC BY 4.0) and ONNX Runtime Web.</p>
         <p>MP3 encoding: lamejs (LGPL-3.0). Fonts: Manrope & Instrument Serif (OFL).</p>
         <p className="muted small" style={{ marginBottom: 0 }}>© 2026 SysAdminDoc · © 2026 Oscar Arnoldo Velasquez (Logos modifications). Released under the MIT License.</p>
       </div>
+      </SetCard>
       </section>
       </div>
     </div>
