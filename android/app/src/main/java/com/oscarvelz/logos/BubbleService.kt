@@ -19,9 +19,6 @@ import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.media.AudioAttributes
-import android.media.AudioManager
-import android.media.MediaPlayer
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -82,72 +79,23 @@ class BubbleService : Service() {
                 wakeLock?.let { if (it.isHeld) it.release() }
                 wakeLock = null
             }
-            // The native stage hold: while the page says BUSY — rendering,
-            // no real sound yet — the shell itself holds the stage: audio
-            // focus plus a native near-silent loop, so the system counts
-            // Logos as actively playing media during the one stretch where
-            // the page's own silent loop proved not to be believed (Oscar,
-            // 2026-11-08: the panel caught a long text, showed Processing…,
-            // and the backgrounded page simply never finished — until he
-            // opened the app, when it took seconds). Released the moment
-            // real audio flows or the state rests.
-            if (j != null && j.optBoolean("busy") && fresh) startHold(c) else stopHold(c)
+            retireHoldFile(c)
         }
 
-        // ── The native stage hold ──
-        private var holdPlayer: MediaPlayer? = null
-        private var holdFocus = false
-
-        private fun holdFile(c: Context): String {
-            val f = java.io.File(c.filesDir, "stage-hold.wav")
-            if (f.length() > 0) return f.absolutePath
-            val sr = 8000; val n = sr * 5
-            val bytes = ByteArray(44 + n * 2)
-            fun putStr(off: Int, v: String) { for (i in v.indices) bytes[off + i] = v[i].code.toByte() }
-            fun put32(off: Int, v: Int) { for (i in 0..3) bytes[off + i] = (v shr (8 * i)).toByte() }
-            fun put16(off: Int, v: Int) { for (i in 0..1) bytes[off + i] = (v shr (8 * i)).toByte() }
-            putStr(0, "RIFF"); put32(4, 36 + n * 2); putStr(8, "WAVE"); putStr(12, "fmt ")
-            put32(16, 16); put16(20, 1); put16(22, 1); put32(24, sr); put32(28, sr * 2); put16(32, 2); put16(34, 16)
-            putStr(36, "data"); put32(40, n * 2)
-            val rnd = java.util.Random(42)
-            for (i in 0 until n) { val v = rnd.nextInt(3) - 1; bytes[44 + i * 2] = v.toByte(); bytes[45 + i * 2] = 0 }
-            f.writeBytes(bytes)
-            return f.absolutePath
-        }
-
-        private var holdCtx: Context? = null
-        private val holdClock = Handler(Looper.getMainLooper())
-        private val holdExpiry = Runnable { holdCtx?.let { stopHold(it) } }
-
-        private fun startHold(c: Context) {
-            holdCtx = c.applicationContext
-            holdClock.removeCallbacks(holdExpiry)
-            holdClock.postDelayed(holdExpiry, 60_000)
-            runCatching {
-                val am = c.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                if (!holdFocus) holdFocus = am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-                var p = holdPlayer
-                if (p == null) {
-                    p = MediaPlayer()
-                    p.setDataSource(holdFile(c))
-                    p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-                    p.isLooping = true
-                    p.prepare()
-                    holdPlayer = p
-                }
-                if (!p.isPlaying) p.start()
-            }
-        }
-
-        fun stopHold(c: Context) {
-            holdClock.removeCallbacks(holdExpiry)
-            runCatching {
-                holdPlayer?.let { if (it.isPlaying) it.pause() }
-                if (holdFocus) {
-                    (c.getSystemService(Context.AUDIO_SERVICE) as AudioManager).abandonAudioFocus(null)
-                    holdFocus = false
-                }
-            }
+        /** The native stage hold is GONE (1.4.90, Oscar's subtraction):
+         *  a near-silent loop the shell played while the page rendered —
+         *  and it was never silent: its samples were written {255, 0, 1}
+         *  instead of {-1, 0, 1} (the -1 lost its high byte), a crackle
+         *  he could hear behind every Processing…. Even written right it
+         *  earned nothing the wakelock above doesn't already give, so
+         *  the mechanism is deleted, not turned down — nothing in the
+         *  shell makes sound anymore except his books. This just sweeps
+         *  the old file away, once. */
+        private var holdRetired = false
+        private fun retireHoldFile(c: Context) {
+            if (holdRetired) return
+            holdRetired = true
+            runCatching { java.io.File(c.filesDir, "stage-hold.wav").delete() }
         }
 
         fun releaseWakeLock() {
@@ -406,11 +354,10 @@ class BubbleService : Service() {
         handler.postDelayed({ deliveryCheck(n, at, 2) }, 3500)
     }
 
-    /** The stall watch (Oscar, 2026-11-08, with the native hold already
-     *  aboard and audible): press play, close the window or lock the phone,
-     *  and the render froze mid-work — white noise forever, the panel
-     *  confessing 'Waiting for Logos…'. The hold keeps the PROCESS alive;
-     *  a hidden page's workers can still be frozen by the browser, and a
+    /** The stall watch (Oscar, 2026-11-08): press play, close the window
+     *  or lock the phone, and the render froze mid-work — the panel
+     *  confessing 'Waiting for Logos…'. A hidden page's workers can still
+     *  be frozen by the browser, and a
      *  frozen page sends no pushes. So the watch is pulse-based: while the
      *  state says the page is WORKING (rendering a sentence, or building
      *  its head start), eight seconds without a single new push is a
@@ -1219,7 +1166,7 @@ class BubbleService : Service() {
 
     override fun onDestroy() {
         releaseWakeLock()
-        stopHold(this)
+        retireHoldFile(this)
         handler.removeCallbacks(fadeRun)
         hideTargets()
         collapsePanel(now = true)
