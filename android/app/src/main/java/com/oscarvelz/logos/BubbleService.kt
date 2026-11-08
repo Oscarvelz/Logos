@@ -61,6 +61,8 @@ class BubbleService : Service() {
         var clipManual = false
         /** Latest player state pushed by the page (JSON: playing, active, title, sub). */
         var nowJson = ""
+        /** When the page last pushed state — the watchdog's pulse. */
+        @Volatile var nowAt = 0L
         var onNow: (() -> Unit)? = null
         var running = false
         /** Set when Paste & play could not read from the bubble: the page reads it itself as Logos opens. */
@@ -256,9 +258,9 @@ class BubbleService : Service() {
     /** A panel transport key: hand it to the page — or, when Android has
      *  retired the activity behind the service (the keys go silent), remember
      *  the press and bring Logos forward so the page collects it as it wakes. */
-    private fun pokeOrWake(cmd: String) {
+    private fun pokeOrWake(cmd: String, force: Boolean = false) {
         val p = poke
-        if (p != null) { p(cmd); return }
+        if (p != null && !force) { p(cmd); return }
         pendingCmd = cmd
         noteTry(this, "panel key woke Logos")
         runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -648,6 +650,19 @@ class BubbleService : Service() {
         val nextB = mediaBtn(android.R.drawable.ic_media_next, "Next sentence", "next", 46, c["discLine"]!!)
         val fastB = speedBtn("+", "Faster", "faster")
         fastB.layoutParams = (fastB.layoutParams as LinearLayout.LayoutParams).apply { marginEnd = 0 }
+        // The watchdog (Oscar: 'no responde al tacto'): a landed toggle always
+        // flips the playing bit in the pushed state. If a breath later it has
+        // not moved, the bridge is a zombie — escalate to the full wake, with
+        // the session recovery behind it.
+        toggleB?.setOnClickListener {
+            val before = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(false)
+            pokeOrWake("toggle")
+            handler.postDelayed({ refreshPanel() }, 350)
+            handler.postDelayed({
+                val after = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(before)
+                if (after == before) pokeOrWake("toggle", force = true)
+            }, 1200)
+        }
         controls.addView(slowB); controls.addView(prevB); controls.addView(toggleB); controls.addView(nextB); controls.addView(fastB)
         card.addView(controls)
         val seekW = SeekBar(this).apply {
@@ -840,7 +855,7 @@ class BubbleService : Service() {
         val playing = j?.optBoolean("playing") ?: false
         handler.post {
             titleV?.text = j?.optString("title")?.ifBlank { "Logos" } ?: "Logos"
-            subV?.text = j?.optString("sub")?.ifBlank { "Ready" } ?: "Ready"
+            subV?.text = if (j?.optBoolean("busy") == true) "Processing…" else j?.optString("sub")?.ifBlank { "Ready" } ?: "Ready"
             toggleB?.setImageResource(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
             playingNow = playing
             seekBar?.let { if (!seekHeld) it.progress = ((j?.optDouble("frac", 0.0) ?: 0.0) * 1000).toInt() }
