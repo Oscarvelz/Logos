@@ -19,6 +19,9 @@ import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -68,8 +71,8 @@ class BubbleService : Service() {
          *  by every state push, so a dead page can never drain the battery. */
         fun syncWakeLock(c: Context) {
             val j = runCatching { JSONObject(nowJson) }.getOrNull()
-            val active = j != null && (j.optBoolean("playing") || j.optBoolean("busy")) &&
-                System.currentTimeMillis() - nowAt < 90_000
+            val fresh = System.currentTimeMillis() - nowAt < 90_000
+            val active = j != null && (j.optBoolean("playing") || j.optBoolean("busy")) && fresh
             if (active) {
                 val pm = c.getSystemService(Context.POWER_SERVICE) as PowerManager
                 val wl = wakeLock ?: pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "logos:stage").apply { setReferenceCounted(false) }
@@ -78,6 +81,64 @@ class BubbleService : Service() {
             } else {
                 wakeLock?.let { if (it.isHeld) it.release() }
                 wakeLock = null
+            }
+            // The native stage hold: while the page says BUSY — rendering,
+            // no real sound yet — the shell itself holds the stage: audio
+            // focus plus a native near-silent loop, so the system counts
+            // Logos as actively playing media during the one stretch where
+            // the page's own silent loop proved not to be believed (Oscar,
+            // 2026-11-08: the panel caught a long text, showed Processing…,
+            // and the backgrounded page simply never finished — until he
+            // opened the app, when it took seconds). Released the moment
+            // real audio flows or the state rests.
+            if (j != null && j.optBoolean("busy") && fresh) startHold(c) else stopHold(c)
+        }
+
+        // ── The native stage hold ──
+        private var holdPlayer: MediaPlayer? = null
+        private var holdFocus = false
+
+        private fun holdFile(c: Context): String {
+            val f = java.io.File(c.filesDir, "stage-hold.wav")
+            if (f.length() > 0) return f.absolutePath
+            val sr = 8000; val n = sr * 5
+            val bytes = ByteArray(44 + n * 2)
+            fun putStr(off: Int, v: String) { for (i in v.indices) bytes[off + i] = v[i].code.toByte() }
+            fun put32(off: Int, v: Int) { for (i in 0..3) bytes[off + i] = (v shr (8 * i)).toByte() }
+            fun put16(off: Int, v: Int) { for (i in 0..1) bytes[off + i] = (v shr (8 * i)).toByte() }
+            putStr(0, "RIFF"); put32(4, 36 + n * 2); putStr(8, "WAVE"); putStr(12, "fmt ")
+            put32(16, 16); put16(20, 1); put16(22, 1); put32(24, sr); put32(28, sr * 2); put16(32, 2); put16(34, 16)
+            putStr(36, "data"); put32(40, n * 2)
+            val rnd = java.util.Random(42)
+            for (i in 0 until n) { val v = rnd.nextInt(7) - 3; bytes[44 + i * 2] = v.toByte(); bytes[45 + i * 2] = 0 }
+            f.writeBytes(bytes)
+            return f.absolutePath
+        }
+
+        private fun startHold(c: Context) {
+            runCatching {
+                val am = c.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                if (!holdFocus) holdFocus = am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                var p = holdPlayer
+                if (p == null) {
+                    p = MediaPlayer()
+                    p.setDataSource(holdFile(c))
+                    p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                    p.isLooping = true
+                    p.prepare()
+                    holdPlayer = p
+                }
+                if (!p.isPlaying) p.start()
+            }
+        }
+
+        fun stopHold(c: Context) {
+            runCatching {
+                holdPlayer?.let { if (it.isPlaying) it.pause() }
+                if (holdFocus) {
+                    (c.getSystemService(Context.AUDIO_SERVICE) as AudioManager).abandonAudioFocus(null)
+                    holdFocus = false
+                }
             }
         }
 
@@ -311,20 +372,29 @@ class BubbleService : Service() {
         handler.postDelayed({ deliveryCheck(n, at, 1) }, 2500)
     }
 
+    private var watchNowAt = 0L
+
     private fun deliveryCheck(n: Int, at: Long, rung: Int) {
         if (n != deliveries) return // a newer catch superseded this one
         val j = runCatching { JSONObject(nowJson) }.getOrNull()
         val alive = j?.optBoolean("playing") == true || j?.optBoolean("busy") == true
-        if (clipText == null || (alive && nowAt >= at)) return // confirmed
-        if (rung == 1) {
-            noteTry(this, "the catch needed a wake")
-            runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            handler.postDelayed({ deliveryCheck(n, at, 2) }, 3500)
-        } else {
+        if (rung == 2) {
+            // After the wake: a page that is pushing again is alive and
+            // working, however long its render takes — stand down. A page
+            // whose pulse has not advanced since the wake, still claiming
+            // to be busy, froze mid-work: climb to the reload.
+            if (clipText == null && nowAt > watchNowAt) return
+            if (clipText == null && j?.optBoolean("busy") != true) return
             noteTry(this, "the catch needed a reload")
             wantReload = true
             runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            return
         }
+        if (clipText == null || (alive && nowAt >= at)) return // confirmed
+        noteTry(this, "the catch needed a wake")
+        watchNowAt = nowAt
+        runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        handler.postDelayed({ deliveryCheck(n, at, 2) }, 3500)
     }
 
     /** A panel transport key: hand it to the page — or, when Android has
@@ -1003,7 +1073,9 @@ class BubbleService : Service() {
         val playing = j?.optBoolean("playing") ?: false
         handler.post {
             titleV?.text = j?.optString("title")?.ifBlank { "Logos" } ?: "Logos"
-            subV?.text = if (j?.optBoolean("busy") == true) "Processing…" else j?.optString("sub")?.ifBlank { "Ready" } ?: "Ready"
+            subV?.text = if (j?.optBoolean("busy") == true) {
+                if (System.currentTimeMillis() - nowAt > 20_000) "Waiting for Logos…" else "Processing…"
+            } else j?.optString("sub")?.ifBlank { "Ready" } ?: "Ready"
             lockBtn?.text = if (isLocked(this@BubbleService)) "🔒" else "🔓"
             toggleB?.setImageResource(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
             playingNow = playing
@@ -1078,6 +1150,7 @@ class BubbleService : Service() {
 
     override fun onDestroy() {
         releaseWakeLock()
+        stopHold(this)
         handler.removeCallbacks(fadeRun)
         hideTargets()
         collapsePanel(now = true)
