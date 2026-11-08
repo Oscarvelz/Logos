@@ -348,8 +348,12 @@ class BubbleService : Service() {
         anim.start()
     }
 
+    private var outsideClosedAt = 0L
+
     private fun togglePanel() {
         if (panel != null) { collapsePanel(); return }
+        // The tap that just closed the panel from outside was a close, not an open.
+        if (System.currentTimeMillis() - outsideClosedAt < 450) return
         openPanel()
     }
 
@@ -427,30 +431,24 @@ class BubbleService : Service() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(12), 0, dp(4))
         }
-        fun mediaBtn(res: Int, label: String, cmd: String): ImageButton = ImageButton(this).apply {
+        fun mediaBtn(res: Int, label: String, cmd: String, size: Int, ring: Int): ImageButton = ImageButton(this).apply {
             setImageResource(res)
             setColorFilter(if (cmd == "toggle") c["gold"]!! else c["ink"]!!)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(c["disc"]!!)
-                setStroke(dp(1), c["discLine"]!!)
+                setStroke(dp(if (cmd == "toggle") 2 else 1), ring)
             }
             contentDescription = label
-            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(8) }
+            layoutParams = LinearLayout.LayoutParams(dp(size), dp(size)).apply { marginEnd = dp(10) }
             setOnClickListener { poke?.invoke(cmd); handler.postDelayed({ refreshPanel() }, 350) }
         }
-        val prevB = mediaBtn(android.R.drawable.ic_media_previous, "Previous sentence", "prev")
-        toggleB = mediaBtn(android.R.drawable.ic_media_play, "Play or pause", "toggle")
-        val nextB = mediaBtn(android.R.drawable.ic_media_next, "Next sentence", "next")
+        controls.gravity = Gravity.CENTER
+        val prevB = mediaBtn(android.R.drawable.ic_media_previous, "Previous sentence", "prev", 50, c["discLine"]!!)
+        toggleB = mediaBtn(android.R.drawable.ic_media_play, "Play or pause", "toggle", 58, c["gold"]!!)
+        val nextB = mediaBtn(android.R.drawable.ic_media_next, "Next sentence", "next", 50, c["discLine"]!!)
+        nextB.layoutParams = (nextB.layoutParams as LinearLayout.LayoutParams).apply { marginEnd = 0 }
         controls.addView(prevB); controls.addView(toggleB); controls.addView(nextB)
-        val spacer = View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) }
-        controls.addView(spacer)
-        val closeB = TextView(this).apply {
-            text = "✕"; setTextColor(c["muted"]!!); textSize = 16f; gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(dp(38), dp(48))
-            setOnClickListener { collapsePanel() }
-        }
-        controls.addView(closeB)
         card.addView(controls)
         val div = View(this).apply {
             setBackgroundColor(c["div"]!!)
@@ -461,20 +459,9 @@ class BubbleService : Service() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val pasteB = Button(this).apply {
-            text = "Paste & play"
-            setTextColor(charcoal)
-            textSize = 13.5f
-            setTypeface(typeface, Typeface.BOLD)
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.rgb(243, 212, 146), Color.rgb(222, 175, 92))).apply { cornerRadius = dp(99).toFloat() }
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42))
-            setOnClickListener { readClip(true) }
-        }
-        clipRow.addView(pasteB)
         val leverLabel = TextView(this).apply {
             text = "Auto"
             setTextColor(c["muted"]!!); textSize = 12.5f
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(14) }
         }
         clipRow.addView(leverLabel)
         val leverS = Switch(this).apply {
@@ -494,9 +481,17 @@ class BubbleService : Service() {
         clipRow.addView(leverS)
         val spacer2 = View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) }
         clipRow.addView(spacer2)
+        val pasteNow = TextView(this).apply {
+            text = "Paste now"
+            setTextColor(c["gold"]!!); textSize = 12.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setOnClickListener { readClip(true) }
+        }
+        clipRow.addView(pasteNow)
         val hideB = TextView(this).apply {
             text = "Hide bubble"
             setTextColor(c["muted"]!!); textSize = 12.5f
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(16) }
             setOnClickListener { collapsePanel(); stopBubble() }
         }
         clipRow.addView(hideB)
@@ -507,7 +502,7 @@ class BubbleService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START }
         panelParams = p
-        stage.setOnTouchListener { _, e -> if (e.action == MotionEvent.ACTION_OUTSIDE) { collapsePanel(); true } else false }
+        stage.setOnTouchListener { _, e -> if (e.action == MotionEvent.ACTION_OUTSIDE) { outsideClosedAt = System.currentTimeMillis(); collapsePanel(); true } else false }
         runCatching { w.addView(stage, p) }
         panel = stage
         positionPanel()
