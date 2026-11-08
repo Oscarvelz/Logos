@@ -256,14 +256,23 @@ export function initBubble() {
       stageKey = ''; resumeCard = null; saveResume()
     }
   })
-  addEventListener('logosandroid-clip', () => {
+  // A stored catch is pulled once (the shell clears it on the pull), so
+  // pulling on every return is safe — and necessary: the 'clip' poke can
+  // fall into a sleeping page and be lost, and a catch that only a poke
+  // can collect dies with that poke (Oscar's frozen stretch: copy, panel,
+  // tap outside, silence). Focus, visibility and a fresh start all pull.
+  const pullClip = () => {
     try {
       const raw = d.bubbleClip?.() ?? ''
       if (!raw) return
       const { t } = JSON.parse(raw) as { t?: string }
       if (t?.trim()) playClipboardText(t)
     } catch { /* ignore */ }
-  })
+  }
+  addEventListener('logosandroid-clip', pullClip)
+  addEventListener('focus', pullClip)
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pullClip() })
+  pullClip()
 
   // What the bubble's panel shows: the title, the sentence, the play state.
   // 1.4.64: the title is computed ONCE per text and cached — the first version

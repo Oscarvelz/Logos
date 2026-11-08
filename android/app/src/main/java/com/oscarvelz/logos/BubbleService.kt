@@ -98,6 +98,11 @@ class BubbleService : Service() {
         /** When the page last pushed state — the watchdog's pulse. */
         @Volatile var nowAt = 0L
         var onNow: (() -> Unit)? = null
+        /** Set by the service: a fresh catch arms its delivery watch. */
+        var onDelivery: (() -> Unit)? = null
+        /** The last rung of the delivery ladder: the activity reloads its
+         *  page when this is standing as it comes forward. */
+        var wantReload = false
         var running = false
         /** Set when Paste & play could not read from the bubble: the page reads it itself as Logos opens. */
         var wantClip = false
@@ -141,6 +146,7 @@ class BubbleService : Service() {
             noteTry(c, "read ${text.length} chars via $trySource")
             clipText = text
             clipManual = manual
+            onDelivery?.invoke()
             val p = poke
             if (p != null) p("clip")
             else if (manual) {
@@ -291,6 +297,36 @@ class BubbleService : Service() {
         rippleAnims.forEach { it.start() }
     }
 
+    /** The delivery watch (Oscar's frozen stretch: copy → open the panel →
+     *  tap outside to close it → nothing ever plays, and the reopened panel
+     *  is a photograph, its play key dead). A catch is only caught when the
+     *  page CONFIRMS it — pulls the text, or pushes a living state. If no
+     *  confirmation lands, the shell climbs the same ladder as the keys:
+     *  first bring Logos forward so the page collects the text in the open;
+     *  if even that page proves dead, ask for a reload as it comes forward.
+     *  The text itself sits stored the whole time; nothing is ever lost. */
+    private fun armDeliveryWatch() {
+        val n = deliveries
+        val at = lastDeliveryAt
+        handler.postDelayed({ deliveryCheck(n, at, 1) }, 2500)
+    }
+
+    private fun deliveryCheck(n: Int, at: Long, rung: Int) {
+        if (n != deliveries) return // a newer catch superseded this one
+        val j = runCatching { JSONObject(nowJson) }.getOrNull()
+        val alive = j?.optBoolean("playing") == true || j?.optBoolean("busy") == true
+        if (clipText == null || (alive && nowAt >= at)) return // confirmed
+        if (rung == 1) {
+            noteTry(this, "the catch needed a wake")
+            runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            handler.postDelayed({ deliveryCheck(n, at, 2) }, 3500)
+        } else {
+            noteTry(this, "the catch needed a reload")
+            wantReload = true
+            runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
+    }
+
     /** A panel transport key: hand it to the page — or, when Android has
      *  retired the activity behind the service (the keys go silent), remember
      *  the press and bring Logos forward so the page collects it as it wakes. */
@@ -318,6 +354,7 @@ class BubbleService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("bubble", "Floating bubble", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
         onNow = { refreshPanel() }
+        onDelivery = { armDeliveryWatch() }
         inviteHook = { invite(3) }
     }
 
@@ -734,6 +771,13 @@ class BubbleService : Service() {
                 val after = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(before)
                 if (after == before) pokeOrWake("toggle", force = true)
             }, 1200)
+            // The last rung: even the wake changed nothing — the page itself
+            // is a corpse. Reload it in place; the session and any waiting
+            // catch are recovered by the fresh page on its own.
+            handler.postDelayed({
+                val after2 = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(before)
+                if (after2 == before) poke?.invoke("reload")
+            }, 2600)
         }
         controls.addView(slowB); controls.addView(prevB); controls.addView(toggleB); controls.addView(nextB); controls.addView(fastB)
         card.addView(controls)
