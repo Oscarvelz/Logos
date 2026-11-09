@@ -1,3 +1,14 @@
+## 1.4.93 — The panel opens beside its bubble
+
+Oscar: the free bubble exposed an old habit — the panel still
+travelled to a screen edge (whichever half the bubble was in), so a
+tap in one corner meant a trip to the other side. Now the panel
+hugs the λ: it centres itself on the bubble horizontally and hangs
+below it by preference, standing above only when the bottom edge
+refuses, and sliding only as far as the screen's edges force. Its
+birth grows out of the bubble from the matching edge, and once laid
+out, its real height gets the final word on the spot.
+
 ## 1.4.92 — The bubble lives where his hand leaves it
 
 Oscar: the bubble should stay anywhere on the screen, not just dock
