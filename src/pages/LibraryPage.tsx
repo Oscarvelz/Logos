@@ -12,6 +12,7 @@ import { drafts } from '../lib/drafts.ts'
 import { navigate } from '../lib/router.ts'
 import { loadText, play as listenPlay } from '../player/listen.ts'
 import { MenuSelect, Sheet, Seg, toast, useMediaQuery, confirmDelete } from '../components/ui.tsx'
+import { t } from '../lib/i18n.ts'
 import { BookShelf, useBookPicker, importMany } from '../components/shelf.tsx'
 import { takeSharedFiles } from '../lib/book/import.ts'
 import { books } from '../lib/books.ts'
@@ -39,14 +40,14 @@ async function removeWithUndo(ids: string[], askTitle: string, askBody?: string)
   if (key && ids.includes(key.slice(5))) pauseClip()
   ids.forEach((id) => cancelItem(id))
   const gone = await deleteClips(ids)
-  if (gone.length) toast(`${gone.length === 1 ? 'Deleted' : `${gone.length} deleted`}`, { label: 'Undo', run: () => { void restoreClips(gone) } }, 6000)
+  if (gone.length) toast(gone.length === 1 ? t('Deleted') : t('{n} deleted', { n: gone.length }), { label: t('Undo'), run: () => { void restoreClips(gone) } }, 6000)
   return gone.length > 0
 }
 
 function makeAudio(c: ClipMeta) {
   const st = settings.get()
   const r = queueExport(c.text, { voice: c.voice || st.voiceOverride, speed: Math.min(2, Math.max(0.6, st.listenSpeed)), format: st.format, origin: 'listen', id: c.id })
-  toast(r === 'queued' ? 'Queued · it starts after the current one' : 'Making the audio…')
+  toast(r === 'queued' ? t('Queued · it starts after the current one') : t('Making the audio…'))
 }
 
 function openInListen(c: ClipMeta, autoplay = false) {
@@ -100,7 +101,7 @@ export function LibraryPage() {
     if (!files?.length) return
     let n = 0
     for (const f of Array.from(files)) { if (f.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|opus|flac|webm)$/i.test(f.name)) { await importAudio(f); n++ } }
-    toast(n ? `Added ${n} audio file${n === 1 ? '' : 's'}` : 'That file isn’t audio')
+    toast(n ? (n === 1 ? t('Added 1 audio file') : t('Added {n} audio files', { n })) : t('That file isn’t audio'))
     if (file.current) file.current.value = ''
   }
 
@@ -110,11 +111,11 @@ export function LibraryPage() {
         <div className="card render-card">
           <span className="keep-ic"><AudioLines size={20} /></span>
           <div className="grow" style={{ minWidth: 0 }}>
-            <div className="rc-title">Making audio · {job.title}</div>
-            <div className="rc-meta">{job.done} of {job.total} sentences{job.queued ? ` · ${job.queued} more waiting` : ''}</div>
+            <div className="rc-title">{t('Making audio · {title}', { title: job.title ?? '' })}</div>
+            <div className="rc-meta">{t('{d} of {t} sentences', { d: job.done, t: job.total })}{job.queued ? t(' · {q} more waiting', { q: job.queued }) : ''}</div>
             <div className="clip-bar" style={{ marginTop: 8 }}><i style={{ width: `${job.total ? (job.done / job.total) * 100 : 0}%`, transition: 'width .4s var(--ease)' }} /></div>
           </div>
-          <button className="icon-btn" onClick={cancelExport} aria-label="Stop making this audio" title="Stop"><Square size={18} /></button>
+          <button className="icon-btn" onClick={cancelExport} aria-label={t('Stop making this audio')} title={t('Stop')}><Square size={18} /></button>
         </div>
       )}
 
@@ -122,19 +123,19 @@ export function LibraryPage() {
         <>
           <label className="lib-search">
             <Search size={18} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search titles and text" aria-label="Search the Library" />
-            {query && <button onClick={() => setQuery('')} aria-label="Clear search"><X size={16} /></button>}
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('Search titles and text')} aria-label={t('Search the Library')} />
+            {query && <button onClick={() => setQuery('')} aria-label={t('Clear search')}><X size={16} /></button>}
           </label>
-          <div className="lib-filters" role="tablist" aria-label="Filter">
+          <div className="lib-filters" role="tablist" aria-label={t('Filter')}>
             {FILTERS.filter((f) => f.id === 'all' || counts[f.id] > 0).map((f) => (
               <button key={f.id} role="tab" aria-selected={filter === f.id} className={`chip ${filter === f.id ? 'accent' : ''}`} onClick={() => setFilter(f.id)}>
-                {f.label}<span className="lf-n">{counts[f.id]}</span>
+                {t(f.label)}<span className="lf-n">{counts[f.id]}</span>
               </button>
             ))}
           </div>
           <div className="lib-sort">
-            <span className="muted small">{shown.length} shown</span>
-            <MenuSelect value={sort} onChange={setSort} label="Sort" options={SORTS.map((s) => ({ value: s.id, label: s.label }))} />
+            <span className="muted small">{t('{n} shown', { n: shown.length })}</span>
+            <MenuSelect value={sort} onChange={setSort} label={t('Sort')} options={SORTS.map((s) => ({ value: s.id, label: t(s.label) }))} />
           </div>
         </>
       )}
@@ -142,15 +143,15 @@ export function LibraryPage() {
       {lib.loaded && lib.clips.length === 0 ? (
         <div className="card empty">
           <div className="glyph">λ</div>
-          <h3>Nothing saved yet</h3>
-          <p style={{ margin: '0 auto 18px', maxWidth: 330 }}>Bring in any web page as clean text, save what you hear on Listen, or add audio files from your phone.</p>
+          <h3>{t('Nothing saved yet')}</h3>
+          <p style={{ margin: '0 auto 18px', maxWidth: 330 }}>{t('Bring in any web page as clean text, save what you hear on Listen, or add audio files from your phone.')}</p>
           <div className="row" style={{ justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn primary" onClick={() => setAdding(true)}><Globe size={18} /> From a web page</button>
-            <button className="btn" onClick={() => file.current?.click()}><Upload size={18} /> Add audio</button>
+            <button className="btn primary" onClick={() => setAdding(true)}><Globe size={18} /> {t('From a web page')}</button>
+            <button className="btn" onClick={() => file.current?.click()}><Upload size={18} /> {t('Add audio')}</button>
           </div>
         </div>
       ) : shown.length === 0 && lib.loaded ? (
-        <div className="card empty" style={{ padding: '32px 20px' }}><p style={{ margin: 0 }}>Nothing here{query ? ' matches your search' : ''}.</p></div>
+        <div className="card empty" style={{ padding: '32px 20px' }}><p style={{ margin: 0 }}>{t('Nothing here')}{query ? t(' matches your search') : ''}.</p></div>
       ) : (
         <div className="clips">
           {shown.map((c) => (
@@ -161,12 +162,12 @@ export function LibraryPage() {
       )}
 
       {selecting && (
-        <div className="sel-bar" role="toolbar" aria-label="Selection">
-          <button className="btn sm ghost" onClick={() => setSel(allSelected ? new Set() : new Set(shown.map((c) => c.id)))}>{allSelected ? 'None' : 'All'}</button>
-          <span className="sel-n">{sel.size} selected</span>
-          <button className="icon-btn" disabled={!sel.size} onClick={() => void bulk({ fav: true })} aria-label="Add to favorites" title="Favorite"><Star size={20} /></button>
-          <button className="icon-btn" disabled={!sel.size} onClick={() => void bulk({ done: true, pos: 0 })} aria-label="Mark finished" title="Mark finished"><CheckCheck size={20} /></button>
-          <button className="icon-btn" disabled={!sel.size} style={{ color: 'var(--danger)' }} onClick={() => { const n = sel.size; void removeWithUndo([...sel], n === 1 ? 'Delete this file?' : `Delete ${n} files?`, 'The selected files will be removed from your library.').then((ok) => { if (ok) endSelect() }) }} aria-label="Delete selected" title="Delete"><Trash2 size={20} /></button>
+        <div className="sel-bar" role="toolbar" aria-label={t('Selection')}>
+          <button className="btn sm ghost" onClick={() => setSel(allSelected ? new Set() : new Set(shown.map((c) => c.id)))}>{allSelected ? t('None') : t('All')}</button>
+          <span className="sel-n">{t('{n} selected', { n: sel.size })}</span>
+          <button className="icon-btn" disabled={!sel.size} onClick={() => void bulk({ fav: true })} aria-label={t('Add to favorites')} title={t('Favorite')}><Star size={20} /></button>
+          <button className="icon-btn" disabled={!sel.size} onClick={() => void bulk({ done: true, pos: 0 })} aria-label={t('Mark finished')} title={t('Mark finished')}><CheckCheck size={20} /></button>
+          <button className="icon-btn" disabled={!sel.size} style={{ color: 'var(--danger)' }} onClick={() => { const n = sel.size; void removeWithUndo([...sel], n === 1 ? t('Delete this file?') : t('Delete {n} files?', { n }), t('The selected files will be removed from your library.')).then((ok) => { if (ok) endSelect() }) }} aria-label={t('Delete selected')} title={t('Delete')}><Trash2 size={20} /></button>
         </div>
       )}
 
@@ -176,25 +177,25 @@ export function LibraryPage() {
     <div className={`page wide library-page ${selecting ? 'selecting' : ''}`}>
       <div className="page-head">
         <div>
-          <h1 className="page-title">Library</h1>
+          <h1 className="page-title">{t('Library')}</h1>
           <p className="page-sub">{shelf === 'books'
-            ? (bk.list.length ? `${bk.list.length} book${bk.list.length === 1 ? '' : 's'} on this device` : 'Your books, with contents, links and search.')
-            : lib.clips.length ? `${lib.clips.length} item${lib.clips.length === 1 ? '' : 's'}${total ? ` · ${formatBytes(total)} on this device` : ''}` : 'Saved audio and texts to hear later, offline.'}</p>
+            ? (bk.list.length ? (bk.list.length === 1 ? t('1 book on this device') : t('{n} books on this device', { n: bk.list.length })) : t('Your books, with contents, links and search.'))
+            : lib.clips.length ? `${lib.clips.length === 1 ? t('1 item') : t('{n} items', { n: lib.clips.length })}${total ? t(' · {x} on this device', { x: formatBytes(total) }) : ''}` : t('Saved audio and texts to hear later, offline.')}</p>
         </div>
         <div className="row" style={{ gap: 6 }}>
-          {shelf === 'saved' && lib.clips.length > 0 && <button className="btn sm ghost" onClick={() => (selecting ? endSelect() : setSelecting(true))}>{selecting ? 'Done' : 'Select'}</button>}
-          <button className="icon-btn filled" onClick={() => (shelf === 'books' ? picker.pick() : setAdding(true))} aria-label={shelf === 'books' ? 'Import a book' : 'Add to Library'} title={shelf === 'books' ? 'Import a book' : 'Add a web page, book or audio'}><Plus size={20} /></button>
+          {shelf === 'saved' && lib.clips.length > 0 && <button className="btn sm ghost" onClick={() => (selecting ? endSelect() : setSelecting(true))}>{selecting ? t('Done') : t('Select')}</button>}
+          <button className="icon-btn filled" onClick={() => (shelf === 'books' ? picker.pick() : setAdding(true))} aria-label={shelf === 'books' ? t('Import a book') : t('Add to Library')} title={shelf === 'books' ? t('Import a book') : t('Add a web page, book or audio')}><Plus size={20} /></button>
           <input ref={file} type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.opus,.flac" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
           {picker.el}
         </div>
       </div>
       {!big && <div className="shelf-tabs">
-        <Seg value={shelf} onChange={setShelf} label="Shelf" options={[{ value: 'saved', label: <>Saved{lib.clips.length ? <span className="lf-n">{lib.clips.length}</span> : null}</> }, { value: 'books', label: <>Books{bk.list.length ? <span className="lf-n">{bk.list.length}</span> : null}</> }]} />
+        <Seg value={shelf} onChange={setShelf} label={t('Shelf')} options={[{ value: 'saved', label: <>{t('Saved')}{lib.clips.length ? <span className="lf-n">{lib.clips.length}</span> : null}</> }, { value: 'books', label: <>{t('Books')}{bk.list.length ? <span className="lf-n">{bk.list.length}</span> : null}</> }]} />
       </div>}
       {big ? (
         <div className="lib-split">
-          <section className="lib-col"><div className="lib-col-head"><span>Saved</span>{lib.clips.length ? <span className="lf-n">{lib.clips.length}</span> : null}</div>{savedPart}</section>
-          <section className="lib-col"><div className="lib-col-head"><span>Books</span>{bk.list.length ? <span className="lf-n">{bk.list.length}</span> : null}<button className="btn sm ghost lib-col-add" onClick={picker.pick}>Import a book</button></div><BookShelf onPick={picker.pick} /></section>
+          <section className="lib-col"><div className="lib-col-head"><span>{t('Saved')}</span>{lib.clips.length ? <span className="lf-n">{lib.clips.length}</span> : null}</div>{savedPart}</section>
+          <section className="lib-col"><div className="lib-col-head"><span>{t('Books')}</span>{bk.list.length ? <span className="lf-n">{bk.list.length}</span> : null}<button className="btn sm ghost lib-col-add" onClick={picker.pick}>{t('Import a book')}</button></div><BookShelf onPick={picker.pick} /></section>
         </div>
       ) : shelf === 'books' ? <BookShelf onPick={picker.pick} /> : savedPart}
       <ItemMenu clip={menu} onClose={() => setMenu(null)} onRename={(c) => { setMenu(null); setRenaming(c) }} />
@@ -221,10 +222,10 @@ function ClipCard({ clip, selecting, selected, onSelect, onLongPress, onMore }: 
   const play = async () => {
     if (active) { void playClip(key, '', { title: clip.title }); return }
     const full = await getClip(clip.id)
-    if (full?.blob) void playClip(key, full.blob, { title: clip.title, artist: `Logos · ${v?.name ?? 'Library'}` }, clip.done ? 0 : clip.pos ?? 0)
+    if (full?.blob) void playClip(key, full.blob, { title: clip.title, artist: `Logos · ${v?.name ?? t('Library')}` }, clip.done ? 0 : clip.pos ?? 0)
     if (clip.done) void updateClip(clip.id, { done: false }, false)
   }
-  const status = clip.done ? 'Finished' : isText ? (rendering ? `Making audio · ${job.done}/${job.total}` : waiting ? 'Waiting to make audio' : 'Listen later') : pos > 1 ? `${formatDuration(Math.max(0, clip.duration - pos))} left` : 'New'
+  const status = clip.done ? t('Finished') : isText ? (rendering ? t('Making audio · {d}/{t}', { d: job.done, t: job.total }) : waiting ? t('Waiting to make audio') : t('Listen later')) : pos > 1 ? t('{d} left', { d: formatDuration(Math.max(0, clip.duration - pos)) }) : t('New')
   const startPress = () => { if (!selecting) press.current = window.setTimeout(() => { press.current = null; onLongPress() }, 480) }
   const endPress = () => { if (press.current) { clearTimeout(press.current); press.current = null } }
 
@@ -235,9 +236,9 @@ function ClipCard({ clip, selecting, selected, onSelect, onLongPress, onMore }: 
         {selecting ? (
           <span className={`sel-box ${selected ? 'on' : ''}`} aria-hidden>{selected && <Check size={16} />}</span>
         ) : isText ? (
-          <button className="mini-play text" onClick={() => openInListen(clip, true)} aria-label="Listen now"><Play size={20} fill="currentColor" style={{ marginLeft: 2 }} /></button>
+          <button className="mini-play text" onClick={() => openInListen(clip, true)} aria-label={t('Listen now')}><Play size={20} fill="currentColor" style={{ marginLeft: 2 }} /></button>
         ) : (
-          <button className="mini-play" onClick={play} aria-label={playing ? 'Pause' : pos > 1 && !clip.done ? 'Resume' : 'Play'}>
+          <button className="mini-play" onClick={play} aria-label={playing ? t('Pause') : pos > 1 && !clip.done ? t('Resume') : t('Play')}>
             {playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" style={{ marginLeft: 2 }} />}
           </button>
         )}
@@ -249,7 +250,7 @@ function ClipCard({ clip, selecting, selected, onSelect, onLongPress, onMore }: 
           <div className="clip-title">{clip.title}</div>
           {clip.summary && <div className="clip-sum">{clip.summary}</div>}
           <div className="clip-meta">
-            {isText ? <span>{wordCount(clip.text).toLocaleString()} words · about {formatDuration(clip.duration)}</span>
+            {isText ? <span>{t('{n} words · about {d}', { n: wordCount(clip.text).toLocaleString(), d: formatDuration(clip.duration) })}</span>
               : <span className="mono">{active && cp.duration ? `${formatDuration(cp.time)} / ` : ''}{formatDuration(clip.duration)}</span>}
             {clip.site && <span className="clip-site"><Globe size={11} /> {clip.site}</span>}
             {v && <span>{v.name}</span>}
@@ -259,24 +260,24 @@ function ClipCard({ clip, selecting, selected, onSelect, onLongPress, onMore }: 
         </div>
         {!selecting && (
           <div className="clip-side">
-            <button className={`icon-btn fav-btn ${clip.fav ? 'on' : ''}`} onClick={() => void updateClip(clip.id, { fav: !clip.fav }, false)} aria-label={clip.fav ? 'Remove from favorites' : 'Add to favorites'} aria-pressed={!!clip.fav}>
+            <button className={`icon-btn fav-btn ${clip.fav ? 'on' : ''}`} onClick={() => void updateClip(clip.id, { fav: !clip.fav }, false)} aria-label={clip.fav ? t('Remove from favorites') : t('Add to favorites')} aria-pressed={!!clip.fav}>
               <Star size={19} fill={clip.fav ? 'currentColor' : 'none'} />
             </button>
-            <button className="icon-btn" onClick={onMore} aria-label="More actions"><MoreHorizontal size={20} /></button>
+            <button className="icon-btn" onClick={onMore} aria-label={t('More actions')}><MoreHorizontal size={20} /></button>
           </div>
         )}
       </div>
       {!isText ? (
-        <div className="clip-bar" role="slider" aria-label="Seek" aria-valuenow={Math.round(progress * 100)}
+        <div className="clip-bar" role="slider" aria-label={t('Seek')} aria-valuenow={Math.round(progress * 100)}
           onClick={(e) => { if (selecting) return; const r = e.currentTarget.getBoundingClientRect(); if (active) seekClip((e.clientX - r.left) / r.width) }}>
           <i style={{ width: `${progress * 100}%` }} />
         </div>
       ) : !selecting && (
         <div className="row clip-actions">
-          <button className="btn sm" onClick={() => openInListen(clip, true)}><Play size={15} fill="currentColor" /> Listen now</button>
+          <button className="btn sm" onClick={() => openInListen(clip, true)}><Play size={15} fill="currentColor" /> {t('Listen now')}</button>
           {rendering || waiting
-            ? <button className="btn sm ghost" onClick={() => cancelItem(clip.id)}><Square size={14} /> Stop</button>
-            : <button className="btn sm ghost" onClick={() => makeAudio(clip)}><AudioLines size={15} /> Make audio</button>}
+            ? <button className="btn sm ghost" onClick={() => cancelItem(clip.id)}><Square size={14} /> {t('Stop')}</button>
+            : <button className="btn sm ghost" onClick={() => makeAudio(clip)}><AudioLines size={15} /> {t('Make audio')}</button>}
         </div>
       )}
       {rendering && <div className="clip-bar"><i style={{ width: `${job.total ? (job.done / job.total) * 100 : 0}%`, transition: 'width .4s var(--ease)' }} /></div>}
@@ -297,17 +298,17 @@ function ItemMenu({ clip, onClose, onRename }: { clip: ClipMeta | null; onClose:
     if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: clip.title }) } catch { /* cancelled */ } } else downloadBlob(f.blob, filename, true)
   }
   return (
-    <Sheet open onClose={onClose} title={clip.title.length > 34 ? 'Options' : clip.title}>
+    <Sheet open onClose={onClose} title={clip.title.length > 34 ? t('Options') : clip.title}>
       <div className="menu-list">
-        {clip.text && <button onClick={run(() => openInListen(clip))}><AudioLines size={20} /> Open in Listen</button>}
-        {isText && <button onClick={run(() => makeAudio(clip))}><FileAudio size={20} /> Make audio</button>}
-        <button onClick={run(() => updateClip(clip.id, clip.done ? { done: false } : { done: true, pos: 0 }, false))}><CircleCheck size={20} /> {clip.done ? 'Mark as not finished' : 'Mark as finished'}</button>
-        {!isText && !!clip.pos && !clip.done && <button onClick={run(() => updateClip(clip.id, { pos: 0 }, false))}><Clock size={20} /> Start over next time</button>}
-        {clip.url && <button onClick={run(() => { window.open(clip.url, '_blank', 'noopener') })}><ExternalLink size={20} /> Open the web page</button>}
-        <button onClick={() => onRename(clip)}><Pencil size={20} /> Rename</button>
-        {!isText && <button onClick={run(download)}><ArrowDownToLine size={20} /> Download {clip.format.toUpperCase()}</button>}
-        {!isText && <button onClick={run(share)}><Share2 size={20} /> Share</button>}
-        <button className="danger" onClick={run(async () => { await removeWithUndo([clip.id], 'Delete this file?', `“${clip.title.length > 90 ? clip.title.slice(0, 90) + '…' : clip.title}” will be removed from your library.`) })}><Trash2 size={20} /> Delete</button>
+        {clip.text && <button onClick={run(() => openInListen(clip))}><AudioLines size={20} /> {t('Open in Listen')}</button>}
+        {isText && <button onClick={run(() => makeAudio(clip))}><FileAudio size={20} /> {t('Make audio')}</button>}
+        <button onClick={run(() => updateClip(clip.id, clip.done ? { done: false } : { done: true, pos: 0 }, false))}><CircleCheck size={20} /> {clip.done ? t('Mark as not finished') : t('Mark as finished')}</button>
+        {!isText && !!clip.pos && !clip.done && <button onClick={run(() => updateClip(clip.id, { pos: 0 }, false))}><Clock size={20} /> {t('Start over next time')}</button>}
+        {clip.url && <button onClick={run(() => { window.open(clip.url, '_blank', 'noopener') })}><ExternalLink size={20} /> {t('Open the web page')}</button>}
+        <button onClick={() => onRename(clip)}><Pencil size={20} /> {t('Rename')}</button>
+        {!isText && <button onClick={run(download)}><ArrowDownToLine size={20} /> {t('Download {f}', { f: clip.format.toUpperCase() })}</button>}
+        {!isText && <button onClick={run(share)}><Share2 size={20} /> {t('Share')}</button>}
+        <button className="danger" onClick={run(async () => { await removeWithUndo([clip.id], t('Delete this file?'), t('“{title}” will be removed from your library.', { title: clip.title.length > 90 ? clip.title.slice(0, 90) + '…' : clip.title })) })}><Trash2 size={20} /> {t('Delete')}</button>
       </div>
     </Sheet>
   )
@@ -319,11 +320,11 @@ function RenameSheet({ clip, onClose }: { clip: ClipMeta | null; onClose: () => 
   if (!clip) return null
   const save = () => { const t = v.trim(); if (t && t !== clip.title) void updateClip(clip.id, { title: t }, false); onClose() }
   return (
-    <Sheet open onClose={onClose} title="Rename">
-      <input className="text-input" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save() }} autoFocus aria-label="Title" />
+    <Sheet open onClose={onClose} title={t('Rename')}>
+      <input className="text-input" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save() }} autoFocus aria-label={t('Title')} />
       <div className="row" style={{ gap: 8, marginTop: 12 }}>
-        <button className="btn ghost grow" onClick={onClose}>Cancel</button>
-        <button className="btn primary grow" onClick={save} disabled={!v.trim()}>Save</button>
+        <button className="btn ghost grow" onClick={onClose}>{t('Cancel')}</button>
+        <button className="btn primary grow" onClick={save} disabled={!v.trim()}>{t('Save')}</button>
       </div>
     </Sheet>
   )

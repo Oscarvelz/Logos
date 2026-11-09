@@ -169,10 +169,10 @@ class MainActivity : Activity() {
         if (crashes.size >= 3) {
             web.loadDataWithBaseURL(home, "<html><body style=\"background:#0A0A0F;color:#eee;font:18px sans-serif;padding:32px\">" +
                 "<p>Logos had to reopen several times in a minute, so it is waiting here.</p>" +
-                "<p><a style=\"color:#e9bd72\" href=\"$home\">Open Logos</a></p></body></html>", "text/html", "utf-8", null)
+                "<p><a style=\"color:#e9bd72\" href=\"$home\">${BubbleService.s("Open Logos", "Abrir Logos")}</a></p></body></html>", "text/html", "utf-8", null)
         } else {
             web.loadUrl(home)
-            Toast.makeText(this, "Logos reopened after its page stopped.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, BubbleService.s("Logos reopened after its page stopped.", "Logos se reabrió tras detenerse su página."), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -342,7 +342,7 @@ class MainActivity : Activity() {
                 if (share) {
                     val send = Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, u).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     runCatching { startActivity(Intent.createChooser(send, safe)) }
-                } else Toast.makeText(this@MainActivity, "Saved to Download/Logos", Toast.LENGTH_SHORT).show()
+                } else Toast.makeText(this@MainActivity, BubbleService.s("Saved to Download/Logos", "Guardado en Download/Logos"), Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -459,7 +459,7 @@ class MainActivity : Activity() {
     }.start()
 
     private fun install(url: String) {
-        Toast.makeText(this, "Downloading the update…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, BubbleService.s("Downloading the update…", "Descargando la actualización…"), Toast.LENGTH_SHORT).show()
         Thread {
             try {
                 val pi = packageManager.packageInstaller
@@ -471,7 +471,7 @@ class MainActivity : Activity() {
                     val pend = PendingIntent.getActivity(this, 1, back, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
                     s.commit(pend.intentSender)
                 }
-            } catch (e: Exception) { runOnUiThread { Toast.makeText(this, "Update failed: ${e.message}", Toast.LENGTH_LONG).show() } }
+            } catch (e: Exception) { runOnUiThread { Toast.makeText(this, BubbleService.s("Update failed: ", "La actualización falló: ") + e.message, Toast.LENGTH_LONG).show() } }
         }.start()
     }
 
@@ -482,7 +482,7 @@ class MainActivity : Activity() {
                 if (confirm != null) startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             PackageInstaller.STATUS_SUCCESS -> {}
-            else -> Toast.makeText(this, "Update didn’t install: " + (intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: ""), Toast.LENGTH_LONG).show()
+            else -> Toast.makeText(this, BubbleService.s("Update didn’t install: ", "La actualización no se instaló: ") + (intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: ""), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -515,7 +515,7 @@ class MainActivity : Activity() {
         if (web.canGoBack()) { web.goBack(); return }
         val now = System.currentTimeMillis()
         if (now - lastBack < 2000) moveTaskToBack(true)
-        else { lastBack = now; Toast.makeText(this, "Press back again to leave Logos", Toast.LENGTH_SHORT).show() }
+        else { lastBack = now; Toast.makeText(this, BubbleService.s("Press back again to leave Logos", "Pulsa atrás otra vez para salir de Logos"), Toast.LENGTH_SHORT).show() }
     }
 
     override fun onDestroy() {

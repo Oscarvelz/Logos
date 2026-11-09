@@ -18,6 +18,7 @@ import { markAndToast, textKey } from './marks.ts'
 import { saveForLater, library, getClipBlob } from './library.ts'
 import { books } from './books.ts'
 import { playBook } from './book/playbook.ts'
+import { t } from './i18n.ts'
 import { playClip } from '../player/clip.ts'
 import { loadSessionResume } from './resume.ts'
 import { estimateSeconds } from './text.ts'
@@ -98,8 +99,8 @@ export function playClipboardText(raw: string) {
   dispatchEvent(new Event('logos-bubble-clip'))
   void play()
   if (prevText.trim() && prevText.trim() !== text) {
-    toast('Playing what you copied', {
-      label: 'Undo',
+    toast(t('Playing what you copied'), {
+      label: t('Undo'),
       run: () => {
         drafts.set({ listen: prevText })
         saveLastText(prevText)
@@ -108,7 +109,7 @@ export function playClipboardText(raw: string) {
       },
     }, 6000)
   } else {
-    toast('Playing what you copied', undefined, 3000)
+    toast(t('Playing what you copied'), undefined, 3000)
   }
 }
 
@@ -238,17 +239,17 @@ export function initBubble() {
   addEventListener('logosandroid-save', () => {
     const s = listen.get()
     const text = (s.active ? s.text : drafts.get().listen).trim()
-    if (!text) { toast('Nothing to save yet'); return }
-    if (nowReadingFor(text)) { toast('Already in your library — it’s a book'); return }
+    if (!text) { toast(t('Nothing to save yet')); return }
+    if (nowReadingFor(text)) { toast(t('Already in your library — it’s a book')); return }
     const lang = detectLang(text.slice(0, 2000)).lang
     const info = describeText(text.slice(0, 12000), lang)
     void saveForLater(text, {
-      title: info.title || 'Copied text',
+      title: info.title || t('Copied text'),
       summary: info.summary,
       lang,
       voice: s.active ? (s.voices[s.current] ?? '') : '',
       duration: estimateSeconds(text, 1),
-    }).then(() => toast('Saved to Library — it stays now'))
+    }).then(() => toast(t('Saved to Library — it stays now')))
   })
   addEventListener('logosandroid-voice', () => {
     const s = listen.get()
@@ -274,7 +275,7 @@ export function initBubble() {
         loadText(r.text)
         if (r.idx > 0) seek(r.idx)
         void play(r.idx)
-        toast(`Back to ${r.title}`, undefined, 3500)
+        toast(t('Back to {title}', { title: r.title }), undefined, 3500)
       }
     } else {
       stageKey = ''; resumeCard = null; saveResume()
@@ -349,13 +350,14 @@ export function initBubble() {
       frac: s.active && s.segments.length ? Math.min(1, (s.current + sentenceProgress()) / s.segments.length) : 0,
       bars: s.active && levels(18, barTmp) ? Array.from(barTmp, (v) => Math.round(Math.max(0, Math.min(1, v)) * 100)) : null,
       light,
+      lang: settings.get().uiLang,
       words: settings.get().bubbleText,
       tp: s.active ? capSent(cleanSent(s.segments[s.current - 1]?.text ?? ''), 160) : '',
       tc: s.active ? capSent(cleanSent(s.segments[s.current]?.text ?? ''), 520) : '',
       tn: s.active ? capSent(cleanSent(s.segments[s.current + 1]?.text ?? ''), 160) : '',
       wi: settings.get().bubbleText ? wordIndexOf(s.active, s.current, s.active ? cleanSent(s.segments[s.current]?.text ?? '') : '') : -1,
       title: titleOf(s.active, text) || 'Logos',
-      sub: s.active ? (s.cushion ? `Preparing… ${s.cushion.done} of ${s.cushion.total} to start` : `Sentence ${s.current + 1} of ${s.segments.length} · ${fmtRate(settings.get().listenSpeed)}`) : 'Ready',
+      sub: s.active ? (s.cushion ? t('Preparing… {d} of {t} to start', { d: s.cushion.done, t: s.cushion.total }) : t('Sentence {a} of {b} · {r}', { a: s.current + 1, b: s.segments.length, r: fmtRate(settings.get().listenSpeed) })) : t('Ready'),
     }
     const key = JSON.stringify(info)
     if (key === last) return

@@ -14,6 +14,7 @@ import { EngineNote, VoicePicker } from '../components/chrome.tsx'
 import { Avatar, Range, Seg, toast, useMediaQuery } from '../components/ui.tsx'
 import { RecordingsPanel } from '../components/desk.tsx'
 import { navigate } from '../lib/router.ts'
+import { t } from '../lib/i18n.ts'
 
 export function CreatePage() {
   const d = useStore(drafts)
@@ -35,30 +36,30 @@ export function CreatePage() {
 
   const big = useMediaQuery('(min-width: 1500px)')
   const generate = () => {
-    if (!text.trim()) { toast('Add some text first'); return }
-    if (queueExport(text, { voice, speed: st.exportSpeed, format: st.format, title, origin: 'create' }) === 'queued') toast('Queued — it starts after the audio being made now', { label: 'Library', run: () => navigate('library') })
+    if (!text.trim()) { toast(t('Add some text first')); return }
+    if (queueExport(text, { voice, speed: st.exportSpeed, format: st.format, title, origin: 'create' }) === 'queued') toast(t('Queued — it starts after the audio being made now'), { label: t('Library'), run: () => navigate('library') })
   }
 
   return (
     <div className="page wide create-page">
       <div className="page-head">
         <div>
-          <h1 className="page-title">Create</h1>
-          <p className="page-sub">Render the whole text into an audio file you can keep.</p>
+          <h1 className="page-title">{t('Create')}</h1>
+          <p className="page-sub">{t('Render the whole text into an audio file you can keep.')}</p>
         </div>
       </div>
 
       <div className="create-grid">
         <div className="card" style={{ overflow: 'hidden' }}>
           <div className="editor">
-            <textarea value={text} onChange={(ev) => drafts.set({ create: ev.target.value })} placeholder="What should Logos record?" aria-label="Text to render" lang={lang} />
+            <textarea value={text} onChange={(ev) => drafts.set({ create: ev.target.value })} placeholder={t('What should Logos record?')} aria-label={t('Text to render')} lang={lang} />
             <div className="editor-bar">
-              <button className="icon-btn" title="Paste" aria-label="Paste" onClick={async () => {
-                try { const c = await readClipboard(); if (c.trim()) drafts.set({ create: c }) } catch { toast('Clipboard blocked — long-press to paste') }
+              <button className="icon-btn" title={t('Paste')} aria-label={t('Paste')} onClick={async () => {
+                try { const c = await readClipboard(); if (c.trim()) drafts.set({ create: c }) } catch { toast(t('Clipboard blocked — long-press to paste')) }
               }}><ClipboardPaste size={21} /></button>
-              <button className="btn sm ghost" onClick={() => drafts.set({ create: drafts.get().listen })} disabled={!d.listen.trim()}>Use Listen text</button>
+              <button className="btn sm ghost" onClick={() => drafts.set({ create: drafts.get().listen })} disabled={!d.listen.trim()}>{t('Use Listen text')}</button>
               <div className="editor-meta">
-                <div>{wordCount(text).toLocaleString()} words</div>
+                <div>{t('{n} words', { n: wordCount(text).toLocaleString() })}</div>
                 <div>≈ {formatDuration(estimateSeconds(text, st.exportSpeed))}</div>
               </div>
             </div>
@@ -69,11 +70,11 @@ export function CreatePage() {
           {job.status === 'running' && job.origin !== 'listen' ? (
             <div className="card card-pad" style={{ textAlign: 'center' }}>
               <Ring value={job.total ? job.done / job.total : 0} />
-              <div style={{ fontWeight: 700, fontSize: 17 }}>Rendering {job.done} of {job.total}</div>
+              <div style={{ fontWeight: 700, fontSize: 17 }}>{t('Rendering {d} of {t}', { d: job.done, t: job.total })}</div>
               <div className="muted small mono" style={{ margin: '4px 0 14px' }}>
-                {formatDuration(job.audioSec)} of audio · {isFinite(eta) ? `about ${formatDuration(eta)} left` : e.status === 'loading' ? 'waiting for the voice model' : 'starting'}
+                {t('{d} of audio', { d: formatDuration(job.audioSec) })} · {isFinite(eta) ? t('about {x} left', { x: formatDuration(eta) }) : e.status === 'loading' ? t('waiting for the voice model') : t('starting')}
               </div>
-              <button className="btn" onClick={cancelExport}><Square size={16} /> Cancel</button>
+              <button className="btn" onClick={cancelExport}><Square size={16} /> {t('Cancel')}</button>
               <EngineNote />
             </div>
           ) : job.status === 'done' && job.result && job.origin !== 'listen' ? (
@@ -81,34 +82,34 @@ export function CreatePage() {
           ) : (
             <div className="card card-pad stack">
               <div>
-                <div className="field-label"><span>Voice</span><span className="muted">{st.langMode === 'auto' ? `Auto-detect · ${LANG_LABEL[detected.lang]}` : LANG_LABEL[st.langMode]}</span></div>
+                <div className="field-label"><span>{t('Voice')}</span><span className="muted">{st.langMode === 'auto' ? t('Auto-detect · {l}', { l: LANG_LABEL[detected.lang] }) : LANG_LABEL[st.langMode]}</span></div>
                 <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
                   <button className={`chip ${voice === null ? 'accent' : ''}`} onClick={() => setVoice(null)}><Wand2 size={15} /> Auto</button>
                   {favs.map((f) => <button key={f.id} className={`chip ${voice === f.id ? 'accent' : ''}`} onClick={() => setVoice(f.id)}>{f.name}</button>)}
-                  <button className="chip" onClick={() => setPickerOpen(true)}>More…</button>
+                  <button className="chip" onClick={() => setPickerOpen(true)}>{t('More…')}</button>
                 </div>
                 {v && (
                   <div className="row" style={{ marginTop: 12 }}>
                     <Avatar voice={v} />
-                    <div className="grow"><div className="voice-name">{v.name} <span className="badge">{v.accent}</span></div><div className="voice-tag">{voice === null ? 'Switches per paragraph language' : v.tagline}</div></div>
+                    <div className="grow"><div className="voice-name">{v.name} <span className="badge">{v.accent}</span></div><div className="voice-tag">{voice === null ? t('Switches per paragraph language') : t(v.tagline)}</div></div>
                   </div>
                 )}
               </div>
               <div>
-                <div className="field-label"><span>Speed</span><span className="mono">{st.exportSpeed.toFixed(2)}×</span></div>
-                <Range label="Export speed" min={0.6} max={1.6} step={0.05} value={st.exportSpeed} onChange={(x) => settings.set({ exportSpeed: x })} />
+                <div className="field-label"><span>{t('Speed')}</span><span className="mono">{st.exportSpeed.toFixed(2)}×</span></div>
+                <Range label={t('Export speed')} min={0.6} max={1.6} step={0.05} value={st.exportSpeed} onChange={(x) => settings.set({ exportSpeed: x })} />
               </div>
               <div>
-                <div className="field-label"><span>Format</span><span className="muted">{st.format === 'mp3' ? '128 kbps · small' : 'Lossless · large'}</span></div>
-                <Seg value={st.format} onChange={(f) => settings.set({ format: f })} options={[{ value: 'mp3', label: 'MP3' }, { value: 'wav', label: 'WAV' }]} label="Format" />
+                <div className="field-label"><span>{t('Format')}</span><span className="muted">{st.format === 'mp3' ? t('128 kbps · small') : t('Lossless · large')}</span></div>
+                <Seg value={st.format} onChange={(f) => settings.set({ format: f })} options={[{ value: 'mp3', label: 'MP3' }, { value: 'wav', label: 'WAV' }]} label={t('Format')} />
               </div>
               <div>
-                <div className="field-label"><span>Title</span></div>
-                <input value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder={text ? titleFrom(text) : 'Untitled'}
+                <div className="field-label"><span>{t('Title')}</span></div>
+                <input value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder={text ? titleFrom(text) : t('Untitled')}
                   style={{ width: '100%', height: 48, borderRadius: 14, border: '1px solid var(--line)', background: 'var(--surface)', padding: '0 14px', outline: 'none' }} />
               </div>
-              <button className="btn primary block" onClick={generate} disabled={!text.trim()} style={{ height: 56, fontSize: 16 }}><Sparkles size={18} /> Generate audio</button>
-              {e.status !== 'ready' && <p className="muted small" style={{ margin: 0, textAlign: 'center' }}>First run downloads the neural voice (~{e.kind === 'phonon' ? PHONON_SIZE_MB : POCKET_SIZE_MB} MB), then works offline.</p>}
+              <button className="btn primary block" onClick={generate} disabled={!text.trim()} style={{ height: 56, fontSize: 16 }}><Sparkles size={18} /> {t('Generate audio')}</button>
+              {e.status !== 'ready' && <p className="muted small" style={{ margin: 0, textAlign: 'center' }}>{t('First run downloads the neural voice (~{n} MB), then works offline.', { n: e.kind === 'phonon' ? PHONON_SIZE_MB : POCKET_SIZE_MB })}</p>}
               {job.status === 'error' && <div className="error-note">{job.error}</div>}
             </div>
           )}
@@ -150,24 +151,24 @@ function Result({ onAgain }: { onAgain: () => void }) {
   return (
     <div className="card card-pad stack">
       <div className="row">
-        <button className="play-btn" style={{ width: 64, height: 64 }} onClick={() => playClip(key, blob, { title: meta.title })} aria-label={playing ? 'Pause' : 'Play'}>
+        <button className="play-btn" style={{ width: 64, height: 64 }} onClick={() => playClip(key, blob, { title: meta.title })} aria-label={playing ? t('Pause') : t('Play')}>
           {playing ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" style={{ marginLeft: 3 }} />}
         </button>
         <div className="grow">
           <div className="clip-title">{meta.title}</div>
-          <div className="clip-meta"><span>{formatDuration(meta.duration)}</span><span>{meta.format.toUpperCase()}</span><span>{formatBytes(meta.size)}</span><span>Saved to Library</span></div>
+          <div className="clip-meta"><span>{formatDuration(meta.duration)}</span><span>{meta.format.toUpperCase()}</span><span>{formatBytes(meta.size)}</span><span>{t('Saved to Library')}</span></div>
         </div>
       </div>
       <div className="clip-bar" style={{ height: 6 }} onClick={(ev) => { const r = (ev.currentTarget as HTMLElement).getBoundingClientRect(); if (cp.key === key) seekClip((ev.clientX - r.left) / r.width) }}>
         <i style={{ width: `${progress * 100}%` }} />
       </div>
       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <button className="btn primary grow" onClick={() => downloadBlob(blob, filename)}><ArrowDownToLine size={18} /> Download {meta.format.toUpperCase()}</button>
-        <button className="btn" onClick={share}><Share2 size={18} /> Share</button>
+        <button className="btn primary grow" onClick={() => downloadBlob(blob, filename)}><ArrowDownToLine size={18} /> {t('Download {f}', { f: meta.format.toUpperCase() })}</button>
+        <button className="btn" onClick={share}><Share2 size={18} /> {t('Share')}</button>
       </div>
       <div className="row" style={{ gap: 8 }}>
-        <button className="btn ghost grow" onClick={() => navigate('library')}><Library size={18} /> Library</button>
-        <button className="btn ghost grow" onClick={onAgain}><RotateCcw size={18} /> New</button>
+        <button className="btn ghost grow" onClick={() => navigate('library')}><Library size={18} /> {t('Library')}</button>
+        <button className="btn ghost grow" onClick={onAgain}><RotateCcw size={18} /> {t('New')}</button>
       </div>
     </div>
   )

@@ -1,3 +1,22 @@
+## 1.4.104 — The app speaks Spanish (Oscar: a Language setting, the whole app translated, nothing working touched)
+
+- **Settings → Language**: a new card with **English | Español**. One tap and every
+  word of the interface changes — pages, sheets, menus, toasts, confirmations.
+- **The whole web app** runs through one small dictionary (`src/lib/i18n.ts`,
+  keys are the English strings; `src/lib/es.ts` holds the Spanish). Oscar's rule
+  governed every line: **the translation fits the design, never the reverse** —
+  where a faithful rendering ran long, the Spanish got shorter (`Playback` →
+  `Escucha`, `Storage` → `Espacio`, the reader hint trimmed) and no layout moved.
+  User content is never translated: book titles, his texts, voice names stay his.
+- **The shell follows**: the page's push now carries `lang`; BubbleService
+  learns it from the push (companion `uiLang`, set by the `nowJson` setter) and
+  the panel, hint cards, drag targets, notification, receipts and toasts speak
+  the chosen language. MainActivity's toasts and error page too.
+- New setting `uiLang` ('en' | 'es', default 'en') in `logos.settings.v1`;
+  `<html lang>` follows it. Nothing else changed: no engine, player, library
+  or bubble behaviour was touched — only the words.
+- The About credits (third-party license notices) stay as written.
+
 ## 1.4.103 — The amber walks the panel, and the window keeps it centred
 
 Oscar, watching the 1.4.102 panel read this very chat back to him:

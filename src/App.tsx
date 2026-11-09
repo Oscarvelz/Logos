@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect } from 'react'
 import { useRoute } from './lib/router.ts'
 import { useStore } from './lib/store.ts'
 import { settings, applyTheme } from './lib/settings.ts'
+import { t, applyUiLang } from './lib/i18n.ts'
 import { listen, installMediaSession } from './player/listen.ts'
 import { initBubble } from './lib/bubble.ts'
 import { initResumeTracking } from './lib/resume.ts'
@@ -26,6 +27,7 @@ export default function App() {
   const s = useStore(listen)
 
   useEffect(() => { applyTheme(st.theme) }, [st.theme])
+  useEffect(() => { applyUiLang() }, [st.uiLang])
   useEffect(() => {
     if (st.theme !== 'system') return
     const mq = matchMedia('(prefers-color-scheme: dark)')
@@ -82,7 +84,7 @@ export default function App() {
         <SideRail />
         <div className="main">
           <header className="topbar">
-            <div className="brand"><BubbleMark /><a className="brand-name-link" href="#/listen" aria-label="Logos home"><span className="brand-name">Logos</span></a></div>
+            <div className="brand"><BubbleMark /><a className="brand-name-link" href="#/listen" aria-label={t('Logos home')}><span className="brand-name">Logos</span></a></div>
             <div className="spacer" />
             <StatusPill />
           </header>

@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { createStore, useStore } from '../lib/store.ts'
 import type { Voice } from '../lib/voices.ts'
+import { t } from '../lib/i18n.ts'
 
 // ── Toasts ──
 type Toast = { id: number; text: string; action?: { label: string; run: () => void } }
@@ -71,8 +72,8 @@ export function ConfirmHost() {
     <Sheet open onClose={() => done(false)} title={req.title}>
       {req.body && <p className="keepask-body">{req.body}</p>}
       <div className="row" style={{ gap: 8 }}>
-        <button className="btn ghost grow" onClick={() => done(false)}>Cancel</button>
-        <button className="btn danger grow" onClick={() => done(true)}><Trash2 size={16} /> Delete</button>
+        <button className="btn ghost grow" onClick={() => done(false)}>{t('Cancel')}</button>
+        <button className="btn danger grow" onClick={() => done(true)}><Trash2 size={16} /> {t('Delete')}</button>
       </div>
     </Sheet>
   )

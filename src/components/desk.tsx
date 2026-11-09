@@ -10,6 +10,7 @@ import { voiceById } from '../lib/voices.ts'
 import { listen, loadText, refreshVoices, seek } from '../player/listen.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { BookCover } from './bookcover.tsx'
+import { t } from '../lib/i18n.ts'
 
 /** Tablet-only column under the player: the book in progress, quick voices and recent items. */
 export function TabletDesk({ onOpen }: { onOpen: (text: string) => void }) {
@@ -29,9 +30,9 @@ export function TabletDesk({ onOpen }: { onOpen: (text: string) => void }) {
         <a className="card desk-book" href={`#/book/${book.id}`}>
           <BookCover meta={book} small />
           <div className="grow" style={{ minWidth: 0 }}>
-            <div className="desk-kicker"><BookOpen size={13} /> {book.progress > 0.002 ? 'Continue reading' : 'Start reading'}</div>
+            <div className="desk-kicker"><BookOpen size={13} /> {book.progress > 0.002 ? t('Continue reading') : t('Start reading')}</div>
             <div className="desk-book-t">{book.title}</div>
-            <div className="desk-sub">{book.author ? `${book.author} · ` : ''}{Math.round(book.progress * 100)}% read</div>
+            <div className="desk-sub">{book.author ? `${book.author} · ` : ''}{t('{n}% read', { n: Math.round(book.progress * 100) })}</div>
             <div className="desk-prog"><i style={{ width: `${Math.max(2, Math.round(book.progress * 100))}%` }} /></div>
           </div>
         </a>
@@ -39,7 +40,7 @@ export function TabletDesk({ onOpen }: { onOpen: (text: string) => void }) {
 
       {favs.length > 0 && (
         <div className="card desk-voices">
-          <div className="desk-kicker"><Star size={13} /> Favorite voices</div>
+          <div className="desk-kicker"><Star size={13} /> {t('Favorite voices')}</div>
           <div className="desk-vrow">
             {favs.map((v) => (
               <button key={v!.id} className={`chip ${st.voiceOverride === v!.id ? 'accent' : ''}`} onClick={() => { settings.set({ voiceOverride: st.voiceOverride === v!.id ? null : v!.id }); refreshVoices() }}>
@@ -52,7 +53,7 @@ export function TabletDesk({ onOpen }: { onOpen: (text: string) => void }) {
 
       {recent.length > 0 && (
         <div className="card desk-recent">
-          <div className="desk-kicker"><AudioLines size={13} /> Recent in Library</div>
+          <div className="desk-kicker"><AudioLines size={13} /> {t('Recent in Library')}</div>
           <div className="desk-list">
             {recent.map((c) => (
               <button key={c.id} className="desk-item" onClick={() => open(c)}>
@@ -90,20 +91,20 @@ export function TextMap({ text, reading }: { text: string; reading: boolean }) {
   return (
     <div className="desk desk-map">
       <div className="card desk-stats">
-        <div className="desk-kicker"><Gauge size={13} /> This text</div>
+        <div className="desk-kicker"><Gauge size={13} /> {t('This text')}</div>
         {src.trim() ? (
           <div className="ds-grid">
-            <div><b>{formatDuration(estimateSeconds(src, st.listenSpeed))}</b><span>listening</span></div>
-            <div><b>{words.toLocaleString()}</b><span>words</span></div>
-            <div><b>{sentences.toLocaleString()}</b><span>sentences</span></div>
-            <div><b>{paras.length.toLocaleString()}</b><span>paragraphs</span></div>
-            <div><b>{lang === 'es' ? 'Español' : 'English'}</b><span>language</span></div>
-            <div><b>{reading ? `${Math.round((s.current / Math.max(1, s.segments.length)) * 100)}%` : `${st.listenSpeed.toFixed(2)}×`}</b><span>{reading ? 'heard' : 'speed'}</span></div>
+            <div><b>{formatDuration(estimateSeconds(src, st.listenSpeed))}</b><span>{t('listening')}</span></div>
+            <div><b>{words.toLocaleString()}</b><span>{t('words')}</span></div>
+            <div><b>{sentences.toLocaleString()}</b><span>{t('sentences')}</span></div>
+            <div><b>{paras.length.toLocaleString()}</b><span>{t('paragraphs')}</span></div>
+            <div><b>{lang === 'es' ? 'Español' : t('English')}</b><span>{t('language')}</span></div>
+            <div><b>{reading ? `${Math.round((s.current / Math.max(1, s.segments.length)) * 100)}%` : `${st.listenSpeed.toFixed(2)}×`}</b><span>{reading ? t('heard') : t('speed')}</span></div>
           </div>
-        ) : <p className="desk-empty">Paste or share a text and its length, language and listening time show up here.</p>}
+        ) : <p className="desk-empty">{t('Paste or share a text and its length, language and listening time show up here.')}</p>}
       </div>
       <div className="card desk-outline">
-        <div className="desk-kicker"><ListTree size={13} /> Paragraphs</div>
+        <div className="desk-kicker"><ListTree size={13} /> {t('Paragraphs')}</div>
         {reading && map.length ? (
           <div className="desk-list" ref={listRef}>
             {map.map((m, i) => (
@@ -112,7 +113,7 @@ export function TextMap({ text, reading }: { text: string; reading: boolean }) {
               </button>
             ))}
           </div>
-        ) : <p className="desk-empty">Press play and every paragraph appears here. Tap one to jump straight to it.</p>}
+        ) : <p className="desk-empty">{t('Press play and every paragraph appears here. Tap one to jump straight to it.')}</p>}
       </div>
     </div>
   )
@@ -132,7 +133,7 @@ export function RecordingsPanel() {
   return (
     <div className="desk desk-recs">
       <div className="card desk-recent">
-        <div className="desk-kicker"><AudioLines size={13} /> Your recordings</div>
+        <div className="desk-kicker"><AudioLines size={13} /> {t('Your recordings')}</div>
         {audio.length ? (
           <div className="desk-list">
             {audio.map((c) => {
@@ -146,7 +147,7 @@ export function RecordingsPanel() {
               )
             })}
           </div>
-        ) : <p className="desk-empty">Every audio you generate lands here, ready to play.</p>}
+        ) : <p className="desk-empty">{t('Every audio you generate lands here, ready to play.')}</p>}
       </div>
     </div>
   )

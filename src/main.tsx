@@ -4,10 +4,12 @@ import './styles.css'
 import App from './App.tsx'
 import { consumeShareTarget } from './lib/drafts.ts'
 import { applyTheme, settings } from './lib/settings.ts'
+import { applyUiLang } from './lib/i18n.ts'
 import { trackPlayback } from './lib/library.ts'
 import { startKeeping } from './engine/keep.ts'
 
 applyTheme(settings.get().theme)
+applyUiLang()
 consumeShareTarget()
 trackPlayback()
 startKeeping()

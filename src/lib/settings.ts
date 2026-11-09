@@ -5,6 +5,8 @@ export type Theme = 'dark' | 'light' | 'system'
 
 export type Settings = {
   theme: Theme
+  /** The app's own language — every word of the interface. */
+  uiLang: 'en' | 'es'
   listenSpeed: number
   exportSpeed: number
   defaultVoice: Record<Lang, string>
@@ -39,6 +41,7 @@ export const isOriginalFavorite = (id: string) => ORIGINAL_FAVORITES.includes(id
 
 const DEFAULTS: Settings = {
   theme: 'dark',
+  uiLang: 'en',
   listenSpeed: 1,
   exportSpeed: 1,
   defaultVoice: { en: 'ph_NbpkqMVS3CJeq2j8', es: 'ph_b6FvJAiokjdqIti4' },
