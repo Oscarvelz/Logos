@@ -1,3 +1,21 @@
+## 1.4.99 — The gray screen was my transparency; the dark ground returns
+
+Oscar's episode, in his words: the button dead for a few seconds,
+then a GRAY screen he does not like, stuck for ~12 seconds, then
+everything back. One story explains all three beats: Samsung had
+killed Logos entirely, the first touches found no living service,
+and the rescue's cold revive spent those seconds with the system's
+starting window on screen. Since 1.4.91 that window is transparent
+with its preview disabled — and a preview-less transparent window
+is exactly what Samsung paints system GRAY while an app cold-boots.
+The transparency (window background, splash background, disabled
+preview) is reverted: a cold revive now wears Logos' own dark
+ground, like the app opening, never a gray void. The zero-animation
+starts and the quicker retire from 1.4.91 stay. Honest residue: a
+revive from a full kill still takes the seconds a cold boot takes;
+the lever against the kills themselves is his (Logos → Battery →
+Unrestricted).
+
 ## 1.4.98 — A shallower ghost on tablets
 
 Oscar: the tablet's screen is longer, so the bubble's ghost rest
