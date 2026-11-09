@@ -1,3 +1,13 @@
+## 1.4.101 — On the phone, the reader's four buttons shrink
+
+Oscar's screenshot: on the phone the reader head's four buttons
+(A−, A+, Save, Edit) ate so much width that 'Tap a word to start
+there.' wrapped to two lines. Phone only (max-width 839px): the
+pills drop to 24px with tighter padding and gaps, and Save / Edit
+ride as their icons alone — the words return on wider screens.
+The hint now sits on one line. The tablet is untouched, as he
+allowed ('en la tableta quizá no haga falta'). Web only.
+
 ## 1.4.100 — The Listen reader's text grows and shrinks
 
 Oscar's ask: make the Listen reading text bigger or smaller, on

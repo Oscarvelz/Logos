@@ -379,8 +379,8 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
         <div className="rh-actions">
           <button className="rh-btn" aria-label="Smaller text" disabled={st.readerScale <= READER_SCALES[0]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, -1) })}><span style={{ fontSize: 10, fontWeight: 700 }}>A</span><span aria-hidden="true">−</span></button>
           <button className="rh-btn" aria-label="Bigger text" disabled={st.readerScale >= READER_SCALES[READER_SCALES.length - 1]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, 1) })}><span style={{ fontSize: 15, fontWeight: 700 }}>A</span><span aria-hidden="true">+</span></button>
-          <button className="rh-btn" onClick={onKeep} aria-label="Save to Library"><BookmarkPlus size={13} /> Save</button>
-          <button className="rh-btn" onClick={onEdit}><PenLine size={13} /> Edit</button>
+          <button className="rh-btn" onClick={onKeep} aria-label="Save to Library"><BookmarkPlus size={13} /><span className="rh-label">Save</span></button>
+          <button className="rh-btn" onClick={onEdit}><PenLine size={13} /><span className="rh-label">Edit</span></button>
         </div>
       </div>
       <div className="reader" ref={box}>{body}</div>
