@@ -1,3 +1,15 @@
+## 1.4.106 — A window, in both directions (Oscar: 'redimensionarlo en ambas direcciones')
+
+- The panel reader's two axes are now **independent**, like a window:
+  pull the grip sideways and the reader widens without growing tall;
+  pull it up or down and it grows tall without widening; drag diagonally
+  for both at once. The letters follow the average of the two axes.
+- Width and height persist separately per device kind (`rscaleW*` /
+  `rscaleH*`); a size saved under 1.4.105 seeds both axes on first read,
+  so nobody's chosen size is lost.
+- Shell only, plus the version. Everything else — the seat that grazes
+  the bubble, the grip's corner, the amber walk — untouched.
+
 ## 1.4.105 — The panel's reader stretches (Oscar's idea, approved the night 1.4.104 shipped)
 
 - **Drag the free corner**: two small gold ticks hug the corner of the panel

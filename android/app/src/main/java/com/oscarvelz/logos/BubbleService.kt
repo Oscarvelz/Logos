@@ -452,7 +452,7 @@ class BubbleService : Service() {
         val base = if (wordsOn && isTablet()) dp(360) else dp(302)
         if (!wordsOn) return base
         val sw2 = resources.displayMetrics.widthPixels
-        return (base * curScale()).toInt().coerceIn(dp(240), (sw2 - dp(20)).coerceAtLeast(dp(240)))
+        return (base * curScaleW()).toInt().coerceIn(dp(240), (sw2 - dp(20)).coerceAtLeast(dp(240)))
     }
 
     // THE STRETCHABLE READER (1.4.105, Oscar: 'redimensionar el tamaño del
@@ -460,14 +460,27 @@ class BubbleService : Service() {
     // more sentences in view, letters growing with the window — while the
     // corner that grazes the bubble never moves. The size is remembered
     // per device kind (phone / tablet), like the bubble's own spot.
-    private var panelScale = -1f
-    private fun scaleKey() = if (isTablet()) "rscaleTab" else "rscalePhone"
-    private fun curScale(): Float = if (panelScale > 0) panelScale else prefs(this).getFloat(scaleKey(), 1f)
-    private fun wordsHeight() = ((if (isTablet()) dp(106) else dp(60)) * curScale()).toInt()
-    private fun wordsTextSize() = (if (isTablet()) 15.5f else 14f) * (0.7f + 0.3f * curScale())
+    // A WINDOW, IN BOTH DIRECTIONS (1.4.106, Oscar: 'redimensionarlo en
+    // ambas direcciones'): width and height are independent axes — pull
+    // sideways and the reader widens without growing tall, pull up or
+    // down and it grows tall without widening, diagonally for both. The
+    // letters follow the average of the two. The 1.4.105 single size
+    // seeds both axes the first time.
+    private var panelScaleW = -1f
+    private var panelScaleH = -1f
+    private fun scaleKeyW() = if (isTablet()) "rscaleWTab" else "rscaleWPhone"
+    private fun scaleKeyH() = if (isTablet()) "rscaleHTab" else "rscaleHPhone"
+    private fun savedScale(key: String): Float {
+        val pr = prefs(this)
+        if (pr.contains(key)) return pr.getFloat(key, 1f)
+        return pr.getFloat(if (isTablet()) "rscaleTab" else "rscalePhone", 1f)
+    }
+    private fun curScaleW(): Float = if (panelScaleW > 0) panelScaleW else savedScale(scaleKeyW())
+    private fun curScaleH(): Float = if (panelScaleH > 0) panelScaleH else savedScale(scaleKeyH())
+    private fun wordsHeight() = ((if (isTablet()) dp(106) else dp(60)) * curScaleH()).toInt()
+    private fun wordsTextSize() = (if (isTablet()) 15.5f else 14f) * (0.7f + 0.3f * (curScaleW() + curScaleH()) / 2f)
 
-    private fun applyReaderScale(v: Float, final: Boolean) {
-        panelScale = v
+    private fun applyReaderScale(final: Boolean) {
         val p = panelParams ?: return
         p.width = panelWidth()
         wordsV?.let { wv ->
@@ -480,7 +493,7 @@ class BubbleService : Service() {
             st.post { positionPanel() }
         }
         if (final) {
-            prefs(this).edit().putFloat(scaleKey(), v).apply()
+            prefs(this).edit().putFloat(scaleKeyW(), curScaleW()).putFloat(scaleKeyH(), curScaleH()).apply()
             lastWordsKey = ""; lastWi = -2
             refreshPanel()
         }
@@ -1104,22 +1117,25 @@ class BubbleService : Service() {
         grip.contentDescription = s("Resize the reader", "Cambiar el tamaño del lector")
         grip.visibility = View.GONE
         grip.layoutParams = FrameLayout.LayoutParams(dp(30), dp(30), Gravity.BOTTOM or Gravity.END)
-        var dragX0 = 0f; var dragY0 = 0f; var dragS0 = 1f
+        var dragX0 = 0f; var dragY0 = 0f; var dragW0 = 1f; var dragH0 = 1f
         grip.setOnTouchListener { v, e ->
             when (e.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    dragX0 = e.rawX; dragY0 = e.rawY; dragS0 = curScale()
+                    dragX0 = e.rawX; dragY0 = e.rawY; dragW0 = curScaleW(); dragH0 = curScaleH()
                     v.parent?.requestDisallowInterceptTouchEvent(true)
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val gx = if (gripFreeR) e.rawX - dragX0 else -(e.rawX - dragX0)
                     val gy = if (gripFreeB) e.rawY - dragY0 else -(e.rawY - dragY0)
-                    val ns = (dragS0 + (gx + gy) / 2f / dp(240)).coerceIn(0.75f, 1.9f)
-                    if (kotlin.math.abs(ns - curScale()) > 0.005f) applyReaderScale(ns, false)
+                    val nsW = (dragW0 + gx / dp(240)).coerceIn(0.75f, 1.9f)
+                    val nsH = (dragH0 + gy / dp(240)).coerceIn(0.75f, 1.9f)
+                    if (kotlin.math.abs(nsW - curScaleW()) > 0.005f || kotlin.math.abs(nsH - curScaleH()) > 0.005f) {
+                        panelScaleW = nsW; panelScaleH = nsH; applyReaderScale(false)
+                    }
                     true
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { applyReaderScale(curScale(), true); true }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { applyReaderScale(true); true }
                 else -> false
             }
         }
