@@ -252,6 +252,7 @@ class MainActivity : Activity() {
         // playback with it. To the back, the activity merely stops:
         // page alive, session alive, his app in front again.
         moveTaskToBack(true)
+        overridePendingTransition(0, 0)
         val seq = ghostSeq
         ghostHandler.postDelayed({ if (seq == ghostSeq && !ghost) unGhost() }, 350)
     }
@@ -267,7 +268,7 @@ class MainActivity : Activity() {
         if (playing || (!busy && System.currentTimeMillis() - ghostBegan > 3_000)) {
             ghostLeaving = true
             ghostHandler.removeCallbacks(ghostLeave)
-            ghostHandler.postDelayed(ghostLeave, 900)
+            ghostHandler.postDelayed(ghostLeave, 400)
         }
     }
 
