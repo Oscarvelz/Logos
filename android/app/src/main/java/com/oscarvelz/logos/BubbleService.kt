@@ -1003,9 +1003,13 @@ class BubbleService : Service() {
         // A short, smooth birth: the panel grows out of the λ's own position.
         val bp2 = bubbleParams
         if (bp2 != null) stage.pivotX = (bp2.x + dp(29) - p.x).coerceIn(0, dp(302)).toFloat()
-        stage.pivotY = 0f
+        // It grows out of the λ: from its top edge when the panel hangs
+        // below the bubble, from its bottom edge when it stands above.
+        stage.pivotY = if (bp2 != null && p.y < bp2.y) dp(320).toFloat() else 0f
         stage.scaleX = 0.86f; stage.scaleY = 0.86f; stage.alpha = 0f
         stage.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(190).setInterpolator(DecelerateInterpolator()).start()
+        // Once laid out, its real height gets the final word on the spot.
+        stage.post { positionPanel() }
         refreshPanel()
         // The tap that opened the panel is the moment Android allows: with the
         // lever on, what was just copied takes the stage.
@@ -1017,17 +1021,26 @@ class BubbleService : Service() {
         handler.postDelayed({ if (deliveries != deliveriesBefore) cheer() }, 1900)
     }
 
+    // THE PANEL HUGS ITS BUBBLE (Oscar): it opens right beside the λ —
+    // centred on it horizontally, hanging below it by preference —
+    // instead of travelling to a screen edge. Only the screen's own
+    // edges push it, and only as far as they must.
     private fun positionPanel() {
         val p = panelParams ?: return
         val bp = bubbleParams ?: return
         val sw2 = resources.displayMetrics.widthPixels
         val sh2 = resources.displayMetrics.heightPixels
         val pw = dp(302)
-        p.x = when {
-            bp.x + dp(29) < sw2 / 2 -> dp(10)
-            else -> (sw2 - pw - dp(10)).coerceAtLeast(dp(10))
+        val margin = dp(10)
+        p.x = (bp.x + dp(29) - pw / 2).coerceIn(margin, (sw2 - pw - margin).coerceAtLeast(margin))
+        val ph = panel?.height?.takeIf { it > 0 } ?: dp(320)
+        val below = bp.y + dp(66)
+        val above = bp.y - ph - dp(8)
+        p.y = when {
+            below + ph <= sh2 - margin -> below
+            above >= margin -> above
+            else -> below.coerceAtMost((sh2 - ph - margin).coerceAtLeast(margin))
         }
-        p.y = (bp.y + dp(64)).coerceAtMost(sh2 - dp(330))
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
 
