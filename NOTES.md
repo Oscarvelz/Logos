@@ -1,4 +1,16 @@
-## 1.4.112 — Hark's backstage, made reliable + the processing is saved
+## 1.4.113 — No cropped buttons (shell)
+
+Oscar's screenshot: with the reader dragged to his preferred width,
+the panel's − and + keys hung off both edges, cut in half. Cause: the
+transport row was born at a fixed 262 dp (keys 38/46/54/46/38 + 10 dp
+gaps) — an exact fit only for the default 302 dp panel — while the
+reader can be dragged down to 240 dp. Fix (`fitControls()`, called at
+panel build and on every reader resize): the row is seated from the
+panel's real inner width — gaps give first (10 → 6 → 4 dp), then the
+keys scale together, the toggle always the largest. At the narrowest
+panel the row still fits exactly; at default width nothing changes.
+
+## ## 1.4.112 — Hark's backstage, made reliable + the processing is saved
 
 Oscar, twice over: Hark's backstage (below) is the right idea and it
 works — sometimes. When it doesn't, the bubble still can't load the
