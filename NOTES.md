@@ -1,3 +1,12 @@
+## 1.4.98 — A shallower ghost on tablets
+
+Oscar: the tablet's screen is longer, so the bubble's ghost rest
+(the fade to 15% after four untouched seconds) makes the floating
+icon hard to find there. On tablets only, the rest now fades to
+45% — visibly resting, but findable at a glance across the big
+screen. The phone keeps its 15% whisper; the four-second clock and
+the instant wake on touch are unchanged.
+
 ## 1.4.97 — A shorter graze, and a larger tablet bubble
 
 Oscar: 'casi' — the gap between the button and the rectangle was
