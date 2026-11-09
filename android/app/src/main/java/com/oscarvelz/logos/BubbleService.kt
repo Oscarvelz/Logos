@@ -255,11 +255,14 @@ class BubbleService : Service() {
         }
     }
 
-    // The ghost rest: four seconds untouched and the bubble fades to a whisper.
+    // The ghost rest: four seconds untouched and the bubble fades to a
+    // whisper. On tablets the whisper is shallower (Oscar): a longer
+    // screen makes a 15% ghost genuinely hard to find, so the tablet's
+    // rest keeps 45% of the bubble — still resting, still findable.
     private val fadeRun = Runnable {
         val b = bubble ?: return@Runnable
         if (panel != null || dragTargets.isNotEmpty()) return@Runnable
-        b.animate().alpha(0.15f).setDuration(700).start()
+        b.animate().alpha(if (isTablet()) 0.45f else 0.15f).setDuration(700).start()
     }
 
     private fun invite(times: Int = 3, force: Boolean = false) {
