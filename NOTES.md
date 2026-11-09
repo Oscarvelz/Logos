@@ -1,3 +1,20 @@
+## 1.4.103 — The amber walks the panel, and the window keeps it centred
+
+Oscar, watching the 1.4.102 panel read this very chat back to him:
+let it advance word by word with the amber, like the app — and
+keep the reading centred, because off-centre the text hides.
+The push now carries the word index (wi), timed from the
+sentence's own audio envelope — the reader's method, word-lead
+and all — with a character-dealt fallback when no envelope
+exists; the playing cadence tightens to 120 ms to feed it.
+In the panel, the sounding sentence is composed word by word:
+said in full ink, the spoken word dark on gold, the words to
+come in muted. The zone is now a fixed-height window (106dp
+tablet, 60dp phone) the words scroll inside with faded edges,
+and every word change glides the window so the amber word sits
+at its centre. The panel no longer breathes in height as
+sentences change — the window's size is steady; the text moves.
+
 ## 1.4.102 — The panel reads along
 
 Oscar's idea, approved with 'Sorpréndeme': the bubble's panel now

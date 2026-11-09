@@ -748,6 +748,8 @@ class BubbleService : Service() {
     private var wordsV: TextView? = null
     private var wordsOn = true
     private var lastWordsKey = ""
+    private var lastWi = -2
+    private var wordsScrollAnim: ObjectAnimator? = null
     private var lastFocusTry = 0L
 
     private val lightPal = mapOf(
@@ -881,10 +883,12 @@ class BubbleService : Service() {
             textSize = if (isTablet()) 15.5f else 14f
             typeface = Typeface.SERIF
             setLineSpacing(0f, 1.3f)
-            maxLines = if (isTablet()) 7 else 3
-            ellipsize = android.text.TextUtils.TruncateAt.END
+            movementMethod = android.text.method.ScrollingMovementMethod.getInstance()
+            isVerticalScrollBarEnabled = false
+            setFadingEdgeLength(dp(16))
+            setVerticalFadingEdgeEnabled(true)
             visibility = View.GONE
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (isTablet()) dp(106) else dp(60)).apply { topMargin = dp(10) }
         }
         wordsV = wv
         card.addView(wv)
@@ -1196,7 +1200,7 @@ class BubbleService : Service() {
     private fun collapsePanel(now: Boolean = false) {
         dismissSaveHint()
         val v = panel
-        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; lastWordsKey = ""
+        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null
         if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
         if (!now && deliveries != lastDeliverySeen) {
             lastDeliverySeen = deliveries
@@ -1208,33 +1212,76 @@ class BubbleService : Service() {
             .withEndAction { runCatching { wm?.removeView(v) } }.start()
     }
 
-    /** The words zone: compose prev · current · next with the neighbours
-     *  dimmed, settle the change with a breath of a fade, and let the panel
-     *  re-seat on its corner now that its height has breathed. */
+    /** The words zone: the neighbours dimmed, the sounding sentence alive —
+     *  its said words in full ink, the word being spoken wearing the amber,
+     *  the words still to come in muted — and the little window keeps that
+     *  amber word centred, the way the reader does, so the reading is
+     *  never out of sight while it sounds. */
     private fun updateWords(j: JSONObject?) {
         val wv = wordsV ?: return
         val tc = j?.optString("tc")?.trim().orEmpty()
         if (!wordsOn || tc.isEmpty()) {
-            if (wv.visibility != View.GONE) { wv.visibility = View.GONE; panel?.post { positionPanel() } }
+            if (wv.visibility != View.GONE) { wv.visibility = View.GONE; wordsScrollAnim?.cancel(); panel?.post { positionPanel() } }
+            lastWordsKey = ""; lastWi = -2
             return
         }
+        val tp = j?.optString("tp")?.trim().orEmpty()
+        val tn = j?.optString("tn")?.trim().orEmpty()
+        val sentKey = tp + "" + tc + "" + tn
+        val wi = j?.optInt("wi", -1) ?: -1
+        val sentChanged = sentKey != lastWordsKey
+        if (!sentChanged && wi == lastWi && wv.visibility == View.VISIBLE) return
+        lastWordsKey = sentKey; lastWi = wi
         val c = pal()
-        val ink = c["ink"]!!; val muted = c["muted"]!!
+        val ink = c["ink"]!!; val muted = c["muted"]!!; val goldC = c["gold"]!!
+        val onGold = Color.rgb(26, 20, 12)
         val sb = SpannableStringBuilder()
-        if (isTablet()) {
-            val tp = j?.optString("tp")?.trim().orEmpty()
-            if (tp.isNotEmpty()) { val st = sb.length; sb.append(tp).append(" "); sb.setSpan(ForegroundColorSpan(muted), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
-            val st = sb.length; sb.append(tc); sb.setSpan(ForegroundColorSpan(ink), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            val tn = j?.optString("tn")?.trim().orEmpty()
-            if (tn.isNotEmpty()) { val s2 = sb.length; sb.append(" ").append(tn); sb.setSpan(ForegroundColorSpan(muted), s2, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
-        } else sb.append(tc)
+        var wordOff = -1
+        if (isTablet() && tp.isNotEmpty()) { val st = sb.length; sb.append(tp).append(" "); sb.setSpan(ForegroundColorSpan(muted), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        val words = tc.split(' ')
+        var first = true
+        for ((i, w) in words.withIndex()) {
+            if (!first) sb.append(" ")
+            first = false
+            val st = sb.length
+            sb.append(w)
+            when {
+                wi < 0 || i < wi -> sb.setSpan(ForegroundColorSpan(ink), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                i == wi -> {
+                    sb.setSpan(ForegroundColorSpan(onGold), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    sb.setSpan(android.text.style.BackgroundColorSpan(goldC), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    wordOff = st
+                }
+                else -> sb.setSpan(ForegroundColorSpan(muted), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+        if (isTablet() && tn.isNotEmpty()) { val s2 = sb.length; sb.append(" ").append(tn); sb.setSpan(ForegroundColorSpan(muted), s2, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
         val wasGone = wv.visibility != View.VISIBLE
         wv.text = sb
         wv.visibility = View.VISIBLE
-        wv.animate().cancel()
-        wv.alpha = if (wasGone) 0f else 0.45f
-        wv.animate().alpha(1f).setDuration(if (wasGone) 240 else 180).start()
-        panel?.post { positionPanel() }
+        if (sentChanged) {
+            wv.animate().cancel()
+            wv.alpha = if (wasGone) 0f else 0.45f
+            wv.animate().alpha(1f).setDuration(if (wasGone) 240 else 180).start()
+        }
+        val off = wordOff
+        wv.post { if (off >= 0) centerWords(off) else if (sentChanged) centerWords(sb.length / 2) }
+    }
+
+    /** Keep the amber word in the middle of the little window. */
+    private fun centerWords(offset: Int) {
+        val wv = wordsV ?: return
+        val lay = wv.layout ?: return
+        if (offset < 0 || offset > (wv.text?.length ?: 0)) return
+        val line = lay.getLineForOffset(offset)
+        val top = lay.getLineTop(line); val bottom = lay.getLineBottom(line)
+        val maxY = maxOf(0, lay.height - wv.height)
+        val target = (top - (wv.height - (bottom - top)) / 2).coerceIn(0, maxY)
+        wordsScrollAnim?.cancel()
+        if (kotlin.math.abs(target - wv.scrollY) < 2) return
+        wordsScrollAnim = ObjectAnimator.ofInt(wv, "scrollY", wv.scrollY, target).apply {
+            duration = 220; interpolator = DecelerateInterpolator(); start()
+        }
     }
 
     private fun refreshPanel() {
@@ -1260,8 +1307,7 @@ class BubbleService : Service() {
                 }
             }
             wordsOn = j?.optBoolean("words", true) ?: true
-            val wKey = if (wordsOn) (j?.optString("tc") ?: "") + "" + (j?.optString("tp") ?: "") + "" + (j?.optString("tn") ?: "") else ""
-            if (wKey != lastWordsKey) { lastWordsKey = wKey; updateWords(j) }
+            updateWords(j)
             val h = halo
             if (playing && h != null) {
                 if (haloAnim == null) {
