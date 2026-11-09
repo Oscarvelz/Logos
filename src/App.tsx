@@ -6,6 +6,7 @@ import { t, applyUiLang } from './lib/i18n.ts'
 import { listen, installMediaSession } from './player/listen.ts'
 import { initBubble } from './lib/bubble.ts'
 import { initResumeTracking } from './lib/resume.ts'
+import { navPin } from './lib/navpin.ts'
 import { isModelCached, ensureModel, lastLoadCrashed, removeLegacyEngine } from './engine/engine.ts'
 import { refreshLibrary } from './lib/library.ts'
 import { BottomNav, SideRail, StatusPill, MiniPlayer, BubbleMark } from './components/chrome.tsx'
@@ -53,7 +54,11 @@ export default function App() {
   // the player glides into its space. Hiding waits a beat so a quick play/pause tap
   // never starts an animation; showing is immediate. Ended, errors (playing goes
   // false) and leaving Listen all bring the nav back.
-  const immersive = route === 'listen' && s.playing && !s.error
+  const pin = useStore(navPin)
+  const immersive = route === 'listen' && s.playing && !s.error && !pin.pinned
+  // The pin (1.4.115) is a per-playing-session courtesy: when the audio
+  // stops, it clears, so the next play starts immersive as designed.
+  useEffect(() => { if (!s.playing && navPin.get().pinned) navPin.set({ pinned: false }) }, [s.playing])
   useEffect(() => {
     const root = document.documentElement
     if (!immersive) { delete root.dataset.immersive; return }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
-import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, House, Languages, Library as LibraryIcon, Loader2, Moon, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
+import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings, READER_SCALES, stepReaderScale } from '../lib/settings.ts'
@@ -10,7 +10,7 @@ import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate,
 import { markAndToast, textKey } from '../lib/marks.ts'
 import { loadSessionResume } from '../lib/resume.ts'
 import { ContinueRow } from '../components/continue.tsx'
-import { desktopSupported, goToDesktop } from '../lib/bubble.ts'
+import { navPin } from '../lib/navpin.ts'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
 import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
@@ -32,6 +32,7 @@ const SPEEDS = RATE_STEPS
 export function ListenPage() {
   const d = useStore(drafts)
   const s = useStore(listen)
+  const pin = useStore(navPin)
   const st = useStore(settings)
   const e = useStore(engine)
   const [editing, setEditing] = useState(() => !listen.get().active)
@@ -201,12 +202,13 @@ export function ListenPage() {
           </div>
 
           <div className="transport">
-            {/* 1.4.114 (Oscar): the empty seat at the player's left becomes
-                the desktop key — the app steps aside and the home screen
-                emerges, the reading never stopping. In a plain browser
-                there is no desktop to emerge, so the seat stays empty. */}
-            {desktopSupported()
-              ? <button className="icon-btn" onClick={goToDesktop} aria-label={t('Show the home screen')} title={t('Show the home screen')}><House size={20} /></button>
+            {/* 1.4.115 (Oscar): the seat at the player's left is the
+                bottom-bar key. While the audio plays, the app is
+                immersive and the bar below is gone — this key pins the
+                bar back (the player glides up) without stopping the
+                reading; tapped again, the bar slides away once more. */}
+            {s.playing
+              ? <button className="icon-btn" onClick={() => navPin.set({ pinned: !pin.pinned })} aria-label={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')} title={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')}>{pin.pinned ? <PanelBottomClose size={20} /> : <PanelBottomOpen size={20} />}</button>
               : <span aria-hidden />}
             <button className="icon-btn filled" onClick={prev} disabled={!reading} aria-label={t('Previous sentence')}><SkipBack size={22} /></button>
             <button className={`play-btn ${s.buffering ? 'busy' : ''}`} onClick={reading ? toggle : start} aria-label={s.playing ? t('Pause') : t('Play')}>

@@ -1,4 +1,27 @@
-## 1.4.114 — The desktop key
+## 1.4.115 — The bottom-bar key (the house is gone)
+
+Correction, plainly: 1.4.114 misunderstood Oscar. The house key left
+the app for the phone's home screen; what he asked for lives INSIDE
+Logos — while the audio plays, the app is immersive: the bottom bar
+(the tab chips) slides away and the player settles into its place,
+and the only way to see that bar again was to stop the audio. The
+house, its bridge door (`toDesktop`) and its label are removed in
+full. In their place:
+
+- **The bottom-bar key** (new store `src/lib/navpin.ts`): the empty
+  seat at the left of the player's transport row now carries a
+  panel-bottom key, shown while the audio plays. Tapped, it pins the
+  bottom bar back — the player glides up to its normal place, the bar
+  returns — **without stopping the reading**; tapped again, the bar
+  slides away and the player settles back down. In App.tsx the pin
+  simply suppresses the immersive state (`immersive && !pin.pinned`),
+  so all the existing glide choreography is reused untouched. The pin
+  clears itself when playback stops: the next play starts immersive,
+  as designed. Icons: PanelBottomOpen / PanelBottomClose — a panel,
+  not a house. Labels: "Show the bottom bar" / "Hide the bottom bar"
+  ("Mostrar / Ocultar la barra inferior").
+
+## ## 1.4.114 — The desktop key
 
 Oscar, from his own screenshot: inside the app there was no way to see
 the home screen behind without stopping the audio first. The empty
