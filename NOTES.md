@@ -1,3 +1,18 @@
+## 1.4.91 — The visit stops flashing black
+
+Oscar: when the engine doesn't load, the trip to the app should be
+faster and unnoticeable — as it stands it looks like an error. What he
+sees is the system's own starting paint, drawn before any Logos code
+runs: a splash and preview window on @color/bg (#0A0A0F, near-black,
+icon blanked long ago) — a full black screen, out of nowhere, then
+gone. Now: the splash background and the theme window background are
+transparent, the preview window is disabled, ghost starts carry a
+zero-animation ActivityOptions bundle, leaving a visit also cuts with
+no transition, and the visit retires 400 ms after the sound flows
+instead of 900. Real opens are untouched in substance — the activity
+paints its own dark ground in code on its first frame, as it always
+has; only the system's black first paint is gone.
+
 ## 1.4.90 — Subtraction: the stage hold is deleted
 
 Oscar: a white noise behind every load and Processing — new, and not

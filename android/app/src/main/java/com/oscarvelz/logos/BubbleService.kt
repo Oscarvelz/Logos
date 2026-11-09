@@ -170,7 +170,7 @@ class BubbleService : Service() {
                 // The page is gone: a ghost visit revives it; the page
                 // pulls the clip as it wakes, and Oscar stays where he is.
                 runCatching {
-                    c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true))
+                    c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(c, 0, 0).toBundle())
                 }
             }
         }
@@ -411,7 +411,7 @@ class BubbleService : Service() {
      *  until the page breathes again, then leaves on its own. The bubble
      *  is a shortcut; a rescue that lands him inside the app is no rescue. */
     private fun ghostWake() {
-        runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true)) }
+        runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle()) }
     }
 
     private fun wakeBubble(schedule: Boolean = true) {
