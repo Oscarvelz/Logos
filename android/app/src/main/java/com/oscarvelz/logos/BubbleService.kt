@@ -171,6 +171,7 @@ class BubbleService : Service() {
          *  collects pending commands on waking, and pay the page a ghost
          *  visit — the same net the panel's transport keys already have. */
         fun wakeForPending(c: Context, cmd: String) {
+            if (NativeSpeaker.active) { NativeSpeaker.handle(cmd); return }
             pendingCmd = cmd
             if (backstageServe()) return
             runCatching { c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(c, 0, 0).toBundle()) }
@@ -361,6 +362,103 @@ class BubbleService : Service() {
      *  first bring Logos forward so the page collects the text in the open;
      *  if even that page proves dead, ask for a reload as it comes forward.
      *  The text itself sits stored the whole time; nothing is ever lost. */
+    // ── The native floor (1.4.112): progress, not pulse ──────────────
+    // The watches above measure the page's pulse (its state pushes).
+    // Oscar's stuck panel had a living pulse and a frozen render: the
+    // pushes flowed every 120 ms while the reading position never moved.
+    // So this chain watches the POSITION SIGNATURE (sentence, word,
+    // fraction, title). A caught text gets the page, then one real visit,
+    // then a fair deadline — and if the signature still has not moved,
+    // the shell reads the text itself (NativeSpeaker). If the page ever
+    // starts flowing, the native voice yields the stage back to it.
+    private var nativeGen = 0
+    private var nativeText: String? = null
+    private var nativeSig = ""
+
+    private fun sigOf(j: JSONObject?): String =
+        if (j == null) "" else listOf(
+            j.optString("title"), j.optString("tc"), j.optInt("wi", -1),
+            (j.optDouble("frac", 0.0) * 200).toInt().toString()
+        ).joinToString("|")
+
+    private fun pageFlowing(armSig: String): Boolean {
+        val j = runCatching { JSONObject(nowJson) }.getOrNull() ?: return false
+        if (j.optBoolean("playing") != true) return false
+        return sigOf(j) != armSig
+    }
+
+    private fun armNativeFallback() {
+        val text = clipText ?: return
+        if (NativeSpeaker.active) NativeSpeaker.stop()
+        val my = ++nativeGen
+        nativeText = text
+        nativeSig = sigOf(runCatching { JSONObject(nowJson) }.getOrNull())
+        handler.postDelayed({ nativeCheck1(my) }, 30_000)
+    }
+
+    private fun nativeCheck1(my: Int) {
+        if (my != nativeGen || NativeSpeaker.active) return
+        if (pageFlowing(nativeSig)) return // the neural voice flows — stand down
+        noteTry(this, s("the voice needed a visit", "la voz necesitó una visita"))
+        ghostWake(force = true)
+        handler.postDelayed({ nativeCheck2(my) }, 15_000)
+    }
+
+    private fun nativeCheck2(my: Int) {
+        if (my != nativeGen || NativeSpeaker.active) return
+        if (pageFlowing(nativeSig)) return
+        val text = nativeText ?: return
+        noteTry(this, s("the device voice took over", "la voz del dispositivo tomó el relevo"))
+        NativeSpeaker.takeOver(this, text, titleFromText(text))
+        handler.postDelayed({ nativeYield(my) }, 6_000)
+    }
+
+    private fun nativeYield(my: Int) {
+        if (my != nativeGen) return
+        if (!NativeSpeaker.active) return
+        if (pageFlowing(nativeSig)) {
+            noteTry(this, s("the app voice took over", "la voz de la app tomó el relevo"))
+            NativeSpeaker.stop()
+            return
+        }
+        handler.postDelayed({ nativeYield(my) }, 6_000)
+    }
+
+    private fun titleFromText(text: String): String {
+        val line = text.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: "Logos"
+        val words = line.split(Regex("\\s+")).take(7).joinToString(" ")
+        return if (words.length < line.length) "$words…" else words
+    }
+
+    // The standing form of the same watch, for a freeze mid-session (the
+    // delivery chain only guards a catch's first minute): while the page
+    // claims to be playing AND busy, 25 s without the signature moving
+    // earns one real visit; a still-frozen page after that hands its text
+    // to the native voice, when the shell holds the text.
+    private var progSig = ""
+    private var progSigAt = 0L
+    private var progVisitAt = 0L
+
+    private fun progressWatch(j: JSONObject?) {
+        if (NativeSpeaker.active) return
+        if (j?.optBoolean("playing") != true || j.optBoolean("busy") != true) { progSig = ""; return }
+        val sig = sigOf(j)
+        val now = System.currentTimeMillis()
+        if (sig != progSig) { progSig = sig; progSigAt = now; return }
+        if (progSigAt == 0L) { progSigAt = now; return }
+        if (now - progSigAt < 25_000) return
+        if (now - progVisitAt > 60_000) {
+            progVisitAt = now
+            noteTry(this, s("the render needed a visit", "el render necesitó una visita"))
+            ghostWake(force = true)
+            return
+        }
+        val text = nativeText ?: return
+        noteTry(this, s("the device voice took over", "la voz del dispositivo tomó el relevo"))
+        NativeSpeaker.takeOver(this, text, titleFromText(text))
+        handler.postDelayed({ nativeYield(nativeGen) }, 6_000)
+    }
+
     private fun armDeliveryWatch() {
         val n = deliveries
         val at = lastDeliveryAt
@@ -368,6 +466,7 @@ class BubbleService : Service() {
     }
 
     private var watchNowAt = 0L
+    private var lastPrewarm = 0L
 
     private fun deliveryCheck(n: Int, at: Long, rung: Int) {
         if (n != deliveries) return // a newer catch superseded this one
@@ -437,6 +536,7 @@ class BubbleService : Service() {
      *  retired the activity behind the service (the keys go silent), remember
      *  the press and bring Logos forward so the page collects it as it wakes. */
     private fun pokeOrWake(cmd: String, force: Boolean = false) {
+        if (NativeSpeaker.active) { NativeSpeaker.handle(cmd); return }
         val p = poke
         if (p != null && !force) { p(cmd); return }
         pendingCmd = cmd
@@ -448,8 +548,8 @@ class BubbleService : Service() {
      *  activity resumes as a ghost — transparent, touch-through — only
      *  until the page breathes again, then leaves on its own. The bubble
      *  is a shortcut; a rescue that lands him inside the app is no rescue. */
-    private fun ghostWake() {
-        if (backstageServe()) { noteTry(this, s("served backstage, no visit", "atendido tras bastidores, sin visita")); return }
+    private fun ghostWake(force: Boolean = false) {
+        if (!force && backstageServe()) { noteTry(this, s("served backstage, no visit", "atendido tras bastidores, sin visita")); return }
         runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle()) }
     }
 
@@ -528,7 +628,8 @@ class BubbleService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("bubble", "Floating bubble", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
         onNow = { refreshPanel() }
-        onDelivery = { armDeliveryWatch() }
+        onDelivery = { armDeliveryWatch(); armNativeFallback() }
+        NativeSpeaker.listener = { refreshPanel() }
         inviteHook = { invite(3) }
     }
 
@@ -538,6 +639,10 @@ class BubbleService : Service() {
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return START_NOT_STICKY }
         if (bubble == null) showBubble()
         running = true
+        if (poke == null && !Backstage.active && System.currentTimeMillis() - lastPrewarm > 60_000) {
+            lastPrewarm = System.currentTimeMillis()
+            ghostWake()
+        }
         return START_STICKY
     }
 
@@ -1036,7 +1141,7 @@ class BubbleService : Service() {
             handler.postDelayed({ refreshPanel() }, 350)
             handler.postDelayed({
                 val after = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(before)
-                if (after == before) pokeOrWake(intent, force = true)
+                if (!NativeSpeaker.active && after == before) pokeOrWake(intent, force = true)
             }, 1200)
             // The last rung: even the wake changed nothing — the page itself
             // is a corpse. Reload it in place; the fresh page collects the
@@ -1044,7 +1149,7 @@ class BubbleService : Service() {
             // resurrection), and any waiting catch is recovered on its own.
             handler.postDelayed({
                 val after2 = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(before)
-                if (after2 == before) poke?.invoke("reload")
+                if (!NativeSpeaker.active && after2 == before) poke?.invoke("reload")
             }, 2600)
         }
         controls.addView(slowB); controls.addView(prevB); controls.addView(toggleB); controls.addView(nextB); controls.addView(fastB)
@@ -1069,7 +1174,7 @@ class BubbleService : Service() {
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, pr: Int, fromUser: Boolean) {}
                 override fun onStartTrackingTouch(sb: SeekBar?) { seekHeld = true }
-                override fun onStopTrackingTouch(sb: SeekBar?) { seekHeld = false; seekFrac = (sb?.progress ?: 0) / 1000.0; poke?.invoke("seek") }
+                override fun onStopTrackingTouch(sb: SeekBar?) { seekHeld = false; seekFrac = (sb?.progress ?: 0) / 1000.0; if (NativeSpeaker.active) NativeSpeaker.seekTo(seekFrac) else poke?.invoke("seek") }
             })
         }
         seekBar = seekW
@@ -1458,12 +1563,16 @@ class BubbleService : Service() {
     }
 
     private fun refreshPanel() {
-        val j = runCatching { JSONObject(nowJson) }.getOrNull()
+        val rawJ = runCatching { JSONObject(nowJson) }.getOrNull()
+        progressWatch(rawJ)
+        val native = NativeSpeaker.active
+        val j = if (native) NativeSpeaker.panelJson() else rawJ
         val playing = j?.optBoolean("playing") ?: false
         handler.post {
             titleV?.text = j?.optString("title")?.ifBlank { "Logos" } ?: "Logos"
-            if (workingNow(j)) armStallWatch() else disarmStallWatch()
-            subV?.text = if (workingNow(j) && System.currentTimeMillis() - nowAt > 20_000) s("Waiting for Logos…", "Esperando a Logos…")
+            if (!native && workingNow(j)) armStallWatch() else disarmStallWatch()
+            subV?.text = if (native) j?.optString("sub")
+                else if (workingNow(j) && System.currentTimeMillis() - nowAt > 20_000) s("Waiting for Logos…", "Esperando a Logos…")
                 else if (j?.optBoolean("busy") == true) s("Processing…", "Procesando…")
                 else j?.optString("sub")?.ifBlank { s("Ready", "Listo") } ?: s("Ready", "Listo")
             lockBtn?.text = if (isLocked(this@BubbleService)) "🔒" else "🔓"
@@ -1541,6 +1650,7 @@ class BubbleService : Service() {
     }
 
     override fun onDestroy() {
+        NativeSpeaker.shutdown()
         Backstage.release()
         releaseWakeLock()
         retireHoldFile(this)

@@ -537,9 +537,18 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        Backstage.release()
+        // While the bubble lives, the backstage and the poke are the
+        // service's to keep (1.4.112): an activity the system reclaims
+        // while Logos sits in the background must not tear down the page
+        // it merely hosted — that quiet teardown was one way the
+        // backstage vanished between one copy and the next. The next
+        // activity instance replaces both when it is created; the
+        // service's own onDestroy releases the backstage for good.
+        if (!BubbleService.running) {
+            Backstage.release()
+            BubbleService.poke = null
+        }
         PlaybackService.onAction = null
-        BubbleService.poke = null
         runCatching { startService(Intent(this, PlaybackService::class.java).setAction("stop")) }
         super.onDestroy()
     }

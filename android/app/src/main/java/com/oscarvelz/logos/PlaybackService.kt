@@ -84,6 +84,9 @@ class PlaybackService : Service() {
      *  or pause where the page collects pending commands, and the page
      *  gets a ghost visit — the panel keys' safety net, extended here. */
     private fun act(kind: String) {
+        // While the shell's own voice holds the stage, the media keys are
+        // its (1.4.112) — the page is the one that failed to flow.
+        if (NativeSpeaker.active) { NativeSpeaker.handle(kind); return }
         val a = onAction
         if (a != null) { a(if (kind == "play" || kind == "pause") "toggle" else kind); return }
         BubbleService.wakeForPending(this, kind)

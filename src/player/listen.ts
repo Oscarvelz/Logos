@@ -11,6 +11,7 @@ import { speakDevice, cancelDevice, deviceSpeechAvailable } from '../engine/devi
 import { stopClipPlayer, onClipPlay } from './clip.ts'
 import { nowReadingFor } from '../lib/book/nowreading.ts'
 import { alignWords } from './wordsync.ts'
+import { renderKey, getPersistedRender, putPersistedRender, hasPersistedRender } from './rendercache.ts'
 
 type Rendered = { blob: Blob; env: Float32Array; duration: number; voice: string }
 
@@ -240,7 +241,19 @@ export function prepareText(text: string) {
   if (!listen.get().active) return
   const go = () => prefetch(0)
   if (engine.get().status === 'ready') go()
-  else ensureModel().then(() => { if (listen.get().text === text && !listen.get().playing) go() }).catch(() => {})
+  else ensureModel().then(() => { if (listen.get().text === text && !listen.get().playing) go() }).catch(() => {
+    // The saved processing does not need the model (1.4.112): when this
+    // text's first sentence is already rendered on disk, prepare from
+    // the cache anyway — unsaved sentences fail quietly inside prefetch,
+    // exactly as render errors always have.
+    const st = listen.get()
+    if (st.text !== text || st.playing || !st.segments.length) return
+    const spoken = speakable(st.segments[0].text, st.segments[0].lang)
+    if (!spoken) return
+    void hasPersistedRender(renderKey(spoken, st.voices[0])).then((has) => {
+      if (has && listen.get().text === text && !listen.get().playing) go()
+    })
+  })
 }
 
 /** Re-resolve voices (after a voice change) and restart the current sentence if playing. */
@@ -285,6 +298,22 @@ function render(i: number, priority: number): Promise<Rendered> {
     // pronunciation dictionary. A sentence that was only a code becomes a breath
     // of silence instead of a spelling bee.
     const spoken = speakable(seg.text, seg.lang)
+    // The saved processing (1.4.112): a sentence rendered before — in a
+    // past session, another day, another book — plays from disk and is
+    // never rendered twice. The key is the spoken string + the voice,
+    // so a dictionary edit or a voice change correctly misses.
+    const key = spoken ? renderKey(spoken, voice) : null
+    if (key) {
+      const saved = await getPersistedRender(key)
+      if (saved) {
+        if (mySession !== session) throw new DOMException('stale', 'AbortError')
+        const r: Rendered = { blob: saved.blob, env: saved.env, duration: saved.duration, voice }
+        cache.set(i, r)
+        pending.delete(i)
+        listen.set((st) => { const rendered = st.rendered.slice(); rendered[i] = true; return { rendered } })
+        return r
+      }
+    }
     const res = spoken
       ? await synthesize(spoken, voice, 1, { priority, signal: ctrl.signal })
       : { samples: silence(300, 24000), sampleRate: 24000, ms: 0 }
@@ -303,6 +332,7 @@ function render(i: number, priority: number): Promise<Rendered> {
     }
     if (mySession !== session) throw new DOMException('stale', 'AbortError')
     cache.set(i, r)
+    if (key) putPersistedRender(key, r.blob)
     pending.delete(i)
     listen.set((st) => { const rendered = st.rendered.slice(); rendered[i] = true; return { rendered } })
     return r
