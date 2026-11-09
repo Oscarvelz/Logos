@@ -23,6 +23,8 @@ export type Settings = {
   highlight: boolean
   /** Word highlight timing nudge in ms (+ = earlier). For Bluetooth delay. */
   wordLeadMs: number
+  /** Listen reader text size, as a multiplier of the base size. */
+  readerScale: number
 }
 
 const KEY = 'logos.settings.v1'
@@ -49,6 +51,15 @@ const DEFAULTS: Settings = {
   bubbleAuto: true,
   highlight: true,
   wordLeadMs: 90,
+  readerScale: 1,
+}
+
+/** The reader's size ladder — A− and A+ walk it one rung at a time. */
+export const READER_SCALES = [0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2]
+export function stepReaderScale(current: number, dir: 1 | -1): number {
+  let i = READER_SCALES.indexOf(current)
+  if (i < 0) { let best = 0; READER_SCALES.forEach((v, j) => { if (Math.abs(v - current) < Math.abs(READER_SCALES[best] - current)) best = j }); i = best }
+  return READER_SCALES[Math.min(READER_SCALES.length - 1, Math.max(0, i + dir))]
 }
 
 function load(): Settings {

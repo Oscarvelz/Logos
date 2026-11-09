@@ -3,7 +3,7 @@ import { readClipboard } from '../lib/clipboard.ts'
 import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Moon, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
-import { saveLastText, settings } from '../lib/settings.ts'
+import { saveLastText, settings, READER_SCALES, stepReaderScale } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
 import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, RATE_STEPS, setSleepTimer, refreshVoices, relangSession, voiceFor, endSession, sentenceProgress, seekFraction, wordClock, seekWord } from '../player/listen.ts'
@@ -313,6 +313,8 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
     el.addEventListener('touchmove', mark, { passive: true }); el.addEventListener('wheel', mark, { passive: true })
     return () => { el.removeEventListener('touchmove', mark); el.removeEventListener('wheel', mark) }
   }, [])
+  // The reader's text size lives in one CSS variable on the reader box.
+  useEffect(() => { box.current?.style.setProperty('--rscale', String(st.readerScale)) }, [st.readerScale])
   const follow = (target: HTMLElement | null, force = false) => {
     const b = box.current
     if (!target || !b) return
@@ -375,6 +377,8 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
       <div className="reader-head">
         <span className="rh-hint">Tap a word to start there.</span>
         <div className="rh-actions">
+          <button className="rh-btn" aria-label="Smaller text" disabled={st.readerScale <= READER_SCALES[0]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, -1) })}><span style={{ fontSize: 10, fontWeight: 700 }}>A</span><span aria-hidden="true">−</span></button>
+          <button className="rh-btn" aria-label="Bigger text" disabled={st.readerScale >= READER_SCALES[READER_SCALES.length - 1]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, 1) })}><span style={{ fontSize: 15, fontWeight: 700 }}>A</span><span aria-hidden="true">+</span></button>
           <button className="rh-btn" onClick={onKeep} aria-label="Save to Library"><BookmarkPlus size={13} /> Save</button>
           <button className="rh-btn" onClick={onEdit}><PenLine size={13} /> Edit</button>
         </div>
