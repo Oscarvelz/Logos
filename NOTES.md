@@ -1,3 +1,18 @@
+## 1.4.107 — The phone's missing line (Oscar's find: 'solo muestra la cabecita, no la cola')
+
+- On his phone the panel's progress bar showed only the round thumb —
+  no track line behind it; on the tablet the same panel drew it fine.
+  Cause, in the code: the track and its gold fill were GradientDrawables
+  with **no height of their own** — the 4dp line existed only as the
+  layer insets' arithmetic (the bar is 24dp, insets carve 10 + 10).
+  Androids that size the track from the layers' own height found none
+  and drew nothing; the thumb, which always declared its 12dp, survived
+  alone. The tablet's Android stretches to the insets instead.
+- Fix: both drawables now declare `setSize(-1, dp(4))`; the insets stay
+  exactly as they were, so the tablet's line is pixel-for-pixel the one
+  it already had, and the phone gains the same line from the same place.
+- Shell only, plus the version.
+
 ## 1.4.106 — A window, in both directions (Oscar: 'redimensionarlo en ambas direcciones')
 
 - The panel reader's two axes are now **independent**, like a window:
