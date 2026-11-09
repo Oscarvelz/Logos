@@ -1,4 +1,54 @@
-## Shell (Hark, 2026-11-09) — the backstage: the bubble reads without visiting the app
+## 1.4.112 — Hark's backstage, made reliable + the processing is saved
+
+Oscar, twice over: Hark's backstage (below) is the right idea and it
+works — sometimes. When it doesn't, the bubble still can't load the
+text without a trip into the app. And separately: stop the audio,
+close the panel, come back later — the engine processes everything
+again from zero, because nothing saved the processing.
+
+- **Progress, not pulse (shell).** Every watch the shell keeps measured
+  the page's pulse — its state pushes — and a stuck page can push a
+  living pulse forever: Oscar's frozen panel said playing + Processing
+  while the reading position never moved an inch, and every watch stood
+  down. The new chain watches the position SIGNATURE (title, sentence,
+  word, fraction): a caught text gets the page, then one REAL ghost
+  visit (the backstage shortcut no longer neuters the rescue), then a
+  fair deadline — still frozen, and the shell reads the text itself.
+  The same watch stands guard mid-session for a freeze after minute one.
+- **The shell's own voice (new: `NativeSpeaker.kt`).** The device's
+  text-to-speech, driven from the bubble's foreground service, sentence
+  by sentence — no WebView, no activity, no model: it reads even with
+  the page stone dead. The panel is driven in the exact shape of the
+  page's own pushes and names the voice honestly ("Device voice ·
+  Sentence 3 of 12"); the amber word follows via range callbacks. Panel
+  keys, the seek bar and the media notification all route to it while
+  it holds the stage; if the page starts flowing, it yields the stage
+  back to the neural voice. `AndroidManifest` gains the TTS `<queries>`
+  so the engine is discoverable on Android 11+.
+- **The backstage can't be torn down by a reclaimed activity (shell).**
+  `MainActivity.onDestroy` used to release the backstage and null the
+  poke unconditionally — an activity the system reclaimed in the
+  background silently demolished the whole arrangement. While the
+  bubble service lives, both are the service's to keep; the next
+  activity replaces them, and the service's own `onDestroy` releases
+  for good.
+- **Pre-warm (shell).** With the bubble on and no page anywhere, the
+  service pays ONE ghost visit when it starts: the page is built and
+  parked backstage before the day's first copy, so the first copy is
+  served at full speed instead of paying a cold visit.
+- **The processing is saved (web: `src/player/rendercache.ts`).** A
+  rendered sentence's WAV now goes to IndexedDB (`logos-renders`,
+  ~60 MB cap, oldest swept first), keyed by the spoken string + voice
+  — position-independent, so the same sentence hits in any book, any
+  day; a voice change or a dictionary edit changes the key and
+  correctly re-renders. On a hit the WAV is decoded by hand (no
+  AudioContext, no gesture rules) and the sentence plays from disk.
+  Stop, close, reload, discarded page: press play and it simply plays.
+  Declared limits: the media notification still follows the page while
+  the device voice holds the stage; the device voice is the system's,
+  plainer than the neural one — it is a floor, not a replacement.
+
+## ## Shell (Hark, 2026-11-09) — the backstage: the bubble reads without visiting the app
 
 - **Cause of the trip into the app:** with Logos out of sight, its WebView sat in
   a stopped MainActivity, so Chromium counted the page hidden and throttled it
