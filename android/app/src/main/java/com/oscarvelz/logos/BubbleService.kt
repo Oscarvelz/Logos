@@ -248,6 +248,10 @@ class BubbleService : Service() {
     private var titleV: TextView? = null
     private var subV: TextView? = null
     private var toggleB: ImageButton? = null
+    private var ctlSlow: View? = null
+    private var ctlPrev: View? = null
+    private var ctlNext: View? = null
+    private var ctlFast: View? = null
     private val handler = Handler(Looper.getMainLooper())
 
     /** The player's mirrored spectrum, drawn the way Listen draws it: bars ease
@@ -577,6 +581,36 @@ class BubbleService : Service() {
         return (base * curScaleW()).toInt().coerceIn(dp(240), (sw2 - dp(20)).coerceAtLeast(dp(240)))
     }
 
+    /** The transport row fits the panel it lives in (1.4.113, Oscar:
+     *  'No quiero botones cortados'). The five keys were born at a fixed
+     *  262 dp — an exact fit only for the default 302 dp panel — while
+     *  the reader can be dragged down to 240 dp, so at Oscar's own scale
+     *  the − and + keys hung off both edges, cropped in half. Now the
+     *  row is seated from the panel's real inner width: first the gaps
+     *  give (10 → 6 → 4 dp), then the keys themselves scale together,
+     *  the toggle always the largest. Nothing is ever cropped. */
+    private fun fitControls() {
+        val slow = ctlSlow ?: return
+        val prev = ctlPrev ?: return
+        val tog = toggleB ?: return
+        val next = ctlNext ?: return
+        val fast = ctlFast ?: return
+        val inner = panelWidth() - dp(36) // the card's own side padding
+        val design = dp(38 + 46 + 54 + 46 + 38)
+        var gap = dp(10)
+        var avail = inner - gap * 4
+        if (avail < design) { gap = dp(6); avail = inner - gap * 4 }
+        if (avail < design) { gap = dp(4); avail = inner - gap * 4 }
+        val k = if (avail >= design) 1f else (avail.toFloat() / design).coerceAtLeast(0.7f)
+        fun seat(v: View, designDp: Int, last: Boolean) {
+            val lp = v.layoutParams as? LinearLayout.LayoutParams ?: return
+            val s = (dp(designDp) * k).toInt()
+            lp.width = s; lp.height = s; lp.marginEnd = if (last) 0 else gap
+            v.layoutParams = lp
+        }
+        seat(slow, 38, false); seat(prev, 46, false); seat(tog, 54, false); seat(next, 46, false); seat(fast, 38, true)
+    }
+
     // THE STRETCHABLE READER (1.4.105, Oscar: 'redimensionar el tamaño del
     // lector'): drag the panel's free corner and the words window grows —
     // more sentences in view, letters growing with the window — while the
@@ -605,6 +639,7 @@ class BubbleService : Service() {
     private fun applyReaderScale(final: Boolean) {
         val p = panelParams ?: return
         p.width = panelWidth()
+        fitControls()
         wordsV?.let { wv ->
             val lp = wv.layoutParams as? LinearLayout.LayoutParams
             if (lp != null && lp.height != wordsHeight()) { lp.height = wordsHeight(); wv.layoutParams = lp }
@@ -1153,6 +1188,8 @@ class BubbleService : Service() {
             }, 2600)
         }
         controls.addView(slowB); controls.addView(prevB); controls.addView(toggleB); controls.addView(nextB); controls.addView(fastB)
+        ctlSlow = slowB; ctlPrev = prevB; ctlNext = nextB; ctlFast = fastB
+        fitControls()
         card.addView(controls)
         val seekW = SeekBar(this).apply {
             max = 1000
