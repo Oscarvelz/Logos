@@ -1,3 +1,19 @@
+## 1.4.95 — The bubble sits on the panel's corner (a correction)
+
+Oscar corrected 1.4.94: he never asked the bubble to travel to the
+device's corner. His picture: draw an arrow from the centre of the
+player's rectangle to one of its corners — the bubble belongs at
+the end of that arrow, pinned ON the corner of the rectangle,
+wherever on the screen the pair is. So the glide is deleted whole;
+the bubble never moves on its own again. The panel now deploys so
+a corner lands exactly under the bubble's centre: top-left when
+the bubble lives on the left, top-right on the right, the matching
+bottom corner when the panel must open upward. The panel's birth
+grows out of that corner. Also his second ask in the same breath:
+the bubble is a little larger on tablets (66dp window, 52dp face)
+— 'un poquito, un poquito más'; phones keep their size, and every
+measurement that knew the old size now follows one helper.
+
 ## 1.4.94 — On open, the bubble takes its corner
 
 Oscar: he likes the panel beside its bubble, but when the player
