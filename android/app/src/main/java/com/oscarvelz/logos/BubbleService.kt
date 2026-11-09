@@ -426,7 +426,9 @@ class BubbleService : Service() {
     // One bubble size on phones, a little more on tablets (Oscar: 'un
     // poquito, un poquito más' — a little, only a little).
     private fun isTablet() = resources.configuration.smallestScreenWidthDp >= 600
-    private fun bubbleSize() = if (isTablet()) dp(66) else dp(58)
+    private fun bubbleSize() = if (isTablet()) dp(76) else dp(58)
+    private fun bubbleFace() = if (isTablet()) dp(60) else dp(46)
+    private fun bubbleHalo() = if (isTablet()) dp(66) else dp(52)
     private fun bubbleHalf() = bubbleSize() / 2
 
     override fun onBind(i: Intent?): IBinder? = null
@@ -485,7 +487,7 @@ class BubbleService : Service() {
         val root = FrameLayout(this)
         val haloV = View(this).apply {
             background = oval(gold, 0, 0, -1f).apply { alpha = 70 }
-            layoutParams = FrameLayout.LayoutParams(if (isTablet()) dp(58) else dp(52), if (isTablet()) dp(58) else dp(52), Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(bubbleHalo(), bubbleHalo(), Gravity.CENTER)
             visibility = View.INVISIBLE
         }
         val face = FrameLayout(this).apply {
@@ -500,12 +502,12 @@ class BubbleService : Service() {
                 setStroke(dp(2), gold)
             }
             elevation = dp(5).toFloat()
-            layoutParams = FrameLayout.LayoutParams(if (isTablet()) dp(52) else dp(46), if (isTablet()) dp(52) else dp(46), Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
         }
         val lambda = TextView(this).apply {
             text = "λ"
             setTextColor(gold)
-            textSize = if (isTablet()) 25f else 22f
+            textSize = if (isTablet()) 28f else 22f
             typeface = Typeface.SERIF
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
@@ -1053,10 +1055,15 @@ class BubbleService : Service() {
         val cx = bp.x + bubbleHalf()
         val cy = bp.y + bubbleHalf()
         val ph = panel?.height?.takeIf { it > 0 } ?: dp(320)
-        // The corner point sits on the circle, along the diagonal:
-        // centre + radius·(cos45°, sin45°) in the panel's direction.
-        val r = (if (isTablet()) dp(52) else dp(46)) / 2
-        val d = (r * 0.7071f).toInt()
+        // The corner travels the diagonal toward the circle — but the
+        // panel's corners are rounded (24dp), which pulls the DRAWN
+        // edge back along that same diagonal by R·(√2−1) ≈ 10dp. The
+        // geometric corner aims inside the circle by that much, so
+        // the drawn corner ends ~2dp from the circle: a short graze,
+        // never an overlap.
+        val r = bubbleFace() / 2
+        val dist = r + dp(2) - (dp(24) * 0.4142f).toInt()
+        val d = (dist * 0.7071f).toInt()
         seatRight = cx >= sw2 / 2
         seatBottom = !(cy + d + ph <= sh2 - margin) && (cy - d - ph >= margin)
         p.x = (if (seatRight) cx - d - pw else cx + d).coerceIn(margin, (sw2 - pw - margin).coerceAtLeast(margin))

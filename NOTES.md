@@ -1,3 +1,16 @@
+## 1.4.97 — A shorter graze, and a larger tablet bubble
+
+Oscar: 'casi' — the gap between the button and the rectangle was
+too long, and the Logos button on his tablet should be bigger. The
+gap had a geometric cause: the panel's corners are rounded (24dp),
+so its drawn edge sits ~10dp back from the geometric corner along
+the diagonal; seating the corner point on the circle left the drawn
+shapes a full step apart. The seat now compensates for the arc, so
+the drawn corner ends ~2dp from the bubble's circle — close, and
+still never overlapping. The tablet bubble grows again at his word:
+76dp window, 60dp face, 66dp halo, λ at 28sp; the phone keeps its
+size, and the face size now lives in bubbleFace() like the rest.
+
 ## 1.4.96 — The corner grazes the circle; nothing overlaps
 
 Oscar, closer: 'En realidad no deben superponerse. El borde
