@@ -917,8 +917,9 @@ class BubbleService : Service() {
             layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
             setOnClickListener {
                 showHintCard(s("Save to Library", "Guardar en Biblioteca"), s("Keeps the text playing now in your Library, so you can hear it again whenever you like.", "Guarda el texto que suena ahora en tu Biblioteca, para oírlo de nuevo cuando quieras."), s("Save", "Guardar"), s("Not now", "Ahora no")) {
+                    val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
                     poke?.invoke("save")
-                    Toast.makeText(this@BubbleService, s("Saved to Library", "Guardado en Biblioteca"), Toast.LENGTH_SHORT).show()
+                    toastSavedWhenTrue(wasSaved)
                 }
             }
         }
@@ -1302,18 +1303,39 @@ class BubbleService : Service() {
      *  at once (a moment cannot wait for a card) and teaches itself a single
      *  time; on a text that is not in the Library it refuses kindly and offers
      *  the save first — marks on unsaved audio would be lost in the dark. */
+    /** "Saved" is claimed only once the page's own state says so (1.4.108,
+     *  audit E-1): the shell used to toast «Saved to Library» in the same
+     *  tap that SENT the save poke — before the page had saved anything,
+     *  and even when there was nothing to save. Now the confirm captures
+     *  whether the text was already saved, and the toast fires only if
+     *  the page's pushed state flips to saved afterwards. When it does
+     *  not, silence — the page's own toast tells the reason in the app. */
+    private fun toastSavedWhenTrue(wasSaved: Boolean) {
+        if (wasSaved) return
+        var fired = false
+        for (delay in longArrayOf(900, 2200)) {
+            handler.postDelayed({
+                if (!fired && runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)) {
+                    fired = true
+                    Toast.makeText(this, s("Saved to Library", "Guardado en Biblioteca"), Toast.LENGTH_SHORT).show()
+                }
+            }, delay)
+        }
+    }
+
     private fun showMarkHint() {
         val saved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
         if (saved) {
             poke?.invoke("mark")
             if (!prefs(this).getBoolean("markTaught", false)) {
                 prefs(this).edit().putBoolean("markTaught", true).apply()
-                showHintCard(s("Marked", "Marcado"), s("The ⚑ keeps a mark on what you are hearing — you will find it in Library, under Saved Marks.", "La ⚑ deja una marca en lo que estás oyendo: la encontrarás en Biblioteca, en Marcas guardadas."), s("Got it", "Entendido"), "") { }
+                showHintCard(s("The ⚑ mark", "La marca ⚑"), s("The ⚑ keeps a mark on what you are hearing — you will find it in Library, under Saved Marks.", "La ⚑ deja una marca en lo que estás oyendo: la encontrarás en Biblioteca, en Marcas guardadas."), s("Got it", "Entendido"), "") { }
             }
         } else {
             showHintCard(s("Not in your Library yet", "Aún no está en tu Biblioteca"), s("Marks live with their audio — on an unsaved text, its marks would be hard to find later. Save it to your Library first, and the ⚑ is yours.", "Las marcas viven con su audio: en un texto sin guardar, sus marcas serían difíciles de encontrar después. Guárdalo primero en tu Biblioteca y la ⚑ es tuya."), s("Save to Library", "Guardar en Biblioteca"), s("Not now", "Ahora no")) {
+                val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
                 poke?.invoke("save")
-                Toast.makeText(this@BubbleService, s("Saved to Library", "Guardado en Biblioteca"), Toast.LENGTH_SHORT).show()
+                toastSavedWhenTrue(wasSaved)
             }
         }
     }

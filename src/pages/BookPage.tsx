@@ -68,7 +68,7 @@ export function BookPage() {
     if (!meta || !chapters) return
     const p = posRef.current
     const progress = progressAt(meta, chapters, p)
-    void updateBook(meta.id, { pos: p, progress, done: meta.done || progress > 0.985 }, false)
+    void updateBook(meta.id, (cur) => ({ pos: p, progress: cur.done ? 1 : progress, done: cur.done || progress > 0.985 }), false)
   }, [meta, chapters])
   useEffect(() => { const t = setTimeout(save, 1200); return () => clearTimeout(t) }, [pos, save])
   useEffect(() => { addEventListener('pagehide', save); return () => { removeEventListener('pagehide', save); save() } }, [save])
@@ -151,13 +151,21 @@ export function BookPage() {
 
   const toggleBookmark = (b: number) => {
     if (!meta || !chapters) return
-    const list = meta.bookmarks ?? []
-    const has = list.some((x) => x.ch === ch && x.b === b)
-    const next = has ? list.filter((x) => !(x.ch === ch && x.b === b)) : [...list, { ch, b, at: Date.now(), text: chapters[ch].blocks[b].t.slice(0, 160) }]
-    setMeta({ ...meta, bookmarks: next })
-    void updateBook(meta.id, { bookmarks: next }, false)
-    toast(has ? t('Bookmark removed') : t('Bookmarked'))
-    setSel(null)
+    const text = chapters[ch].blocks[b].t.slice(0, 160)
+    void (async () => {
+      // The patch is computed from the FRESH record inside the write queue,
+      // and the toast is born only after the write has landed (1.4.108,
+      // audit C-1: it used to celebrate a bookmark that never persisted).
+      let added = false
+      const landed = await updateBook(meta.id, (cur) => {
+        const list = cur.bookmarks ?? []
+        const has = list.some((x) => x.ch === ch && x.b === b)
+        added = !has
+        return { bookmarks: has ? list.filter((x) => !(x.ch === ch && x.b === b)) : [...list, { ch, b, at: Date.now(), text }] }
+      }, false)
+      if (landed) { setMeta(landed); toast(t(added ? 'Bookmarked' : 'Bookmark removed')) }
+      setSel(null)
+    })()
   }
 
   if (missing) return (
@@ -206,7 +214,7 @@ export function BookPage() {
           <BlockView key={i} b={b} i={i} sel={sel === i} marked={marked.has(i)} mark={mark?.b === i ? mark : null} onLink={onLink}
             onTap={() => setSel((s) => (s === i ? null : i))} />
         ))}
-        <ChapterEnd chapters={chapters} ch={ch} meta={meta} onNext={() => jump({ ch: ch + 1, b: 0 })} onFinish={() => { void updateBook(meta.id, { done: true, progress: 1 }); setMeta({ ...meta, done: true }); toast(t('Marked as finished')) }} />
+        <ChapterEnd chapters={chapters} ch={ch} meta={meta} onNext={() => jump({ ch: ch + 1, b: 0 })} onFinish={() => { void (async () => { const landed = await updateBook(meta.id, { done: true, progress: 1 }, false); if (landed) { setMeta(landed); toast(t('Marked as finished')) } })() }} />
       </article>
 
       {createPortal(
