@@ -6,7 +6,8 @@
 // playing, always with an Undo, so no text is ever lost to it.
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
-import { listen, loadText, play, pause, endSession, stepRate, seek, seekFraction, refreshVoices, voiceFor, sentenceProgress, levels } from '../player/listen.ts'
+import { listen, loadText, play, pause, endSession, stepRate, seek, seekFraction, refreshVoices, voiceFor, sentenceProgress, wordClock, levels } from '../player/listen.ts'
+import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { cancelDevice } from '../engine/device-voice.ts'
 import { readClipboard } from './clipboard.ts'
 import { describeText } from './describe.ts'
@@ -318,6 +319,20 @@ export function initBubble() {
   // sentence can never flood the little window.
   const cleanSent = (t: string) => t.replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim()
   const capSent = (t: string, n: number) => { if (t.length <= n) return t; const cut = t.lastIndexOf(' ', n); return `${t.slice(0, cut > 40 ? cut : n)}…` }
+  // The word sounding right now, for the panel's amber: timed from the
+  // sentence's own audio while the envelope clock is alive (the reader's
+  // own method), else dealt out by characters over the sentence's progress.
+  const wordIndexOf = (active: boolean, idx: number, clean: string): number => {
+    if (!active || !clean) return -1
+    const words = clean.split(' ')
+    const clk = wordClock()
+    if (clk && clk.idx === idx) return wordAtTime(alignWords(clk.env, 60, words), clk.t + settings.get().wordLeadMs / 1000)
+    const total = words.reduce((a, w) => a + w.length + 1, 0)
+    const target = sentenceProgress() * total
+    let acc = 0
+    for (let i = 0; i < words.length; i++) { acc += words[i].length + 1; if (acc > target) return i }
+    return words.length - 1
+  }
   const barTmp = new Float32Array(18)
   const push = () => {
     const s = listen.get()
@@ -338,6 +353,7 @@ export function initBubble() {
       tp: s.active ? capSent(cleanSent(s.segments[s.current - 1]?.text ?? ''), 160) : '',
       tc: s.active ? capSent(cleanSent(s.segments[s.current]?.text ?? ''), 520) : '',
       tn: s.active ? capSent(cleanSent(s.segments[s.current + 1]?.text ?? ''), 160) : '',
+      wi: settings.get().bubbleText ? wordIndexOf(s.active, s.current, s.active ? cleanSent(s.segments[s.current]?.text ?? '') : '') : -1,
       title: titleOf(s.active, text) || 'Logos',
       sub: s.active ? (s.cushion ? `Preparing… ${s.cushion.done} of ${s.cushion.total} to start` : `Sentence ${s.current + 1} of ${s.segments.length} · ${fmtRate(settings.get().listenSpeed)}`) : 'Ready',
     }
@@ -347,9 +363,9 @@ export function initBubble() {
     try { d.bubbleNow?.(key) } catch { /* ignore */ }
   }
   listen.subscribe(push)
-  // While playing, feed the panel's spectrum a few times a second — push()
+  // While playing, feed the panel's spectrum and its amber word — push()
   // dedupes unchanged states, so this costs nothing at rest.
-  setInterval(() => { if (listen.get().playing) push() }, 250)
+  setInterval(() => { if (listen.get().playing) push() }, 120)
   drafts.subscribe(push)
   settings.subscribe(push)
   push()
