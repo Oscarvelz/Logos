@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { exportBackup, importBackup } from '../lib/backup.ts'
 import { Cpu, Download, HardDrive, Loader2, Mic, Palette, PictureInPicture2, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
-import { settings, applyTheme, type Theme } from '../lib/settings.ts'
+import { settings, applyTheme, READER_SCALES, stepReaderScale, type Theme } from '../lib/settings.ts'
 import { bubbleSupported, bubbleNativeState, setBubble, openBubblePermission, type BubbleNativeState } from '../lib/bubble.ts'
 import { keep } from '../engine/keep.ts'
 import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHONON_SIZE_MB, modelCacheBytes } from '../engine/engine.ts'
@@ -11,7 +11,7 @@ import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.99'
+const VERSION = '1.4.100'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -206,6 +206,15 @@ export function SettingsPage() {
         <div className="list-row">
           <div className="grow"><div className="t">Highlight current sentence</div></div>
           <Switch label="Highlight current sentence" on={st.highlight} onChange={(v) => settings.set({ highlight: v })} />
+        </div>
+        <div className="list-row">
+          <div className="grow"><div className="t">Reader text size</div><div className="d">The Listen reading view — bigger or smaller, on phone and tablet alike.</div></div>
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn sm ghost" aria-label="Smaller text" disabled={st.readerScale <= READER_SCALES[0]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, -1) })}>−</button>
+            <button className="btn sm ghost" aria-label="Reset text size" onClick={() => settings.set({ readerScale: 1 })} style={{ minWidth: 0, padding: '0 8px', opacity: st.readerScale === 1 ? .4 : 1 }}>↺</button>
+            <span className="mono muted" style={{ minWidth: 40, textAlign: 'center' }}>{Math.round(st.readerScale * 100)}%</span>
+            <button className="btn sm ghost" aria-label="Bigger text" disabled={st.readerScale >= READER_SCALES[READER_SCALES.length - 1]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, 1) })}>+</button>
+          </div>
         </div>
         <div className="list-row">
           <div className="grow"><div className="t">Word timing</div><div className="d">{st.wordLeadMs === 90 ? 'Tuned for the phone speaker' : st.wordLeadMs > 90 ? `${st.wordLeadMs - 90} ms earlier · for Bluetooth delay` : `${90 - st.wordLeadMs} ms later`}</div></div>

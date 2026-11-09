@@ -324,7 +324,7 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 
 .reader { padding: 22px 22px 18px; max-height: 58vh; overflow-y: auto; scroll-behavior: smooth; mask-image: linear-gradient(transparent, #000 18px, #000 calc(100% - 24px), transparent); }
 @media (min-width: 840px) { .reader { max-height: 64vh; } }
-.reader p { margin: 0 0 1em; font-size: 19px; line-height: 1.75; color: var(--text-2); }
+.reader p { margin: 0 0 1em; font-size: calc(19px * var(--rscale, 1)); line-height: 1.75; color: var(--text-2); }
 .sent { border-radius: 8px; padding: 2px 1px; cursor: pointer; transition: color .3s, background .3s, box-shadow .3s; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .sent:hover { color: var(--text); }
 .sent.past { color: var(--muted); }
@@ -337,6 +337,7 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 .rh-btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 99px; font-size: 12px; font-weight: 600; color: var(--text-2, var(--text));
   background: color-mix(in srgb, var(--text) 6%, transparent); border: 1px solid var(--line); transition: background .2s, color .2s, transform .15s; }
 .rh-btn:active { transform: scale(.95); }
+.rh-btn:disabled { opacity: .35; }
 .rh-btn:hover { color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); }
 .rh-btn svg { opacity: .85; }
 
@@ -911,7 +912,8 @@ html, body { overflow-x: clip; }
   .listen-grid > .card:first-child .editor { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   .listen-page .editor textarea { flex: 1; min-height: 0; max-height: none; font-size: 20px; padding: 24px 28px 10px; }
   .listen-page .reader { flex: 1; max-height: none; min-height: 0; padding: 28px 34px 22px; }
-  .listen-page .reader p { font-size: 21px; }
+  .listen-page .reader p { font-size: calc(21px * var(--rscale, 1)); }
+  .reader-head .rh-btn { height: 34px; padding: 0 13px; }
   .desk-voices { display: block !important; }
   .desk-stats .ds-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; }
   .ds-grid div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

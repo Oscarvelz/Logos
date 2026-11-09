@@ -1,3 +1,17 @@
+## 1.4.100 — The Listen reader's text grows and shrinks
+
+Oscar's ask: make the Listen reading text bigger or smaller, on
+phone and tablet, 'muy optimizado para mi tableta'. The reader now
+carries a size ladder (80% → 200% in eight rungs) walked by two
+small pills in the reader's own head — A− and A+ — so the size is
+changed from the reading chair, not from a settings expedition;
+the same stepper also lives in Settings → Playback, beside
+Highlight, with the percentage shown and a reset. The size is one
+CSS variable over the reader's two bases (19px phone, 21px on wide
+screens), so on the tablet the ladder runs from a compact 17px to
+a true large-print 42px, line-height breathing with it. The choice
+persists with the rest of his settings. Web only — no APK.
+
 ## 1.4.99 — The gray screen was my transparency; the dark ground returns
 
 Oscar's episode, in his words: the button dead for a few seconds,
