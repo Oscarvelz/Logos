@@ -338,6 +338,14 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
   background: color-mix(in srgb, var(--text) 6%, transparent); border: 1px solid var(--line); transition: background .2s, color .2s, transform .15s; }
 .rh-btn:active { transform: scale(.95); }
 .rh-btn:disabled { opacity: .35; }
+/* Phone only: the four reader-head buttons shrink (Save and Edit become
+   their icons) so the hint sentence sits on one line. Tablet untouched. */
+@media (max-width: 839px) {
+  .rh-btn { height: 24px; padding: 0 8px; font-size: 11px; }
+  .rh-actions { gap: 4px; }
+  .rh-label { display: none; }
+  .rh-hint { letter-spacing: 0; }
+}
 .rh-btn:hover { color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); }
 .rh-btn svg { opacity: .85; }
 
