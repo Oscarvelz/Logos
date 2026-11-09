@@ -1,3 +1,13 @@
+## 1.4.94 — On open, the bubble takes its corner
+
+Oscar: he likes the panel beside its bubble, but when the player
+opens he wants the pair cornered — the λ itself glides to the
+nearest top corner (left, or right when it lives on that side) and
+the panel deploys tucked into the corner under it, rather than the
+two settling up high mid-screen. The corner becomes the bubble's
+remembered spot until a hand drags it somewhere else; closing the
+panel leaves it there.
+
 ## 1.4.93 — The panel opens beside its bubble
 
 Oscar: the free bubble exposed an old habit — the panel still

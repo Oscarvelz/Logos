@@ -1010,6 +1010,7 @@ class BubbleService : Service() {
         stage.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(190).setInterpolator(DecelerateInterpolator()).start()
         // Once laid out, its real height gets the final word on the spot.
         stage.post { positionPanel() }
+        cornerBubble()
         refreshPanel()
         // The tap that opened the panel is the moment Android allows: with the
         // lever on, what was just copied takes the stage.
@@ -1019,6 +1020,37 @@ class BubbleService : Service() {
         val deliveriesBefore = deliveries
         handler.postDelayed({ if (deliveries != deliveriesBefore) cheer() }, 900)
         handler.postDelayed({ if (deliveries != deliveriesBefore) cheer() }, 1900)
+    }
+
+    // ON OPEN, THE BUBBLE TAKES ITS CORNER (Oscar): when the player
+    // deploys, the λ glides to the nearest top corner — left, or right
+    // when it lives on that side — and the panel opens tucked into the
+    // corner with it, instead of the pair settling up high mid-screen.
+    // The corner becomes its remembered spot until a hand drags it away.
+    private fun cornerBubble() {
+        val bp = bubbleParams ?: return
+        val bv = bubble ?: return
+        val sw2 = resources.displayMetrics.widthPixels
+        val bw = dp(58)
+        val targetX = if (bp.x + dp(29) < sw2 / 2) dp(4) else sw2 - bw - dp(4)
+        val targetY = dp(12)
+        if (bp.x == targetX && bp.y == targetY) { saveBubblePos(bp.x, bp.y); return }
+        val startX = bp.x; val startY = bp.y
+        val anim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 230
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                val f = it.animatedValue as Float
+                bp.x = startX + ((targetX - startX) * f).toInt()
+                bp.y = startY + ((targetY - startY) * f).toInt()
+                runCatching { wm?.updateViewLayout(bv, bp) }
+                if (panel != null) positionPanel()
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(a: android.animation.Animator) { saveBubblePos(bp.x, bp.y) }
+            })
+        }
+        anim.start()
     }
 
     // THE PANEL HUGS ITS BUBBLE (Oscar): it opens right beside the λ —
