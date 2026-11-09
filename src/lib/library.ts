@@ -99,7 +99,7 @@ export async function restoreClip(clip: Clip) {
 export async function updateClip(id: string, patch: Partial<Omit<Clip, 'id'>>, refresh = true) {
   const cur = await getClip(id)
   if (!cur) return
-  await tx('readwrite', (s) => s.put({ ...cur, ...patch, size: (patch.blob ?? cur.blob)?.size ?? 0 }))
+  await tx('readwrite', (s) => s.put({ ...cur, ...patch, size: patch.blob ? patch.blob.size : cur.size }))
   if (refresh) await refreshLibrary()
   else library.set((st) => ({ clips: st.clips.map((c) => (c.id === id ? { ...c, ...patch, blob: undefined } as ClipMeta : c)) }))
 }

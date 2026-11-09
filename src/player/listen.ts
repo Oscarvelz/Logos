@@ -102,11 +102,13 @@ export type ListenState = {
   cushion: { have: number; need: number; eta: number | null; done: number; total: number } | null
   /** sleep timer: seconds left, or null when off */
   sleepLeft: number | null
+  /** the duration chosen for the sleep timer, so its sheet can mark it */
+  sleepMins: number | null
 }
 
 export const listen = createStore<ListenState>({
   active: false, text: '', segments: [], voices: [], current: 0, playing: false,
-  buffering: false, mode: null, rendered: [], error: null, finished: false, cushion: null, sleepLeft: null,
+  buffering: false, mode: null, rendered: [], error: null, finished: false, cushion: null, sleepLeft: null, sleepMins: null,
 })
 
 const LISTEN_PRIORITY = 1000
@@ -683,9 +685,9 @@ let sleepEnd = 0
 export function setSleepTimer(minutes: number | null) {
   if (sleepId) { clearInterval(sleepId); sleepId = null }
   if (audio) audio.volume = 1
-  if (!minutes || minutes <= 0) { listen.set({ sleepLeft: null }); return }
+  if (!minutes || minutes <= 0) { listen.set({ sleepLeft: null, sleepMins: null }); return }
   sleepEnd = Date.now() + minutes * 60000
-  listen.set({ sleepLeft: minutes * 60 })
+  listen.set({ sleepLeft: minutes * 60, sleepMins: minutes })
   sleepId = setInterval(() => {
     const left = Math.max(0, (sleepEnd - Date.now()) / 1000)
     listen.set({ sleepLeft: Math.ceil(left) })

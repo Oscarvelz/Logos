@@ -1,3 +1,38 @@
+## 1.4.110 — Wave 3 of the button audit: the fine edges (A-2, B-1, B-2, B-3, C-3, C-4, C-5, D-S2, A-3/D-5)
+
+- **Sleep timer sheet marks the armed duration** (A-2): the store now
+  remembers the chosen minutes (`sleepMins`, set and cleared inside
+  setSleepTimer), and the sheet paints that option `on`, like Off
+  already did.
+- **A metadata edit no longer zeroes a text clip's size** (B-1):
+  updateClip recomputed size from the blob on every patch; text clips
+  have no blob, so fav/rename/finish wrote size 0 and the «on this
+  device» header undercounted. Size now changes only when a blob does.
+- **The shelf badge shows the STATE** (B-2): a temporary book wears
+  «Once» with its clock, a kept book «Keep» with its pin — the label
+  and aria keep naming the tap's action, as they did.
+- **The clip bar is a slider only while its clip holds the stage**
+  (B-3): role, label and valuenow are conditional on `active`; in
+  repose it no longer advertises a seek it will not perform.
+- **The reader seek never promises a number it won't rest at** (C-3):
+  while dragging, fill, thumb, % and chapter all show the LANDING
+  place (the seek rests on block starts) instead of the finger's raw
+  share — the 77%-promised, 63%-rested gap is closed: the number
+  shown is now the landing block's own share, end to end. (The scroll
+  tracker's "top of the screen" line was also aligned with the jump's
+  landing line, header+16 vs the old +8, so the two definitions of
+  the reading place agree.)
+- **Reader paragraphs answer the keyboard** (C-5): every block is
+  focusable and Enter/Space selects it, exactly like a tap.
+- **Errors speak the app's language** (C-4, D-S2): a failed audiobook
+  export and a failed voice-model download now say what happened in
+  human, translated words («The audiobook could not be finished…»,
+  «Not enough storage…», «Could not download the voice model —
+  check your connection…») instead of the browser's raw text.
+- **The reader head's aria-labels go through t()** (A-3/D-5):
+  «Smaller text», «Bigger text» and «Save to Library» were hardcoded
+  English; the dictionary already carried them, they were never asked.
+
 ## 1.4.109 — Wave 2 of the button audit: reach and rescue nets (A-1/B-6, E-2, E-3)
 
 - **A-1/B-6: the Continue row for a pasted text no longer eats itself.**

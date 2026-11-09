@@ -92,7 +92,11 @@ export function BookPage() {
       raf = requestAnimationFrame(() => {
         const els = textRef.current?.querySelectorAll<HTMLElement>('[data-b]')
         if (!els?.length) return
-        const top = (document.querySelector('.bk-head')?.getBoundingClientRect().bottom ?? 60) + 8
+        // The jump scroll leaves its block 14px under the header; the
+        // tracker must look below that landing line, or it settles one
+        // block before every jump (the last of C-3's gap: preview 65%,
+        // rest 63%). One definition of "the top" for both.
+        const top = (document.querySelector('.bk-head')?.getBoundingClientRect().bottom ?? 60) + 16
         let lo = 0, hi = els.length - 1
         while (lo < hi) { const m = (lo + hi) >> 1; if (els[m].getBoundingClientRect().bottom < top) lo = m + 1; else hi = m }
         const b = Number(els[lo].dataset.b)
@@ -285,7 +289,7 @@ function renderText(b: Block, mark: Mark, onLink: (to: string) => void): ReactNo
 
 function BlockView({ b, i, sel, marked, mark, onLink, onTap }: { b: Block; i: number; sel: boolean; marked: boolean; mark: Mark; onLink: (to: string) => void; onTap: () => void }) {
   const cls = `bk-b bk-${b.k}${sel ? ' sel' : ''}${marked ? ' marked' : ''}${mark ? ' found' : ''}`
-  const props = { id: `bk-${i}`, 'data-b': i, className: cls, onClick: (e: React.MouseEvent) => { if (!getSelection()?.toString()) { e.stopPropagation(); onTap() } } }
+  const props = { id: `bk-${i}`, 'data-b': i, className: cls, tabIndex: 0, onClick: (e: React.MouseEvent) => { if (!getSelection()?.toString()) { e.stopPropagation(); onTap() } }, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onTap() } } }
   const kids = renderText(b, mark, onLink)
   switch (b.k) {
     case 'h1': return <h2 {...props}>{kids}</h2>
@@ -319,12 +323,16 @@ function BottomBar({ meta, chapters, ch, progress, onPrev, onNext, onToc, onList
   const s = useStore(listen)
   const [dragF, setDragF] = useState<number | null>(null)
   const progRef = useRef<HTMLDivElement>(null)
-  const shown = dragF ?? progress
+  const seekPos = dragF !== null ? posAtProgress(meta, chapters, dragF) : null
+  // While dragging, everything the bar says — fill, thumb, %, chapter — is
+  // the place the seek will REST (it lands on block starts), never the
+  // finger's raw share: the audit caught it promising 77% and resting
+  // at 63% (C-3).
+  const shown = dragF !== null && seekPos ? progressAt(meta, chapters, seekPos) : (dragF ?? progress)
   const left = Math.max(0, meta.words * (1 - shown))
   const mins = Math.round(left / 230)
   const fromHere = s.active && nowReadingFor(s.text)?.id === meta.id
   const timeLeft = t('{x} left', { x: mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min` : `${Math.max(1, mins)} min` })
-  const seekPos = dragF !== null ? posAtProgress(meta, chapters, dragF) : null
   const fracFromEvent = (e: React.PointerEvent) => {
     const el = progRef.current; if (!el) return 0
     const r = el.getBoundingClientRect()
@@ -339,7 +347,7 @@ function BottomBar({ meta, chapters, ch, progress, onPrev, onNext, onToc, onList
         onPointerCancel={() => setDragF(null)}
         onKeyDown={(e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); onSeek(posAtProgress(meta, chapters, progress + (e.key === 'ArrowRight' ? 0.05 : -0.05))) } }}>
         <div className="bk-prog-track" ref={progRef}><i style={{ width: `${shown * 100}%` }} /><span className="bk-prog-thumb" style={{ left: `${shown * 100}%` }} /></div>
-        {dragF !== null && seekPos && <div className="bk-seek-tip" style={{ left: `clamp(58px, calc(14px + ${dragF * 100}% - ${dragF * 28}px), calc(100% - 58px))` }}>{Math.round(dragF * 100)}% · {shortTitle(chapters[seekPos.ch].title)}</div>}
+        {dragF !== null && seekPos && <div className="bk-seek-tip" style={{ left: `clamp(58px, calc(14px + ${dragF * 100}% - ${dragF * 28}px), calc(100% - 58px))` }}>{Math.round(shown * 100)}% · {shortTitle(chapters[seekPos.ch].title)}</div>}
       </div>
       <button className="icon-btn" onClick={onPrev} disabled={ch === 0} aria-label={t('Previous chapter')}><ChevronLeft size={22} /></button>
       <button className="bk-bar-mid" onClick={onToc}>

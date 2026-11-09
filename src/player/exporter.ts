@@ -8,6 +8,7 @@ import { voiceById, type Lang } from '../lib/voices.ts'
 import { concat, createMp3Encoder, encodeWav, silence, trimSilence, applyGain, levelGain } from '../lib/audio.ts'
 import { synthesize } from '../engine/engine.ts'
 import { saveClip, updateClip, getClip, type ClipMeta } from '../lib/library.ts'
+import { t } from '../lib/i18n.ts'
 
 export type ExportState = {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -109,7 +110,12 @@ export async function runExport(text: string, opts: ExportOpts) {
   } catch (err) {
     if (opts.id) void updateClip(opts.id, { rendering: false })
     if ((err as Error).name === 'AbortError') exportJob.set({ status: 'idle', done: 0, total: 0 })
-    else exportJob.set({ status: 'error', error: (err as Error).message })
+    else {
+      // The raw system message («Failed to fetch») is not user language
+      // (audit C-4): say what happened, in the app's own words.
+      const raw = (err as Error).message ?? ''
+      exportJob.set({ status: 'error', error: /quota|storage/i.test(raw) ? t('Not enough storage to finish the audiobook') : t('The audiobook could not be finished — please try again') })
+    }
   } finally {
     ctrl = null
     next()

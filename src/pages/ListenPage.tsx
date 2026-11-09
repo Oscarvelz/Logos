@@ -253,7 +253,7 @@ export function ListenPage() {
       <Sheet open={sleepOpen} onClose={() => setSleepOpen(false)} title={t('Sleep timer')}>
         <div className="speed-row" style={{ marginBottom: 14 }}>
           <button className={s.sleepLeft == null ? 'on' : ''} onClick={() => setSleepTimer(null)}>{t('Off')}</button>
-          {[10, 15, 20, 30, 45, 60].map((m) => <button key={m} onClick={() => setSleepTimer(m)}>{m} min</button>)}
+          {[10, 15, 20, 30, 45, 60].map((m) => <button key={m} className={s.sleepMins === m ? 'on' : ''} onClick={() => setSleepTimer(m)}>{m} min</button>)}
         </div>
         <p className="muted small" style={{ margin: '8px 4px 0' }}>{t('The last ten seconds fade down gently, then it pauses.')}</p>
       </Sheet>
@@ -387,9 +387,9 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
       <div className="reader-head">
         <span className="rh-hint">{t('Tap a word to start there.')}</span>
         <div className="rh-actions">
-          <button className="rh-btn" aria-label="Smaller text" disabled={st.readerScale <= READER_SCALES[0]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, -1) })}><span style={{ fontSize: 10, fontWeight: 700 }}>A</span><span aria-hidden="true">−</span></button>
-          <button className="rh-btn" aria-label="Bigger text" disabled={st.readerScale >= READER_SCALES[READER_SCALES.length - 1]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, 1) })}><span style={{ fontSize: 15, fontWeight: 700 }}>A</span><span aria-hidden="true">+</span></button>
-          <button className="rh-btn" onClick={onKeep} aria-label="Save to Library"><BookmarkPlus size={13} /><span className="rh-label">{t('Save')}</span></button>
+          <button className="rh-btn" aria-label={t('Smaller text')} disabled={st.readerScale <= READER_SCALES[0]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, -1) })}><span style={{ fontSize: 10, fontWeight: 700 }}>A</span><span aria-hidden="true">−</span></button>
+          <button className="rh-btn" aria-label={t('Bigger text')} disabled={st.readerScale >= READER_SCALES[READER_SCALES.length - 1]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, 1) })}><span style={{ fontSize: 15, fontWeight: 700 }}>A</span><span aria-hidden="true">+</span></button>
+          <button className="rh-btn" onClick={onKeep} aria-label={t('Save to Library')}><BookmarkPlus size={13} /><span className="rh-label">{t('Save')}</span></button>
           <button className="rh-btn" onClick={onEdit}><PenLine size={13} /><span className="rh-label">{t('Edit')}</span></button>
         </div>
       </div>

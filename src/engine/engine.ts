@@ -6,6 +6,7 @@ import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
 import { voiceById, type EngineKind } from '../lib/voices.ts'
 import { timeStretch } from '../lib/audio.ts'
+import { t } from '../lib/i18n.ts'
 import { pocket, pocketEnsure, pocketSynth, pocketPromote, pocketClear, pocketDelete, pocketCached, pocketCacheBytes, pocketRelease, onPocketBeforeLoad, POCKET_SIZE_MB, type PocketLang } from './pocket.ts'
 import { phonon, phononEnsure, phononSynth, phononPromote, phononClear, phononDelete, phononCached, phononCacheBytes, phononRelease, phononLoaded, onPhononBeforeLoad, PHONON_SIZE_MB } from './phonon.ts'
 
@@ -70,6 +71,12 @@ function compute(): EngineState {
   return activeKind() === 'phonon' ? computeFrom(phonon.get(), 'phonon') : computeFrom(pocket.get(), 'pocket')
 }
 
+/** A download that died on the network says so in human words, never the
+ *  browser's raw «Failed to fetch» (audit D-S2); anything else passes
+ *  through untouched. */
+const friendlyError = (e: string | null): string | null =>
+  e && /failed to fetch|network|load failed|fetch/i.test(e) ? t('Could not download the voice model — check your connection and try again') : e
+
 function computeFrom(p: { langs: Record<PocketLang, { status: string; loaded: number; total: number; error: string | null; loadMs: number | null; fromCache: boolean }>; active: PocketLang | null; lastRtf: number | null; threads?: number | null }, kind: EngineKind): EngineState {
   const lang: PocketLang = p.active ?? wantedLang()
   const l = p.langs[lang]
@@ -80,7 +87,7 @@ function computeFrom(p: { langs: Record<PocketLang, { status: string; loaded: nu
     progress: l.total ? l.loaded / l.total : 0,
     loaded: l.loaded,
     total: l.total,
-    error: l.error,
+    error: friendlyError(l.error),
     cached: cachedFlag || anyReady,
     lastRtf: p.lastRtf,
     loadMs: l.loadMs,
