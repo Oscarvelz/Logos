@@ -223,7 +223,7 @@ export function KeepAskSheet() {
 
 function BookMenu({ b, onClose, onRename }: { b: BookMeta | null; onClose: () => void; onRename: (b: BookMeta) => void }) {
   if (!b) return null
-  const run = (fn: () => void | Promise<void>) => () => { onClose(); void fn() }
+  const run = (fn: () => void | Promise<unknown>) => () => { onClose(); void fn() }
   const remove = async () => {
     const shown = b.title.length > 90 ? b.title.slice(0, 90) + '…' : b.title
     if (!await confirmDelete(t('Delete this book?'), t('“{title}” will be removed from your library.', { title: shown }))) return

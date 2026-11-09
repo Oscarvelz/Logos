@@ -83,13 +83,33 @@ export async function putBook(meta: BookMeta, content: BookContent) {
 export const getBook = async (id: string) => (await run<BookMeta | undefined>('books', 'readonly', (s) => s.get(id) as IDBRequest<BookMeta | undefined>)) ?? null
 export const getContent = async (id: string) => (await run<BookContent | undefined>('content', 'readonly', (s) => s.get(id) as IDBRequest<BookContent | undefined>)) ?? null
 
-export async function updateBook(id: string, patch: Partial<Omit<BookMeta, 'id'>>, refresh = true) {
-  const cur = await getBook(id)
-  if (!cur) return
-  const next = { ...cur, ...patch }
-  await run('books', 'readwrite', (s) => s.put(next))
-  if (refresh) await refreshBooks()
-  else books.set((st) => ({ list: st.list.map((b) => (b.id === id ? next : b)) }))
+type BookPatch = Partial<Omit<BookMeta, 'id'>>
+/** One writer at a time per book (1.4.108). updateBook used to be a bare
+    read-modify-write: two writers holding different photos of the same
+    record stomped each other — the reader's bookmark, written while the
+    position saver re-saved its older photo, simply never landed (audit
+    C-1), and a finished book's progress was re-derived back down (C-2).
+    Now every write for a book queues behind the previous one and reads
+    the record FRESH inside its turn; a patch may be a function of that
+    fresh record, so no writer ever merges onto a stale photo. */
+const bookWriteChains = new Map<string, Promise<unknown>>()
+function enqueueBookWrite<T>(id: string, job: () => Promise<T>): Promise<T> {
+  const prev = bookWriteChains.get(id) ?? Promise.resolve()
+  const runJob = prev.then(job, job)
+  bookWriteChains.set(id, runJob.then(() => undefined, () => undefined))
+  return runJob
+}
+
+export function updateBook(id: string, patch: BookPatch | ((cur: BookMeta) => BookPatch), refresh = true): Promise<BookMeta | null> {
+  return enqueueBookWrite(id, async () => {
+    const cur = await getBook(id)
+    if (!cur) return null
+    const next = { ...cur, ...(typeof patch === 'function' ? patch(cur) : patch) }
+    await run('books', 'readwrite', (s) => s.put(next))
+    if (refresh) await refreshBooks()
+    else books.set((st) => ({ list: st.list.map((b) => (b.id === id ? next : b)) }))
+    return next
+  })
 }
 
 export async function deleteBook(id: string): Promise<{ meta: BookMeta; content: BookContent } | null> {

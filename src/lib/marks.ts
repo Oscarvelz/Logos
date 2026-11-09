@@ -46,13 +46,9 @@ export async function markCurrentMoment(): Promise<'book' | 'loose' | null> {
   if (!seg) return null
   const nr = nowReadingFor(s.text)
   if (nr) {
-    const meta = await getBook(nr.id)
-    if (meta) {
-      const p = posAt(nr, seg.start)
-      const marks = [...(meta.bookmarks ?? []), { ch: p.ch, b: p.b, at: Date.now(), text: seg.text }]
-      await updateBook(nr.id, { bookmarks: marks }, false)
-      return 'book'
-    }
+    const p = posAt(nr, seg.start)
+    const landed = await updateBook(nr.id, (cur) => ({ bookmarks: [...(cur.bookmarks ?? []), { ch: p.ch, b: p.b, at: Date.now(), text: seg.text }] }), false)
+    if (landed) return 'book'
   }
   addLooseMark({
     id: `m${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`,

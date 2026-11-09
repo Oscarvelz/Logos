@@ -28,9 +28,7 @@ export function MarksSection() {
 
   const drop = async (r: Row) => {
     if (r.kind === 'loose') { removeLooseMark(r.mark.id); setLoose(loadMarks()); return }
-    const meta = bk.list.find((b) => b.id === r.bookId)
-    if (!meta) return
-    await updateBook(r.bookId, { bookmarks: (meta.bookmarks ?? []).filter((m) => m.at !== r.at) }, false)
+    await updateBook(r.bookId, (cur) => ({ bookmarks: (cur.bookmarks ?? []).filter((m) => m.at !== r.at) }), false)
     setTick((t) => t + 1)
   }
 

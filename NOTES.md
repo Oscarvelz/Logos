@@ -1,3 +1,31 @@
+## 1.4.108 — Wave 1 of the button audit: say it only once it's true (C-1, C-2, E-1)
+
+- **C-1 (the audit's one ENGAÑOSO): the reader's bookmark now actually
+  lands.** updateBook was a bare read-modify-write; the bookmark's write
+  and the reader's own position saver, holding an older photo of the
+  record, stomped each other and the bookmark died. books.ts now runs
+  ONE writer at a time per book (a per-id queue), every write reads the
+  record fresh inside its turn, and a patch may be a function of that
+  fresh record. The bookmark toggle, the panel's mark (marks.ts) and
+  the Saved Marks removal (marks.tsx) all compute from the fresh
+  record. And the «Bookmarked» toast is born only AFTER the write has
+  landed — verify before claiming.
+- **C-2, same root:** «Mark as finished» keeps its 100%: the position
+  saver now derives its patch from the fresh record and honours
+  `done` (progress stays 1 once done), so a later position save can no
+  longer re-derive the bar back to 63%. The finish toast also waits
+  for the landing.
+- **E-1: the panel stops celebrating early.** The shell toasted
+  «Saved to Library» in the very tap that SENT the save poke — before
+  the page saved, and even when there was nothing to save. Both ＋
+  confirm paths now capture whether the text was already saved and
+  toast only when the page's own pushed state flips to saved
+  (toastSavedWhenTrue, checks at 0.9 s and 2.2 s); otherwise silence —
+  the page's toast («Nothing to save yet», «Already in your
+  library») tells the truth inside the app. The ⚑ first-time card
+  keeps teaching where marks live, but its title no longer claims
+  the deed («The ⚑ mark», not «Marked»).
+
 ## 1.4.107 — The phone's missing line (Oscar's find: 'solo muestra la cabecita, no la cola')
 
 - On his phone the panel's progress bar showed only the round thumb —
