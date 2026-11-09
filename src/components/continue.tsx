@@ -23,7 +23,7 @@ type Entry = {
   run: () => void
 }
 
-export function ContinueRow() {
+export function ContinueRow({ onResume }: { onResume?: () => void }) {
   const bk = useStore(books)
   const lib = useStore(library)
   const s = useStore(listen)
@@ -74,7 +74,7 @@ export function ContinueRow() {
         title: r.title,
         sub: t('Sentence {a}', { a: r.idx + 1 }),
         at: r.at,
-        run: () => { loadText(d.listen); seek(r.idx); void play(r.idx); location.hash = '#/listen' },
+        run: () => { loadText(d.listen); seek(r.idx); void play(r.idx); onResume?.(); location.hash = '#/listen' },
       })
     }
     return out.sort((a, b) => b.at - a.at).slice(0, 3)

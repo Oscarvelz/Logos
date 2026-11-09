@@ -166,6 +166,15 @@ class BubbleService : Service() {
 
         /** A clipboard text takes the stage: stored for the page to pull, and the page is poked.
          *  The same text twice in a row does not restart itself (unless Oscar asked by hand). */
+        /** A press that arrived with no activity to hear it (the media
+         *  notification's buttons, audit E-3): remember it where the page
+         *  collects pending commands on waking, and pay the page a ghost
+         *  visit — the same net the panel's transport keys already have. */
+        fun wakeForPending(c: Context, cmd: String) {
+            pendingCmd = cmd
+            runCatching { c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(c, 0, 0).toBundle()) }
+        }
+
         fun deliver(c: Context, text: String, manual: Boolean) {
             if (text.isEmpty()) return
             if (!manual && isLocked(c)) { noteTry(c, s("the lock held a copy back", "el candado retuvo una copia")); return }
@@ -617,7 +626,7 @@ class BubbleService : Service() {
         val longRun = Runnable {
             if (!moved && panel == null) {
                 longHit = true
-                poke?.invoke("voice")
+                pokeOrWake("voice")
                 v.animate().scaleX(1.13f).scaleY(1.13f).setDuration(90)
                     .withEndAction { v.animate().scaleX(1f).scaleY(1f).setDuration(160).start() }.start()
             }
@@ -918,7 +927,7 @@ class BubbleService : Service() {
             setOnClickListener {
                 showHintCard(s("Save to Library", "Guardar en Biblioteca"), s("Keeps the text playing now in your Library, so you can hear it again whenever you like.", "Guarda el texto que suena ahora en tu Biblioteca, para oírlo de nuevo cuando quieras."), s("Save", "Guardar"), s("Not now", "Ahora no")) {
                     val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
-                    poke?.invoke("save")
+                    pokeOrWake("save")
                     toastSavedWhenTrue(wasSaved)
                 }
             }
@@ -1326,7 +1335,7 @@ class BubbleService : Service() {
     private fun showMarkHint() {
         val saved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
         if (saved) {
-            poke?.invoke("mark")
+            pokeOrWake("mark")
             if (!prefs(this).getBoolean("markTaught", false)) {
                 prefs(this).edit().putBoolean("markTaught", true).apply()
                 showHintCard(s("The ⚑ mark", "La marca ⚑"), s("The ⚑ keeps a mark on what you are hearing — you will find it in Library, under Saved Marks.", "La ⚑ deja una marca en lo que estás oyendo: la encontrarás en Biblioteca, en Marcas guardadas."), s("Got it", "Entendido"), "") { }
@@ -1334,7 +1343,7 @@ class BubbleService : Service() {
         } else {
             showHintCard(s("Not in your Library yet", "Aún no está en tu Biblioteca"), s("Marks live with their audio — on an unsaved text, its marks would be hard to find later. Save it to your Library first, and the ⚑ is yours.", "Las marcas viven con su audio: en un texto sin guardar, sus marcas serían difíciles de encontrar después. Guárdalo primero en tu Biblioteca y la ⚑ es tuya."), s("Save to Library", "Guardar en Biblioteca"), s("Not now", "Ahora no")) {
                 val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
-                poke?.invoke("save")
+                pokeOrWake("save")
                 toastSavedWhenTrue(wasSaved)
             }
         }

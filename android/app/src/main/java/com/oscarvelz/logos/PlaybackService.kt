@@ -38,10 +38,10 @@ class PlaybackService : Service() {
         nm.createNotificationChannel(NotificationChannel(CH, "Reading aloud", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
         session = MediaSession(this, "Logos").apply {
             setCallback(object : MediaSession.Callback() {
-                override fun onPlay() { onAction?.invoke("toggle") }
-                override fun onPause() { onAction?.invoke("toggle") }
-                override fun onSkipToNext() { onAction?.invoke("next") }
-                override fun onSkipToPrevious() { onAction?.invoke("prev") }
+                override fun onPlay() { act("play") }
+                override fun onPause() { act("pause") }
+                override fun onSkipToNext() { act("next") }
+                override fun onSkipToPrevious() { act("prev") }
             })
             isActive = true
         }
@@ -50,10 +50,11 @@ class PlaybackService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            "toggle", "next", "prev" -> { onAction?.invoke(intent.action!!); return START_NOT_STICKY }
+            "toggle", "next", "prev" -> { act(if (intent.action == "toggle") (if (lastPlaying) "pause" else "play") else intent.action!!); return START_NOT_STICKY }
             "stop" -> { stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf(); return START_NOT_STICKY }
         }
         val playing = intent?.getBooleanExtra("playing", false) ?: false
+        lastPlaying = playing
         // Shell 17's page sends book + artist separately; the older playing() call folded the
         // artist line into "title" and the current sentence into "text".
         val artist = intent?.getStringExtra("artist") ?: intent?.getStringExtra("title") ?: "Logos"
@@ -69,6 +70,23 @@ class PlaybackService : Service() {
         startForeground(1, build(playing, book, artist, text), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         if (playing) wake?.acquire(3 * 60 * 60 * 1000L) else wake?.let { if (it.isHeld) it.release() }
         return START_NOT_STICKY
+    }
+
+    /** The last playing state this service published — the notification's
+     *  toggle button means pause while playing, play while paused. */
+    private var lastPlaying = false
+
+    /** Route a button press. While the activity lives it hears the press
+     *  exactly as before (play/pause travel as its "toggle"). When Android
+     *  has retired the activity and revived this service alone, the press
+     *  used to fall on a null lambda and die with a visible notification
+     *  and dead buttons (audit E-3): now it is stored as a DEFINITE play
+     *  or pause where the page collects pending commands, and the page
+     *  gets a ghost visit — the panel keys' safety net, extended here. */
+    private fun act(kind: String) {
+        val a = onAction
+        if (a != null) { a(if (kind == "play" || kind == "pause") "toggle" else kind); return }
+        BubbleService.wakeForPending(this, kind)
     }
 
     private fun pi(action: String, rq: Int): PendingIntent =
