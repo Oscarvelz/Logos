@@ -10,6 +10,7 @@ import { getBook, updateBook } from './books.ts'
 import { nowReadingFor, posAt } from './book/nowreading.ts'
 import { playBook } from './book/playbook.ts'
 import { toast } from '../components/ui.tsx'
+import { t } from './i18n.ts'
 
 export type LooseMark = {
   id: string
@@ -67,9 +68,9 @@ export async function markCurrentMoment(): Promise<'book' | 'loose' | null> {
 /** The one toast every door uses after marking. */
 export async function markAndToast() {
   const r = await markCurrentMoment()
-  if (r === 'book') toast('Marked in the book — find it in the book’s marks')
-  else if (r === 'loose') toast('Moment marked — find it in Library')
-  else toast('Nothing is playing to mark')
+  if (r === 'book') toast(t('Marked in the book — find it in the book’s marks'))
+  else if (r === 'loose') toast(t('Moment marked — find it in Library'))
+  else toast(t('Nothing is playing to mark'))
 }
 
 /** Jump back to a loose mark: only while its text is still the Listen draft. */

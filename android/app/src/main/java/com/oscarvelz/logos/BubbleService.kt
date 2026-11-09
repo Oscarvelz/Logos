@@ -115,6 +115,17 @@ class BubbleService : Service() {
         var clipManual = false
         /** Latest player state pushed by the page (JSON: playing, active, title, sub). */
         var nowJson = ""
+            set(value) {
+                field = value
+                if (value.isNotEmpty()) {
+                    val l = runCatching { JSONObject(value).optString("lang", "") }.getOrDefault("")
+                    if (l == "en" || l == "es") uiLang = l
+                }
+            }
+        /** The app's chosen language, learned from the page's pushes — the
+         *  panel speaks it too (1.4.104). */
+        @Volatile var uiLang = "en"
+        fun s(en: String, es: String): String = if (uiLang == "es") es else en
         /** When the page last pushed state — the watchdog's pulse. */
         @Volatile var nowAt = 0L
         var onNow: (() -> Unit)? = null
@@ -157,13 +168,13 @@ class BubbleService : Service() {
          *  The same text twice in a row does not restart itself (unless Oscar asked by hand). */
         fun deliver(c: Context, text: String, manual: Boolean) {
             if (text.isEmpty()) return
-            if (!manual && isLocked(c)) { noteTry(c, "the lock held a copy back"); return }
+            if (!manual && isLocked(c)) { noteTry(c, s("the lock held a copy back", "el candado retuvo una copia")); return }
             val key = text.length * 31 + text.hashCode()
             if (!manual && key == lastKey) return
             lastKey = key
             deliveries++
             lastDeliveryAt = System.currentTimeMillis()
-            noteTry(c, "read ${text.length} chars via $trySource")
+            noteTry(c, s("read ${text.length} chars via $trySource", "leídos ${text.length} caracteres vía ${if (trySource == "the blink") "el parpadeo" else "el panel"}"))
             clipText = text
             clipManual = manual
             onDelivery?.invoke()
@@ -181,8 +192,8 @@ class BubbleService : Service() {
         /** ClipActivity read the clipboard under its brief focus: hand it over. */
         fun deliverFromClip(c: Context, text: String) {
             if (text.isEmpty()) {
-                noteTry(c, "the blink found the clipboard empty")
-                if (pendingManual) Toast.makeText(c, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                noteTry(c, s("the blink found the clipboard empty", "el parpadeo vio el portapapeles vacío"))
+                if (pendingManual) Toast.makeText(c, s("Clipboard is empty", "El portapapeles está vacío"), Toast.LENGTH_SHORT).show()
                 return
             }
             trySource = "the blink"
@@ -348,13 +359,13 @@ class BubbleService : Service() {
             // to be busy, froze mid-work: climb to the reload.
             if (clipText == null && nowAt > watchNowAt) return
             if (clipText == null && j?.optBoolean("busy") != true) return
-            noteTry(this, "the catch needed a reload")
+            noteTry(this, s("the catch needed a reload", "la captura necesitó recargar"))
             wantReload = true
             ghostWake()
             return
         }
         if (clipText == null || (alive && nowAt >= at)) return // confirmed
-        noteTry(this, "the catch needed a visit")
+        noteTry(this, s("the catch needed a visit", "la captura necesitó una visita"))
         watchNowAt = nowAt
         ghostWake()
         handler.postDelayed({ deliveryCheck(n, at, 2) }, 3500)
@@ -376,7 +387,7 @@ class BubbleService : Service() {
         val j = runCatching { JSONObject(nowJson) }.getOrNull()
         if (!workingNow(j)) return@Runnable
         if (nowAt > stallPulse) return@Runnable // the wake worked; it breathes again
-        noteTry(this, "the render needed a reload")
+        noteTry(this, s("the render needed a reload", "el render necesitó recargar"))
         wantReload = true
         ghostWake()
     }
@@ -384,7 +395,7 @@ class BubbleService : Service() {
         val j = runCatching { JSONObject(nowJson) }.getOrNull()
         if (!workingNow(j)) return@Runnable
         if (nowAt > stallPulse) { armStallWatch(); return@Runnable } // alive — keep watching
-        noteTry(this, "the render needed a visit")
+        noteTry(this, s("the render needed a visit", "el render necesitó una visita"))
         stallPulse = nowAt
         ghostWake()
         handler.postDelayed(stallRung2, 6000)
@@ -408,7 +419,7 @@ class BubbleService : Service() {
         val p = poke
         if (p != null && !force) { p(cmd); return }
         pendingCmd = cmd
-        noteTry(this, "panel key visited Logos")
+        noteTry(this, s("panel key visited Logos", "la tecla del panel visitó Logos"))
         ghostWake()
     }
 
@@ -465,12 +476,12 @@ class BubbleService : Service() {
         return Notification.Builder(this, "bubble")
             .setSmallIcon(R.drawable.ic_note)
             .setColor(Color.rgb(23, 19, 16))
-            .setContentTitle("Logos bubble")
-            .setContentText("Floating over your apps · tap the λ to listen")
+            .setContentTitle(s("Logos bubble", "Burbuja de Logos"))
+            .setContentText(s("Floating over your apps · tap the λ to listen", "Flotando sobre tus apps · toca la λ para escuchar"))
             .setContentIntent(open)
             .setOngoing(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
-            .addAction(Notification.Action.Builder(null, "Hide bubble", hide).build())
+            .addAction(Notification.Action.Builder(null, s("Hide bubble", "Ocultar burbuja"), hide).build())
             .build()
     }
 
@@ -642,8 +653,8 @@ class BubbleService : Service() {
             return DragTarget(row, Rect(lp.x, lp.y, lp.x + tw, lp.y + th), idle, hot)
         }
         dragTargets = listOf(
-            target(0, "✕", ink, "Remove", Color.rgb(128, 36, 26), Color.rgb(214, 102, 82), Color.WHITE),
-            target(1, "λ", gold, "Open Logos", gold, gold, charcoal)
+            target(0, "✕", ink, s("Remove", "Quitar"), Color.rgb(128, 36, 26), Color.rgb(214, 102, 82), Color.WHITE),
+            target(1, "λ", gold, s("Open Logos", "Abrir Logos"), gold, gold, charcoal)
         )
         hoverTarget = -1
     }
@@ -850,12 +861,12 @@ class BubbleService : Service() {
             text = "+"; setTextColor(c["gold"]!!); textSize = 18f; gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
-            contentDescription = "Save this text to the Library"
+            contentDescription = s("Save this text to the Library", "Guardar este texto en la Biblioteca")
             layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
             setOnClickListener {
-                showHintCard("Save to Library", "Keeps the text playing now in your Library, so you can hear it again whenever you like.", "Save", "Not now") {
+                showHintCard(s("Save to Library", "Guardar en Biblioteca"), s("Keeps the text playing now in your Library, so you can hear it again whenever you like.", "Guarda el texto que suena ahora en tu Biblioteca, para oírlo de nuevo cuando quieras."), s("Save", "Guardar"), s("Not now", "Ahora no")) {
                     poke?.invoke("save")
-                    Toast.makeText(this@BubbleService, "Saved to Library", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@BubbleService, s("Saved to Library", "Guardado en Biblioteca"), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -1014,14 +1025,14 @@ class BubbleService : Service() {
         val spacer2 = View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) }
         clipRow.addView(spacer2)
         val pasteNow = TextView(this).apply {
-            text = "Paste now"
+            text = s("Paste now", "Pegar ahora")
             setTextColor(c["gold"]!!); textSize = 12.5f
             setTypeface(typeface, Typeface.BOLD)
             setOnClickListener { readClip(true) }
         }
         clipRow.addView(pasteNow)
         val hideB = TextView(this).apply {
-            text = "Hide bubble"
+            text = s("Hide bubble", "Ocultar")
             setTextColor(c["muted"]!!); textSize = 12.5f
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(16) }
             setOnClickListener { collapsePanel(); stopBubble() }
@@ -1159,12 +1170,12 @@ class BubbleService : Service() {
      *  what letting go restores. Paste now (a hand ask) is never locked out. */
     private fun showLockHint() {
         if (isLocked(this)) {
-            showHintCard("Unlock the stage", "Copies can take the stage again — a fresh copy will replace what is playing, as before.", "Unlock", "Keep locked") {
+            showHintCard(s("Unlock the stage", "Desbloquear la escena"), s("Copies can take the stage again — a fresh copy will replace what is playing, as before.", "Las copias pueden tomar la escena otra vez: una copia nueva reemplazará lo que suena, como antes."), s("Unlock", "Desbloquear"), s("Keep locked", "Dejar bloqueado")) {
                 setLocked(this@BubbleService, false)
                 lockBtn?.text = "🔓"
             }
         } else {
-            showHintCard("Lock the stage", "While locked, copying a text will not replace what you are hearing — your book keeps the stage. Paste now still works when you ask for it.", "Lock", "Not now") {
+            showHintCard(s("Lock the stage", "Bloquear la escena"), s("While locked, copying a text will not replace what you are hearing — your book keeps the stage. Paste now still works when you ask for it.", "Bloqueada, copiar un texto no reemplazará lo que estás oyendo: tu libro conserva la escena. Pegar ahora sigue funcionando cuando lo pides."), s("Lock", "Bloquear"), s("Not now", "Ahora no")) {
                 setLocked(this@BubbleService, true)
                 lockBtn?.text = "🔒"
             }
@@ -1181,12 +1192,12 @@ class BubbleService : Service() {
             poke?.invoke("mark")
             if (!prefs(this).getBoolean("markTaught", false)) {
                 prefs(this).edit().putBoolean("markTaught", true).apply()
-                showHintCard("Marked", "The ⚑ keeps a mark on what you are hearing — you will find it in Library, under Saved Marks.", "Got it", "") { }
+                showHintCard(s("Marked", "Marcado"), s("The ⚑ keeps a mark on what you are hearing — you will find it in Library, under Saved Marks.", "La ⚑ deja una marca en lo que estás oyendo: la encontrarás en Biblioteca, en Marcas guardadas."), s("Got it", "Entendido"), "") { }
             }
         } else {
-            showHintCard("Not in your Library yet", "Marks live with their audio — on an unsaved text, its marks would be hard to find later. Save it to your Library first, and the ⚑ is yours.", "Save to Library", "Not now") {
+            showHintCard(s("Not in your Library yet", "Aún no está en tu Biblioteca"), s("Marks live with their audio — on an unsaved text, its marks would be hard to find later. Save it to your Library first, and the ⚑ is yours.", "Las marcas viven con su audio: en un texto sin guardar, sus marcas serían difíciles de encontrar después. Guárdalo primero en tu Biblioteca y la ⚑ es tuya."), s("Save to Library", "Guardar en Biblioteca"), s("Not now", "Ahora no")) {
                 poke?.invoke("save")
-                Toast.makeText(this@BubbleService, "Saved to Library", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@BubbleService, s("Saved to Library", "Guardado en Biblioteca"), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -1290,9 +1301,9 @@ class BubbleService : Service() {
         handler.post {
             titleV?.text = j?.optString("title")?.ifBlank { "Logos" } ?: "Logos"
             if (workingNow(j)) armStallWatch() else disarmStallWatch()
-            subV?.text = if (workingNow(j) && System.currentTimeMillis() - nowAt > 20_000) "Waiting for Logos…"
-                else if (j?.optBoolean("busy") == true) "Processing…"
-                else j?.optString("sub")?.ifBlank { "Ready" } ?: "Ready"
+            subV?.text = if (workingNow(j) && System.currentTimeMillis() - nowAt > 20_000) s("Waiting for Logos…", "Esperando a Logos…")
+                else if (j?.optBoolean("busy") == true) s("Processing…", "Procesando…")
+                else j?.optString("sub")?.ifBlank { s("Ready", "Listo") } ?: s("Ready", "Listo")
             lockBtn?.text = if (isLocked(this@BubbleService)) "🔒" else "🔓"
             toggleB?.setImageResource(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
             playingNow = playing
@@ -1332,7 +1343,7 @@ class BubbleService : Service() {
         }
         if (!allowBlink) return // focus retries read directly only — never a blink loop
         val now = System.currentTimeMillis()
-        if (!manual && now - lastTrampoline < 2500) { noteTry(this, "the panel saw the clipboard empty"); return }
+        if (!manual && now - lastTrampoline < 2500) { noteTry(this, s("the panel saw the clipboard empty", "el panel vio el portapapeles vacío")); return }
         lastTrampoline = now
         pendingManual = manual
         if (manual) {
@@ -1343,7 +1354,7 @@ class BubbleService : Service() {
             handler.postDelayed({
                 if (deliveries == before) {
                     wantClip = true
-                    noteTry(this, "opened Logos to read it")
+                    noteTry(this, s("opened Logos to read it", "abrió Logos para leerlo"))
                     runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 }
             }, 1000)
@@ -1363,7 +1374,7 @@ class BubbleService : Service() {
             }
             pi.send()
         }.onFailure {
-            if (manual) Toast.makeText(this, "Couldn't read the clipboard here", Toast.LENGTH_SHORT).show()
+            if (manual) Toast.makeText(this, s("Couldn't read the clipboard here", "No se pudo leer el portapapeles aquí"), Toast.LENGTH_SHORT).show()
         }
     }
 

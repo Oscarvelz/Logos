@@ -13,6 +13,7 @@ import { settings } from '../lib/settings.ts'
 import { drafts } from '../lib/drafts.ts'
 import { navigate } from '../lib/router.ts'
 import { loadText, play as listenPlay } from '../player/listen.ts'
+import { t } from '../lib/i18n.ts'
 
 type Phase = 'input' | 'loading' | 'ready' | 'error'
 
@@ -25,7 +26,7 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
 
   const go = async (raw = url) => {
     const norm = normalizeUrl(raw)
-    if (!norm) { setErr('Paste a web address, like a news story or an article.'); setPhase('error'); return }
+    if (!norm) { setErr(t('Paste a web address, like a news story or an article.')); setPhase('error'); return }
     setUrl(norm); setPhase('loading'); setErr('')
     ctrl.current?.abort(); ctrl.current = new AbortController()
     try {
@@ -53,8 +54,8 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
     try {
       const c = (await readClipboard()).trim()
       const n = normalizeUrl(c)
-      if (n) { setUrl(n); void go(n) } else toast('No link on the clipboard')
-    } catch { toast('Clipboard blocked — long-press the field to paste') }
+      if (n) { setUrl(n); void go(n) } else toast(t('No link on the clipboard'))
+    } catch { toast(t('Clipboard blocked — long-press the field to paste')) }
   }
 
   const lang = res ? detectLang(res.text.slice(0, 4000)).lang : 'en'
@@ -70,40 +71,40 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
   const later = async () => {
     if (!res) return
     await saveForLater(res.text, { title: res.title || info!.title, summary: info?.summary, lang, voice: st.voiceOverride ?? '', duration: estimateSeconds(res.text, 1), url: res.url, site: res.site })
-    onClose(); toast('Saved to Listen later', { label: 'Library', run: () => navigate('library') }, 4000)
+    onClose(); toast(t('Saved to Listen later'), { label: t('Library'), run: () => navigate('library') }, 4000)
   }
   const saveAudio = () => {
     if (!res) return
     const r = queueExport(res.text, { voice: st.voiceOverride, speed, format: st.format, title: res.title || info!.title, summary: info?.summary, origin: 'listen', url: res.url, site: res.site })
-    onClose(); toast(r === 'queued' ? 'Queued for your Library' : 'Making the audio · it will be in your Library', { label: 'Library', run: () => navigate('library') }, 5000)
+    onClose(); toast(r === 'queued' ? t('Queued for your Library') : t('Making the audio · it will be in your Library'), { label: t('Library'), run: () => navigate('library') }, 5000)
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title={phase === 'ready' ? undefined : 'From a web page'}>
+    <Sheet open={open} onClose={onClose} title={phase === 'ready' ? undefined : t('From a web page')}>
       {(phase === 'input' || phase === 'error') && (
         <>
           <form className="url-field" onSubmit={(e) => { e.preventDefault(); void go() }}>
             <Link2 size={18} />
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste a link" inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} aria-label="Web address" autoFocus={!initialUrl} />
-            <button type="button" className="icon-btn" onClick={() => void pasteUrl()} aria-label="Paste link"><ClipboardPaste size={18} /></button>
+            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t('Paste a link')} inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} aria-label={t('Web address')} autoFocus={!initialUrl} />
+            <button type="button" className="icon-btn" onClick={() => void pasteUrl()} aria-label={t('Paste link')}><ClipboardPaste size={18} /></button>
           </form>
           {phase === 'error' && <div className="web-err">{err}</div>}
           <button className="btn primary block" style={{ height: 52, marginTop: 12 }} onClick={() => void go()} disabled={!url.trim()}>
-            {phase === 'error' ? <><RotateCcw size={17} /> Try again</> : <><Globe size={17} /> Bring the text</>}
+            {phase === 'error' ? <><RotateCcw size={17} /> {t('Try again')}</> : <><Globe size={17} /> {t('Bring the text')}</>}
           </button>
-          <p className="muted small" style={{ margin: '10px 4px 0', lineHeight: 1.45 }}>Logos keeps only the article itself: no menus, ads, links, captions or reference lists.</p>
+          <p className="muted small" style={{ margin: '10px 4px 0', lineHeight: 1.45 }}>{t('Logos keeps only the article itself: no menus, ads, links, captions or reference lists.')}</p>
           {onAudioFile && (
             <>
-              <div className="or-rule"><span>or</span></div>
+              <div className="or-rule"><span>{t('or')}</span></div>
               {onBookFile && (
                 <button className="keep-opt" style={{ marginBottom: 10 }} onClick={() => { onClose(); onBookFile() }}>
                   <span className="keep-ic"><BookPlus size={22} /></span>
-                  <span className="grow"><b>Import a book</b><small>EPUB, PDF, Word, FB2, Markdown or text</small></span>
+                  <span className="grow"><b>{t('Import a book')}</b><small>{t('EPUB, PDF, Word, FB2, Markdown or text')}</small></span>
                 </button>
               )}
               <button className="keep-opt" onClick={() => { onClose(); onAudioFile() }}>
                 <span className="keep-ic"><FileAudio size={22} /></span>
-                <span className="grow"><b>Add an audio file</b><small>MP3, M4A, WAV or OGG from this phone</small></span>
+                <span className="grow"><b>{t('Add an audio file')}</b><small>{t('MP3, M4A, WAV or OGG from this phone')}</small></span>
               </button>
             </>
           )}
@@ -112,31 +113,31 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
       {phase === 'loading' && (
         <div className="web-loading">
           <Loader2 size={30} className="spin" />
-          <div className="wl-t">Reading the page</div>
+          <div className="wl-t">{t('Reading the page')}</div>
           <div className="wl-s">{(() => { try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url } })()}</div>
-          <button className="btn sm ghost" onClick={() => { ctrl.current?.abort(); setPhase('input') }}>Cancel</button>
+          <button className="btn sm ghost" onClick={() => { ctrl.current?.abort(); setPhase('input') }}>{t('Cancel')}</button>
         </div>
       )}
       {phase === 'ready' && res && (
         <>
           <div className="web-site"><Globe size={13} /> {res.site}</div>
           <div className="keep-title" style={{ marginTop: 4 }}>{res.title || info?.title}</div>
-          <div className="keep-sub">{res.words.toLocaleString()} words · about {formatDuration(estimateSeconds(res.text, speed))} at {speed}×</div>
+          <div className="keep-sub">{t('{n} words · about {d} at {s}×', { n: res.words.toLocaleString(), d: formatDuration(estimateSeconds(res.text, speed)), s: speed })}</div>
           <div className="web-preview" lang={lang}>
             {res.text.split('\n\n').slice(1, 5).map((p, i) => <p key={i}>{p}</p>)}
           </div>
           <div className="keep-opts" style={{ marginTop: 14 }}>
             <button className="keep-opt primary" onClick={listenNow}>
               <span className="keep-ic"><Play size={20} fill="currentColor" /></span>
-              <span className="grow"><b>Listen now</b><small>Opens it in Listen and starts reading</small></span>
+              <span className="grow"><b>{t('Listen now')}</b><small>{t('Opens it in Listen and starts reading')}</small></span>
             </button>
             <button className="keep-opt" onClick={() => void later()}>
               <span className="keep-ic"><Clock size={21} /></span>
-              <span className="grow"><b>Listen later</b><small>Keeps the text in your Library</small></span>
+              <span className="grow"><b>{t('Listen later')}</b><small>{t('Keeps the text in your Library')}</small></span>
             </button>
             <button className="keep-opt" onClick={saveAudio}>
               <span className="keep-ic"><AudioLines size={21} /></span>
-              <span className="grow"><b>Save the audio</b><small>{st.format.toUpperCase()} you can play offline and share</small></span>
+              <span className="grow"><b>{t('Save the audio')}</b><small>{t('{f} you can play offline and share', { f: st.format.toUpperCase() })}</small></span>
             </button>
           </div>
         </>

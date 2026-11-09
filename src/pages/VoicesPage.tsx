@@ -8,6 +8,7 @@ import { engine, synthesize } from '../engine/engine.ts'
 import { encodeWav, trimSilence } from '../lib/audio.ts'
 import { refreshVoices } from '../player/listen.ts'
 import { FavStar, Avatar, toast } from '../components/ui.tsx'
+import { t } from '../lib/i18n.ts'
 import previews from '../lib/previews.json'
 
 type Filter = 'all' | 'fav' | 'en' | 'es' | 'pocket'
@@ -35,16 +36,16 @@ export function VoicesPage() {
     <div className="page wide">
       <div className="page-head">
         <div>
-          <h1 className="page-title">Voices</h1>
-          <p className="page-sub">{VOICES.length} natural voices that run right on your phone. Star your favorites, set a default per language.</p>
+          <h1 className="page-title">{t('Voices')}</h1>
+          <p className="page-sub">{t('{n} natural voices that run right on your phone. Star your favorites, set a default per language.', { n: VOICES.length })}</p>
         </div>
       </div>
       <div className="filter-row" role="tablist">
         {FILTERS.map((f) => (
-          <button key={f.value} role="tab" aria-selected={filter === f.value} className={`chip ${filter === f.value ? 'accent' : ''}`} onClick={() => setFilter(f.value)}>{f.label}</button>
+          <button key={f.value} role="tab" aria-selected={filter === f.value} className={`chip ${filter === f.value ? 'accent' : ''}`} onClick={() => setFilter(f.value)}>{t(f.label)}</button>
         ))}
       </div>
-      {list.length === 0 && <div className="card empty"><h3>No favorites yet</h3><p>Tap the star on any voice.</p></div>}
+      {list.length === 0 && <div className="card empty"><h3>{t('No favorites yet')}</h3><p>{t('Tap the star on any voice.')}</p></div>}
       <div className="voice-grid">
         {list.map((v) => <VoiceCard key={v.id} voice={v} />)}
       </div>
@@ -63,42 +64,42 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
 
   const preview = async () => {
     if (cp.key === key) { void playClip(key, ''); return }
-    if (HAS_PREVIEW.has(v.id)) { void playClip(key, `${import.meta.env.BASE_URL}previews/${v.id}.mp3`, { title: `${v.name} — preview` }); return }
+    if (HAS_PREVIEW.has(v.id)) { void playClip(key, `${import.meta.env.BASE_URL}previews/${v.id}.mp3`, { title: t('{name} — preview', { name: v.name }) }); return }
     let blob = livePreviews.get(v.id)
     if (!blob) {
       setLoading(true)
       try {
-        if (engine.get().status !== 'ready') toast('Loading the neural voice for previews…')
+        if (engine.get().status !== 'ready') toast(t('Loading the neural voice for previews…'))
         const res = await synthesize(PREVIEW_TEXT[v.lang], v.id, 1, { priority: 3000 })
         blob = encodeWav(trimSilence(res.samples, res.sampleRate), res.sampleRate)
         livePreviews.set(v.id, blob)
       } catch (err) {
-        toast(`Preview failed: ${(err as Error).message}`)
+        toast(t('Preview failed: {msg}', { msg: (err as Error).message }))
         return
       } finally { setLoading(false) }
     }
-    void playClip(key, blob, { title: `${v.name} — preview` })
+    void playClip(key, blob, { title: t('{name} — preview', { name: v.name }) })
   }
 
   return (
     <div className={`voice-card ${isDefault ? 'is-default' : ''}`}>
-      {isDefault && <span className="default-flag">Default · {v.lang === 'en' ? 'English' : 'Español'}</span>}
+      {isDefault && <span className="default-flag">{t('Default · {l}', { l: v.lang === 'en' ? t('English') : 'Español' })}</span>}
       <Avatar voice={v} playing={playing} />
       <div className="grow" style={{ minWidth: 0 }}>
-        <div className="voice-name">{v.name} <span className="badge" title={ACCENT_LABEL[v.accent]}>{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
-        <div className="voice-tag">{v.tagline}</div>
+        <div className="voice-name">{v.name} <span className="badge" title={t(ACCENT_LABEL[v.accent])}>{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
+        <div className="voice-tag">{t(v.tagline)}</div>
         {!isDefault && (
           <button className="btn sm ghost" style={{ height: 32, padding: '0 8px', marginLeft: -8, marginTop: 2, fontSize: 13, color: 'var(--text-2)' }}
-            onClick={() => { settings.set((s) => ({ defaultVoice: { ...s.defaultVoice, [v.lang]: v.id } })); refreshVoices(); toast(`${v.name} is now your ${v.lang === 'en' ? 'English' : 'Spanish'} default`) }}>
-            <Check size={14} /> Make default
+            onClick={() => { settings.set((s) => ({ defaultVoice: { ...s.defaultVoice, [v.lang]: v.id } })); refreshVoices(); toast(t('{name} is now your {lang} default', { name: v.name, lang: v.lang === 'en' ? t('English') : 'Español' })) }}>
+            <Check size={14} /> {t('Make default')}
           </button>
         )}
       </div>
       <div className="voice-actions">
-        <button className={`icon-btn ${fav ? 'on' : ''}`} onClick={() => toggleFavorite(v.id)} aria-label={fav ? 'Remove favorite' : 'Add favorite'} aria-pressed={fav}>
+        <button className={`icon-btn ${fav ? 'on' : ''}`} onClick={() => toggleFavorite(v.id)} aria-label={fav ? t('Remove favorite') : t('Add favorite')} aria-pressed={fav}>
           <FavStar id={v.id} on={fav} size={21} />
         </button>
-        <button className="icon-btn filled" onClick={preview} aria-label={playing ? 'Pause preview' : `Preview ${v.name}`}>
+        <button className="icon-btn filled" onClick={preview} aria-label={playing ? t('Pause preview') : t('Preview {name}', { name: v.name })}>
           {loading ? <Loader2 size={20} className="spin" /> : playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" style={{ marginLeft: 2 }} />}
         </button>
       </div>

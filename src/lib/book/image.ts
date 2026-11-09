@@ -3,6 +3,7 @@
 // kept as the book's cover. An image with no legible words in it fails the
 // usual way — importBook finds no readable text and says so.
 import { parseText } from './formats.ts'
+import { t } from '../i18n.ts'
 import { ocrImageText } from './pdf.ts'
 import { isMachineName, titleFromText, type RawBook } from './finish.ts'
 
@@ -34,7 +35,7 @@ export async function parseImage(buf: ArrayBuffer, file: File, step: (s: string,
   }
   text = lines.join('\n')
   const raw = parseText(text, false)
-  if (cut) raw.warn = 'This shared image arrived cut off: the app that shared it shortened the text with "…", so the ending was never in the picture. For the whole message, copy it and use Paste in Listen.'
+  if (cut) raw.warn = t('This shared image arrived cut off: the app that shared it shortened the text with "…", so the ending was never in the picture. For the whole message, copy it and use Paste in Listen.')
   raw.cover = new Blob([buf], { type: mime })
   // The book is titled by its own words, never by the file's name. When the
   // file arrived under a machine name (a share hash, a camera name) the

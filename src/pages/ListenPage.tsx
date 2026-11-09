@@ -22,6 +22,7 @@ import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, StatusPill, VoicePicker } from '../components/chrome.tsx'
 import { Range, Sheet, toast, useMediaQuery } from '../components/ui.tsx'
+import { t } from '../lib/i18n.ts'
 import { TabletDesk, TextMap } from '../components/desk.tsx'
 
 const SPEEDS = RATE_STEPS
@@ -77,7 +78,7 @@ export function ListenPage() {
   }, [text, st.voiceOverride, st.defaultVoice, st.langMode])
 
   const start = () => {
-    if (!text.trim()) { toast('Paste or type something to listen to'); return }
+    if (!text.trim()) { toast(t('Paste or type something to listen to')); return }
     if (!s.active || s.text !== text) loadText(text)
     setEditing(false)
     void play()
@@ -86,7 +87,7 @@ export function ListenPage() {
   const paste = async () => {
     try {
       const clip = await readClipboard()
-      if (!clip.trim()) { toast('Clipboard is empty'); return }
+      if (!clip.trim()) { toast(t('Clipboard is empty')); return }
       if (isJustUrl(clip)) { setWebUrl(normalizeUrl(clip)); return }
       setText(clip)
       // Paste = listen: load the new text and start playing right away (Oscar, 1.4.40)
@@ -94,7 +95,7 @@ export function ListenPage() {
       setEditing(false)
       void play()
     } catch {
-      toast('Clipboard blocked — long-press the box and choose Paste')
+      toast(t('Clipboard blocked — long-press the box and choose Paste'))
     }
   }
 
@@ -137,24 +138,24 @@ export function ListenPage() {
               <textarea
                 value={text}
                 onChange={(ev) => setText(ev.target.value)}
-                placeholder="Paste an article, a chapter, a poem — or share text here from any app…"
+                placeholder={t('Paste an article, a chapter, a poem — or share text here from any app…')}
                 spellCheck={false}
                 lang={lang}
-                aria-label="Text to listen to"
+                aria-label={t('Text to listen to')}
               />
               {isJustUrl(text) && (
                 <button className="url-banner" onClick={() => setWebUrl(normalizeUrl(text))}>
-                  <Globe size={17} /><span className="grow">Bring the text from <b>{new URL(normalizeUrl(text)!).hostname.replace(/^www\./, '')}</b></span><span className="ub-go">Read page</span>
+                  <Globe size={17} /><span className="grow">{t('Bring the text from')} <b>{new URL(normalizeUrl(text)!).hostname.replace(/^www\./, '')}</b></span><span className="ub-go">{t('Read page')}</span>
                 </button>
               )}
               <div className="editor-bar">
-                <button className="icon-btn" onClick={paste} aria-label="Paste from clipboard" title="Paste"><ClipboardPaste size={21} /></button>
-                <button className="icon-btn" onClick={() => { setText(''); endSession() }} disabled={!text} aria-label="Clear text" title="Clear"><Eraser size={21} /></button>
-                <button className="icon-btn" onClick={() => setKeepOpen(true)} disabled={!text.trim()} aria-label="Save to Library" title="Save to Library"><BookmarkPlus size={21} /></button>
-                {s.active && <button className="icon-btn" onClick={() => { if (s.text !== text) loadText(text); setEditing(false) }} aria-label="Back to reading view" title="Reading view"><X size={21} /></button>}
-                {text.trim() && <div className="editor-meta" aria-label={`About ${formatDuration(estimateSeconds(text, st.listenSpeed))} of listening, ${wordCount(text)} words`}>
+                <button className="icon-btn" onClick={paste} aria-label={t('Paste from clipboard')} title={t('Paste')}><ClipboardPaste size={21} /></button>
+                <button className="icon-btn" onClick={() => { setText(''); endSession() }} disabled={!text} aria-label={t('Clear text')} title={t('Clear')}><Eraser size={21} /></button>
+                <button className="icon-btn" onClick={() => setKeepOpen(true)} disabled={!text.trim()} aria-label={t('Save to Library')} title={t('Save to Library')}><BookmarkPlus size={21} /></button>
+                {s.active && <button className="icon-btn" onClick={() => { if (s.text !== text) loadText(text); setEditing(false) }} aria-label={t('Back to reading view')} title={t('Reading view')}><X size={21} /></button>}
+                {text.trim() && <div className="editor-meta" aria-label={t('About {d} of listening, {n} words', { d: formatDuration(estimateSeconds(text, st.listenSpeed)), n: wordCount(text) })}>
                   <span className="em-time"><Clock size={12} strokeWidth={2.4} />{formatDuration(estimateSeconds(text, st.listenSpeed))}</span>
-                  <span className="em-words">{wordCount(text).toLocaleString()} words</span>
+                  <span className="em-words">{t('{n} words', { n: wordCount(text).toLocaleString() })}</span>
                 </div>}
               </div>
             </div>
@@ -166,14 +167,14 @@ export function ListenPage() {
           {/* 1.4.59: back to one row (Oscar: two rows grew the player and shrank
               the text window) — the four chips fit by being smaller, not taller. */}
           <div className="player-top">
-            <button className={`chip lang-chip ${st.langMode === 'auto' ? '' : 'accent'}`} onClick={cycleLang} aria-label="Language">
+            <button className={`chip lang-chip ${st.langMode === 'auto' ? '' : 'accent'}`} onClick={cycleLang} aria-label={t('Language')}>
               <Languages size={16} />
               <span className="chip-txt">{st.langMode === 'auto' ? <>Auto · {mixed ? 'EN + ES' : detected.lang.toUpperCase()}</> : LANG_LABEL[st.langMode]}</span>
             </button>
             <div className="player-top-r">
-              <button className={`chip ${s.sleepLeft != null ? 'accent' : ''}`} onClick={() => setSleepOpen(true)} aria-label="Sleep timer"><Moon size={15} />{s.sleepLeft != null ? formatDuration(s.sleepLeft) : null}</button>
-              <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={`Playback speed ${fmtSpeed(st.listenSpeed)}`}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
-              <button className="chip accent voice-chip" onClick={() => setVoiceOpen(true)} aria-label="Voice">
+              <button className={`chip ${s.sleepLeft != null ? 'accent' : ''}`} onClick={() => setSleepOpen(true)} aria-label={t('Sleep timer')}><Moon size={15} />{s.sleepLeft != null ? formatDuration(s.sleepLeft) : null}</button>
+              <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={t('Playback speed {x}', { x: fmtSpeed(st.listenSpeed) })}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
+              <button className="chip accent voice-chip" onClick={() => setVoiceOpen(true)} aria-label={t('Voice')}>
                 <span className="dot" /><span className="chip-txt">{currentVoice?.name ?? ''}</span>
               </button>
             </div>
@@ -184,29 +185,29 @@ export function ListenPage() {
           <ProgressLine />
 
           <div className="player-meta">
-            <span>{reading ? `Sentence ${s.current + 1} of ${s.segments.length}` : 'Ready'}</span>
+            <span>{reading ? t('Sentence {a} of {b}', { a: s.current + 1, b: s.segments.length }) : t('Ready')}</span>
             {/* 1.4.60: the voice's name lives in the chip above — naming it again here was pure repetition (Oscar). Only the device-voice state, which the chip cannot show, is still said. */}
-            <span>{s.mode === 'device' ? 'Device voice · ' : ''}{formatDuration(remaining)} left</span>
+            <span>{s.mode === 'device' ? t('Device voice · ') : ''}{t('{d} left', { d: formatDuration(remaining) })}</span>
           </div>
 
           <div className="transport">
             <span aria-hidden />
-            <button className="icon-btn filled" onClick={prev} disabled={!reading} aria-label="Previous sentence"><SkipBack size={22} /></button>
-            <button className={`play-btn ${s.buffering ? 'busy' : ''}`} onClick={reading ? toggle : start} aria-label={s.playing ? 'Pause' : 'Play'}>
+            <button className="icon-btn filled" onClick={prev} disabled={!reading} aria-label={t('Previous sentence')}><SkipBack size={22} /></button>
+            <button className={`play-btn ${s.buffering ? 'busy' : ''}`} onClick={reading ? toggle : start} aria-label={s.playing ? t('Pause') : t('Play')}>
               <span className="pb-icon" key={s.buffering ? 'b' : s.playing ? 'p' : 'l'}>{s.buffering ? <Loader2 size={32} className="spin" /> : s.playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" style={{ marginLeft: 4 }} />}</span>
             </button>
-            <button className="icon-btn filled" onClick={next} disabled={!reading} aria-label="Next sentence"><SkipForward size={22} /></button>
-            <button className="icon-btn" onClick={() => void markAndToast()} disabled={!reading} aria-label="Mark this moment" title="Mark this moment"><Bookmark size={20} /></button>
+            <button className="icon-btn filled" onClick={next} disabled={!reading} aria-label={t('Next sentence')}><SkipForward size={22} /></button>
+            <button className="icon-btn" onClick={() => void markAndToast()} disabled={!reading} aria-label={t('Mark this moment')} title={t('Mark this moment')}><Bookmark size={20} /></button>
           </div>
 
           {s.mode === 'device' && s.playing && (
-            <div className="engine-note"><span>Using your device voice while the neural voice downloads. It switches over automatically.</span></div>
+            <div className="engine-note"><span>{t('Using your device voice while the neural voice downloads. It switches over automatically.')}</span></div>
           )}
           {s.cushion && (
             <div className="engine-note">
               <span>
-                Preparing the audio so it reads to the end without stopping · {s.cushion.done} of {s.cushion.total} sentences
-                {s.cushion.eta != null ? ` · about ${formatWait(s.cushion.eta)} left` : ' · measuring this phone’s speed'}. Playback starts on its own.
+                {t('Preparing the audio so it reads to the end without stopping · {d} of {t} sentences', { d: s.cushion.done, t: s.cushion.total })}
+                {s.cushion.eta != null ? t(' · about {w} left', { w: formatWait(s.cushion.eta) }) : t(' · measuring this phone’s speed')}{t('. Playback starts on its own.')}
               </span>
               <span className="bar"><i style={{ width: `${s.cushion.need > 0 ? Math.min(100, Math.round((s.cushion.have / s.cushion.need) * 100)) : 3}%` }} /></span>
             </div>
@@ -214,12 +215,12 @@ export function ListenPage() {
           {!s.playing && !s.cushion && s.active && s.text === text && s.segments.length > 0 && (() => {
             const ready = s.rendered.filter(Boolean).length
             return ready < s.segments.length ? (
-              <div className="engine-note"><span>Preparing the audio in the background · {ready} of {s.segments.length} sentences ready</span><span className="bar"><i style={{ width: `${Math.round((ready / s.segments.length) * 100)}%` }} /></span></div>
-            ) : <div className="engine-note"><span>All audio ready · it will read without stopping</span></div>
+              <div className="engine-note"><span>{t('Preparing the audio in the background · {r} of {n} sentences ready', { r: ready, n: s.segments.length })}</span><span className="bar"><i style={{ width: `${Math.round((ready / s.segments.length) * 100)}%` }} /></span></div>
+            ) : <div className="engine-note"><span>{t('All audio ready · it will read without stopping')}</span></div>
           })()}
           <EngineNote />
           {s.error && <div className="error-note">{s.error}</div>}
-          {e.status === 'error' && <div className="error-note">Neural engine: {e.error}</div>}
+          {e.status === 'error' && <div className="error-note">{t('Neural engine: ')}{e.error}</div>}
         </div>
         {wide && <TabletDesk onOpen={(t) => { setText(t); setEditing(false) }} />}
         </div>
@@ -232,20 +233,20 @@ export function ListenPage() {
       <WebImport open={webUrl !== null} onClose={() => setWebUrl(null)} initialUrl={webUrl ?? undefined} />
       <KeepSheet open={keepOpen} onClose={() => setKeepOpen(false)} text={reading ? s.text : text} lang={lang} />
 
-      <Sheet open={speedOpen} onClose={() => setSpeedOpen(false)} title="Speed">
+      <Sheet open={speedOpen} onClose={() => setSpeedOpen(false)} title={t('Speed')}>
         <div className="speed-row" style={{ marginBottom: 14 }}>
           {SPEEDS.map((v) => <button key={v} className={Math.abs(st.listenSpeed - v) < 0.001 ? 'on' : ''} onClick={() => setRate(v)}>{v}×</button>)}
         </div>
-        <Range label="Speed" min={0.5} max={2.5} step={0.05} value={st.listenSpeed} onChange={setRate} />
-        <p className="muted small" style={{ margin: '8px 4px 0' }}>Changes apply instantly, pitch preserved.</p>
+        <Range label={t('Speed')} min={0.5} max={2.5} step={0.05} value={st.listenSpeed} onChange={setRate} />
+        <p className="muted small" style={{ margin: '8px 4px 0' }}>{t('Changes apply instantly, pitch preserved.')}</p>
       </Sheet>
 
-      <Sheet open={sleepOpen} onClose={() => setSleepOpen(false)} title="Sleep timer">
+      <Sheet open={sleepOpen} onClose={() => setSleepOpen(false)} title={t('Sleep timer')}>
         <div className="speed-row" style={{ marginBottom: 14 }}>
-          <button className={s.sleepLeft == null ? 'on' : ''} onClick={() => setSleepTimer(null)}>Off</button>
+          <button className={s.sleepLeft == null ? 'on' : ''} onClick={() => setSleepTimer(null)}>{t('Off')}</button>
           {[10, 15, 20, 30, 45, 60].map((m) => <button key={m} onClick={() => setSleepTimer(m)}>{m} min</button>)}
         </div>
-        <p className="muted small" style={{ margin: '8px 4px 0' }}>The last ten seconds fade down gently, then it pauses.</p>
+        <p className="muted small" style={{ margin: '8px 4px 0' }}>{t('The last ten seconds fade down gently, then it pauses.')}</p>
       </Sheet>
     </div>
   )
@@ -275,7 +276,7 @@ function ProgressLine() {
     <div
       ref={bar}
       className={`scrubber ${drag !== null ? 'dragging' : ''} ${s.active ? '' : 'off'}`}
-      role="slider" aria-label="Position" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(shown * 100)}
+      role="slider" aria-label={t('Position')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(shown * 100)}
       tabIndex={s.active ? 0 : -1}
       onPointerDown={(e) => { if (!s.active) return; e.currentTarget.setPointerCapture(e.pointerId); setDrag(fracAt(e.clientX)) }}
       onPointerMove={(e) => { if (drag !== null) setDrag(fracAt(e.clientX)) }}
@@ -294,7 +295,7 @@ function ProgressLine() {
       {s.active && <span className="scrub-thumb" style={{ left: `${shown * 100}%` }} />}
       {target !== null && (
         <span className="scrub-tip" style={{ left: `${Math.min(88, Math.max(12, drag! * 100))}%` }}>
-          Sentence {target + 1} of {n}{s.rendered[target] ? '' : ' · not ready yet'}
+          {t('Sentence {a} of {b}', { a: target + 1, b: n })}{s.rendered[target] ? '' : t(' · not ready yet')}
         </span>
       )}
     </div>
@@ -375,12 +376,12 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
   return (
     <>
       <div className="reader-head">
-        <span className="rh-hint">Tap a word to start there.</span>
+        <span className="rh-hint">{t('Tap a word to start there.')}</span>
         <div className="rh-actions">
           <button className="rh-btn" aria-label="Smaller text" disabled={st.readerScale <= READER_SCALES[0]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, -1) })}><span style={{ fontSize: 10, fontWeight: 700 }}>A</span><span aria-hidden="true">−</span></button>
           <button className="rh-btn" aria-label="Bigger text" disabled={st.readerScale >= READER_SCALES[READER_SCALES.length - 1]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, 1) })}><span style={{ fontSize: 15, fontWeight: 700 }}>A</span><span aria-hidden="true">+</span></button>
-          <button className="rh-btn" onClick={onKeep} aria-label="Save to Library"><BookmarkPlus size={13} /><span className="rh-label">Save</span></button>
-          <button className="rh-btn" onClick={onEdit}><PenLine size={13} /><span className="rh-label">Edit</span></button>
+          <button className="rh-btn" onClick={onKeep} aria-label="Save to Library"><BookmarkPlus size={13} /><span className="rh-label">{t('Save')}</span></button>
+          <button className="rh-btn" onClick={onEdit}><PenLine size={13} /><span className="rh-label">{t('Edit')}</span></button>
         </div>
       </div>
       <div className="reader" ref={box}>{body}</div>
@@ -468,9 +469,9 @@ function ListenHead({ text, lang, playing, remaining }: { text: string; lang: La
     const host = new URL(normalizeUrl(text)!).hostname.replace(/^www\./, '')
     return (
       <div className="listen-head">
-        <div className="lh-eyebrow"><span className="lh-dot" /><span>Web page</span></div>
+        <div className="lh-eyebrow"><span className="lh-dot" /><span>{t('Web page')}</span></div>
         <div className="lh-title">{host}</div>
-        <div className="lh-sum">Tap Read page to bring in its text, clean and ready to hear.</div>
+        <div className="lh-sum">{t('Tap Read page to bring in its text, clean and ready to hear.')}</div>
       </div>
     )
   }
@@ -478,16 +479,16 @@ function ListenHead({ text, lang, playing, remaining }: { text: string; lang: La
     <div className={`listen-head ${playing ? 'live' : ''}`}>
       <div className="lh-eyebrow">
         <span className="lh-dot" />
-        <span>{has ? (playing ? 'Now reading' : 'Ready to read') : 'Listen'}</span>
-        {has ? <span className="lh-meta">{words.toLocaleString()} words · {formatDuration(remaining)} · {LANG_LABEL[lang]}</span> : null}
+        <span>{has ? (playing ? t('Now reading') : t('Ready to read')) : t('Listen')}</span>
+        {has ? <span className="lh-meta">{t('{n} words · {d} · {l}', { n: words.toLocaleString(), d: formatDuration(remaining), l: LANG_LABEL[lang] })}</span> : null}
       </div>
       {book
-        ? <button className="lh-book" onClick={backToBook} aria-label={`Back to ${book.title}`}>
+        ? <button className="lh-book" onClick={backToBook} aria-label={t('Back to {title}', { title: book.title })}>
             <BookOpen size={17} />
             <span className="lh-book-t" lang={lang}>{book.title}</span>
-            <span className="lh-book-go">Back to book</span>
+            <span className="lh-book-go">{t('Back to book')}</span>
           </button>
-        : <div className="lh-title" lang={lang}>{title || 'Paste anything. Hear it instantly.'}</div>}
+        : <div className="lh-title" lang={lang}>{title || t('Paste anything. Hear it instantly.')}</div>}
       {summary && !book ? <div className="lh-sum" lang={lang}>{summary}</div> : null}
       <div className="lh-status"><StatusPill compact /></div>
     </div>
@@ -511,36 +512,36 @@ function KeepSheet({ open, onClose, text, lang }: { open: boolean; onClose: () =
   const saveAudio = () => {
     const r = queueExport(text, { voice: st.voiceOverride, speed, format: st.format, title: info.title, summary: info.summary, origin: 'listen' })
     onClose()
-    toast(r === 'queued' ? 'Queued for your Library · it starts after the current one' : 'Making the audio · it will be in your Library', { label: 'Library', run: () => navigate('library') }, 5000)
+    toast(r === 'queued' ? t('Queued for your Library · it starts after the current one') : t('Making the audio · it will be in your Library'), { label: t('Library'), run: () => navigate('library') }, 5000)
   }
   const later = async () => {
     await saveForLater(text, { title: info.title, summary: info.summary, lang, voice: st.voiceOverride ?? '', duration: estimateSeconds(text, 1) })
     onClose()
-    toast('Saved to Listen later', { label: 'Library', run: () => navigate('library') }, 4000)
+    toast(t('Saved to Listen later'), { label: t('Library'), run: () => navigate('library') }, 4000)
   }
   return (
-    <Sheet open={open} onClose={onClose} title="Keep this">
+    <Sheet open={open} onClose={onClose} title={t('Keep this')}>
       <div className="keep-title">{info.title}</div>
-      <div className="keep-sub">{words.toLocaleString()} words · about {formatDuration(estimateSeconds(text, speed))} at {fmtSpeed(speed)}</div>
+      <div className="keep-sub">{t('{n} words · about {d} at {s}', { n: words.toLocaleString(), d: formatDuration(estimateSeconds(text, speed)), s: fmtSpeed(speed) })}</div>
       <div className="keep-opts">
         <button className="keep-opt" onClick={saveAudio}>
           <span className="keep-ic"><AudioLines size={22} /></span>
           <span className="grow">
-            <b>Save the audio</b>
-            <small>{st.format.toUpperCase()} in {v?.name ?? 'your voice'}{st.voiceOverride ? '' : ' (switches by language)'} · plays offline, ready to share{busy ? ' · queued after the current one' : ''}</small>
+            <b>{t('Save the audio')}</b>
+            <small>{t('{f} in {v}', { f: st.format.toUpperCase(), v: v?.name ?? t('your voice') })}{st.voiceOverride ? '' : t(' (switches by language)')}{t(' · plays offline, ready to share')}{busy ? t(' · queued after the current one') : ''}</small>
           </span>
         </button>
         <button className="keep-opt" onClick={() => void later()}>
           <span className="keep-ic"><Clock size={22} /></span>
           <span className="grow">
-            <b>Listen later</b>
-            <small>Saves the text instantly. Make its audio whenever you like</small>
+            <b>{t('Listen later')}</b>
+            <small>{t('Saves the text instantly. Make its audio whenever you like')}</small>
           </span>
         </button>
       </div>
       {(hasAudio || hasLater) && (
         <button className="keep-note" onClick={() => { onClose(); navigate('library') }}>
-          <LibraryIcon size={16} /> {hasAudio ? 'This text is already in your Library as audio' : 'This text is already in Listen later'} · Open
+          <LibraryIcon size={16} /> {hasAudio ? t('This text is already in your Library as audio') : t('This text is already in Listen later')} · {t('Open')}
         </button>
       )}
     </Sheet>

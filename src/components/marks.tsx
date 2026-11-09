@@ -6,6 +6,7 @@ import { useStore } from '../lib/store.ts'
 import { books, updateBook } from '../lib/books.ts'
 import { loadMarks, removeLooseMark, playLooseMark, playBookMark, type LooseMark } from '../lib/marks.ts'
 import { toast, confirmDelete } from './ui.tsx'
+import { t } from '../lib/i18n.ts'
 
 type Row =
   | { kind: 'book'; at: number; bookId: string; bookTitle: string; ch: number; b: number; sentence: string }
@@ -35,12 +36,12 @@ export function MarksSection() {
 
   return (
     <div className="card" style={{ padding: '12px 16px 6px', marginBottom: 14 }}>
-      <div className="continue-h">Marks</div>
+      <div className="continue-h">{t('Marks')}</div>
       {rows.slice(0, 30).map((r) => (
         <div key={`${r.kind}-${r.at}-${r.kind === 'book' ? r.bookId : r.mark.id}`} className="mark-row" role="button" tabIndex={0}
           onClick={() => {
             if (r.kind === 'book') void playBookMark(r.bookId, r)
-            else if (!playLooseMark(r.mark)) toast('That text is no longer in Listen — the moment is kept here as words')
+            else if (!playLooseMark(r.mark)) toast(t('That text is no longer in Listen — the moment is kept here as words'))
           }}>
           <span className="mark-ic"><Bookmark size={16} /></span>
           <span className="mark-tx grow">
@@ -48,7 +49,7 @@ export function MarksSection() {
             <span className="mark-s">{r.kind === 'book' ? r.sentence : r.mark.sentence}</span>
             <span className="mark-when">{when(r.at)}</span>
           </span>
-          <button className="mark-del" aria-label="Remove mark" onClick={(e) => { e.stopPropagation(); const s = r.kind === 'book' ? r.sentence : r.mark.sentence; void confirmDelete('Remove this mark?', s.length > 90 ? s.slice(0, 90) + '…' : s).then((ok) => { if (ok) void drop(r) }) }}><Trash2 size={15} /></button>
+          <button className="mark-del" aria-label={t('Remove mark')} onClick={(e) => { e.stopPropagation(); const s = r.kind === 'book' ? r.sentence : r.mark.sentence; void confirmDelete(t('Remove this mark?'), s.length > 90 ? s.slice(0, 90) + '…' : s).then((ok) => { if (ok) void drop(r) }) }}><Trash2 size={15} /></button>
         </div>
       ))}
     </div>

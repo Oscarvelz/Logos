@@ -13,6 +13,7 @@ import { drafts } from '../lib/drafts.ts'
 import { loadSessionResume } from '../lib/resume.ts'
 import { textKey } from '../lib/marks.ts'
 import { formatDuration } from '../lib/text.ts'
+import { t } from '../lib/i18n.ts'
 
 type Entry = {
   kind: 'book' | 'clip' | 'text'
@@ -38,7 +39,7 @@ export function ContinueRow() {
       out.push({
         kind: 'book',
         title: meta.title,
-        sub: `${Math.round(meta.progress * 100)}% read`,
+        sub: t('{n}% read', { n: Math.round(meta.progress * 100) }),
         at: meta.openedAt ?? 0,
         run: () => { void playBook(meta, { pos: meta.pos }) },
       })
@@ -51,7 +52,7 @@ export function ContinueRow() {
       out.push({
         kind: 'clip',
         title: c.title,
-        sub: c.kind === 'text' ? 'Saved text' : `Left at ${formatDuration(c.pos ?? 0)}`,
+        sub: c.kind === 'text' ? t('Saved text') : t('Left at {d}', { d: formatDuration(c.pos ?? 0) }),
         at: c.playedAt ?? 0,
         run: () => {
           if (c.kind === 'text' || !c.format) {
@@ -71,7 +72,7 @@ export function ContinueRow() {
       out.push({
         kind: 'text',
         title: r.title,
-        sub: `Sentence ${r.idx + 1}`,
+        sub: t('Sentence {a}', { a: r.idx + 1 }),
         at: r.at,
         run: () => { loadText(d.listen); seek(r.idx); void play(r.idx); location.hash = '#/listen' },
       })
@@ -83,7 +84,7 @@ export function ContinueRow() {
   const Icon = { book: BookOpen, clip: AudioLines, text: PenLine }
   return (
     <div className="card continue-card">
-      <div className="continue-h">Continue listening</div>
+      <div className="continue-h">{t('Continue listening')}</div>
       {entries.map((e, i) => {
         const I = Icon[e.kind]
         return (
