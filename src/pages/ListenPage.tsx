@@ -7,7 +7,8 @@ import { saveLastText, settings, READER_SCALES, stepReaderScale } from '../lib/s
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
 import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, RATE_STEPS, setSleepTimer, refreshVoices, relangSession, voiceFor, endSession, sentenceProgress, seekFraction, wordClock, seekWord } from '../player/listen.ts'
-import { markAndToast } from '../lib/marks.ts'
+import { markAndToast, textKey } from '../lib/marks.ts'
+import { loadSessionResume } from '../lib/resume.ts'
 import { ContinueRow } from '../components/continue.tsx'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
@@ -73,6 +74,14 @@ export function ListenPage() {
   // Begin preparing the audio as soon as text is pasted or typed (after a short pause in typing).
   useEffect(() => {
     if (!text.trim() || isJustUrl(text)) return   // a bare link waits for "Read page"
+    // A saved resume for this very draft keeps its front door (1.4.109,
+    // audit A-1/B-6): preparing loads the draft as the session, and the
+    // Continue row — which exists to offer that resume — hides itself the
+    // moment the session is the same text. While the offer stands, the
+    // draft waits unprepared; typing changes the text (and its key) and
+    // preparation resumes on its own.
+    const r = loadSessionResume()
+    if (r && r.idx > 0 && textKey(text) === r.key) return
     const t = setTimeout(() => prepareText(text), 1200)
     return () => clearTimeout(t)
   }, [text, st.voiceOverride, st.defaultVoice, st.langMode])
@@ -127,7 +136,7 @@ export function ListenPage() {
     <div className="page wide listen-page">
       <ListenHead text={reading ? s.text : text} lang={lang} playing={s.playing && reading} remaining={remaining} />
 
-      <ContinueRow />
+      <ContinueRow onResume={() => setEditing(false)} />
 
       <div className="listen-grid">
         <div className="card" style={{ overflow: 'hidden' }}>

@@ -200,7 +200,11 @@ export function initBubble() {
         return
       }
       void recoverSession().then((ok) => {
-        if (ok && (cmd === 'prev' || cmd === 'next')) {
+        // prev/next re-fire at the recovered session; so do mark, save and
+        // voice (1.4.109, audit E-2): they act on the session the recovery
+        // just restored — the very one the panel was showing when the
+        // press was stored.
+        if (ok && (cmd === 'prev' || cmd === 'next' || cmd === 'mark' || cmd === 'save' || cmd === 'voice')) {
           setTimeout(() => dispatchEvent(new Event(`logosandroid-${cmd}`)), 900)
         }
       })

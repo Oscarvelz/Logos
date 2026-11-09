@@ -1,3 +1,33 @@
+## 1.4.109 — Wave 2 of the button audit: reach and rescue nets (A-1/B-6, E-2, E-3)
+
+- **A-1/B-6: the Continue row for a pasted text no longer eats itself.**
+  Listen auto-prepared the draft 1.2 s after the page opened; the
+  prepared session IS the draft, and the row hides whenever the session
+  is the same text — so the resume offer vanished ~1.3 s after it was
+  born, before a finger could reach it (two audit fronts converged on
+  this). Now, while a saved resume for this exact draft stands, the
+  auto-prepare waits: the row stays, and typing (which changes the
+  text's key) re-arms preparation on its own. And the row's tap now
+  also leaves the editor for the reading view (ContinueRow's
+  onResume) — resuming is one tap again, landing on the reader at the
+  saved sentence.
+- **E-2: voice, ⚑ and ＋ get the transport keys' safety net.** They
+  poked the page directly; if Android had retired the activity behind
+  the service, the press died without a trace. All four sites now use
+  pokeOrWake — a dead page means the press is stored as the pending
+  command and collected after a ghost visit. The page's collector also
+  re-fires mark/save/voice at the session its recovery restores (the
+  one the panel was showing), like prev/next already did.
+- **E-3: the media notification's buttons survive the activity.** They
+  routed through a lambda the activity installs on create and clears
+  on destroy; a START_STICKY revive of PlaybackService alone left a
+  visible notification whose ⏮ ▶/⏸ ⏭ silently did nothing. Presses
+  now go through act(): live activity — unchanged ("toggle" as
+  before); no activity — the press is stored as a DEFINITE play or
+  pause (from the last published state, never a bare toggle) in the
+  same pending-command slot, and BubbleService.wakeForPending pays
+  the page a ghost visit to collect it.
+
 ## 1.4.108 — Wave 1 of the button audit: say it only once it's true (C-1, C-2, E-1)
 
 - **C-1 (the audit's one ENGAÑOSO): the reader's bookmark now actually
