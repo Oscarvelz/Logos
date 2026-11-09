@@ -312,6 +312,12 @@ export function initBubble() {
     titleCached = book?.title ?? (text.trim() ? describeText(text.slice(0, 12000), detectLang(text.slice(0, 2000)).lang).title : '')
     return titleCached
   }
+  // The words for the panel: the sentence sounding now, and — for the
+  // tablet's wider window — the one before and the one after. Cleaned of
+  // markdown like the reader cleans them, and capped so a monster
+  // sentence can never flood the little window.
+  const cleanSent = (t: string) => t.replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim()
+  const capSent = (t: string, n: number) => { if (t.length <= n) return t; const cut = t.lastIndexOf(' ', n); return `${t.slice(0, cut > 40 ? cut : n)}…` }
   const barTmp = new Float32Array(18)
   const push = () => {
     const s = listen.get()
@@ -328,6 +334,10 @@ export function initBubble() {
       frac: s.active && s.segments.length ? Math.min(1, (s.current + sentenceProgress()) / s.segments.length) : 0,
       bars: s.active && levels(18, barTmp) ? Array.from(barTmp, (v) => Math.round(Math.max(0, Math.min(1, v)) * 100)) : null,
       light,
+      words: settings.get().bubbleText,
+      tp: s.active ? capSent(cleanSent(s.segments[s.current - 1]?.text ?? ''), 160) : '',
+      tc: s.active ? capSent(cleanSent(s.segments[s.current]?.text ?? ''), 520) : '',
+      tn: s.active ? capSent(cleanSent(s.segments[s.current + 1]?.text ?? ''), 160) : '',
       title: titleOf(s.active, text) || 'Logos',
       sub: s.active ? (s.cushion ? `Preparing… ${s.cushion.done} of ${s.cushion.total} to start` : `Sentence ${s.current + 1} of ${s.segments.length} · ${fmtRate(settings.get().listenSpeed)}`) : 'Ready',
     }

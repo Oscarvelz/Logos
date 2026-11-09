@@ -11,7 +11,7 @@ import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.101'
+const VERSION = '1.4.102'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -285,6 +285,13 @@ export function SettingsPage() {
             <div className="d">The lever. On: copy text anywhere, tap the bubble, and it plays — replacing what was playing, with an Undo so nothing is lost; opening Logos right after copying plays it too. Off: the bubble only controls playback, and pasting stays manual, as now. Android only lets Logos look at the clipboard at that tap — never in secret.</div>
           </div>
           <Switch label="Play the clipboard" on={st.bubbleAuto} onChange={(v) => settings.set({ bubbleAuto: v })} />
+        </div>
+        <div className="list-row">
+          <div className="grow">
+            <div className="t">Words in the panel</div>
+            <div className="d">The bubble's panel reads along: the sentence being read, in the open. On the tablet the panel widens and the sentences before and after ride along dimmed — a glance catches what the ear missed.</div>
+          </div>
+          <Switch label="Words in the panel" on={st.bubbleText} onChange={(v) => settings.set({ bubbleText: v })} />
         </div>
       </div>
       {bState?.last ? <div className="muted small" style={{ marginTop: 10, padding: '0 4px' }}>Last clipboard try: {bState.last}</div> : null}
