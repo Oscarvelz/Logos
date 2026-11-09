@@ -172,7 +172,19 @@ class BubbleService : Service() {
          *  visit — the same net the panel's transport keys already have. */
         fun wakeForPending(c: Context, cmd: String) {
             pendingCmd = cmd
+            if (backstageServe()) return
             runCatching { c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(c, 0, 0).toBundle()) }
+        }
+
+        /** The page lives backstage (1.4.111): it is awake, so a wake is a
+         *  direct poke — no ghost visit, no black flash, Oscar stays put. */
+        fun backstageServe(): Boolean {
+            val p = poke ?: return false
+            if (!Backstage.active) return false
+            val cmd = pendingCmd
+            if (cmd != null) { pendingCmd = null; p(cmd) }
+            else if (clipText != null) p("clip")
+            return true
         }
 
         fun deliver(c: Context, text: String, manual: Boolean) {
@@ -437,6 +449,7 @@ class BubbleService : Service() {
      *  until the page breathes again, then leaves on its own. The bubble
      *  is a shortcut; a rescue that lands him inside the app is no rescue. */
     private fun ghostWake() {
+        if (backstageServe()) { noteTry(this, s("served backstage, no visit", "atendido tras bastidores, sin visita")); return }
         runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle()) }
     }
 
@@ -1528,6 +1541,7 @@ class BubbleService : Service() {
     }
 
     override fun onDestroy() {
+        Backstage.release()
         releaseWakeLock()
         retireHoldFile(this)
         handler.removeCallbacks(fadeRun)

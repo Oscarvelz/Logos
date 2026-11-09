@@ -208,6 +208,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        bringWebHome()
         resumed = true
         // Back without any intent behind it — he opened the task himself
         // (Recents, a notification): a visit still wearing its ghost
@@ -504,6 +505,23 @@ class MainActivity : Activity() {
     override fun onStop() {
         super.onStop()
         runCatching { BubbleService.inviteHook?.invoke() }
+        // The backstage (1.4.111): with the bubble on, the page keeps working
+        // out of sight in an invisible overlay instead of sleeping here.
+        if (!isChangingConfigurations && !isFinishing && BubbleService.running && web.width > 0)
+            Backstage.adopt(this, web, web.width, web.height)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        bringWebHome()
+    }
+
+    /** Take the WebView back from the backstage before the activity draws. */
+    private fun bringWebHome() {
+        if (web.parent === root) return
+        Backstage.release()
+        (web.parent as? ViewGroup)?.removeView(web)
+        root.addView(web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     }
 
     override fun onSaveInstanceState(out: Bundle) { super.onSaveInstanceState(out); web.saveState(out) }
@@ -519,6 +537,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        Backstage.release()
         PlaybackService.onAction = null
         BubbleService.poke = null
         runCatching { startService(Intent(this, PlaybackService::class.java).setAction("stop")) }

@@ -1,3 +1,21 @@
+## Shell (Hark, 2026-11-09) — the backstage: the bubble reads without visiting the app
+
+- **Cause of the trip into the app:** with Logos out of sight, its WebView sat in
+  a stopped MainActivity, so Chromium counted the page hidden and throttled it
+  (no frames, slow timers). A clip caught by the bubble reached a page that could
+  not start the engine, so the watches paid a ghost visit (the black flash).
+- **Fix (`Backstage.kt`):** when MainActivity stops and the bubble is running, the
+  same WebView moves into an invisible overlay window (window alpha 0, not
+  touchable, not focusable, same size). Chromium keeps it visible, so the engine
+  renders and plays at full speed while Oscar stays in the other app. onStart and
+  onResume take it home before the activity draws; onDestroy of either side
+  closes the window. One page, one engine, nothing duplicated.
+- `BubbleService.backstageServe()`: while the page is backstage, `ghostWake()` and
+  `wakeForPending()` poke the page directly (pending command or "clip") instead of
+  launching the activity. Ghost visits remain only for a page that is truly gone.
+- Not tested on a device (no emulator here). If a phone ever shows the overlay
+  stealing touches, check FLAG_NOT_TOUCHABLE and alpha 0 first.
+
 ## 1.4.110 — Wave 3 of the button audit: the fine edges (A-2, B-1, B-2, B-3, C-3, C-4, C-5, D-S2, A-3/D-5)
 
 - **Sleep timer sheet marks the armed duration** (A-2): the store now
