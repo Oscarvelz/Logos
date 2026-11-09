@@ -1,3 +1,17 @@
+## 1.4.102 — The panel reads along
+
+Oscar's idea, approved with 'Sorpréndeme': the bubble's panel now
+shows the WORDS. The push carries the sentence sounding now plus
+its neighbours, cleaned and capped; the panel seats a serif words
+zone under the status line — on the tablet the panel widens to
+360dp and the three sentences ride together (the neighbours
+dimmed, the sounding one in full ink), on the phone the sounding
+sentence alone, three lines at most. A sentence change settles in
+with a short fade; the panel re-seats itself on its corner as its
+height breathes. When there are no words — no session, or the new
+Settings lever ('Words in the panel', beside the bubble's other
+switches) turned off — the panel is exactly the one he knows.
+
 ## 1.4.101 — On the phone, the reader's four buttons shrink
 
 Oscar's screenshot: on the phone the reader head's four buttons

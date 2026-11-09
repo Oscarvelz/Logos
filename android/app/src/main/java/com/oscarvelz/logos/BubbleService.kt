@@ -37,6 +37,9 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.Switch
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
@@ -433,6 +436,8 @@ class BubbleService : Service() {
     private fun bubbleFace() = if (isTablet()) dp(60) else dp(46)
     private fun bubbleHalo() = if (isTablet()) dp(66) else dp(52)
     private fun bubbleHalf() = bubbleSize() / 2
+    // The panel's width: the words (1.4.102) earn the tablet a wider window.
+    private fun panelWidth() = if (wordsOn && isTablet()) dp(360) else dp(302)
 
     override fun onBind(i: Intent?): IBinder? = null
 
@@ -740,6 +745,9 @@ class BubbleService : Service() {
     // player's warm charcoal gradient with its soft gold glow on top — or, when
     // Logos itself is in its light theme, the warm paper of that room.
     private var panelLight = false
+    private var wordsV: TextView? = null
+    private var wordsOn = true
+    private var lastWordsKey = ""
     private var lastFocusTry = 0L
 
     private val lightPal = mapOf(
@@ -778,6 +786,7 @@ class BubbleService : Service() {
     private fun openPanel() {
         val w = wm ?: return
         panelLight = runCatching { JSONObject(nowJson).optBoolean("light") }.getOrDefault(false)
+        wordsOn = runCatching { JSONObject(nowJson).optBoolean("words", true) }.getOrDefault(true)
         val c = pal()
         // The panel is a small stage: gradient card, a gold glow lying on its top
         // like the player's, then the content.
@@ -863,6 +872,22 @@ class BubbleService : Service() {
         titleRow.addView(lockB)
         card.addView(titleRow)
         card.addView(subV)
+        // THE WORDS (1.4.102): the panel reads along. A serif zone under the
+        // status line — on the tablet, the sentence before and after ride
+        // dimmed beside the one sounding; on the phone, the sounding
+        // sentence alone. Hidden whenever there are no words to show.
+        val wv = TextView(this).apply {
+            setTextColor(c["ink"]!!)
+            textSize = if (isTablet()) 15.5f else 14f
+            typeface = Typeface.SERIF
+            setLineSpacing(0f, 1.3f)
+            maxLines = if (isTablet()) 7 else 3
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            visibility = View.GONE
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) }
+        }
+        wordsV = wv
+        card.addView(wv)
         val spec = SpectrumView(this, c["gold"]!!)
         spec.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)).apply { topMargin = dp(8) }
         spectrum = spec
@@ -1000,7 +1025,7 @@ class BubbleService : Service() {
         clipRow.addView(hideB)
         card.addView(clipRow)
         val p = WindowManager.LayoutParams(
-            dp(302), WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            panelWidth(), WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START }
@@ -1013,7 +1038,7 @@ class BubbleService : Service() {
         bubble?.let { if (it.alpha < 1f) { it.animate().cancel(); it.alpha = 1f } }
         // A short, smooth birth: the panel grows out of the λ's own position.
         val bp2 = bubbleParams
-        stage.pivotX = if (seatRight) dp(302).toFloat() else 0f
+        stage.pivotX = if (seatRight) panelWidth().toFloat() else 0f
         // It grows out of the very corner that grazes the λ.
         stage.pivotY = if (seatBottom) dp(320).toFloat() else 0f
         stage.scaleX = 0.86f; stage.scaleY = 0.86f; stage.alpha = 0f
@@ -1053,7 +1078,7 @@ class BubbleService : Service() {
         val bp = bubbleParams ?: return
         val sw2 = resources.displayMetrics.widthPixels
         val sh2 = resources.displayMetrics.heightPixels
-        val pw = dp(302)
+        val pw = panelWidth()
         val margin = dp(10)
         val cx = bp.x + bubbleHalf()
         val cy = bp.y + bubbleHalf()
@@ -1171,7 +1196,7 @@ class BubbleService : Service() {
     private fun collapsePanel(now: Boolean = false) {
         dismissSaveHint()
         val v = panel
-        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null
+        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; lastWordsKey = ""
         if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
         if (!now && deliveries != lastDeliverySeen) {
             lastDeliverySeen = deliveries
@@ -1181,6 +1206,35 @@ class BubbleService : Service() {
         if (now) { runCatching { wm?.removeView(v) }; return }
         v.animate().alpha(0f).scaleX(0.93f).scaleY(0.93f).setDuration(120)
             .withEndAction { runCatching { wm?.removeView(v) } }.start()
+    }
+
+    /** The words zone: compose prev · current · next with the neighbours
+     *  dimmed, settle the change with a breath of a fade, and let the panel
+     *  re-seat on its corner now that its height has breathed. */
+    private fun updateWords(j: JSONObject?) {
+        val wv = wordsV ?: return
+        val tc = j?.optString("tc")?.trim().orEmpty()
+        if (!wordsOn || tc.isEmpty()) {
+            if (wv.visibility != View.GONE) { wv.visibility = View.GONE; panel?.post { positionPanel() } }
+            return
+        }
+        val c = pal()
+        val ink = c["ink"]!!; val muted = c["muted"]!!
+        val sb = SpannableStringBuilder()
+        if (isTablet()) {
+            val tp = j?.optString("tp")?.trim().orEmpty()
+            if (tp.isNotEmpty()) { val st = sb.length; sb.append(tp).append(" "); sb.setSpan(ForegroundColorSpan(muted), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+            val st = sb.length; sb.append(tc); sb.setSpan(ForegroundColorSpan(ink), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val tn = j?.optString("tn")?.trim().orEmpty()
+            if (tn.isNotEmpty()) { val s2 = sb.length; sb.append(" ").append(tn); sb.setSpan(ForegroundColorSpan(muted), s2, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        } else sb.append(tc)
+        val wasGone = wv.visibility != View.VISIBLE
+        wv.text = sb
+        wv.visibility = View.VISIBLE
+        wv.animate().cancel()
+        wv.alpha = if (wasGone) 0f else 0.45f
+        wv.animate().alpha(1f).setDuration(if (wasGone) 240 else 180).start()
+        panel?.post { positionPanel() }
     }
 
     private fun refreshPanel() {
@@ -1205,6 +1259,9 @@ class BubbleService : Service() {
                     sp.setTargets(t)
                 }
             }
+            wordsOn = j?.optBoolean("words", true) ?: true
+            val wKey = if (wordsOn) (j?.optString("tc") ?: "") + "" + (j?.optString("tp") ?: "") + "" + (j?.optString("tn") ?: "") else ""
+            if (wKey != lastWordsKey) { lastWordsKey = wKey; updateWords(j) }
             val h = halo
             if (playing && h != null) {
                 if (haloAnim == null) {
