@@ -423,6 +423,12 @@ class BubbleService : Service() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
+    // One bubble size on phones, a little more on tablets (Oscar: 'un
+    // poquito, un poquito más' — a little, only a little).
+    private fun isTablet() = resources.configuration.smallestScreenWidthDp >= 600
+    private fun bubbleSize() = if (isTablet()) dp(66) else dp(58)
+    private fun bubbleHalf() = bubbleSize() / 2
+
     override fun onBind(i: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -475,11 +481,11 @@ class BubbleService : Service() {
     private fun showBubble() {
         val w = getSystemService(WindowManager::class.java)
         wm = w
-        val size = dp(58) // the window carries a halo ring around the 46dp face
+        val size = bubbleSize() // the window carries a halo ring around the face
         val root = FrameLayout(this)
         val haloV = View(this).apply {
             background = oval(gold, 0, 0, -1f).apply { alpha = 70 }
-            layoutParams = FrameLayout.LayoutParams(dp(52), dp(52), Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(if (isTablet()) dp(58) else dp(52), if (isTablet()) dp(58) else dp(52), Gravity.CENTER)
             visibility = View.INVISIBLE
         }
         val face = FrameLayout(this).apply {
@@ -494,12 +500,12 @@ class BubbleService : Service() {
                 setStroke(dp(2), gold)
             }
             elevation = dp(5).toFloat()
-            layoutParams = FrameLayout.LayoutParams(dp(46), dp(46), Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(if (isTablet()) dp(52) else dp(46), if (isTablet()) dp(52) else dp(46), Gravity.CENTER)
         }
         val lambda = TextView(this).apply {
             text = "λ"
             setTextColor(gold)
-            textSize = 22f
+            textSize = if (isTablet()) 25f else 22f
             typeface = Typeface.SERIF
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
@@ -633,7 +639,7 @@ class BubbleService : Service() {
     }
 
     private fun updateHover(p: WindowManager.LayoutParams) {
-        val cx = p.x + dp(29); val cy = p.y + dp(29)
+        val cx = p.x + bubbleHalf(); val cy = p.y + bubbleHalf()
         val idx = dragTargets.indexOfFirst { it.rect.contains(cx, cy) }
         if (idx == hoverTarget) return
         hoverTarget = idx
@@ -662,7 +668,7 @@ class BubbleService : Service() {
     private fun saveBubblePos(x: Int, y: Int) {
         val sw2 = resources.displayMetrics.widthPixels
         val sh2 = resources.displayMetrics.heightPixels
-        val bw = dp(58)
+        val bw = bubbleSize()
         getSharedPreferences("bubble", MODE_PRIVATE).edit()
             .putFloat("posFx", if (sw2 > bw) x.toFloat() / (sw2 - bw) else 0f)
             .putFloat("posFy", if (sh2 > bw) y.toFloat() / (sh2 - bw) else 0f)
@@ -677,7 +683,7 @@ class BubbleService : Service() {
         if (fx < 0f) return
         val sw2 = resources.displayMetrics.widthPixels
         val sh2 = resources.displayMetrics.heightPixels
-        val bw = dp(58)
+        val bw = bubbleSize()
         bp.x = (fx * (sw2 - bw)).toInt().coerceIn(dp(2), (sw2 - bw - dp(2)).coerceAtLeast(dp(2)))
         bp.y = (fy * (sh2 - bw)).toInt().coerceIn(dp(2), (sh2 - bw - dp(24)).coerceAtLeast(dp(2)))
         runCatching { wm?.updateViewLayout(bv, bp) }
@@ -693,7 +699,7 @@ class BubbleService : Service() {
     private fun settleBubble(v: View, p: WindowManager.LayoutParams) {
         val sw2 = resources.displayMetrics.widthPixels
         val sh2 = resources.displayMetrics.heightPixels
-        val bw = dp(58)
+        val bw = bubbleSize()
         p.x = p.x.coerceIn(dp(2), (sw2 - bw - dp(2)).coerceAtLeast(dp(2)))
         p.y = p.y.coerceIn(dp(2), (sh2 - bw - dp(24)).coerceAtLeast(dp(2)))
         val near = dp(30)
@@ -1002,15 +1008,13 @@ class BubbleService : Service() {
         bubble?.let { if (it.alpha < 1f) { it.animate().cancel(); it.alpha = 1f } }
         // A short, smooth birth: the panel grows out of the λ's own position.
         val bp2 = bubbleParams
-        if (bp2 != null) stage.pivotX = (bp2.x + dp(29) - p.x).coerceIn(0, dp(302)).toFloat()
-        // It grows out of the λ: from its top edge when the panel hangs
-        // below the bubble, from its bottom edge when it stands above.
-        stage.pivotY = if (bp2 != null && p.y < bp2.y) dp(320).toFloat() else 0f
+        if (bp2 != null) stage.pivotX = (bp2.x + bubbleHalf() - p.x).coerceIn(0, dp(302)).toFloat()
+        // It grows out of the corner the λ is pinned on.
+        stage.pivotY = if (bp2 != null) (bp2.y + bubbleHalf() - p.y).toFloat() else 0f
         stage.scaleX = 0.86f; stage.scaleY = 0.86f; stage.alpha = 0f
         stage.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(190).setInterpolator(DecelerateInterpolator()).start()
         // Once laid out, its real height gets the final word on the spot.
         stage.post { positionPanel() }
-        cornerBubble()
         refreshPanel()
         // The tap that opened the panel is the moment Android allows: with the
         // lever on, what was just copied takes the stage.
@@ -1022,41 +1026,14 @@ class BubbleService : Service() {
         handler.postDelayed({ if (deliveries != deliveriesBefore) cheer() }, 1900)
     }
 
-    // ON OPEN, THE BUBBLE TAKES ITS CORNER (Oscar): when the player
-    // deploys, the λ glides to the nearest top corner — left, or right
-    // when it lives on that side — and the panel opens tucked into the
-    // corner with it, instead of the pair settling up high mid-screen.
-    // The corner becomes its remembered spot until a hand drags it away.
-    private fun cornerBubble() {
-        val bp = bubbleParams ?: return
-        val bv = bubble ?: return
-        val sw2 = resources.displayMetrics.widthPixels
-        val bw = dp(58)
-        val targetX = if (bp.x + dp(29) < sw2 / 2) dp(4) else sw2 - bw - dp(4)
-        val targetY = dp(12)
-        if (bp.x == targetX && bp.y == targetY) { saveBubblePos(bp.x, bp.y); return }
-        val startX = bp.x; val startY = bp.y
-        val anim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 230
-            interpolator = DecelerateInterpolator()
-            addUpdateListener {
-                val f = it.animatedValue as Float
-                bp.x = startX + ((targetX - startX) * f).toInt()
-                bp.y = startY + ((targetY - startY) * f).toInt()
-                runCatching { wm?.updateViewLayout(bv, bp) }
-                if (panel != null) positionPanel()
-            }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(a: android.animation.Animator) { saveBubblePos(bp.x, bp.y) }
-            })
-        }
-        anim.start()
-    }
-
-    // THE PANEL HUGS ITS BUBBLE (Oscar): it opens right beside the λ —
-    // centred on it horizontally, hanging below it by preference —
-    // instead of travelling to a screen edge. Only the screen's own
-    // edges push it, and only as far as they must.
+    // THE BUBBLE SITS ON THE PANEL'S CORNER (Oscar, correcting 1.4.94):
+    // the bubble never moves on its own. The panel deploys so that one
+    // of its own corners lands exactly under the bubble's centre — the
+    // λ ends up pinned ON the corner of the rectangle, at the end of
+    // the arrow from the rectangle's centre to its corner — wherever
+    // on the screen the pair happens to be. Top-left corner when the
+    // bubble lives on the left, top-right on the right; the matching
+    // bottom corner when the panel must deploy upward instead.
     private fun positionPanel() {
         val p = panelParams ?: return
         val bp = bubbleParams ?: return
@@ -1064,14 +1041,14 @@ class BubbleService : Service() {
         val sh2 = resources.displayMetrics.heightPixels
         val pw = dp(302)
         val margin = dp(10)
-        p.x = (bp.x + dp(29) - pw / 2).coerceIn(margin, (sw2 - pw - margin).coerceAtLeast(margin))
+        val cx = bp.x + bubbleHalf()
+        val cy = bp.y + bubbleHalf()
         val ph = panel?.height?.takeIf { it > 0 } ?: dp(320)
-        val below = bp.y + dp(66)
-        val above = bp.y - ph - dp(8)
+        p.x = (if (cx < sw2 / 2) cx else cx - pw).coerceIn(margin, (sw2 - pw - margin).coerceAtLeast(margin))
         p.y = when {
-            below + ph <= sh2 - margin -> below
-            above >= margin -> above
-            else -> below.coerceAtMost((sh2 - ph - margin).coerceAtLeast(margin))
+            cy + ph <= sh2 - margin -> cy
+            cy - ph >= margin -> cy - ph
+            else -> cy.coerceAtMost((sh2 - ph - margin).coerceAtLeast(margin))
         }
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
