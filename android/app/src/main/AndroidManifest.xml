@@ -70,6 +70,7 @@
         <service
             android:name=".BubbleService"
             android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
             android:foregroundServiceType="mediaPlayback" />
         <!-- The bubble's invisible clipboard reader: takes the focus for a blink, reads, finishes. -->
         <activity

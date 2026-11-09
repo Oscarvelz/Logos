@@ -1,3 +1,16 @@
+## 1.4.92 — The bubble lives where his hand leaves it
+
+Oscar: the bubble should stay anywhere on the screen, not just dock
+at the sides — on the tablet above all. Until now it could be dragged
+anywhere but snapped to the nearest edge on release, and it forgot
+the spot on every restart. Now a drop settles where it lands: it
+docks only when let go near an edge, and the place is remembered as
+screen fractions — a restart returns it to its spot, and a rotation
+recomputes the same relative place on the new shape instead of
+losing it at a corner. The drag gates (Remove / Open Logos) are
+unchanged, and the panel still opens on the bubble's nearer side,
+below it.
+
 ## 1.4.91 — The visit stops flashing black
 
 Oscar: when the engine doesn't load, the trip to the app should be
