@@ -1,3 +1,19 @@
+## 1.4.105 — The panel's reader stretches (Oscar's idea, approved the night 1.4.104 shipped)
+
+- **Drag the free corner**: two small gold ticks hug the corner of the panel
+  opposite the one that grazes the bubble. Dragging it grows the words
+  window — more sentences in view, and the letters grow with the window.
+  The seated corner never moves: the panel grows away from its bubble,
+  never over it.
+- **Remembered**: the size persists per device kind (phone / tablet) in the
+  bubble's own prefs, like the bubble's spot. One drag, once — then it
+  simply opens that size.
+- Shell only, plus the version: the scale (0.75–1.9) drives the panel
+  width, the words window height and the words' text size together
+  (`curScale` / `wordsHeight` / `wordsTextSize` in BubbleService); the grip
+  shows only while the words show. Untouched at scale 1 — the panel is
+  exactly the one from 1.4.104 until a hand stretches it.
+
 ## 1.4.104 — The app speaks Spanish (Oscar: a Language setting, the whole app translated, nothing working touched)
 
 - **Settings → Language**: a new card with **English | Español**. One tap and every

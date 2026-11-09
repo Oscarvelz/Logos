@@ -448,7 +448,43 @@ class BubbleService : Service() {
     private fun bubbleHalo() = if (isTablet()) dp(66) else dp(52)
     private fun bubbleHalf() = bubbleSize() / 2
     // The panel's width: the words (1.4.102) earn the tablet a wider window.
-    private fun panelWidth() = if (wordsOn && isTablet()) dp(360) else dp(302)
+    private fun panelWidth(): Int {
+        val base = if (wordsOn && isTablet()) dp(360) else dp(302)
+        if (!wordsOn) return base
+        val sw2 = resources.displayMetrics.widthPixels
+        return (base * curScale()).toInt().coerceIn(dp(240), (sw2 - dp(20)).coerceAtLeast(dp(240)))
+    }
+
+    // THE STRETCHABLE READER (1.4.105, Oscar: 'redimensionar el tamaño del
+    // lector'): drag the panel's free corner and the words window grows —
+    // more sentences in view, letters growing with the window — while the
+    // corner that grazes the bubble never moves. The size is remembered
+    // per device kind (phone / tablet), like the bubble's own spot.
+    private var panelScale = -1f
+    private fun scaleKey() = if (isTablet()) "rscaleTab" else "rscalePhone"
+    private fun curScale(): Float = if (panelScale > 0) panelScale else prefs(this).getFloat(scaleKey(), 1f)
+    private fun wordsHeight() = ((if (isTablet()) dp(106) else dp(60)) * curScale()).toInt()
+    private fun wordsTextSize() = (if (isTablet()) 15.5f else 14f) * (0.7f + 0.3f * curScale())
+
+    private fun applyReaderScale(v: Float, final: Boolean) {
+        panelScale = v
+        val p = panelParams ?: return
+        p.width = panelWidth()
+        wordsV?.let { wv ->
+            val lp = wv.layoutParams as? LinearLayout.LayoutParams
+            if (lp != null && lp.height != wordsHeight()) { lp.height = wordsHeight(); wv.layoutParams = lp }
+            wv.textSize = wordsTextSize()
+        }
+        panel?.let { st ->
+            runCatching { wm?.updateViewLayout(st, p) }
+            st.post { positionPanel() }
+        }
+        if (final) {
+            prefs(this).edit().putFloat(scaleKey(), v).apply()
+            lastWordsKey = ""; lastWi = -2
+            refreshPanel()
+        }
+    }
 
     override fun onBind(i: Intent?): IBinder? = null
 
@@ -757,6 +793,9 @@ class BubbleService : Service() {
     // Logos itself is in its light theme, the warm paper of that room.
     private var panelLight = false
     private var wordsV: TextView? = null
+    private var gripV: View? = null
+    private var gripFreeR = true
+    private var gripFreeB = true
     private var wordsOn = true
     private var lastWordsKey = ""
     private var lastWi = -2
@@ -891,7 +930,7 @@ class BubbleService : Service() {
         // sentence alone. Hidden whenever there are no words to show.
         val wv = TextView(this).apply {
             setTextColor(c["ink"]!!)
-            textSize = if (isTablet()) 15.5f else 14f
+            textSize = wordsTextSize()
             typeface = Typeface.SERIF
             setLineSpacing(0f, 1.3f)
             movementMethod = android.text.method.ScrollingMovementMethod.getInstance()
@@ -899,7 +938,7 @@ class BubbleService : Service() {
             setFadingEdgeLength(dp(16))
             setVerticalFadingEdgeEnabled(true)
             visibility = View.GONE
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (isTablet()) dp(106) else dp(60)).apply { topMargin = dp(10) }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, wordsHeight()).apply { topMargin = dp(10) }
         }
         wordsV = wv
         card.addView(wv)
@@ -1039,6 +1078,53 @@ class BubbleService : Service() {
         }
         clipRow.addView(hideB)
         card.addView(clipRow)
+        // The reader's grip: two small gold ticks hugging the panel's free
+        // corner. Drag it and the reader stretches (see applyReaderScale).
+        val grip = object : View(this) {
+            override fun onDraw(cv: android.graphics.Canvas) {
+                super.onDraw(cv)
+                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = c["gold"]!!; alpha = 150; style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = dp(2).toFloat(); strokeCap = android.graphics.Paint.Cap.ROUND
+                }
+                val cxp = if (gripFreeR) width.toFloat() else 0f
+                val cyp = if (gripFreeB) height.toFloat() else 0f
+                val ix = if (gripFreeR) -1f else 1f
+                val iy = if (gripFreeB) -1f else 1f
+                val arm = dp(12).toFloat()
+                for (inset in intArrayOf(dp(6), dp(12))) {
+                    val path = android.graphics.Path()
+                    path.moveTo(cxp + ix * inset, cyp + iy * arm)
+                    path.lineTo(cxp + ix * inset, cyp + iy * inset)
+                    path.lineTo(cxp + ix * arm, cyp + iy * inset)
+                    cv.drawPath(path, paint)
+                }
+            }
+        }
+        grip.contentDescription = s("Resize the reader", "Cambiar el tamaño del lector")
+        grip.visibility = View.GONE
+        grip.layoutParams = FrameLayout.LayoutParams(dp(30), dp(30), Gravity.BOTTOM or Gravity.END)
+        var dragX0 = 0f; var dragY0 = 0f; var dragS0 = 1f
+        grip.setOnTouchListener { v, e ->
+            when (e.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    dragX0 = e.rawX; dragY0 = e.rawY; dragS0 = curScale()
+                    v.parent?.requestDisallowInterceptTouchEvent(true)
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val gx = if (gripFreeR) e.rawX - dragX0 else -(e.rawX - dragX0)
+                    val gy = if (gripFreeB) e.rawY - dragY0 else -(e.rawY - dragY0)
+                    val ns = (dragS0 + (gx + gy) / 2f / dp(240)).coerceIn(0.75f, 1.9f)
+                    if (kotlin.math.abs(ns - curScale()) > 0.005f) applyReaderScale(ns, false)
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { applyReaderScale(curScale(), true); true }
+                else -> false
+            }
+        }
+        gripV = grip
+        stage.addView(grip)
         val p = WindowManager.LayoutParams(
             panelWidth(), WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
@@ -1109,6 +1195,14 @@ class BubbleService : Service() {
         val d = (dist * 0.7071f).toInt()
         seatRight = cx >= sw2 / 2
         seatBottom = !(cy + d + ph <= sh2 - margin) && (cy - d - ph >= margin)
+        // The grip rides the corner opposite the seated one — the free one.
+        val nfr = !seatRight; val nfb = !seatBottom
+        gripV?.let { g ->
+            val lp = g.layoutParams as? FrameLayout.LayoutParams
+            val ng = (if (nfb) Gravity.BOTTOM else Gravity.TOP) or (if (nfr) Gravity.END else Gravity.START)
+            if (lp != null && lp.gravity != ng) { lp.gravity = ng; g.layoutParams = lp }
+            if (nfr != gripFreeR || nfb != gripFreeB) { gripFreeR = nfr; gripFreeB = nfb; g.invalidate() }
+        }
         p.x = (if (seatRight) cx - d - pw else cx + d).coerceIn(margin, (sw2 - pw - margin).coerceAtLeast(margin))
         p.y = if (seatBottom) cy - d - ph else (cy + d).coerceAtMost((sh2 - ph - margin).coerceAtLeast(margin))
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
@@ -1211,7 +1305,7 @@ class BubbleService : Service() {
     private fun collapsePanel(now: Boolean = false) {
         dismissSaveHint()
         val v = panel
-        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null
+        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; gripV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null
         if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
         if (!now && deliveries != lastDeliverySeen) {
             lastDeliverySeen = deliveries
@@ -1232,6 +1326,7 @@ class BubbleService : Service() {
         val wv = wordsV ?: return
         val tc = j?.optString("tc")?.trim().orEmpty()
         if (!wordsOn || tc.isEmpty()) {
+            gripV?.visibility = View.GONE
             if (wv.visibility != View.GONE) { wv.visibility = View.GONE; wordsScrollAnim?.cancel(); panel?.post { positionPanel() } }
             lastWordsKey = ""; lastWi = -2
             return
@@ -1270,6 +1365,7 @@ class BubbleService : Service() {
         val wasGone = wv.visibility != View.VISIBLE
         wv.text = sb
         wv.visibility = View.VISIBLE
+        gripV?.visibility = View.VISIBLE
         if (sentChanged) {
             wv.animate().cancel()
             wv.alpha = if (wasGone) 0f else 0.45f
