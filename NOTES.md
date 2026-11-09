@@ -1,3 +1,14 @@
+## 1.4.96 — The corner grazes the circle; nothing overlaps
+
+Oscar, closer: 'En realidad no deben superponerse. El borde
+puntiagudo del rectángulo debe apenas rozar el círculo del botón
+flotante, pero en esa dirección.' The seat moves out by the
+diagonal: the panel's corner point now rests ON the bubble's
+circle — centre plus radius along the 45° diagonal toward the
+panel — touching, never crossing. Same four corners as 1.4.95
+(top-left / top-right, bottom pair when the panel opens upward),
+and the birth pivot is the grazing corner itself.
+
 ## 1.4.95 — The bubble sits on the panel's corner (a correction)
 
 Oscar corrected 1.4.94: he never asked the bubble to travel to the

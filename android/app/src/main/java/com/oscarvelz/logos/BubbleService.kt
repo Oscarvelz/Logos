@@ -1008,9 +1008,9 @@ class BubbleService : Service() {
         bubble?.let { if (it.alpha < 1f) { it.animate().cancel(); it.alpha = 1f } }
         // A short, smooth birth: the panel grows out of the λ's own position.
         val bp2 = bubbleParams
-        if (bp2 != null) stage.pivotX = (bp2.x + bubbleHalf() - p.x).coerceIn(0, dp(302)).toFloat()
-        // It grows out of the corner the λ is pinned on.
-        stage.pivotY = if (bp2 != null) (bp2.y + bubbleHalf() - p.y).toFloat() else 0f
+        stage.pivotX = if (seatRight) dp(302).toFloat() else 0f
+        // It grows out of the very corner that grazes the λ.
+        stage.pivotY = if (seatBottom) dp(320).toFloat() else 0f
         stage.scaleX = 0.86f; stage.scaleY = 0.86f; stage.alpha = 0f
         stage.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(190).setInterpolator(DecelerateInterpolator()).start()
         // Once laid out, its real height gets the final word on the spot.
@@ -1034,6 +1034,15 @@ class BubbleService : Service() {
     // on the screen the pair happens to be. Top-left corner when the
     // bubble lives on the left, top-right on the right; the matching
     // bottom corner when the panel must deploy upward instead.
+    // Which corner of the panel grazes the bubble, from the last seating.
+    private var seatRight = false
+    private var seatBottom = false
+
+    // THE CORNER GRAZES THE CIRCLE (Oscar, refining 1.4.95): the panel
+    // and the bubble must NOT overlap. The rectangle's corner point
+    // travels the diagonal from the bubble's centre until it just
+    // touches the bubble's circle — the corner rests on the circle's
+    // edge, in that direction, and no further.
     private fun positionPanel() {
         val p = panelParams ?: return
         val bp = bubbleParams ?: return
@@ -1044,12 +1053,14 @@ class BubbleService : Service() {
         val cx = bp.x + bubbleHalf()
         val cy = bp.y + bubbleHalf()
         val ph = panel?.height?.takeIf { it > 0 } ?: dp(320)
-        p.x = (if (cx < sw2 / 2) cx else cx - pw).coerceIn(margin, (sw2 - pw - margin).coerceAtLeast(margin))
-        p.y = when {
-            cy + ph <= sh2 - margin -> cy
-            cy - ph >= margin -> cy - ph
-            else -> cy.coerceAtMost((sh2 - ph - margin).coerceAtLeast(margin))
-        }
+        // The corner point sits on the circle, along the diagonal:
+        // centre + radius·(cos45°, sin45°) in the panel's direction.
+        val r = (if (isTablet()) dp(52) else dp(46)) / 2
+        val d = (r * 0.7071f).toInt()
+        seatRight = cx >= sw2 / 2
+        seatBottom = !(cy + d + ph <= sh2 - margin) && (cy - d - ph >= margin)
+        p.x = (if (seatRight) cx - d - pw else cx + d).coerceIn(margin, (sw2 - pw - margin).coerceAtLeast(margin))
+        p.y = if (seatBottom) cy - d - ph else (cy + d).coerceAtMost((sh2 - ph - margin).coerceAtLeast(margin))
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
 
