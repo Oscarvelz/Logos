@@ -177,7 +177,7 @@ function BookTile({ b, sort, onMore }: { b: BookMeta; sort: Sort; onMore: () => 
         <BookCover meta={b} />
         <span className="book-fmt">{b.format.toUpperCase()}</span>
         {b.fav && <span className="book-fav"><Star size={13} fill="currentColor" /></span>}
-        <span className={`book-temp ${b.temp ? 'is-temp' : ''}`} role="button" aria-label={b.temp ? t('Keep {title}', { title: b.title }) : t('Keep {title} only once', { title: b.title })} title={b.temp ? t('Keep this book') : t('Only once — removed when you move to another book')} onClick={(e) => { e.stopPropagation(); void updateBook(b.id, { temp: !b.temp }) }}>{b.temp ? <><Pin size={11} /> {t('Keep')}</> : <><Clock size={11} /> {t('Once')}</>}</span>
+        <span className={`book-temp ${b.temp ? 'is-temp' : ''}`} role="button" aria-label={b.temp ? t('Keep {title}', { title: b.title }) : t('Keep {title} only once', { title: b.title })} title={b.temp ? t('Only once — removed when you move to another book') : t('Kept in your library')} onClick={(e) => { e.stopPropagation(); void updateBook(b.id, { temp: !b.temp }) }}>{b.temp ? <><Clock size={11} /> {t('Once')}</> : <><Pin size={11} /> {t('Keep')}</>}</span>
         <span className="book-prog"><i style={{ width: `${b.done ? 100 : pct}%` }} /></span>
       </button>
       <div className="book-tile-info">

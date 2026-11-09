@@ -268,7 +268,7 @@ function ClipCard({ clip, selecting, selected, onSelect, onLongPress, onMore }: 
         )}
       </div>
       {!isText ? (
-        <div className="clip-bar" role="slider" aria-label={t('Seek')} aria-valuenow={Math.round(progress * 100)}
+        <div className="clip-bar" role={active ? 'slider' : undefined} aria-label={active ? t('Seek') : undefined} aria-valuenow={active ? Math.round(progress * 100) : undefined}
           onClick={(e) => { if (selecting) return; const r = e.currentTarget.getBoundingClientRect(); if (active) seekClip((e.clientX - r.left) / r.width) }}>
           <i style={{ width: `${progress * 100}%` }} />
         </div>
