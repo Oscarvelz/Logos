@@ -515,8 +515,15 @@ class BubbleService : Service() {
             gravity = Gravity.TOP or Gravity.START
             val sw2 = resources.displayMetrics.widthPixels
             val sh2 = resources.displayMetrics.heightPixels
-            x = sw2 - size - dp(10)
-            y = (sh2 * 0.38f).toInt()
+            val fx = getSharedPreferences("bubble", MODE_PRIVATE).getFloat("posFx", -1f)
+            val fy = getSharedPreferences("bubble", MODE_PRIVATE).getFloat("posFy", -1f)
+            if (fx >= 0f) {
+                x = (fx * (sw2 - size)).toInt()
+                y = (fy * (sh2 - size)).toInt()
+            } else {
+                x = sw2 - size - dp(10)
+                y = (sh2 * 0.38f).toInt()
+            }
         }
         bubbleParams = p
         attachDrag(root, p)
@@ -565,14 +572,14 @@ class BubbleService : Service() {
                         !moved -> togglePanel()
                         target == 0 -> stopBubble()
                         target == 1 -> {
-                            snapEdge(v, p)
+                            settleBubble(v, p)
                             runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)) }
                         }
-                        else -> snapEdge(v, p)
+                        else -> settleBubble(v, p)
                     }
                     true
                 }
-                MotionEvent.ACTION_CANCEL -> { handler.removeCallbacks(longRun); hideTargets(); if (moved) snapEdge(v, p); true }
+                MotionEvent.ACTION_CANCEL -> { handler.removeCallbacks(longRun); hideTargets(); if (moved) settleBubble(v, p); true }
                 else -> false
             }
         }
@@ -648,14 +655,64 @@ class BubbleService : Service() {
         hoverTarget = -1
     }
 
-    private fun snapEdge(v: View, p: WindowManager.LayoutParams) {
+    // FREE PLACEMENT (Oscar): the bubble lives where his hand leaves it —
+    // mid-screen included. It docks only when dropped near an edge, and it
+    // remembers its spot as screen fractions, so a rotation, a restart or
+    // a bigger screen keeps the same relative place.
+    private fun saveBubblePos(x: Int, y: Int) {
         val sw2 = resources.displayMetrics.widthPixels
-        val target = if (p.x + dp(29) < sw2 / 2) dp(4) else sw2 - dp(58) - dp(4)
-        val anim = ValueAnimator.ofInt(p.x, target).apply {
-            duration = 180
-            addUpdateListener { p.x = it.animatedValue as Int; runCatching { wm?.updateViewLayout(v, p) }; if (panel != null) positionPanel() }
+        val sh2 = resources.displayMetrics.heightPixels
+        val bw = dp(58)
+        getSharedPreferences("bubble", MODE_PRIVATE).edit()
+            .putFloat("posFx", if (sw2 > bw) x.toFloat() / (sw2 - bw) else 0f)
+            .putFloat("posFy", if (sh2 > bw) y.toFloat() / (sh2 - bw) else 0f)
+            .apply()
+    }
+
+    private fun placeFromMemory() {
+        val bp = bubbleParams ?: return
+        val bv = bubble ?: return
+        val prefs = getSharedPreferences("bubble", MODE_PRIVATE)
+        val fx = prefs.getFloat("posFx", -1f); val fy = prefs.getFloat("posFy", -1f)
+        if (fx < 0f) return
+        val sw2 = resources.displayMetrics.widthPixels
+        val sh2 = resources.displayMetrics.heightPixels
+        val bw = dp(58)
+        bp.x = (fx * (sw2 - bw)).toInt().coerceIn(dp(2), (sw2 - bw - dp(2)).coerceAtLeast(dp(2)))
+        bp.y = (fy * (sh2 - bw)).toInt().coerceIn(dp(2), (sh2 - bw - dp(24)).coerceAtLeast(dp(2)))
+        runCatching { wm?.updateViewLayout(bv, bp) }
+        if (panel != null) positionPanel()
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        placeFromMemory()
+        handler.postDelayed({ placeFromMemory() }, 300)
+    }
+
+    private fun settleBubble(v: View, p: WindowManager.LayoutParams) {
+        val sw2 = resources.displayMetrics.widthPixels
+        val sh2 = resources.displayMetrics.heightPixels
+        val bw = dp(58)
+        p.x = p.x.coerceIn(dp(2), (sw2 - bw - dp(2)).coerceAtLeast(dp(2)))
+        p.y = p.y.coerceIn(dp(2), (sh2 - bw - dp(24)).coerceAtLeast(dp(2)))
+        val near = dp(30)
+        val target = when {
+            p.x <= near -> dp(4)
+            p.x >= sw2 - bw - near -> sw2 - bw - dp(4)
+            else -> p.x
         }
-        anim.start()
+        saveBubblePos(target, p.y)
+        if (target != p.x) {
+            val anim = ValueAnimator.ofInt(p.x, target).apply {
+                duration = 150
+                addUpdateListener { p.x = it.animatedValue as Int; runCatching { wm?.updateViewLayout(v, p) }; if (panel != null) positionPanel() }
+            }
+            anim.start()
+        } else {
+            runCatching { wm?.updateViewLayout(v, p) }
+            if (panel != null) positionPanel()
+        }
     }
 
     private var outsideClosedAt = 0L
