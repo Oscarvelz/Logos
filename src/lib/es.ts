@@ -138,6 +138,7 @@ export const ES: Record<string, string> = {
   'Pause': 'Pausar',
   'Play': 'Reproducir',
   'Mark this moment': 'Marcar este momento',
+  'Show the home screen': 'Mostrar el escritorio',
   'Using your device voice while the neural voice downloads. It switches over automatically.': 'Usando la voz de tu teléfono mientras la neuronal se descarga. Cambia sola.',
   'Preparing the audio so it reads to the end without stopping · {d} of {t} sentences': 'Preparando el audio para que lea hasta el final sin parar · {d} de {t} oraciones',
   ' · about {w} left': ' · quedan unos {w}',
