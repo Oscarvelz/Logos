@@ -36,11 +36,18 @@ type DroidBubble = {
   bubbleSeek?: () => string
   bubblePendingCmd?: () => string
   bubbleLock?: () => boolean
+  toDesktop?: () => void
 }
 const droid = () => (window as unknown as { LogosAndroid?: DroidBubble }).LogosAndroid
 
 /** True only in the Logos app with a shell new enough to carry the bubble. */
 export const bubbleSupported = () => typeof droid()?.bubbleState === 'function'
+
+/** The desktop key (1.4.114): present only in the app, shell new enough. */
+export const desktopSupported = () => typeof droid()?.toDesktop === 'function'
+export function goToDesktop() {
+  try { droid()?.toDesktop?.() } catch { /* old shell */ }
+}
 
 export type BubbleNativeState = { permission: boolean; running: boolean; last?: string }
 export function bubbleNativeState(): BubbleNativeState | null {

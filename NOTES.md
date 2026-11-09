@@ -1,4 +1,18 @@
-## 1.4.113 — No cropped buttons (shell)
+## 1.4.114 — The desktop key
+
+Oscar, from his own screenshot: inside the app there was no way to see
+the home screen behind without stopping the audio first. The empty
+seat at the left of the player's transport row is now a key (a house,
+shown only inside the app): one tap and Logos steps aside — the task
+goes to the back, the desktop emerges — while the reading keeps
+playing untouched: the page parks backstage as the activity stops,
+and the bubble and the media card stay in charge. New bridge method
+`LogosAndroid.toDesktop()` (`moveTaskToBack(true)`, the same motion
+the ghost visits leave by); the web asks `desktopSupported()` so a
+plain browser keeps the empty seat. Label: "Show the home screen" /
+"Mostrar el escritorio".
+
+## ## 1.4.113 — No cropped buttons (shell)
 
 Oscar's screenshot: with the reader dragged to his preferred width,
 the panel's − and + keys hung off both edges, cut in half. Cause: the

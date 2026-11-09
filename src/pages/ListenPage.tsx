@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
-import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Moon, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
+import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, House, Languages, Library as LibraryIcon, Loader2, Moon, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings, READER_SCALES, stepReaderScale } from '../lib/settings.ts'
@@ -10,6 +10,7 @@ import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate,
 import { markAndToast, textKey } from '../lib/marks.ts'
 import { loadSessionResume } from '../lib/resume.ts'
 import { ContinueRow } from '../components/continue.tsx'
+import { desktopSupported, goToDesktop } from '../lib/bubble.ts'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
 import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
@@ -200,7 +201,13 @@ export function ListenPage() {
           </div>
 
           <div className="transport">
-            <span aria-hidden />
+            {/* 1.4.114 (Oscar): the empty seat at the player's left becomes
+                the desktop key — the app steps aside and the home screen
+                emerges, the reading never stopping. In a plain browser
+                there is no desktop to emerge, so the seat stays empty. */}
+            {desktopSupported()
+              ? <button className="icon-btn" onClick={goToDesktop} aria-label={t('Show the home screen')} title={t('Show the home screen')}><House size={20} /></button>
+              : <span aria-hidden />}
             <button className="icon-btn filled" onClick={prev} disabled={!reading} aria-label={t('Previous sentence')}><SkipBack size={22} /></button>
             <button className={`play-btn ${s.buffering ? 'busy' : ''}`} onClick={reading ? toggle : start} aria-label={s.playing ? t('Pause') : t('Play')}>
               <span className="pb-icon" key={s.buffering ? 'b' : s.playing ? 'p' : 'l'}>{s.buffering ? <Loader2 size={32} className="spin" /> : s.playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" style={{ marginLeft: 4 }} />}</span>

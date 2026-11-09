@@ -287,6 +287,15 @@ class MainActivity : Activity() {
     inner class Bridge {
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
 
+        /** Oscar's desktop key (1.4.114): the app steps aside — the task
+         *  goes to the back and the home screen emerges — while the
+         *  reading keeps playing: as the activity stops the page parks
+         *  backstage, and the bubble and the media card stay in charge.
+         *  Nothing is stopped, nothing is lost. */
+        @JavascriptInterface fun toDesktop() {
+            runOnUiThread { moveTaskToBack(true) }
+        }
+
         /** WebView can't grant clipboard-read, so Paste reads the system clipboard here. */
         @JavascriptInterface fun clipboard(): String = runCatching {
             val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
