@@ -1028,8 +1028,14 @@ class BubbleService : Service() {
         card.addView(controls)
         val seekW = SeekBar(this).apply {
             max = 1000
-            val trackD = GradientDrawable().apply { setColor(c["div"]!!); cornerRadius = dp(2).toFloat() }
-            val fillD = ClipDrawable(GradientDrawable().apply { setColor(c["gold"]!!); cornerRadius = dp(2).toFloat() }, Gravity.START, ClipDrawable.HORIZONTAL)
+            // The line's height is DECLARED in the drawables (1.4.107): it
+            // used to exist only as the insets' arithmetic (24 − 10 − 10),
+            // and some Androids (Oscar's phone) size the track from the
+            // layers' own height — none declared, no line, only the thumb
+            // (which always had its size) survived. The tablet stretched
+            // it anyway; now both read the same 4dp from the same place.
+            val trackD = GradientDrawable().apply { setColor(c["div"]!!); cornerRadius = dp(2).toFloat(); setSize(-1, dp(4)) }
+            val fillD = ClipDrawable(GradientDrawable().apply { setColor(c["gold"]!!); cornerRadius = dp(2).toFloat(); setSize(-1, dp(4)) }, Gravity.START, ClipDrawable.HORIZONTAL)
             val ld = LayerDrawable(arrayOf(trackD, fillD))
             ld.setId(0, android.R.id.background); ld.setId(1, android.R.id.progress)
             ld.setLayerInset(0, 0, dp(10), 0, dp(10)); ld.setLayerInset(1, 0, dp(10), 0, dp(10))
