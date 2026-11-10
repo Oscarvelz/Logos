@@ -350,6 +350,9 @@ export function initBubble() {
     const info = {
       playing: s.playing || s.buffering,
       busy: s.buffering && !s.cushion,
+      // The session's error, as a flag (1.4.125): quiet-with-error is a
+      // failure asking for the rescue floor; quiet-without is his pause.
+      err: s.error ? 1 : 0,
       // Whether what is playing already lives in the Library — the ⚑ asks this
       // before it marks, so no mark is ever left on unsaved audio.
       saved: s.active && (!!nowReadingFor(s.text) || library.get().clips.some((c) => c.kind === 'text' && !!c.text && c.text.trim() === s.text.trim())),

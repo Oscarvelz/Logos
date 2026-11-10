@@ -183,6 +183,7 @@ class BubbleService : Service() {
          *  never as a summon (1.4.89's law). Play-side intents clear the
          *  stored pause again: the newest word is his. */
         fun notePagePaused() {
+            nativeGen++ // his stop also ends the delivery chain (1.4.125)
             pendingCmd = "pause"
             runCatching { poke?.invoke("pause") }
         }
@@ -223,6 +224,7 @@ class BubbleService : Service() {
         }
 
         fun wakeForPending(c: Context, cmd: String) {
+            if (cmd == "pause") nativeGen++ // a stored stop ends the chain too (1.4.125)
             if (NativeSpeaker.active) { NativeSpeaker.handle(cmd); return }
             pendingCmd = cmd
             if (backstageServe()) return
@@ -475,8 +477,26 @@ class BubbleService : Service() {
         handler.postDelayed({ nativeCheck1(my) }, 30_000)
     }
 
+    /** At rest by his word (1.4.125): a page that is neither playing
+     *  nor busy is not frozen — it is PAUSED, most of all when HE
+     *  paused it. The chain's whole jurisdiction is sessions that
+     *  CLAIM to be working; a quiet page ends the chain where it
+     *  stands — no visit, no takeover, no voice from nowhere. This
+     *  was the self-firing audio's main door: copy, listen, press
+     *  stop, and thirty seconds later the chain — which knew nothing
+     *  of his stop — first visited, then read the stopped text aloud
+     *  in the device voice. */
+    private fun pageAtRest(): Boolean {
+        val j = runCatching { JSONObject(nowJson) }.getOrNull() ?: return false
+        // An ERRORED session is quiet too, but it is not at rest by his
+        // word — it is a failure asking for the floor, and the page
+        // says so in its pushes (err, 1.4.125). Quiet + no error = his.
+        return !j.optBoolean("playing") && !j.optBoolean("busy") && j.optInt("err", 0) == 0
+    }
+
     private fun nativeCheck1(my: Int) {
         if (my != nativeGen || NativeSpeaker.active) return
+        if (pageAtRest()) return
         if (flowNow()) {
             // It moved since the last look. One move earns one more
             // window — a single push followed by stone is the classic
@@ -495,6 +515,7 @@ class BubbleService : Service() {
 
     private fun nativeCheck2(my: Int) {
         if (my != nativeGen || NativeSpeaker.active) return
+        if (pageAtRest()) return // he stopped it during the visit's grace
         if (flowNow()) return // the visit revived it
         val text = nativeText ?: return
         noteTry(this, s("the device voice took over", "la voz del dispositivo tomó el relevo"))
@@ -636,6 +657,7 @@ class BubbleService : Service() {
      *  retired the activity behind the service (the keys go silent), remember
      *  the press and bring Logos forward so the page collects it as it wakes. */
     private fun pokeOrWake(cmd: String, force: Boolean = false) {
+        if (cmd == "pause") nativeGen++ // a definite stop ends the delivery chain (1.4.125)
         if (NativeSpeaker.active) { NativeSpeaker.handle(cmd); return }
         val p = poke
         if (p != null && !force) { p(cmd); return }
@@ -770,7 +792,12 @@ class BubbleService : Service() {
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return START_NOT_STICKY }
         if (bubble == null) showBubble()
         running = true
-        if (poke == null && !Backstage.active && System.currentTimeMillis() - lastPrewarm > 60_000) {
+        // The pre-warm visit belongs to starts HIS hand asked for
+        // (1.4.125): a sticky system restart after the process died —
+        // overnight hibernation, Samsung's reaper — passes a null
+        // intent, and a visit summoned by nobody is how the app
+        // "asked to appear again" while he was doing something else.
+        if (intent != null && poke == null && !Backstage.active && System.currentTimeMillis() - lastPrewarm > 60_000) {
             lastPrewarm = System.currentTimeMillis()
             ghostWake()
         }
