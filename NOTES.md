@@ -1,4 +1,16 @@
-## 1.4.126 — Skin wave 1: the top light (web)
+## 1.4.127 — Skin wave 2: the small courtesies (web)
+
+The second polish wave, same law — finish, never replacement.
+Selected text now wears the house gold in both themes instead of
+the browser's blue; scrollbars go thin and take the theme's own
+line colour (the reader's raw gray bar was the loudest unfinished
+detail on the screen); and keyboard or switch focus shows a gold
+ring, never the default blue. The sheets, checked for the same
+treatment, already wore their own top light — left exactly as
+they were. Verified rendered in both themes; geometry untouched,
+as in every skin wave. Web only; the shell stays 1.4.125's.
+
+## ## 1.4.126 — Skin wave 1: the top light (web)
 
 Under Oscar's third order of the night — Muse commands the look;
 skin only, polish never replacement — the first wave gives every
