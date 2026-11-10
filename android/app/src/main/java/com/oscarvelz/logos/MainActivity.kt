@@ -216,7 +216,13 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         intentDriven = true
         if (intent.getBooleanExtra("logos.ghost", false)) { if (!resumed && !ghost) enterGhost() }
-        else if (ghost) exitGhost()
+        // Only a HUMAN arrival converts a visit into a stay (1.4.120):
+        // his icon, his share, his notification and gate all carry a
+        // real action; a bare system redelivery does not get to strip
+        // the ghost clothes and park Logos in his face uninvited.
+        else if (ghost && (intent.action == Intent.ACTION_MAIN || intent.action == Intent.ACTION_VIEW ||
+            intent.action == Intent.ACTION_SEND || intent.action == Intent.ACTION_SEND_MULTIPLE ||
+            intent.action == "logos.INSTALL")) exitGhost()
         if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
         if (intent.action == "logos.INSTALL") { installResult(intent); return }
         shareUrl(intent)?.let { web.loadUrl(it) }
@@ -275,7 +281,7 @@ class MainActivity : Activity() {
         if (::web.isInitialized) { web.alpha = 0f; root.setBackgroundColor(Color.TRANSPARENT); window.decorView.setBackgroundColor(Color.TRANSPARENT) }
         overridePendingTransition(0, 0)
         ghostHandler.removeCallbacks(ghostLeave)
-        ghostHandler.postDelayed(ghostLeave, 25_000)
+        ghostHandler.postDelayed(ghostLeave, 10_000)
         ghostCheck(ghostSeq)
     }
 

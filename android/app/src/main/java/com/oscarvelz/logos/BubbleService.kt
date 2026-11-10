@@ -170,6 +170,23 @@ class BubbleService : Service() {
          *  notification's buttons, audit E-3): remember it where the page
          *  collects pending commands on waking, and pay the page a ghost
          *  visit — the same net the panel's transport keys already have. */
+        /** A stop spoken to the device voice is a stop for the whole
+         *  house (1.4.120). The device voice is a shell creature; the page
+         *  — which owns the session — never heard the pause, and its
+         *  session still said "playing". Every later resurrection of the
+         *  page (a visit, a reload, a renderer recovery) then did what a
+         *  playing session does: it started the audio BY ITSELF, long
+         *  after Oscar had stopped it and gone to other things. So a
+         *  native pause now also pauses the page: directly when a page
+         *  can hear it, and as a stored command when it cannot — the
+         *  page's own collection honours a stored pause as silence and
+         *  never as a summon (1.4.89's law). Play-side intents clear the
+         *  stored pause again: the newest word is his. */
+        fun notePagePaused() {
+            pendingCmd = "pause"
+            runCatching { poke?.invoke("pause") }
+        }
+
         fun wakeForPending(c: Context, cmd: String) {
             if (NativeSpeaker.active) { NativeSpeaker.handle(cmd); return }
             pendingCmd = cmd
@@ -190,6 +207,9 @@ class BubbleService : Service() {
 
         fun deliver(c: Context, text: String, manual: Boolean) {
             if (text.isEmpty()) return
+            // A fresh catch is meant to be heard: it supersedes a stored
+            // stop (1.4.120), which would otherwise pause the new text.
+            if (pendingCmd == "pause") pendingCmd = null
             if (!manual && isLocked(c)) { noteTry(c, s("the lock held a copy back", "el candado retuvo una copia")); return }
             val key = text.length * 31 + text.hashCode()
             if (!manual && key == lastKey) return
@@ -690,7 +710,7 @@ class BubbleService : Service() {
     }
 
     private fun note(): Notification {
-        val open = PendingIntent.getActivity(this, 21, Intent(this, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
+        val open = PendingIntent.getActivity(this, 21, Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         val hide = PendingIntent.getService(this, 22, Intent(this, BubbleService::class.java).setAction("hide"), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return Notification.Builder(this, "bubble")
             .setSmallIcon(R.drawable.ic_note)
@@ -819,7 +839,7 @@ class BubbleService : Service() {
                         target == 0 -> stopBubble()
                         target == 1 -> {
                             settleBubble(v, p)
-                            runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)) }
+                            runCatching { startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)) }
                         }
                         else -> settleBubble(v, p)
                     }
@@ -1753,7 +1773,7 @@ class BubbleService : Service() {
                 if (deliveries == before) {
                     wantClip = true
                     noteTry(this, s("opened Logos to read it", "abrió Logos para leerlo"))
-                    runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    runCatching { startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 }
             }, 1000)
         }

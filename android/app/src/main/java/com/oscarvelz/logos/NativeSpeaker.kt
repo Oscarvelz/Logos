@@ -102,6 +102,7 @@ object NativeSpeaker {
     fun takeOver(c: Context, text: String, titleHint: String) {
         val parts = splitSentences(text)
         if (parts.isEmpty()) return
+        if (BubbleService.pendingCmd == "pause") BubbleService.pendingCmd = null
         sentences = parts
         title = titleHint.ifBlank { "Logos" }
         idx = 0; wordIdx = -1; wordFrac = 0.0
@@ -195,11 +196,18 @@ object NativeSpeaker {
         if (!active) return
         playing = false
         runCatching { tts?.stop() }
+        // The whole house hears the stop (1.4.120): the page owns the
+        // session, and a session it still believes is playing will start
+        // the audio by itself the next time the page is resurrected.
+        BubbleService.notePagePaused()
         notifyUi()
     }
 
     fun resume() {
         if (!active) return
+        // His newest word is play: a stored pause must not ambush a
+        // later, legitimate recovery (1.4.120).
+        if (BubbleService.pendingCmd == "pause") BubbleService.pendingCmd = null
         playing = true
         speakCurrent()
     }

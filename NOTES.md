@@ -1,4 +1,38 @@
-## 1.4.119 — The sentence is a handle
+## 1.4.120 — A stop is a stop for the whole house (shell)
+
+Oscar's report: he stops the audio, goes to other things — and later
+the engine launches BY ITSELF, and throws him into the app besides.
+The root, in code: **the page never heard his stop.** The device
+voice is a shell creature; when Oscar pauses it, only it pauses. The
+page owns the session, and its session still said "playing" — so
+every later resurrection of the page (a ghost visit, a reload, a
+renderer recovery, including the 1.4.117 visit reload) did what a
+playing session does on waking: it started the audio on its own,
+uninvited, sometimes long after. Fixes:
+
+- **`NativeSpeaker.pause()` now pauses the whole house.** It routes
+  through `BubbleService.notePagePaused()`: the page is poked with a
+  definite "pause" when it can hear it, and a "pause" is stored as
+  the pending command when it cannot — the page's collection has
+  honoured a stored pause as silence (never as a summon) since
+  1.4.89, so a resurrected page now wakes to a STOPPED session.
+  Play-side intents (native resume, a takeover, a fresh delivery)
+  clear the stored pause: the newest word is his.
+- **Only a human arrival may turn a visit into a stay.** Any
+  non-ghost intent used to strip the ghost clothes; now the intent
+  must carry a human fingerprint — ACTION_MAIN (his icon, the λ
+  gate, both notifications' open buttons, the paste floor — all
+  stamped MAIN where they lacked it), VIEW, SEND, or the install
+  action. A bare system redelivery leaves the visit a visit.
+- **A visit's tenancy is ten seconds, not twenty-five** — one that
+  has not breathed by then is not reviving anything the watches
+  will not retry on their own.
+
+Shell-only; the web stays 1.4.119. CI compiles it; Oscar's phone —
+stop the device voice, walk away, and meet only silence — is the
+verdict.
+
+## ## 1.4.119 — The sentence is a handle
 
 Oscar's imagination, verbatim: slide the sentence in the panel and
 the progress bar moves with it — right, the bar advances; left, it
