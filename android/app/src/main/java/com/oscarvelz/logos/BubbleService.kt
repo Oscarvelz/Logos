@@ -1184,10 +1184,10 @@ class BubbleService : Service() {
         val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         titleRow.addView(titleV)
         val markB = TextView(this).apply {
-            text = "⚑"; setTextColor(c["gold"]!!); textSize = 14f; gravity = Gravity.CENTER
+            text = "⚑"; setTextColor(c["gold"]!!); textSize = 11f; gravity = Gravity.CENTER
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
             contentDescription = "Mark this moment"
-            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
+            layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(6) }
             setOnClickListener { showMarkHint() }
         }
         titleRow.addView(markB)
@@ -1195,11 +1195,11 @@ class BubbleService : Service() {
         // and the wish strikes — one tap turns the temporary into a permanent
         // Library resident. It sits by the title, where the text is named.
         val saveB = TextView(this).apply {
-            text = "+"; setTextColor(c["gold"]!!); textSize = 18f; gravity = Gravity.CENTER
+            text = "+"; setTextColor(c["gold"]!!); textSize = 14f; gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
             contentDescription = s("Save this text to the Library", "Guardar este texto en la Biblioteca")
-            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
+            layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(6) }
             setOnClickListener {
                 showHintCard(s("Save to Library", "Guardar en Biblioteca"), s("Save what's playing to your Library, to hear it again anytime.", "Guarda lo que suena en tu Biblioteca, para oírlo cuando quieras."), s("Save", "Guardar"), s("Not now", "Ahora no")) {
                     val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
@@ -1213,10 +1213,10 @@ class BubbleService : Service() {
         // playing — the audiobook keeps the stage (Oscar's scenario).
         val lockB = TextView(this).apply {
             text = if (isLocked(this@BubbleService)) "🔒" else "🔓"
-            setTextColor(c["gold"]!!); textSize = 13f; gravity = Gravity.CENTER
+            setTextColor(c["gold"]!!); textSize = 10.5f; gravity = Gravity.CENTER
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
             contentDescription = "Lock the stage"
-            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
+            layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(6) }
             setOnClickListener { showLockHint() }
         }
         lockBtn = lockB

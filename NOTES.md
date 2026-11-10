@@ -1,4 +1,13 @@
-## 1.4.132 — The middle of the room (shell)
+## 1.4.133 — The header trio, smaller (shell)
+
+Oscar's close-up of the panel's title row: the mark, save and
+lock medallions (32 dp discs) outweigh the title they serve —
+"Make these three icons way smaller, please. There's no need
+for them to have that size." They are 24 dp now, glyphs scaled
+with them (⚑ 11, + 14, lock 10.5), spacing 6 dp. Same seats,
+same deeds, same explanations before they act. Shell only.
+
+## ## 1.4.132 — The middle of the room (shell)
 
 Oscar's three screenshots: with the λ resting mid-screen on his
 phone, the open panel didn't know where to go — the λ ended up
