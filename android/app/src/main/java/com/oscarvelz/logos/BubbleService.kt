@@ -1153,9 +1153,12 @@ class BubbleService : Service() {
             setOnClickListener { pokeOrWake(cmd); handler.postDelayed({ refreshPanel() }, 350) }
         }
         val slowB = speedBtn("−", "Slower", "slower")
-        val prevB = mediaBtn(android.R.drawable.ic_media_previous, "Previous sentence", "prev", 46, c["discLine"]!!)
+        // Seek glyphs, not track glyphs (1.4.118, Oscar): the bar promised
+        // another audio; these keys step one sentence — a few seconds — so
+        // they wear the double triangle of rew/ff, kin to play/pause.
+        val prevB = mediaBtn(android.R.drawable.ic_media_rew, "Previous sentence", "prev", 46, c["discLine"]!!)
         toggleB = mediaBtn(android.R.drawable.ic_media_play, "Play or pause", "toggle", 54, c["gold"]!!)
-        val nextB = mediaBtn(android.R.drawable.ic_media_next, "Next sentence", "next", 46, c["discLine"]!!)
+        val nextB = mediaBtn(android.R.drawable.ic_media_ff, "Next sentence", "next", 46, c["discLine"]!!)
         val fastB = speedBtn("+", "Faster", "faster")
         fastB.layoutParams = (fastB.layoutParams as LinearLayout.LayoutParams).apply { marginEnd = 0 }
         // The watchdog (Oscar: 'no responde al tacto'): a landed toggle always
