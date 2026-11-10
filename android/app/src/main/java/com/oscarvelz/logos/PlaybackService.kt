@@ -50,7 +50,10 @@ class PlaybackService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            "toggle", "next", "prev" -> { act(if (intent.action == "toggle") (if (lastPlaying) "pause" else "play") else intent.action!!); return START_NOT_STICKY }
+            // The toggle's truth is the driver's (1.4.116): while the
+            // shell's own device voice holds the stage, the page's last
+            // published state is a dead letter — ask the speaker.
+            "toggle", "next", "prev" -> { act(if (intent.action == "toggle") (if (if (NativeSpeaker.active) NativeSpeaker.playing else lastPlaying) "pause" else "play") else intent.action!!); return START_NOT_STICKY }
             "stop" -> { stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf(); return START_NOT_STICKY }
         }
         val playing = intent?.getBooleanExtra("playing", false) ?: false

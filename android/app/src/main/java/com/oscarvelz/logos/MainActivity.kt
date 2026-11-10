@@ -160,12 +160,28 @@ class MainActivity : Activity() {
     }
 
     private fun recoverWeb(dead: WebView) {
-        if (dead !== web) { runCatching { root.removeView(dead); dead.destroy() }; return }
-        root.removeView(dead); runCatching { dead.destroy() }
+        if (dead !== web) { runCatching { (dead.parent as? ViewGroup)?.removeView(dead); dead.destroy() }; return }
+        // The page may be living BACKSTAGE when its renderer dies (1.4.116):
+        // the old recovery removed it from `root` (not its parent), destroyed
+        // a still-attached view, and installed the replacement into a stopped
+        // activity — the backstage window kept the corpse, bringWebHome then
+        // early-returned on the new view's parent, and Oscar was delivered
+        // to a black screen that never left. Now: out of its REAL parent,
+        // and the replacement takes the dead page's actual seat.
+        val wasBackstage = Backstage.active
+        val dw = dead.width; val dh = dead.height
+        (dead.parent as? ViewGroup)?.removeView(dead); runCatching { dead.destroy() }
         val now = SystemClock.elapsedRealtime()
         crashes.add(now); crashes.removeAll { now - it > 60_000 }
         web = makeWeb()
-        root.addView(web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        if (ghost) web.alpha = 0f
+        if (wasBackstage) {
+            Backstage.release()
+            if (!Backstage.adopt(this, web, dw, dh))
+                root.addView(web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        } else {
+            root.addView(web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
         if (crashes.size >= 3) {
             web.loadDataWithBaseURL(home, "<html><body style=\"background:#0A0A0F;color:#eee;font:18px sans-serif;padding:32px\">" +
                 "<p>Logos had to reopen several times in a minute, so it is waiting here.</p>" +
@@ -216,6 +232,32 @@ class MainActivity : Activity() {
         if (ghost && !intentDriven) exitGhost()
         intentDriven = false
         if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
+        if (!ghost) arrivalCheck()
+    }
+
+    private var arrivalSeq = 0
+
+    /** A real arrival must find a living page (1.4.116). A renderer can hang
+     *  without dying — no onRenderProcessGone, no funeral, just a black
+     *  window that never leaves, which is what Oscar was delivered to. So
+     *  on arrival the page is whispered to: a living page answers at once
+     *  and nothing at all happens; silence earns one reload, and continued
+     *  silence the full rebuild a renderer death would have had. Skipped
+     *  when the page has never pushed state in this process (a first load
+     *  still in flight is not a corpse). */
+    private fun arrivalCheck() {
+        if (BubbleService.nowJson == null) return
+        val seq = ++arrivalSeq
+        var answered = false
+        runCatching { web.evaluateJavascript("1") { answered = true } }
+        ghostHandler.postDelayed({
+            if (seq != arrivalSeq || ghost || answered || isFinishing) return@postDelayed
+            runCatching { web.reload() }
+            runCatching { web.evaluateJavascript("1") { answered = true } }
+            ghostHandler.postDelayed({
+                if (seq == arrivalSeq && !ghost && !answered && !isFinishing) recoverWeb(web)
+            }, 4000)
+        }, 2500)
     }
 
     private fun enterGhost() {

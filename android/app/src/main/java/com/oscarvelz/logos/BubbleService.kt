@@ -1170,7 +1170,15 @@ class BubbleService : Service() {
             // this, a pause stored against a dead page was 'fulfilled' by
             // the recovery PLAYING the session: the pause became a play,
             // and every fresh press re-ran the same inversion.
-            val before = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(false)
+            // The truth belongs to whoever is DRIVING (1.4.116): while the
+            // device voice holds the stage, the page's last push is a dead
+            // letter — a takeover that began from a page that never got to
+            // say "playing" leaves it false forever, and every press then
+            // computes "play": the pause key could not pause. Ever. Oscar
+            // met exactly that: tapping pause while the device voice read
+            // re-issued play, and the reading would not stop.
+            val before = if (NativeSpeaker.active) NativeSpeaker.playing
+                else runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(false)
             val intent = if (before) "pause" else "play"
             pokeOrWake(intent)
             handler.postDelayed({ refreshPanel() }, 350)

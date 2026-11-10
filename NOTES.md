@@ -1,4 +1,45 @@
-## 1.4.115 — The bottom-bar key (the house is gone)
+## 1.4.116 — The unstoppable reading, and the black screen (shell)
+
+Oscar's report, two failures in one evening:
+
+1. **The panel's pause could not stop the device voice.** The toggle
+   computes its definite intent (1.4.89's law) from the PAGE's pushed
+   state — but while the shell's own speaker (1.4.112) holds the
+   stage, that state is a dead letter: a takeover that began from a
+   page that never got to say "playing" leaves it false forever, so
+   every tap computed "play" and re-issued play. The reading could
+   not be stopped from the panel, ever. **Fix:** the toggle's truth
+   is the DRIVER's — `NativeSpeaker.playing` while it is active, the
+   page's push otherwise. The media notification's toggle had the
+   same inversion (`lastPlaying` is page-borne) and takes the same
+   law in PlaybackService. The definite media-session callbacks were
+   never wrong — which is why a system gesture could stop what the
+   panel could not.
+
+2. **The black screen that never left.** When a renderer dies while
+   its WebView sits BACKSTAGE, the old `recoverWeb` removed the view
+   from `root` (not its real parent), destroyed a still-attached
+   view, and installed the replacement into a stopped activity's
+   root — the backstage window kept the corpse and `bringWebHome`
+   then early-returned, leaving nothing alive to paint. **Fix:**
+   recovery takes the dead view out of its actual parent and seats
+   the replacement in the dead page's actual place — a fresh
+   backstage window when it died backstage, the root otherwise
+   (poke and the media bridge read the `web` field, so they follow
+   on their own). **And a belt:** a renderer can also HANG without
+   dying — no funeral, just black. On every real arrival (not a
+   ghost visit) the page is now whispered to (`evaluateJavascript`):
+   a living page answers instantly and nothing happens; silence
+   earns one reload, continued silence the full rebuild. Skipped
+   when the page has never pushed state in this process — a first
+   load in flight is not a corpse.
+
+Shell-only; the web stays 1.4.115. As ever with the shell, the CI
+compile is the bench proof available here; Oscar's phone — pause
+under the device voice, and opening Logos after a background death —
+is the verdict.
+
+## ## 1.4.115 — The bottom-bar key (the house is gone)
 
 Correction, plainly: 1.4.114 misunderstood Oscar. The house key left
 the app for the phone's home screen; what he asked for lives INSIDE
