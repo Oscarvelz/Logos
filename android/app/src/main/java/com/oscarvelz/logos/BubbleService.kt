@@ -687,6 +687,16 @@ class BubbleService : Service() {
     // One bubble size on phones, a little more on tablets (Oscar: 'un
     // poquito, un poquito más' — a little, only a little).
     private fun isTablet() = resources.configuration.smallestScreenWidthDp >= 600
+    /** Channel-wise blend of two colours: f of the way from a to b. */
+    private fun mixCol(a: Int, b: Int, f: Float): Int {
+        fun ch(x: Int, y: Int) = (x + ((y - x) * f)).toInt().coerceIn(0, 255)
+        return android.graphics.Color.argb(
+            ch(android.graphics.Color.alpha(a), android.graphics.Color.alpha(b)),
+            ch(android.graphics.Color.red(a), android.graphics.Color.red(b)),
+            ch(android.graphics.Color.green(a), android.graphics.Color.green(b)),
+            ch(android.graphics.Color.blue(a), android.graphics.Color.blue(b))
+        )
+    }
     private fun bubbleSize() = if (isTablet()) dp(76) else dp(58)
     private fun bubbleFace() = if (isTablet()) dp(60) else dp(46)
     private fun bubbleHalo() = if (isTablet()) dp(66) else dp(52)
@@ -1265,12 +1275,33 @@ class BubbleService : Service() {
         }
         controls.gravity = Gravity.CENTER
         fun speedBtn(glyph: String, label: String, cmd: String): TextView = TextView(this).apply {
-            text = glyph; setTextColor(c["muted"]!!); textSize = 18f; gravity = Gravity.CENTER
+            text = glyph; textSize = 18f; gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
-            background = GradientDrawable().apply {
+            // Touch feedback (Oscar, 2026-11-10): the speed keys changed
+            // the rate in silence — the tap landed nowhere his eye could
+            // see. Now the key answers the finger: while pressed, the
+            // disc warms toward gold, its ring turns gold and the glyph
+            // lights; the whole key gives a little (0.9) and springs
+            // back on release. The deed itself is untouched.
+            fun disc(fill: Int, ringC: Int) = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(c["disc"]!!)
-                setStroke(dp(1), c["discLine"]!!)
+                setColor(fill)
+                setStroke(dp(1), ringC)
+            }
+            background = android.graphics.drawable.StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_pressed), disc(mixCol(c["disc"]!!, c["gold"]!!, 0.28f), c["gold"]!!))
+                addState(intArrayOf(), disc(c["disc"]!!, c["discLine"]!!))
+            }
+            setTextColor(android.content.res.ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_pressed), intArrayOf()),
+                intArrayOf(c["gold"]!!, c["muted"]!!)
+            ))
+            setOnTouchListener { v, e ->
+                when (e.action) {
+                    MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.9f).scaleY(0.9f).setDuration(90).start()
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(150).setInterpolator(DecelerateInterpolator()).start()
+                }
+                false
             }
             contentDescription = label
             layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(10) }
