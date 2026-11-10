@@ -413,24 +413,49 @@ class BubbleService : Service() {
             (j.optDouble("frac", 0.0) * 200).toInt().toString()
         ).joinToString("|")
 
-    private fun pageFlowing(armSig: String): Boolean {
+    /** "Flowing" judged against a MOVING baseline (1.4.121). The old
+     *  test compared the page against its state at ARM time — before it
+     *  had even pulled the text. A page that took the text, pushed one
+     *  busy state and then froze forever therefore read as "flowing"
+     *  at every check (its signature differed from the pre-delivery
+     *  state), and the native floor stood down while the panel sat on
+     *  "Processing…" with the audio never beginning — Oscar's report.
+     *  Now every check re-baselines: flowing means the signature moved
+     *  SINCE THE PREVIOUS CHECK, while the page claims to be playing. */
+    private fun flowNow(): Boolean {
         val j = runCatching { JSONObject(nowJson) }.getOrNull() ?: return false
-        if (j.optBoolean("playing") != true) return false
-        return sigOf(j) != armSig
+        val cur = sigOf(j)
+        val moved = cur != nativeSig
+        nativeSig = cur
+        return j.optBoolean("playing") == true && moved
     }
+
+    private var nativeMoved = false
+    private var yieldFlow = 0
 
     private fun armNativeFallback() {
         val text = clipText ?: return
         if (NativeSpeaker.active) NativeSpeaker.stop()
         val my = ++nativeGen
         nativeText = text
+        nativeMoved = false
         nativeSig = sigOf(runCatching { JSONObject(nowJson) }.getOrNull())
         handler.postDelayed({ nativeCheck1(my) }, 30_000)
     }
 
     private fun nativeCheck1(my: Int) {
         if (my != nativeGen || NativeSpeaker.active) return
-        if (pageFlowing(nativeSig)) return // the neural voice flows — stand down
+        if (flowNow()) {
+            // It moved since the last look. One move earns one more
+            // window — a single push followed by stone is the classic
+            // freeze, not flow; movement in BOTH windows is real flow,
+            // and the standing progress watch guards the session then.
+            if (!nativeMoved) {
+                nativeMoved = true
+                handler.postDelayed({ nativeCheck1(my) }, 20_000)
+            }
+            return
+        }
         noteTry(this, s("the voice needed a visit", "la voz necesitó una visita"))
         ghostWake(force = true)
         handler.postDelayed({ nativeCheck2(my) }, 15_000)
@@ -438,9 +463,10 @@ class BubbleService : Service() {
 
     private fun nativeCheck2(my: Int) {
         if (my != nativeGen || NativeSpeaker.active) return
-        if (pageFlowing(nativeSig)) return
+        if (flowNow()) return // the visit revived it
         val text = nativeText ?: return
         noteTry(this, s("the device voice took over", "la voz del dispositivo tomó el relevo"))
+        yieldFlow = 0
         NativeSpeaker.takeOver(this, text, titleFromText(text))
         handler.postDelayed({ nativeYield(my) }, 6_000)
     }
@@ -448,11 +474,17 @@ class BubbleService : Service() {
     private fun nativeYield(my: Int) {
         if (my != nativeGen) return
         if (!NativeSpeaker.active) return
-        if (pageFlowing(nativeSig)) {
-            noteTry(this, s("the app voice took over", "la voz de la app tomó el relevo"))
-            NativeSpeaker.stop()
-            return
-        }
+        // The stage returns only on SUSTAINED flow (1.4.121): the page
+        // must move at two consecutive looks. One twitch used to hand
+        // the stage back to a page that froze again a sentence later,
+        // with nobody left armed to rescue it a second time.
+        if (flowNow()) {
+            if (++yieldFlow >= 2) {
+                noteTry(this, s("the app voice took over", "la voz de la app tomó el relevo"))
+                NativeSpeaker.stop()
+                return
+            }
+        } else yieldFlow = 0
         handler.postDelayed({ nativeYield(my) }, 6_000)
     }
 
@@ -486,7 +518,16 @@ class BubbleService : Service() {
             return
         }
         val text = nativeText ?: return
+        // The shell only holds the text of a CATCH. If the frozen
+        // session is a different one (started inside the app), the
+        // native voice has nothing of ITS to speak — visits are its
+        // only medicine, never another text's voice (1.4.121).
+        val held = titleFromText(text)
+        val showing = j?.optString("title") ?: ""
+        val same = showing == held || showing.startsWith(held.take(12)) || held.startsWith(showing.take(12))
+        if (!same) { progVisitAt = now; return }
         noteTry(this, s("the device voice took over", "la voz del dispositivo tomó el relevo"))
+        yieldFlow = 0
         NativeSpeaker.takeOver(this, text, titleFromText(text))
         handler.postDelayed({ nativeYield(nativeGen) }, 6_000)
     }
