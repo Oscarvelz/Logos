@@ -288,12 +288,19 @@ const PLAYHEAD_PRIORITY = 2000
  *  word highlight, the sentence counter) then "plays" a sentence nobody
  *  hears, which is precisely the failure Oscar kept meeting: sentences
  *  advancing, the wave flat, no sound — the English sentences of a
- *  Spanish text among them. Judge the envelope: real speech, even
+ *  Spanish text among them. The judgment is made on the SAMPLES' own
+ *  peak (1.4.123): the envelope cannot testify, because envelope()
+ *  peak-normalizes — a whisper of noise wears a full-height envelope,
+ *  and the first version of this detector, which judged the envelope,
+ *  caught exact zeros and missed near-silence. Real speech, even
  *  levelled quiet speech, peaks far above this floor; silence is 0. */
-const renderSilent = (env: Float32Array): boolean => {
-    let peak = 0
-    for (let k = 0; k < env.length; k++) if (env[k] > peak) peak = env[k]
-    return peak < 0.02
+const renderSilent = (peak: number): boolean => peak < 0.005
+
+/** Peak absolute value of a sample buffer — the loudness witness. */
+const peakAbs = (samples: Float32Array): number => {
+  let peak = 0
+  for (let k = 0; k < samples.length; k++) { const a = Math.abs(samples[k]); if (a > peak) peak = a }
+  return peak
 }
 
 function render(i: number, priority: number): Promise<Rendered> {
@@ -319,7 +326,7 @@ function render(i: number, priority: number): Promise<Rendered> {
     const key = spoken ? renderKey(spoken, voice) : null
     if (key) {
       const saved = await getPersistedRender(key)
-      if (saved && renderSilent(saved.env)) {
+      if (saved && renderSilent(saved.peak)) {
         // Poisoned on a bad night and served forever since: evict it
         // and render the sentence fresh below.
         dropPersistedRender(key)
@@ -348,7 +355,7 @@ function render(i: number, priority: number): Promise<Rendered> {
       duration: full.length / res.sampleRate,
       voice,
     }
-    if (spoken && renderSilent(r.env)) {
+    if (spoken && renderSilent(peakAbs(full))) {
       // The voice rendered silence: never cache it, never save it —
       // fail the render so the caller's rescue (the shell's device
       // voice, 1.4.122) takes the sentence instead.

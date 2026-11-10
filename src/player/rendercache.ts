@@ -99,17 +99,23 @@ export async function hasPersistedRender(key: string): Promise<boolean> {
 }
 
 /** A saved render, rebuilt into the player's shape. */
-export async function getPersistedRender(key: string): Promise<{ blob: Blob; env: Float32Array; duration: number } | null> {
+export async function getPersistedRender(key: string): Promise<{ blob: Blob; env: Float32Array; duration: number; peak: number } | null> {
   const rec = await tx<Rec | undefined>('readonly', (st) => st.get(key) as IDBRequest<Rec | undefined>)
   if (!rec) return null
   const dec = await decodeWav(rec.blob)
   if (!dec || dec.samples.length === 0) return null
+  // The samples' own peak, for the silence judgment (1.4.123): the
+  // envelope is peak-NORMALIZED, so it cannot testify about loudness —
+  // a whisper of noise wears a full-height envelope. Only the samples
+  // tell the truth.
+  let peak = 0
+  for (let i = 0; i < dec.samples.length; i++) { const a = Math.abs(dec.samples[i]); if (a > peak) peak = a }
   // LRU touch, at most once a day per entry — a daily text must not be
   // evicted as "old" while one-off renders survive.
   if (Date.now() - rec.at > 24 * 3600 * 1000) {
     void tx('readwrite', (st) => st.put({ ...rec, at: Date.now() }))
   }
-  return { blob: rec.blob, env: envelope(dec.samples, dec.sampleRate, 60), duration: dec.samples.length / dec.sampleRate }
+  return { blob: rec.blob, env: envelope(dec.samples, dec.sampleRate, 60), duration: dec.samples.length / dec.sampleRate, peak }
 }
 
 let totalBytes = -1
