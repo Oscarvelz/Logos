@@ -395,6 +395,10 @@ const neuralUsable = () => engine.get().status === 'ready'
 export async function play(from?: number) {
   const s = listen.get()
   if (!s.active) return
+  // The page taking the stage silences the shell's voice (1.4.128):
+  // two drivers, one stage — a press on Play here is also a stop
+  // there, whichever road the shell's voice took the stage by.
+  stopShellVoice()
   stopClipPlayer()
   let idx = from ?? (s.finished ? 0 : s.current)
   if (idx >= s.segments.length) idx = 0
@@ -746,9 +750,11 @@ export function prev() {
 export function stop() {
   token++
   cancelDevice()
-  // A session handed to the shell ends there too (1.4.124): starting
-  // a new text must never leave the old one reading in the shell.
-  if (listen.get().mode === 'device') stopShellVoice()
+  // A session in the shell ends there too (1.4.124, widened 1.4.128):
+  // handed over OR taken over, the shell's voice stops with the
+  // page's session — the mode flag only knows the roads the page
+  // itself took, and a chain takeover is not one of them.
+  stopShellVoice()
   if (audio) {
     quietPause()
     audio.removeAttribute('src')

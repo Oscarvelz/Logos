@@ -74,6 +74,17 @@ class MainActivity : Activity() {
         window.isNavigationBarContrastEnforced = false
         window.isStatusBarContrastEnforced = false
         WebView.setWebContentsDebuggingEnabled(true)
+        // One page, ever (1.4.128): if the backstage still holds the
+        // previous activity's page, it dies here — silenced and
+        // destroyed — before this activity makes its own. Until now
+        // the two could coexist: the backstage page kept playing (and
+        // pushing the state the panel believes) while every control
+        // in the house addressed the new page — a voice no switch
+        // could stop, exactly as Oscar reported. The common return
+        // (this activity still alive) keeps bringWebHome's reparent;
+        // this gate is only for an activity born after the system
+        // reclaimed the old one.
+        if (Backstage.active) Backstage.evictAndDestroy()
         root = FrameLayout(this)
         root.setBackgroundColor(bg)
         web = makeWeb()
