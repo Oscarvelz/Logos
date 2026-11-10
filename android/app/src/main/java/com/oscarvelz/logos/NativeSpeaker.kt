@@ -125,7 +125,13 @@ object NativeSpeaker {
             done(true)
             return
         }
-        if (failed) { done(false); return }
+        // A failed engine must not brick the floor for the life of the
+        // process (1.4.121): one transient init failure — the speech
+        // service mid-rebind — used to latch `failed` forever, and
+        // every later takeover surrendered on the spot. Retire the
+        // corpse; each takeover may try a fresh engine.
+        if (existing != null) { runCatching { existing.shutdown() }; tts = null; ready = false }
+        failed = false
         var called = false
         val engine = TextToSpeech(ctx) { status ->
             if (called) return@TextToSpeech

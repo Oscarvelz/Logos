@@ -1,4 +1,42 @@
-## 1.4.120 — A stop is a stop for the whole house (shell)
+## 1.4.121 — The floor was judging flow against a photograph of the past (shell)
+
+Oscar's report: the panel sits on "Processing…" / "Waiting for
+Logos…" and the audio NEVER begins. The native floor built in
+1.4.112 was supposed to make that impossible — and in code, it
+could not fire for exactly the freeze Oscar kept meeting:
+
+- **The flow test compared the page against its state at ARM
+  time** — the moment of delivery, before the page had even pulled
+  the text. A page that took the text, pushed one busy state and
+  then froze forever differed from that pre-delivery snapshot at
+  every check, so it read as "flowing" — and both native checks
+  stood down while the panel processed forever. (That is also why
+  the floor's rescues were real but rare: they only fired when the
+  page had never pushed anything at all.)
+- **Fix: a moving baseline.** Every check re-baselines — flowing
+  means the signature moved SINCE THE PREVIOUS CHECK. One move
+  earns one more window (a single push followed by stone is the
+  classic freeze, not flow); movement in both windows is real
+  flow and the chain stands down, with the progress watch — which
+  always had the right discipline — standing guard.
+- **The yield asks twice.** The native voice now returns the stage
+  only on sustained flow — movement at two consecutive looks —
+  where one twitch used to hand it back to a page that froze again
+  a sentence later with nobody left armed.
+- **A failed speech engine no longer bricks the floor.** One
+  transient TTS init failure latched `failed` for the life of the
+  process and every later takeover surrendered on the spot; the
+  corpse is now retired and each takeover may try a fresh engine.
+- **The mid-session takeover checks its text.** The progress
+  watch's takeover now verifies the frozen session IS the catch
+  whose text the shell holds — otherwise visits are its only
+  medicine, never another text's voice.
+
+Shell-only; the web stays 1.4.119. CI compiles it; Oscar's frozen
+catch — copy, wait, and hear the device voice take over when the
+page cannot — is the verdict.
+
+## ## 1.4.120 — A stop is a stop for the whole house (shell)
 
 Oscar's report: he stops the audio, goes to other things — and later
 the engine launches BY ITSELF, and throws him into the app besides.
