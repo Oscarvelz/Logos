@@ -1,4 +1,23 @@
-## 1.4.129 — The mini player, finished (web)
+## 1.4.130 — Settings folds (web)
+
+Oscar's whole order, and only it: "make the shapes of the
+settings fold themselves and gain a small distance in between."
+Measured first: the cards touched — the gap between them was
+0 px; the page read as one long slab.
+
+- Every Settings card folds now. The header (icon, title, its
+  one-line summary) is the handle, with a chevron that turns as
+  it opens; the fold runs on the grid-rows fold the fleet uses,
+  and sleeps under reduced-motion. The first card — Neural
+  voice, with its live status — arrives open; the rest arrive
+  folded, so Settings opens as a tidy index.
+- The cards stand 14 px apart, first measured, then set.
+
+Nothing else moved: same cards, same contents, same order. Bench
+facts: 8 cards, gap 14, first open, a tap on a folded header
+unfolds it. Web only; the shell stays 1.4.128's.
+
+## ## 1.4.129 — The mini player, finished (web)
 
 Oscar, on the mini bar that follows a session through the other
 sections: "You are doing too much with that player. Do not show
