@@ -35,6 +35,7 @@ type DroidBubble = {
   bubbleWantClip?: () => boolean
   bubbleSeek?: () => string
   bubblePendingCmd?: () => string
+  bubbleNative?: (text: string, title: string, idx: number) => void
   bubbleLock?: () => boolean
 }
 const droid = () => (window as unknown as { LogosAndroid?: DroidBubble }).LogosAndroid

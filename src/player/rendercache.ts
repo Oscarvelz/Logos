@@ -152,3 +152,9 @@ export function putPersistedRender(key: string, blob: Blob): void {
     }
   })()
 }
+
+/** Remove a saved render. A poisoned entry — digital silence saved on a
+ *  bad-engine night (1.4.122) — must not be served forever. */
+export function dropPersistedRender(key: string): void {
+  void tx('readwrite', (st) => st.delete(key) as IDBRequest<undefined>)
+}

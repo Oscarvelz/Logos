@@ -97,15 +97,16 @@ object NativeSpeaker {
         return esHits > enHits
     }
 
-    /** Take over a text the page could not get flowing. Idempotent per call:
-     *  a fresh takeover always restarts from the first sentence. */
-    fun takeOver(c: Context, text: String, titleHint: String) {
+    /** Take over a text the page could not get flowing. A takeover
+     *  starts at the first sentence, or at the sentence the page hands
+     *  over (1.4.122) when it surrenders a session mid-way. */
+    fun takeOver(c: Context, text: String, titleHint: String, startIdx: Int = 0) {
         val parts = splitSentences(text)
         if (parts.isEmpty()) return
         if (BubbleService.pendingCmd == "pause") BubbleService.pendingCmd = null
         sentences = parts
         title = titleHint.ifBlank { "Logos" }
-        idx = 0; wordIdx = -1; wordFrac = 0.0
+        idx = startIdx.coerceIn(0, parts.size - 1); wordIdx = -1; wordFrac = 0.0
         active = true
         playing = true
         val my = ++gen
