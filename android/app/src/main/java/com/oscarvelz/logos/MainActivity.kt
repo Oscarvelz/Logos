@@ -231,6 +231,12 @@ class MainActivity : Activity() {
         // clothes simply becomes his stay.
         if (ghost && !intentDriven) exitGhost()
         intentDriven = false
+        // Still a visit after that decision (1.4.117): re-nail the ghost
+        // clothes, so a visit can never be caught visible halfway.
+        if (ghost && ::web.isInitialized) {
+            web.alpha = 0f; root.setBackgroundColor(Color.TRANSPARENT); window.decorView.setBackgroundColor(Color.TRANSPARENT)
+            window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        }
         if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
         if (!ghost) arrivalCheck()
     }
@@ -270,6 +276,23 @@ class MainActivity : Activity() {
         overridePendingTransition(0, 0)
         ghostHandler.removeCallbacks(ghostLeave)
         ghostHandler.postDelayed(ghostLeave, 25_000)
+        ghostCheck(ghostSeq)
+    }
+
+    /** The arrival whisper, visit edition (1.4.117): a page that cannot
+     *  answer during a visit is a corpse the visit would otherwise park
+     *  in the back — and a later real arrival would meet it as a black
+     *  screen. Reload it here, invisibly, and let the visit's own pulse
+     *  retire on the fresh page's pushes. A page that never pushed in
+     *  this process may still be loading: not a corpse, left alone. */
+    private fun ghostCheck(seq: Int) {
+        if (BubbleService.nowJson == null) return
+        var answered = false
+        runCatching { web.evaluateJavascript("1") { answered = true } }
+        ghostHandler.postDelayed({
+            if (seq != ghostSeq || !ghost || answered) return@postDelayed
+            runCatching { web.reload() }
+        }, 2500)
     }
 
     /** A real arrival (his tap on the icon, a share) while a visit is on:
