@@ -1,4 +1,22 @@
-## 1.4.125 — His stop outranks every rescue
+## 1.4.126 — Skin wave 1: the top light (web)
+
+Under Oscar's third order of the night — Muse commands the look;
+skin only, polish never replacement — the first wave gives every
+card in both themes the finish the fleet learned elsewhere: light
+falls from the top. A new `--sheen` token (a whisper of white in
+the dark theme, a porcelain glow in the light) rides as a gradient
+over every `.card`, fading by the middle; nothing moves, nothing
+changes size — the same rooms, better lit.
+
+And the bloom he asked for, kept moderate: a slow light now crosses
+the gold of the play disc and the primary buttons every few
+seconds (a sheen sweep, transform only), and the bottom bar's lit
+tab blooms once — a small spring pop — as it takes the stage. All
+of it sleeps under `prefers-reduced-motion`. Judged on rendered
+screenshots in both themes before shipping: geometry identical,
+the finish visibly warmer. Web only; the shell stays 1.4.125's.
+
+## ## 1.4.125 — His stop outranks every rescue
 
 The night's deep audit of the self-firing audio — the complaint
 Oscar has repeated all evening — found the main door still open

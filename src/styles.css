@@ -47,6 +47,7 @@
   --glass: rgba(16, 16, 22, 0.72);
   --aurora-a: rgba(233, 189, 114, 0.10);
   --aurora-b: rgba(143, 124, 255, 0.10);
+  --sheen: rgba(255, 255, 255, 0.05);
   color-scheme: dark;
 }
 
@@ -74,6 +75,7 @@
   --glass: rgba(245, 241, 232, 0.8);
   --aurora-a: rgba(201, 146, 52, 0.14);
   --aurora-b: rgba(110, 90, 230, 0.08);
+  --sheen: rgba(255, 255, 255, 0.65);
   color-scheme: light;
 }
 
@@ -208,7 +210,8 @@ button:disabled { cursor: default; opacity: .45; }
 
 /* ── Primitives ─────────────────────────────────────────── */
 .card {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-l);
+  background: linear-gradient(180deg, var(--sheen), rgba(255, 255, 255, 0) 46%), var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius-l);
   box-shadow: var(--shadow);
 }
 .card-pad { padding: 18px; }
@@ -408,6 +411,31 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
   transition: transform .25s var(--ease-spring), box-shadow .3s;
 }
 .play-btn:active:not(:disabled) { transform: scale(.92); }
+
+/* Skin wave 1 (1.4.126, Oscar's third order — polish, never replacement):
+   a slow light crosses the gold now and then, and the lit tab blooms
+   once as it takes the stage. Light and motion only — transform and
+   opacity — and all of it sleeps when the phone asks for calm. */
+@media (prefers-reduced-motion: no-preference) {
+  .btn.primary, .play-btn { position: relative; overflow: hidden; }
+  .btn.primary::after, .play-btn::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, .26) 48%, rgba(255, 255, 255, .05) 56%, transparent 72%);
+    transform: translateX(-130%);
+    animation: sheenSweep 7s var(--ease) infinite;
+  }
+  @keyframes sheenSweep {
+    0% { transform: translateX(-130%); }
+    16% { transform: translateX(130%); }
+    100% { transform: translateX(130%); }
+  }
+  .nav-item.active .nav-ico { animation: navBloom .55s var(--ease-spring); }
+  @keyframes navBloom {
+    0% { transform: translateY(-1px) scale(.82); }
+    60% { transform: translateY(-1px) scale(1.1); }
+    100% { transform: translateY(-1px) scale(1); }
+  }
+}
 .play-btn.busy { animation: breathe 1.6s ease-in-out infinite; }
 @keyframes breathe { 50% { box-shadow: 0 18px 40px -14px var(--accent-glow), 0 0 0 14px var(--accent-soft); } }
 .engine-note { position: relative; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin-top: 12px; }
