@@ -239,6 +239,14 @@ class BubbleService : Service() {
     private var lockBtn: TextView? = null
     private var spectrum: SpectrumView? = null
     private var seekHeld = false
+    // The sentence scrub (1.4.119): the reading-along text is a handle.
+    private var scrubX0 = 0f
+    private var scrubY0 = 0f
+    private var scrubMode = 0 // 0 undecided, 1 scrubbing, 2 the words keep their scroll
+    private var scrubFrom = -1
+    private var scrubTarget = -1
+    private var lastCi = -1
+    private var lastCt = 0
     private var playingNow = false
     private var lastInvite = 0L
     private var lastDeliverySeen = 0
@@ -1117,6 +1125,7 @@ class BubbleService : Service() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, wordsHeight()).apply { topMargin = dp(10) }
         }
         wordsV = wv
+        attachSentenceScrub(wv)
         card.addView(wv)
         val spec = SpectrumView(this, c["gold"]!!)
         spec.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)).apply { topMargin = dp(8) }
@@ -1530,7 +1539,7 @@ class BubbleService : Service() {
     private fun collapsePanel(now: Boolean = false) {
         dismissSaveHint()
         val v = panel
-        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; gripV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null
+        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; gripV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null; scrubTarget = -1; scrubMode = 0
         if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
         if (!now && deliveries != lastDeliverySeen) {
             lastDeliverySeen = deliveries
@@ -1540,6 +1549,65 @@ class BubbleService : Service() {
         if (now) { runCatching { wm?.removeView(v) }; return }
         v.animate().alpha(0f).scaleX(0.93f).scaleY(0.93f).setDuration(120)
             .withEndAction { runCatching { wm?.removeView(v) } }.start()
+    }
+
+    /** The sentence is a handle (1.4.119, Oscar): slide the reading-along
+     *  text sideways and the reading scrubs with it — right goes forward,
+     *  left goes back — the progress bar following the finger live, one
+     *  sentence per short step of travel, the seek landing when the finger
+     *  lifts. Vertical drags keep their old job (the words still scroll);
+     *  only a clearly horizontal slide is claimed, and the words themselves
+     *  lean with the finger while it travels. */
+    private fun attachSentenceScrub(wv: TextView) {
+        wv.setOnTouchListener { v, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    scrubX0 = ev.x; scrubY0 = ev.y; scrubMode = 0
+                    false // the scroll method still anchors on the way in
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = ev.x - scrubX0; val dy = ev.y - scrubY0
+                    if (scrubMode == 0) {
+                        if (kotlin.math.abs(dx) > dp(10) && kotlin.math.abs(dx) > 1.5f * kotlin.math.abs(dy) && lastCt > 1 && lastCi >= 0) {
+                            scrubMode = 1; scrubFrom = lastCi; scrubTarget = lastCi
+                            seekHeld = true
+                            wordsScrollAnim?.cancel()
+                        } else if (kotlin.math.abs(dy) > dp(10)) scrubMode = 2
+                    }
+                    if (scrubMode == 1) {
+                        val step = dp(26).coerceAtLeast(1)
+                        val t = (scrubFrom + Math.round(dx / step)).coerceIn(0, lastCt - 1)
+                        if (t != scrubTarget) {
+                            scrubTarget = t
+                            seekBar?.progress = (((t + 0.5) / lastCt) * 1000).toInt()
+                            subV?.text = s("Sentence", "Oración") + " ${t + 1} " + s("of", "de") + " $lastCt"
+                        }
+                        v.translationX = (dx * 0.4f).coerceIn(-dp(60).toFloat(), dp(60).toFloat())
+                        true
+                    } else false
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val was = scrubMode == 1
+                    if (was) scrubCommit(v)
+                    scrubMode = 0
+                    was
+                }
+                else -> false
+            }
+        }
+    }
+
+    /** Land the sentence scrub through the same door the seek bar uses. */
+    private fun scrubCommit(v: View) {
+        val t = scrubTarget; val ct = lastCt
+        scrubTarget = -1
+        v.animate().translationX(0f).setDuration(140).start()
+        seekHeld = false
+        if (t >= 0 && ct > 0 && t != scrubFrom) {
+            seekFrac = t.toDouble() / ct
+            if (NativeSpeaker.active) NativeSpeaker.seekTo(seekFrac) else poke?.invoke("seek")
+        }
+        handler.postDelayed({ refreshPanel() }, 60)
     }
 
     /** The words zone: the neighbours dimmed, the sounding sentence alive —
@@ -1621,6 +1689,10 @@ class BubbleService : Service() {
         progressWatch(rawJ)
         val native = NativeSpeaker.active
         val j = if (native) NativeSpeaker.panelJson() else rawJ
+        // The scrub counts in sentences: remember where the reading stands,
+        // in the driver's own numbers (page push or device voice alike).
+        val jCt = j?.optInt("ct", 0) ?: 0
+        if (jCt > 0) { lastCt = jCt; lastCi = j?.optInt("ci", -1) ?: -1 }
         val playing = j?.optBoolean("playing") ?: false
         handler.post {
             titleV?.text = j?.optString("title")?.ifBlank { "Logos" } ?: "Logos"
@@ -1629,6 +1701,7 @@ class BubbleService : Service() {
                 else if (workingNow(j) && System.currentTimeMillis() - nowAt > 20_000) s("Waiting for Logos…", "Esperando a Logos…")
                 else if (j?.optBoolean("busy") == true) s("Processing…", "Procesando…")
                 else j?.optString("sub")?.ifBlank { s("Ready", "Listo") } ?: s("Ready", "Listo")
+            if (scrubTarget >= 0 && lastCt > 0) subV?.text = s("Sentence", "Oración") + " ${scrubTarget + 1} " + s("of", "de") + " $lastCt"
             lockBtn?.text = if (isLocked(this@BubbleService)) "🔒" else "🔓"
             toggleB?.setImageResource(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
             playingNow = playing

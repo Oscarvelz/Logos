@@ -282,6 +282,8 @@ object NativeSpeaker {
             .put("busy", false)
             .put("sub", sub)
             .put("frac", (idx + wordFrac) / total)
+            .put("ci", idx)
+            .put("ct", sentences.size)
             .put("words", true)
             .put("saved", true)
             .put("tc", sentences.getOrNull(idx) ?: "")
