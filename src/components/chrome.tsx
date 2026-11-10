@@ -1,4 +1,4 @@
-import { AudioLines, Library, Mic2, Pause, Play, Settings2, SkipForward, Sparkles, Star, Check, Download, Loader2, ChevronDown } from 'lucide-react'
+import { AudioLines, Library, Mic2, Pause, Play, Settings2, FastForward, Sparkles, Star, Check, Download, Loader2, ChevronDown } from 'lucide-react'
 import { navigate, useRoute, type Route } from '../lib/router.ts'
 import { useStore } from '../lib/store.ts'
 import { engine, ensureModel, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
@@ -159,7 +159,7 @@ export function MiniPlayer() {
       <button className="mini-play" onClick={toggle} aria-label={s.playing ? t('Pause') : t('Play')}>
         {s.buffering ? <Loader2 size={20} className="spin" /> : s.playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" style={{ marginLeft: 2 }} />}
       </button>
-      <button className="icon-btn" onClick={next} aria-label={t('Next sentence')}><SkipForward size={20} /></button>
+      <button className="icon-btn" onClick={next} aria-label={t('Next sentence')}><FastForward size={20} /></button>
       <span className="mini-prog" style={{ width: `${((s.current + (s.playing ? 0.5 : 0)) / Math.max(1, s.segments.length)) * 100}%` }} />
     </div>
   )

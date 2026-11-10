@@ -1,7 +1,7 @@
 {
   "name": "logos",
   "private": true,
-  "version": "1.4.115",
+  "version": "1.4.118",
   "description": "Logos \u2014 a fast, private, phone-first text-to-speech PWA with PocketTTS voices. Based on BetterTTS by SysAdminDoc (MIT).",
   "type": "module",
   "scripts": {

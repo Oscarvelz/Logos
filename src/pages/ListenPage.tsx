@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
-import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
+import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, FastForward, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, Rewind, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings, READER_SCALES, stepReaderScale } from '../lib/settings.ts'
@@ -210,11 +210,11 @@ export function ListenPage() {
             {s.playing
               ? <button className="icon-btn" onClick={() => navPin.set({ pinned: !pin.pinned })} aria-label={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')} title={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')}>{pin.pinned ? <PanelBottomClose size={20} /> : <PanelBottomOpen size={20} />}</button>
               : <span aria-hidden />}
-            <button className="icon-btn filled" onClick={prev} disabled={!reading} aria-label={t('Previous sentence')}><SkipBack size={22} /></button>
+            <button className="icon-btn filled" onClick={prev} disabled={!reading} aria-label={t('Previous sentence')}><Rewind size={22} /></button>
             <button className={`play-btn ${s.buffering ? 'busy' : ''}`} onClick={reading ? toggle : start} aria-label={s.playing ? t('Pause') : t('Play')}>
               <span className="pb-icon" key={s.buffering ? 'b' : s.playing ? 'p' : 'l'}>{s.buffering ? <Loader2 size={32} className="spin" /> : s.playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" style={{ marginLeft: 4 }} />}</span>
             </button>
-            <button className="icon-btn filled" onClick={next} disabled={!reading} aria-label={t('Next sentence')}><SkipForward size={22} /></button>
+            <button className="icon-btn filled" onClick={next} disabled={!reading} aria-label={t('Next sentence')}><FastForward size={22} /></button>
             <button className="icon-btn" onClick={() => void markAndToast()} disabled={!reading} aria-label={t('Mark this moment')} title={t('Mark this moment')}><Bookmark size={20} /></button>
           </div>
 

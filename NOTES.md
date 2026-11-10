@@ -1,4 +1,19 @@
-## 1.4.117 — Fewer words, brighter cards, no Paste now (shell)
+## 1.4.118 — Honest arrows
+
+Oscar's inconsistency, in his words: the step keys wore track glyphs
+(|◁ ▷|) — the promise of another audio — while the keys actually step
+one sentence, a few seconds (prev even restarts the current sentence
+when it is more than a breath in). He liked the buttons as they were;
+the change was allowed only for genuinely better icons. The seek pair
+is precisely that: the BAR was the lie, so the bar is what leaves.
+Double triangles (Rewind / FastForward on the web; ic_media_rew /
+ic_media_ff in the shell) — the universal sign for "scrub a little",
+same filled family as the play/pause they sit beside, same sizes,
+same seats, same behavior. Everywhere the pair appears: the Listen
+transport, the mini player, the bubble panel, and the media
+notification.
+
+## ## 1.4.117 — Fewer words, brighter cards, no Paste now (shell)
 
 Oscar's round, from his screenshots:
 
