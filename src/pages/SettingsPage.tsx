@@ -12,7 +12,7 @@ import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.130'
+const VERSION = '1.4.131'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -328,6 +328,7 @@ export function SettingsPage() {
       </SetCard>
       </section>
       </div>
+      <div className="set-version">{t('Version {v}', { v: VERSION })}</div>
     </div>
   )
 }

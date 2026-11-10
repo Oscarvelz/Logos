@@ -1,4 +1,18 @@
-## 1.4.130 — Settings folds (web)
+## 1.4.131 — The version closes Settings (web)
+
+The fleet's universality, at Oscar's order through the main
+chat: six of the eight apps end their Settings with the version
+as the last line on the screen; Logos kept its number inside the
+About card's subtitle, with the credits running on below it.
+
+Now the Settings screen's final element is the closing line —
+"Version 1.4.131" / "Versión 1.4.131", small, centered, dim —
+drawn from the same VERSION constant the page already keeps, so
+there is still exactly one number to maintain. The About card is
+untouched; nothing else changed. Bench-verified: the line is the
+page's last child, centered, 12 px. Web only.
+
+## ## 1.4.130 — Settings folds (web)
 
 Oscar's whole order, and only it: "make the shapes of the
 settings fold themselves and gain a small distance in between."

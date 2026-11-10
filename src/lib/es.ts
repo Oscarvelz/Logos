@@ -106,6 +106,7 @@ export const ES: Record<string, string> = {
   'That file is not a Logos backup': 'Ese archivo no es un respaldo de Logos',
   'About Logos': 'Acerca de Logos',
   'Version {v} · private, on-device text-to-speech': 'Versión {v} · texto a voz privado, en el dispositivo',
+  'Version {v}': 'Versión {v}',
   // ── Listen ──
   'Paste or type something to listen to': 'Pega o escribe algo para escuchar',
   'Clipboard is empty': 'El portapapeles está vacío',
