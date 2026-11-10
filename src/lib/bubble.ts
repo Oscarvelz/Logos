@@ -353,6 +353,11 @@ export function initBubble() {
       saved: s.active && (!!nowReadingFor(s.text) || library.get().clips.some((c) => c.kind === 'text' && !!c.text && c.text.trim() === s.text.trim())),
       active: s.active,
       frac: s.active && s.segments.length ? Math.min(1, (s.current + sentenceProgress()) / s.segments.length) : 0,
+      // Sentence coordinates (1.4.119): the panel's sentence scrub counts
+      // in sentences, so it needs the driver's own numbers, not a guess
+      // from the fraction.
+      ci: s.active ? s.current : -1,
+      ct: s.active ? s.segments.length : 0,
       bars: s.active && levels(18, barTmp) ? Array.from(barTmp, (v) => Math.round(Math.max(0, Math.min(1, v)) * 100)) : null,
       light,
       lang: settings.get().uiLang,

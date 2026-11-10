@@ -1,4 +1,31 @@
-## 1.4.118 — Honest arrows
+## 1.4.119 — The sentence is a handle
+
+Oscar's imagination, verbatim: slide the sentence in the panel and
+the progress bar moves with it — right, the bar advances; left, it
+falls back. Built exactly so:
+
+- **The gesture.** A clearly horizontal drag on the panel's
+  reading-along text is claimed as a scrub (vertical drags keep their
+  old job — the words still scroll; the scroll method anchors first,
+  the claim only lands when the slide proves horizontal). Travel is
+  counted in sentences — one per 26dp — so a short slide steps a few
+  sentences in a book of any size. While the finger travels, the
+  words lean with it (damped), the seek bar follows live, and the
+  status line reads the landing spot ("Sentence 12 of 31"). On lift,
+  the seek goes through the very door the seek bar uses
+  (`seekFrac` + poke "seek", or the device voice's own seekTo) and
+  the words settle back.
+- **The coordinates.** Counting in sentences needs the driver's own
+  numbers, so the page push and the device voice's panel state now
+  both carry `ci`/`ct` (current sentence / sentence count);
+  `refreshPanel` remembers them, and the scrub is simply unavailable
+  until a state with coordinates has arrived.
+
+Web + shell. The CI compile proves the shell; the gesture's feel —
+claim threshold, step size, the lean — is judged on Oscar's phone,
+where panel gestures have always had their final say.
+
+## ## 1.4.118 — Honest arrows
 
 Oscar's inconsistency, in his words: the step keys wore track glyphs
 (|◁ ▷|) — the promise of another audio — while the keys actually step
