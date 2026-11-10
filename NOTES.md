@@ -1,4 +1,16 @@
-## 1.4.133 — The header trio, smaller (shell)
+## 1.4.134 — The speed keys answer the finger (shell)
+
+Oscar: the panel's − / + speed keys change the rate but give no
+feedback — "make the bubble feel more intentional." The keys
+(the one speedBtn factory builds both) now answer a tap: while
+pressed, the disc warms toward gold, its ring turns gold and
+the glyph lights gold; the key gives to 0.9 under the finger
+and springs back on release. The deed — pokeOrWake slower /
+faster, the refresh a breath later — is byte-identical. The
+transport keys were not asked about and were not touched.
+Shell only.
+
+## ## 1.4.133 — The header trio, smaller (shell)
 
 Oscar's close-up of the panel's title row: the mark, save and
 lock medallions (32 dp discs) outweigh the title they serve —
