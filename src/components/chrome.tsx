@@ -1,8 +1,8 @@
-import { AudioLines, Library, Mic2, Pause, Play, Settings2, FastForward, Sparkles, Star, Check, Download, Loader2, ChevronDown } from 'lucide-react'
+import { AudioLines, Library, Mic2, Pause, Play, Settings2, FastForward, Rewind, Sparkles, Star, Check, Download, Loader2, ChevronDown } from 'lucide-react'
 import { navigate, useRoute, type Route } from '../lib/router.ts'
 import { useStore } from '../lib/store.ts'
 import { engine, ensureModel, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
-import { listen, toggle, next } from '../player/listen.ts'
+import { listen, toggle, next, prev } from '../player/listen.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
 import { useEffect, useState } from 'react'
 import { VOICES, favoriteVoices, type Lang, type Voice } from '../lib/voices.ts'
@@ -149,13 +149,14 @@ export function MiniPlayer() {
   const s = useStore(listen)
   const route = useRoute()
   if (!s.active || route === 'listen' || route === 'book' || (!s.playing && s.current === 0 && !s.mode)) return null
-  const seg = s.segments[s.current]
+  // The player, only (Oscar, 2026-11-10): no sentence text in the mini
+  // bar — the words live in Listen; while he moves through the other
+  // sections the bar is a finished strip of transport: prev, the gold
+  // toggle, next, and its progress hairline. Tapping the bar's own
+  // body (not a key) still opens Listen.
   return (
-    <div className="mini" role="region" aria-label={t('Now playing')}>
-      <button className="grow" style={{ textAlign: 'left', minWidth: 0 }} onClick={() => navigate('listen')}>
-        <div className="mini-text">{seg?.text}</div>
-        <div className="mini-sub">{s.buffering ? t('Preparing…') : t('Sentence {a} of {b}', { a: s.current + 1, b: s.segments.length })}</div>
-      </button>
+    <div className="mini" role="region" aria-label={t('Now playing')} onClick={(e) => { if (e.target === e.currentTarget) navigate('listen') }}>
+      <button className="icon-btn" onClick={prev} aria-label={t('Previous sentence')}><Rewind size={20} /></button>
       <button className="mini-play" onClick={toggle} aria-label={s.playing ? t('Pause') : t('Play')}>
         {s.buffering ? <Loader2 size={20} className="spin" /> : s.playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" style={{ marginLeft: 2 }} />}
       </button>

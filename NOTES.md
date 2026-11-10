@@ -1,4 +1,21 @@
-## 1.4.128 — One page, ever
+## 1.4.129 — The mini player, finished (web)
+
+Oscar, on the mini bar that follows a session through the other
+sections: "You are doing too much with that player. Do not show
+me the text… As it is, it looks unfinished because of the text
+on the left." He was right — the current sentence crowded the
+bar's left side at whatever length the sentence happened to be,
+and the strip never looked like a finished thing.
+
+The mini is transport only now: rewind, the gold toggle, fast-
+forward — a slim centered strip with its progress hairline —
+while he moves through Voices, Create, Library and Settings.
+The words live in Listen, where they belong; tapping the bar's
+own body (not a key) still opens Listen. Verified on the bench:
+the bar's text content is empty and its children are exactly the
+three keys and the hairline. Web only; the shell stays 1.4.128's.
+
+## ## 1.4.128 — One page, ever
 
 Oscar's morning verdict on the night's work: "Imposible parar el
 audio" — the voice kept speaking after he closed the floating
