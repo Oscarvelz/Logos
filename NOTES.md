@@ -1,4 +1,44 @@
-## 1.4.124 — A stop is a stop, in both directions
+## 1.4.125 — His stop outranks every rescue
+
+The night's deep audit of the self-firing audio — the complaint
+Oscar has repeated all evening — found the main door still open
+after 1.4.120. The native fallback chain knows how to tell a FROZEN
+page from a flowing one, but nothing in it knew what a DELIBERATE
+STOP looks like: a paused page and a frozen page are equally still.
+So: copy a text, listen, press stop — and thirty seconds later the
+chain, faithful to its orders, first sent a ghost visit (the app
+"asking to appear again") and fifteen seconds after that handed
+the STOPPED text to the device voice, which read it aloud from
+nowhere. The ~30-second delay in his report is the chain's own fuse.
+
+- **The quiet-state gate:** both native checks now begin by asking
+  whether the page is at rest — neither playing nor busy. At rest
+  ends the chain where it stands: no visit, no takeover. The
+  chain's jurisdiction is sessions that CLAIM to be working.
+- **The error carve-out:** the page's pushes now carry an `err`
+  flag. Quiet WITH an error is not his pause — it is a failure
+  asking for the floor, and the rescue proceeds as before. Quiet
+  without one is his word, and it is final.
+- **Disarm on any definite stop:** a pause that reaches the shell
+  by any road — the panel, the media card, the native voice's own
+  pause — invalidates the armed chain on the spot, so even a stop
+  inside the first thirty seconds is already law when the fuse
+  would have run out.
+- **The pre-warm visit is his too:** the bubble service used to
+  warm the page with a ghost visit on every service start —
+  including the system's sticky restarts after the process died
+  (overnight, Samsung's reaper), which pass no intent at all. A
+  visit summoned by nobody was the other half of "the app appeared
+  on its own". The warm-up now belongs only to starts his hand
+  asked for.
+
+The other watches were audited and stand as they are: the progress
+watch already requires playing-and-busy, the stall watch requires
+work in progress, and the page's session recovery only ever answers
+a pressed key. Rollback: the pre-1.4.125 snapshot plus the 1.4.124
+snapshot for the web files.
+
+## ## 1.4.124 — A stop is a stop, in both directions
 
 The self-review found the handover's reverse leak. A session handed
 to the shell's voice is PAUSED on the page — so everything the page
