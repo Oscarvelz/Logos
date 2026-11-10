@@ -206,6 +206,14 @@ class BubbleService : Service() {
          *  render must end in a voice that exists. The shell's Android
          *  TTS takes the text from the sentence where the page stopped
          *  and switches language sentence by sentence. */
+        /** The page ends a session it handed over (1.4.124): its
+         *  sleep timer fired, or a new text replaced the old one.
+         *  The shell's voice stops — a stop is a stop for the whole
+         *  house, in both directions. */
+        fun stopNativeFromPage() {
+            if (NativeSpeaker.active) NativeSpeaker.stop()
+        }
+
         fun handToNative(c: Context, text: String, title: String, idx: Int) {
             if (text.isBlank()) return
             if (NativeSpeaker.active && nativeText == text) return

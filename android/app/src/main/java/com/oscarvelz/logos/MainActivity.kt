@@ -469,6 +469,12 @@ class MainActivity : Activity() {
             BubbleService.handToNative(this@MainActivity, text, title, idx)
         }
 
+        /** The page ends a handed-over session (1.4.124): the shell's
+         *  voice stops with it. */
+        @JavascriptInterface fun bubbleNativeStop() {
+            BubbleService.stopNativeFromPage()
+        }
+
         @JavascriptInterface fun bubbleSeek(): String {
             val f = BubbleService.seekFrac
             BubbleService.seekFrac = -1.0

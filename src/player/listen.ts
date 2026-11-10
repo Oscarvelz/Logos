@@ -613,12 +613,34 @@ engine.subscribe(() => {
 
 // ── Transport ──
 
-export function pause() {
+export function pause() { pauseImpl(false) }
+
+/** A pause arriving FROM the shell (1.4.124): it must never echo back.
+ *  When the shell's own voice pauses, it pokes the page as a courtesy
+ *  (1.4.120) — if that poke returned as a stop order, his pause would
+ *  become a full stop of the native session. */
+export function pauseFromShell() { pauseImpl(true) }
+
+function pauseImpl(fromShell: boolean) {
   const s = listen.get()
-  if (!s.playing) return
+  if (!s.playing) {
+    // A session handed to the shell's voice is paused on the page but
+    // still reading in the shell. A stop spoken on the page's side —
+    // the sleep timer's word above all — is a stop for the whole
+    // house (1.4.124): the shell voice stops too.
+    if (!fromShell && s.mode === 'device') stopShellVoice()
+    return
+  }
   listen.set({ playing: false })
-  if (s.mode === 'device') { token++; cancelDevice() } else quietPause()
+  if (s.mode === 'device') { token++; cancelDevice(); if (!fromShell) stopShellVoice() } else quietPause()
   updateMediaSession()
+}
+
+/** Tell the shell its voice's session is over (1.4.124). Older shells
+ *  simply do not have the door; the call fades away harmlessly. */
+function stopShellVoice() {
+  const d = (window as unknown as { LogosAndroid?: { bubbleNativeStop?: () => void } }).LogosAndroid
+  try { d?.bubbleNativeStop?.() } catch { /* a stale shell ignores it */ }
 }
 
 export function resume() {
@@ -724,6 +746,9 @@ export function prev() {
 export function stop() {
   token++
   cancelDevice()
+  // A session handed to the shell ends there too (1.4.124): starting
+  // a new text must never leave the old one reading in the shell.
+  if (listen.get().mode === 'device') stopShellVoice()
   if (audio) {
     quietPause()
     audio.removeAttribute('src')
