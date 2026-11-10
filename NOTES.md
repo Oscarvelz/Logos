@@ -1,4 +1,39 @@
-## 1.4.116 — The unstoppable reading, and the black screen (shell)
+## 1.4.117 — Fewer words, brighter cards, no Paste now (shell)
+
+Oscar's round, from his screenshots:
+
+- **Paste now leaves the panel footer.** A copied text arrives on its
+  own now — the catch delivers it without being asked — so the manual
+  key only repeated what already happened. The footer keeps Auto and
+  Hide; `readClip` itself stays (the lever and the panel's own opening
+  still read through it).
+- **Hide asks first.** Tapping Hide (Ocultar) now raises the small
+  confirmation card instead of removing the bubble on the spot:
+  "Remove the bubble? — You can always turn it back on in Settings."
+  ("¿Quitar la burbuja? — Puedes volver a activarla en Ajustes."),
+  Remove / Not now. The deed itself is unchanged (collapse + stop).
+- **Confirmation cards: contrast refined, text cut to the bone.** The
+  explainer cards' muted steps closer to the ink in both themes
+  (dark 203→226 warm; light parchment 110→84 deep) — the body and the
+  cancel word were the dimmest text in the app. And every card body
+  says the same in fewer words, EN and ES: Save ("Save what's playing
+  to your Library, to hear it again anytime."), Lock ("Locked: a
+  copied text won't replace what you're hearing." — its Paste-now
+  clause died with the key), Unlock, and both ⚑ cards.
+- **The black screen, one more layer.** Oscar: stopped, stepped out,
+  ~30 seconds later the app surfaced on its own wearing the same
+  black. A ghost visit that finds a corpse page now buries it on the
+  spot: the visit whispers (`evaluateJavascript`, same test as the
+  1.4.116 arrival check) and reloads the page invisibly if it cannot
+  answer — instead of parking the corpse for a later arrival to meet.
+  And a visit that continues across a resume re-nails its ghost
+  clothes (alpha 0, transparent, untouchable), so a visit can never
+  be caught visible halfway.
+
+Shell-only; the web stays 1.4.115. CI compiles it; Oscar's phone —
+the footer, the cards, and no black self-appearance — is the verdict.
+
+## ## 1.4.116 — The unstoppable reading, and the black screen (shell)
 
 Oscar's report, two failures in one evening:
 

@@ -999,13 +999,13 @@ class BubbleService : Service() {
     private fun cardPal(): Map<String, Int> = if (panelLight) mapOf(
         "bg1" to Color.rgb(238, 227, 199), "bg2" to Color.rgb(226, 210, 172),
         "line" to Color.rgb(178, 152, 100), "ink" to Color.rgb(34, 28, 18),
-        "muted" to Color.rgb(110, 96, 72), "disc" to Color.rgb(255, 255, 255),
+        "muted" to Color.rgb(84, 72, 50), "disc" to Color.rgb(255, 255, 255),
         "discLine" to Color.rgb(200, 180, 140), "gold" to Color.rgb(154, 102, 20),
         "glow" to Color.argb(46, 233, 189, 114), "div" to Color.rgb(200, 184, 148)
     ) else mapOf(
         "bg1" to Color.rgb(79, 70, 58), "bg2" to Color.rgb(60, 53, 44),
         "line" to Color.rgb(158, 132, 84), "ink" to Color.rgb(246, 240, 228),
-        "muted" to Color.rgb(203, 191, 168), "disc" to Color.rgb(90, 81, 68),
+        "muted" to Color.rgb(226, 216, 196), "disc" to Color.rgb(90, 81, 68),
         "discLine" to Color.rgb(120, 106, 82), "gold" to gold,
         "glow" to Color.argb(64, 233, 189, 114), "div" to Color.rgb(96, 86, 70)
     )
@@ -1078,7 +1078,7 @@ class BubbleService : Service() {
             contentDescription = s("Save this text to the Library", "Guardar este texto en la Biblioteca")
             layoutParams = LinearLayout.LayoutParams(dp(32), dp(32)).apply { marginStart = dp(8) }
             setOnClickListener {
-                showHintCard(s("Save to Library", "Guardar en Biblioteca"), s("Keeps the text playing now in your Library, so you can hear it again whenever you like.", "Guarda el texto que suena ahora en tu Biblioteca, para oírlo de nuevo cuando quieras."), s("Save", "Guardar"), s("Not now", "Ahora no")) {
+                showHintCard(s("Save to Library", "Guardar en Biblioteca"), s("Save what's playing to your Library, to hear it again anytime.", "Guarda lo que suena en tu Biblioteca, para oírlo cuando quieras."), s("Save", "Guardar"), s("Not now", "Ahora no")) {
                     val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
                     pokeOrWake("save")
                     toastSavedWhenTrue(wasSaved)
@@ -1255,18 +1255,14 @@ class BubbleService : Service() {
         clipRow.addView(leverS)
         val spacer2 = View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) }
         clipRow.addView(spacer2)
-        val pasteNow = TextView(this).apply {
-            text = s("Paste now", "Pegar ahora")
-            setTextColor(c["gold"]!!); textSize = 12.5f
-            setTypeface(typeface, Typeface.BOLD)
-            setOnClickListener { readClip(true) }
-        }
-        clipRow.addView(pasteNow)
+        // Paste now is gone (1.4.117, Oscar): a copied text arrives on its
+        // own now — the catch delivers it without being asked — so a manual
+        // paste key in the footer only repeated what already happened.
         val hideB = TextView(this).apply {
             text = s("Hide bubble", "Ocultar")
             setTextColor(c["muted"]!!); textSize = 12.5f
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(16) }
-            setOnClickListener { collapsePanel(); stopBubble() }
+            setOnClickListener { showHideHint() }
         }
         clipRow.addView(hideB)
         card.addView(clipRow)
@@ -1456,15 +1452,17 @@ class BubbleService : Service() {
     }
 
     /** The lock explains itself, like every panel button: what it holds, and
-     *  what letting go restores. Paste now (a hand ask) is never locked out. */
+     *  what letting go restores. (A hand paste inside the app itself was
+     *  never the lock's business; the panel's Paste now key is gone since
+     *  1.4.117 — catches arrive on their own.) */
     private fun showLockHint() {
         if (isLocked(this)) {
-            showHintCard(s("Unlock the stage", "Desbloquear la escena"), s("Copies can take the stage again — a fresh copy will replace what is playing, as before.", "Las copias pueden tomar la escena otra vez: una copia nueva reemplazará lo que suena, como antes."), s("Unlock", "Desbloquear"), s("Keep locked", "Dejar bloqueado")) {
+            showHintCard(s("Unlock the stage", "Desbloquear la escena"), s("Unlocked: a fresh copy will replace what is playing.", "Desbloqueada: una copia nueva reemplazará lo que suena."), s("Unlock", "Desbloquear"), s("Keep locked", "Dejar bloqueado")) {
                 setLocked(this@BubbleService, false)
                 lockBtn?.text = "🔓"
             }
         } else {
-            showHintCard(s("Lock the stage", "Bloquear la escena"), s("While locked, copying a text will not replace what you are hearing — your book keeps the stage. Paste now still works when you ask for it.", "Bloqueada, copiar un texto no reemplazará lo que estás oyendo: tu libro conserva la escena. Pegar ahora sigue funcionando cuando lo pides."), s("Lock", "Bloquear"), s("Not now", "Ahora no")) {
+            showHintCard(s("Lock the stage", "Bloquear la escena"), s("Locked: a copied text won't replace what you're hearing.", "Bloqueada: un texto copiado no reemplazará lo que estás oyendo."), s("Lock", "Bloquear"), s("Not now", "Ahora no")) {
                 setLocked(this@BubbleService, true)
                 lockBtn?.text = "🔒"
             }
@@ -1501,14 +1499,22 @@ class BubbleService : Service() {
             pokeOrWake("mark")
             if (!prefs(this).getBoolean("markTaught", false)) {
                 prefs(this).edit().putBoolean("markTaught", true).apply()
-                showHintCard(s("The ⚑ mark", "La marca ⚑"), s("The ⚑ keeps a mark on what you are hearing — you will find it in Library, under Saved Marks.", "La ⚑ deja una marca en lo que estás oyendo: la encontrarás en Biblioteca, en Marcas guardadas."), s("Got it", "Entendido"), "") { }
+                showHintCard(s("The ⚑ mark", "La marca ⚑"), s("The ⚑ marks this moment. Find it in Library, under Saved Marks.", "La ⚑ marca este momento. La encuentras en Biblioteca, en Marcas guardadas."), s("Got it", "Entendido"), "") { }
             }
         } else {
-            showHintCard(s("Not in your Library yet", "Aún no está en tu Biblioteca"), s("Marks live with their audio — on an unsaved text, its marks would be hard to find later. Save it to your Library first, and the ⚑ is yours.", "Las marcas viven con su audio: en un texto sin guardar, sus marcas serían difíciles de encontrar después. Guárdalo primero en tu Biblioteca y la ⚑ es tuya."), s("Save to Library", "Guardar en Biblioteca"), s("Not now", "Ahora no")) {
+            showHintCard(s("Not in your Library yet", "Aún no está en tu Biblioteca"), s("Marks live with their audio. Save this text to your Library first.", "Las marcas viven con su audio. Guarda primero este texto en tu Biblioteca."), s("Save to Library", "Guardar en Biblioteca"), s("Not now", "Ahora no")) {
                 val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
                 pokeOrWake("save")
                 toastSavedWhenTrue(wasSaved)
             }
+        }
+    }
+
+    /** Removing the bubble asks first (1.4.117, Oscar): a small card, the
+     *  deed one tap away, and the way back named — Settings always holds it. */
+    private fun showHideHint() {
+        showHintCard(s("Remove the bubble?", "¿Quitar la burbuja?"), s("You can always turn it back on in Settings.", "Puedes volver a activarla en Ajustes."), s("Remove", "Quitar"), s("Not now", "Ahora no")) {
+            collapsePanel(); stopBubble()
         }
     }
 
