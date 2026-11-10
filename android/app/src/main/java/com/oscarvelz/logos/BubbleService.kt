@@ -187,6 +187,33 @@ class BubbleService : Service() {
             runCatching { poke?.invoke("pause") }
         }
 
+        fun titleFromText(text: String): String {
+            val line = text.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: "Logos"
+            val words = line.split(Regex("\\s+")).take(7).joinToString(" ")
+            return if (words.length < line.length) "$words…" else words
+        }
+
+        // The native-fallback chain's memory lives in the companion
+        // (1.4.122): the page's handover arrives here, while the chain
+        // itself runs on the service instance — one memory for both.
+        var nativeGen = 0
+        var nativeText: String? = null
+        var nativeSig = ""
+
+        /** The page hands its session to the shell's device voice
+         *  (1.4.122): its own WebView speech bridge can run a sentence
+         *  to "completion" in total silence, and a wedged or silent
+         *  render must end in a voice that exists. The shell's Android
+         *  TTS takes the text from the sentence where the page stopped
+         *  and switches language sentence by sentence. */
+        fun handToNative(c: Context, text: String, title: String, idx: Int) {
+            if (text.isBlank()) return
+            if (NativeSpeaker.active && nativeText == text) return
+            nativeText = text
+            noteTry(c, s("the device voice took over", "la voz del dispositivo tomó el relevo"))
+            NativeSpeaker.takeOver(c, text, title.ifBlank { titleFromText(text) }, idx)
+        }
+
         fun wakeForPending(c: Context, cmd: String) {
             if (NativeSpeaker.active) { NativeSpeaker.handle(cmd); return }
             pendingCmd = cmd
@@ -403,9 +430,6 @@ class BubbleService : Service() {
     // then a fair deadline — and if the signature still has not moved,
     // the shell reads the text itself (NativeSpeaker). If the page ever
     // starts flowing, the native voice yields the stage back to it.
-    private var nativeGen = 0
-    private var nativeText: String? = null
-    private var nativeSig = ""
 
     private fun sigOf(j: JSONObject?): String =
         if (j == null) "" else listOf(
@@ -488,11 +512,6 @@ class BubbleService : Service() {
         handler.postDelayed({ nativeYield(my) }, 6_000)
     }
 
-    private fun titleFromText(text: String): String {
-        val line = text.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: "Logos"
-        val words = line.split(Regex("\\s+")).take(7).joinToString(" ")
-        return if (words.length < line.length) "$words…" else words
-    }
 
     // The standing form of the same watch, for a freeze mid-session (the
     // delivery chain only guards a catch's first minute): while the page

@@ -461,6 +461,14 @@ class MainActivity : Activity() {
         }
 
         /** The panel's seek bar: the chosen fraction, pulled once by the page. */
+        /** The page hands its session to the shell's device voice
+         *  (1.4.122): its own speech bridge can run silently inside a
+         *  WebView, and a wedged or silent render must end in a voice
+         *  that exists. */
+        @JavascriptInterface fun bubbleNative(text: String, title: String, idx: Int) {
+            BubbleService.handToNative(this@MainActivity, text, title, idx)
+        }
+
         @JavascriptInterface fun bubbleSeek(): String {
             val f = BubbleService.seekFrac
             BubbleService.seekFrac = -1.0

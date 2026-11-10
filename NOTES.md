@@ -1,4 +1,55 @@
-## 1.4.121 — The floor was judging flow against a photograph of the past (shell)
+## 1.4.122 — The app learns to hear silence; the session changes hands
+
+Oscar's evidence, two screenshots nineteen seconds apart: the panel
+at sentence 9, then sentence 11 — the word lit, the position
+advancing, the wave strip FLAT, the toggle at rest, and no sound.
+Plus his second charge: reading in Spanish, the English sentences
+no longer speak English, as was agreed. One mechanism explains
+both: **the voice was returning silence of exactly the right
+duration.** A wedged engine — or one voice's missing model — can
+synthesize zeros; every downstream system (the clock, the word
+highlight, the sentence counter, the panel) then "plays" a sentence
+nobody hears. The English sentences of a Spanish text are exactly
+the ones a sick English model would silence. And once saved, the
+saved-processing cache (1.4.112) served the poison forever. The app
+had no ears. Now it does:
+
+- **A render is judged by its envelope.** Speech — even levelled,
+  quiet speech — peaks far above 0.02; digital silence is 0. A
+  fresh render that comes back silent FAILS like any other render
+  error (never cached, never saved), and a saved render found
+  silent is EVICTED and rendered fresh. The one legitimate silence
+  (a sentence that was only a code, which becomes a breath) is
+  untouched — it never carries a render key.
+- **A silent render hands the session to the shell.** The page's
+  failure rescue now treats 'the voice rendered silence' as a
+  first-class failure: `handToShell()` stops the page and gives the
+  text — from the very sentence where it stopped — to the shell's
+  Android TTS, which is a real voice and switches language sentence
+  by sentence (the agreement, kept). The page's own device bridge
+  (`playDevice`) takes the same door whenever the shell is present:
+  inside a WebView, `speechSynthesis` can run a sentence to
+  "completion" without producing any sound at all; real browsers,
+  whose bridge is honest, keep it.
+- **Shell side of the door:** a new bridge call `bubbleNative`, a
+  new `BubbleService.handToNative` (which also arms the native
+  chain's memory, so the older floors can see this text), and
+  `NativeSpeaker.takeOver` learns to start mid-text at the handed
+  sentence. The fallback chain's state moved into the companion so
+  the handover and the chain share one memory.
+
+Bench: the handover is proven end to end — with the shell stubbed,
+pressing play handed the full text over at sentence 0 and the
+page's speechSynthesis was never touched (0 calls). The silence
+detector's bench leg could not be driven here (the sandbox browser
+cannot fetch the voice model at all — "Engine error" — so the
+render path never opens); its arithmetic is envelope-peak against
+a floor, and its wiring is the same render() every sentence passes
+through. Oscar's phone — a Spanish text with English sentences,
+heard in both languages, nothing advancing in silence — is the
+verdict.
+
+## ## 1.4.121 — The floor was judging flow against a photograph of the past (shell)
 
 Oscar's report: the panel sits on "Processing…" / "Waiting for
 Logos…" and the audio NEVER begins. The native floor built in

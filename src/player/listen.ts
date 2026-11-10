@@ -11,7 +11,7 @@ import { speakDevice, cancelDevice, deviceSpeechAvailable } from '../engine/devi
 import { stopClipPlayer, onClipPlay } from './clip.ts'
 import { nowReadingFor } from '../lib/book/nowreading.ts'
 import { alignWords } from './wordsync.ts'
-import { renderKey, getPersistedRender, putPersistedRender, hasPersistedRender } from './rendercache.ts'
+import { renderKey, getPersistedRender, putPersistedRender, hasPersistedRender, dropPersistedRender } from './rendercache.ts'
 
 type Rendered = { blob: Blob; env: Float32Array; duration: number; voice: string }
 
@@ -282,6 +282,20 @@ export function relangSession() {
 
 const PLAYHEAD_PRIORITY = 2000
 
+/** A render that came back as digital silence is not speech (1.4.122).
+ *  A wedged engine — or one voice's missing model — can return zeros of
+ *  exactly the right duration; every downstream system (the clock, the
+ *  word highlight, the sentence counter) then "plays" a sentence nobody
+ *  hears, which is precisely the failure Oscar kept meeting: sentences
+ *  advancing, the wave flat, no sound — the English sentences of a
+ *  Spanish text among them. Judge the envelope: real speech, even
+ *  levelled quiet speech, peaks far above this floor; silence is 0. */
+const renderSilent = (env: Float32Array): boolean => {
+    let peak = 0
+    for (let k = 0; k < env.length; k++) if (env[k] > peak) peak = env[k]
+    return peak < 0.02
+}
+
 function render(i: number, priority: number): Promise<Rendered> {
   const hit = cache.get(i)
   if (hit) return Promise.resolve(hit)
@@ -305,7 +319,11 @@ function render(i: number, priority: number): Promise<Rendered> {
     const key = spoken ? renderKey(spoken, voice) : null
     if (key) {
       const saved = await getPersistedRender(key)
-      if (saved) {
+      if (saved && renderSilent(saved.env)) {
+        // Poisoned on a bad night and served forever since: evict it
+        // and render the sentence fresh below.
+        dropPersistedRender(key)
+      } else if (saved) {
         if (mySession !== session) throw new DOMException('stale', 'AbortError')
         const r: Rendered = { blob: saved.blob, env: saved.env, duration: saved.duration, voice }
         cache.set(i, r)
@@ -329,6 +347,13 @@ function render(i: number, priority: number): Promise<Rendered> {
       env: envelope(full, res.sampleRate, 60),
       duration: full.length / res.sampleRate,
       voice,
+    }
+    if (spoken && renderSilent(r.env)) {
+      // The voice rendered silence: never cache it, never save it —
+      // fail the render so the caller's rescue (the shell's device
+      // voice, 1.4.122) takes the sentence instead.
+      pending.delete(i)
+      throw new Error('the voice rendered silence')
     }
     if (mySession !== session) throw new DOMException('stale', 'AbortError')
     cache.set(i, r)
@@ -400,6 +425,10 @@ async function playIndex(i: number, startFrac = 0, startWord?: { w: number; word
   } catch (err) {
     if (my !== token || (err as Error).name === 'AbortError') return
     if (!listen.get().playing) return
+    // A voice that renders silence (1.4.122) has failed as surely as
+    // one that throws — hand the session to the shell's real device
+    // voice, whatever the page-bridge toggle says.
+    if ((err as Error).message === 'the voice rendered silence' && handToShell(i)) return
     // A wedged voice engine must never leave the listener in silence: the
     // device voice reads this sentence while the engine heals itself.
     if (settings.get().deviceFallback && deviceSpeechAvailable() && !fellBack.has(i)) {
@@ -526,8 +555,31 @@ function finish() {
 
 // ── Device-voice bridge (speechSynthesis) ──
 
+/** Hand the session to the shell's real device voice (1.4.122): the
+ *  page stops, the shell's Android TTS takes the text from sentence i,
+ *  switching language sentence by sentence. False where there is no
+ *  shell (a real browser), whose own speech bridge is honest. */
+function handToShell(i: number): boolean {
+  const d = (window as unknown as { LogosAndroid?: { bubbleNative?: (t: string, ti: string, ix: number) => void } }).LogosAndroid
+  if (typeof d?.bubbleNative !== 'function') return false
+  const s = listen.get()
+  ++token
+  quietPause()
+  listen.set({ current: i, playing: false, mode: 'device', finished: false, buffering: false, error: null })
+  updateMediaSession()
+  d.bubbleNative(s.text, '', i)
+  return true
+}
+
 async function playDevice(i: number) {
   const s = listen.get()
+  // In the Android app, the page's own speechSynthesis is a trap
+  // (1.4.122): inside a WebView it can run a sentence to "completion"
+  // without producing any sound at all. The shell owns a real device
+  // voice — Android TTS, switching language sentence by sentence —
+  // so hand the session over at this sentence and let it read. Real
+  // browsers keep the bridge below.
+  if (handToShell(i)) return
   const my = ++token
   quietPause()
   listen.set({ current: i, playing: true, mode: 'device', finished: false, buffering: false, error: null })
