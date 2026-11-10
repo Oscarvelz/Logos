@@ -1,4 +1,27 @@
-## 1.4.122 — The app learns to hear silence; the session changes hands
+## 1.4.123 — The detector learns where loudness lives (web)
+
+The night's self-review caught 1.4.122's silence detector judging
+the wrong witness. `envelope()` peak-NORMALIZES: every render's
+envelope is scaled so its loudest frame is 1.0 — so a whisper of
+noise wears a full-height envelope, and a detector reading the
+envelope catches exact zeros and misses near-silence entirely.
+(Flat waves in a screenshot, likewise, testify about missing peaks
+data, not about loudness.) The judgment now reads the SAMPLES' own
+peak — the only honest witness:
+
+- a saved render's peak is computed where it is decoded
+  (`getPersistedRender` returns it alongside the envelope);
+- a fresh render is judged on its gained samples;
+- the floor is 0.005: levelled speech peaks far above it, digital
+  silence is 0, and faint engine noise falls under it.
+
+Bench, before and after, same two planted poisons: under 1.4.122
+the exact-zero entry was evicted and the 0.002-amplitude entry
+SURVIVED; under 1.4.123 both are evicted at the first poll. The
+handover to the shell's voice (1.4.122) is untouched. Web only;
+the shell stays 1.4.122's.
+
+## ## 1.4.122 — The app learns to hear silence; the session changes hands
 
 Oscar's evidence, two screenshots nineteen seconds apart: the panel
 at sentence 9, then sentence 11 — the word lit, the position
