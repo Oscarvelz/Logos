@@ -1457,7 +1457,7 @@ class BubbleService : Service() {
         bubble?.let { if (it.alpha < 1f) { it.animate().cancel(); it.alpha = 1f } }
         // A short, smooth birth: the panel grows out of the λ's own position.
         val bp2 = bubbleParams
-        stage.pivotX = if (seatRight) panelWidth().toFloat() else 0f
+        stage.pivotX = panelPivotX ?: if (seatRight) panelWidth().toFloat() else 0f
         // It grows out of the very corner that grazes the λ.
         stage.pivotY = if (seatBottom) dp(320).toFloat() else 0f
         stage.scaleX = 0.86f; stage.scaleY = 0.86f; stage.alpha = 0f
@@ -1486,6 +1486,10 @@ class BubbleService : Service() {
     // Which corner of the panel grazes the bubble, from the last seating.
     private var seatRight = false
     private var seatBottom = false
+    // In the middle of the room (phone), the panel is born from the
+    // point beneath the bubble instead of from a corner: its pivot x
+    // inside the panel, set by positionPanel; null = corner birth.
+    private var panelPivotX: Float? = null
 
     // THE CORNER GRAZES THE CIRCLE (Oscar, refining 1.4.95): the panel
     // and the bubble must NOT overlap. The rectangle's corner point
@@ -1512,7 +1516,30 @@ class BubbleService : Service() {
         val dist = r + dp(2) - (dp(24) * 0.4142f).toInt()
         val d = (dist * 0.7071f).toInt()
         seatRight = cx >= sw2 / 2
-        seatBottom = !(cy + d + ph <= sh2 - margin) && (cy - d - ph >= margin)
+        p.x = (if (seatRight) cx - d - pw else cx + d).coerceIn(margin, (sw2 - pw - margin).coerceAtLeast(margin))
+        // THE MIDDLE OF THE ROOM (Oscar, 2026-11-10; phone only): with
+        // the bubble resting mid-screen, the corner seat above cannot
+        // land — the wide phone panel clamps its corner to a far edge,
+        // and its top edge then cuts through the circle, the λ stranded
+        // mid-edge, sunk into the player: the panel doesn't know where
+        // to go. When the seated corner ends up more than a bubble's
+        // width from the bubble, forget the corner: the panel unfolds
+        // straight BELOW the bubble, its top edge resting under the
+        // whole circle (the same 2dp graze, vertical now), the bubble
+        // stays in the middle on top, and the birth grows out of the
+        // point beneath it (panelPivotX). Corners and borders keep the
+        // corner seat exactly as it was; tablets keep it everywhere.
+        val midRoom = !isTablet() && kotlin.math.abs((if (seatRight) p.x + pw else p.x) - cx) > dp(56)
+        if (midRoom) {
+            val rest = r + dp(2)
+            seatBottom = !(cy + rest + ph <= sh2 - margin) && (cy - rest - ph >= margin)
+            p.y = if (seatBottom) cy - rest - ph else (cy + rest).coerceAtMost((sh2 - ph - margin).coerceAtLeast(margin))
+            panelPivotX = (cx - p.x).toFloat().coerceIn(0f, pw.toFloat())
+        } else {
+            seatBottom = !(cy + d + ph <= sh2 - margin) && (cy - d - ph >= margin)
+            p.y = if (seatBottom) cy - d - ph else (cy + d).coerceAtMost((sh2 - ph - margin).coerceAtLeast(margin))
+            panelPivotX = null
+        }
         // The grip rides the corner opposite the seated one — the free one.
         val nfr = !seatRight; val nfb = !seatBottom
         gripV?.let { g ->
@@ -1521,8 +1548,6 @@ class BubbleService : Service() {
             if (lp != null && lp.gravity != ng) { lp.gravity = ng; g.layoutParams = lp }
             if (nfr != gripFreeR || nfb != gripFreeB) { gripFreeR = nfr; gripFreeB = nfb; g.invalidate() }
         }
-        p.x = (if (seatRight) cx - d - pw else cx + d).coerceIn(margin, (sw2 - pw - margin).coerceAtLeast(margin))
-        p.y = if (seatBottom) cy - d - ph else (cy + d).coerceAtMost((sh2 - ph - margin).coerceAtLeast(margin))
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
 

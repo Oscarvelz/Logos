@@ -1,4 +1,25 @@
-## 1.4.131 — The version closes Settings (web)
+## 1.4.132 — The middle of the room (shell)
+
+Oscar's three screenshots: with the λ resting mid-screen on his
+phone, the open panel didn't know where to go — the λ ended up
+stranded in the middle of the panel's top edge, sunk into the
+player. The mechanism, in positionPanel: the panel seats a
+CORNER against the bubble (his settled 1.4.95 design), but the
+wide phone panel clamps that corner to a far edge when the
+bubble is mid-screen, so the top edge cuts through the circle
+instead of grazing it.
+
+Phone only, middle only: when the seated corner would land more
+than a bubble's width away from the bubble, the corner seat is
+forgotten — the panel unfolds straight BELOW the bubble, its
+top edge resting under the whole circle (the same 2 dp graze,
+vertical now; above only when below cannot fit), the bubble
+stays in the middle on top, and the birth grows out of the
+point beneath it. Corners and borders keep the corner seat
+exactly as it was, and tablets keep it everywhere. Shell only;
+the web stays 1.4.131.
+
+## ## 1.4.131 — The version closes Settings (web)
 
 The fleet's universality, at Oscar's order through the main
 chat: six of the eight apps end their Settings with the version
