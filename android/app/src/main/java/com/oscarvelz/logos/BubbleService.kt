@@ -1893,7 +1893,9 @@ class BubbleService : Service() {
 
     override fun onDestroy() {
         NativeSpeaker.shutdown()
-        Backstage.release()
+        // The house is gone; its page dies with it (1.4.128) — a
+        // parentless page would keep speaking with no switch left.
+        Backstage.evictAndDestroy()
         releaseWakeLock()
         retireHoldFile(this)
         handler.removeCallbacks(fadeRun)

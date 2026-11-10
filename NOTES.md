@@ -1,4 +1,45 @@
-## 1.4.127 — Skin wave 2: the small courtesies (web)
+## 1.4.128 — One page, ever
+
+Oscar's morning verdict on the night's work: "Imposible parar el
+audio" — the voice kept speaking after he closed the floating
+window, and pressing Play on the text in the app did not stop it.
+His screenshot showed the anatomy exactly: the panel reading
+sentence 26 of 40 with the word lit, while the app's own player
+sat at "Ready" with a Play button. TWO pages. One voice answered
+to no switch because every switch in the house was wired to the
+other page.
+
+The birth: the backstage keeps the page alive in its invisible
+window when the activity goes out of sight (1.4.111 — by design).
+When Samsung later reclaims the stopped activity, the page
+survives backstage — also by design (1.4.112). But the NEXT
+activity instance simply made its OWN new page and never asked
+the backstage for the old one: `bringWebHome` early-returns when
+the new view is already seated, so the backstage page stayed in
+its window forever — playing, pushing the state the panel
+believes, unreachable. The same failure Oscar met on November 8,
+by a road the intervening versions paved one honest step at a
+time.
+
+- The backstage now names its tenant, and a newborn activity
+  evicts and DESTROYS a held page before making its own. One
+  page, ever. The ordinary return — the activity still alive —
+  keeps the reparent exactly as it was; only an activity born
+  after the system reclaimed the old one passes this gate.
+- The service's own death destroys the backstage page too:
+  `release()` parked it parentless, and a parentless page keeps
+  its renderer, its audio and its voice with no switch left.
+- Two drivers, one stage, in the small as well: the page's Play
+  now silences the shell's voice as it starts (by either road the
+  shell took the stage), and the page's session teardown stops
+  the shell's voice unconditionally, not only for handovers.
+
+The test is the scene itself: listen through the bubble with
+Logos in the background until the system reclaims it, reopen
+Logos, and every switch must answer. His phone is the judge, as
+always — this one is confessed, not claimed.
+
+## ## 1.4.127 — Skin wave 2: the small courtesies (web)
 
 The second polish wave, same law — finish, never replacement.
 Selected text now wears the house gold in both themes instead of

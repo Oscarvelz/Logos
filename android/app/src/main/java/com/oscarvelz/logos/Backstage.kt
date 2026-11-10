@@ -24,6 +24,7 @@ import android.widget.FrameLayout
 object Backstage {
     private var host: FrameLayout? = null
     private var wm: WindowManager? = null
+    private var tenant: WebView? = null
     @Volatile var active = false
         private set
 
@@ -51,7 +52,7 @@ object Backstage {
                 title = "Logos backstage"
             }
             m.addView(frame, p)
-            host = frame; wm = m; active = true
+            host = frame; wm = m; active = true; tenant = web
             true
         }.getOrElse {
             // Could not open the window: hand the WebView back untouched.
@@ -63,9 +64,20 @@ object Backstage {
 
     /** Close the backstage window; the WebView is left without a parent for its activity to take back. */
     fun release() {
-        val h = host ?: run { active = false; return }
+        val h = host ?: run { active = false; tenant = null; return }
         runCatching { h.removeAllViews() }
         runCatching { wm?.removeViewImmediate(h) }
-        host = null; wm = null; active = false
+        host = null; wm = null; active = false; tenant = null
+    }
+
+    /** End the backstage tenancy for good (1.4.128): the window closes
+     *  AND the page is destroyed. release() only ever parked the
+     *  WebView parentless — and a parentless page keeps its renderer,
+     *  its audio and its voice, with no switch left anywhere that can
+     *  reach it. Whoever calls this has decided the page dies here. */
+    fun evictAndDestroy() {
+        val t = tenant
+        release()
+        if (t != null) runCatching { t.destroy() }
     }
 }
