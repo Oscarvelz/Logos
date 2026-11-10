@@ -6,7 +6,7 @@
 // playing, always with an Undo, so no text is ever lost to it.
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
-import { listen, loadText, play, pause, endSession, stepRate, seek, seekFraction, refreshVoices, voiceFor, sentenceProgress, wordClock, levels } from '../player/listen.ts'
+import { listen, loadText, play, pauseFromShell, endSession, stepRate, seek, seekFraction, refreshVoices, voiceFor, sentenceProgress, wordClock, levels } from '../player/listen.ts'
 import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { cancelDevice } from '../engine/device-voice.ts'
 import { readClipboard } from './clipboard.ts'
@@ -36,6 +36,7 @@ type DroidBubble = {
   bubbleSeek?: () => string
   bubblePendingCmd?: () => string
   bubbleNative?: (text: string, title: string, idx: number) => void
+  bubbleNativeStop?: () => void
   bubbleLock?: () => boolean
 }
 const droid = () => (window as unknown as { LogosAndroid?: DroidBubble }).LogosAndroid
@@ -195,7 +196,7 @@ export function initBubble() {
       // the truth. The one thing it must never do is summon playback —
       // the recovery used to 'fulfil' it by playing the session, and his
       // pause became a play, visit after visit.
-      if (cmd === 'pause') { if (listen.get().playing) pause(); return }
+      if (cmd === 'pause') { if (listen.get().playing) pauseFromShell(); return }
       if (cmd === 'play') { dispatchEvent(new Event('logosandroid-play')); return }
       if (cmd === 'slower' || cmd === 'faster' || listen.get().active) {
         dispatchEvent(new Event(`logosandroid-${cmd}`))
@@ -225,7 +226,7 @@ export function initBubble() {
   // The panel's definite transport intents (1.4.89): the shell reads the
   // pushed state at press time and sends PLAY or PAUSE, never a bare
   // toggle, so a press keeps its meaning however it travels.
-  addEventListener('logosandroid-pause', () => { if (listen.get().playing) pause() })
+  addEventListener('logosandroid-pause', () => { if (listen.get().playing) pauseFromShell() })
   addEventListener('logosandroid-play', () => {
     const s = listen.get()
     if (s.active) { if (!s.playing) void play() }

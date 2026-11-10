@@ -1,4 +1,31 @@
-## 1.4.123 — The detector learns where loudness lives (web)
+## 1.4.124 — A stop is a stop, in both directions
+
+The self-review found the handover's reverse leak. A session handed
+to the shell's voice is PAUSED on the page — so everything the page
+later says about stopping lands nowhere:
+
+- The **sleep timer** fires the page's `pause()`, which early-returns
+  on a paused session: the shell's voice would read straight past
+  Oscar's sleep deadline, all night if the text ran that long.
+- **Starting a new text** tore the page session down (`stop()`)
+  while the shell kept reading the OLD one — two sessions, one
+  voice, wrong book.
+
+The page now has a door back: `bubbleNativeStop`. The page's own
+stops — its pause (the sleep timer's word included) and its session
+teardown — stop the shell's voice whenever the device mode holds
+the stage. And the echo is guarded: pauses that arrive FROM the
+shell (its courtesy poke, a stored pause) travel a separate path
+(`pauseFromShell`) and never bounce back as a stop order — 1.4.120's
+law would otherwise turn every native pause into a full stop.
+Older shells lack the door and simply ignore the call.
+
+Bench: the handover probe passes unchanged on the new build (full
+text handed over, the page's speech bridge untouched). CI compiles
+the shell; Oscar's phone — a handed-over session that still obeys
+his sleep timer — is the verdict.
+
+## ## 1.4.123 — The detector learns where loudness lives (web)
 
 The night's self-review caught 1.4.122's silence detector judging
 the wrong witness. `envelope()` peak-NORMALIZES: every render's
