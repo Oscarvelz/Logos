@@ -1048,15 +1048,16 @@ html, body { overflow-x: clip; }
 }
 
 /* 1.4.68: Continue listening + marks */
-.continue-card { padding: 10px 14px 6px; margin-bottom: 14px; }
-.continue-h { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); font-weight: 700; margin-bottom: 4px; }
-.continue-row { width: 100%; display: flex; align-items: center; gap: 11px; padding: 8px 2px; background: none; border: none; border-top: 1px solid var(--line); color: var(--text); text-align: left; cursor: pointer; }
+.continue-card { padding: 7px 12px 4px; margin-bottom: 14px; }
+.continue-h { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); font-weight: 700; margin-bottom: 2px; }
+.continue-row { width: 100%; display: flex; align-items: center; gap: 9px; padding: 4px 2px; background: none; border: none; border-top: 1px solid var(--line); color: var(--text); text-align: left; cursor: pointer; }
 .continue-row:first-of-type { border-top: none; }
-.continue-ic { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--gold-soft, rgba(201,162,39,.14)); color: var(--gold); flex: none; }
-.continue-tx { display: flex; flex-direction: column; min-width: 0; }
-.continue-t { font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.continue-s { font-size: 12px; color: var(--muted); }
-.continue-play { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--gold); color: var(--gold); flex: none; }
+.continue-ic { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--gold-soft, rgba(201,162,39,.14)); color: var(--gold); flex: none; }
+.continue-tx { display: flex; flex-direction: row; align-items: baseline; gap: 6px; min-width: 0; }
+.continue-t { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.continue-s { font-size: 12px; color: var(--muted); white-space: nowrap; flex: none; }
+.continue-s::before { content: '·'; margin-right: 6px; opacity: .7; }
+.continue-play { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--gold); color: var(--gold); flex: none; }
 .mark-row { display: flex; gap: 11px; align-items: flex-start; width: 100%; padding: 10px 2px; background: none; border: none; border-top: 1px solid var(--line); color: var(--text); text-align: left; cursor: pointer; }
 .mark-row:first-of-type { border-top: none; }
 .mark-ic { color: var(--gold); flex: none; margin-top: 2px; }

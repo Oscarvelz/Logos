@@ -1,3 +1,10 @@
+## 1.4.145 — The Continue listening card goes on a diet (Oscar's screenshot)
+
+His words over the screenshot: the Continue listening chips "should be way smaller so they don't get confused with the text player. Reduce its height. No reason to be as it is to say so little." Right — the card was spending a header line plus a two-line row (title stacked over "12% read") on a title and a percentage, at near-player visual weight.
+
+- The row is now ONE line: kind disc (30→24px) · title (14.5→13.5px, still ellipsized) · "· 12% read" riding the same line in muted 12px · play ring (26→22px). Row padding 8→4px, card padding tightened, the gold header kept but a touch smaller. One-entry card ≈ 92px → ≈58px tall by the styles' arithmetic. Nothing else moved: same entries, same order, same resume actions, same hairlines between rows.
+- Pure presentation (styles.css + two icon sizes in continue.tsx); no behavior change. Not bench-photographed — this machine's headless browser is still down (see 1.4.144); the layout is guarded by nowrap + ellipsis in both languages, and Oscar's phone is the judge, as ever.
+
 ## 1.4.144 — Kokoro at q8: the same complete model, half the weight (Oscar's pick)
 
 1.4.143's fp16 Kokoro crashed the app on Oscar's phone — his report: "Kokoro breaks the app. 😄 Any idea to avoid that? The app closes." The diagnosis: memory. The load stacked copies (hosted parts held in the page, an assembled 163 MB blob, then the runtime's own copy with fp16 weights inflating toward fp32 in its work area) until the WebView ran out and took the app down. Offered three routes; Oscar chose q8 — and the record matters: **q8 is not a distilled model.** Same architecture, all 82M weights, stored at 8 bits and run on integer kernels; the model is complete, the storage is leaner (92 MB vs 163 MB). The spike had already proven q8 speaks (Heart at RTF ~6 on this throttled box, healthy audio).

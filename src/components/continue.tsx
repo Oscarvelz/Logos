@@ -89,12 +89,12 @@ export function ContinueRow({ onResume }: { onResume?: () => void }) {
         const I = Icon[e.kind]
         return (
           <button key={`${e.kind}-${i}`} className="continue-row" onClick={e.run}>
-            <span className="continue-ic"><I size={16} /></span>
+            <span className="continue-ic"><I size={13} /></span>
             <span className="grow continue-tx">
               <span className="continue-t">{e.title}</span>
               <span className="continue-s">{e.sub}</span>
             </span>
-            <span className="continue-play"><Play size={14} fill="currentColor" /></span>
+            <span className="continue-play"><Play size={11} fill="currentColor" /></span>
           </button>
         )
       })}
