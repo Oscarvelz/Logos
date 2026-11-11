@@ -1,20 +1,29 @@
-// Kokoro manager: one worker, one model (the full Kokoro 82M at fp16,
-// English). Mirrors the PocketTTS manager's shape — priority queue,
-// watchdogs, progress — because Listen's contract with engine.ts is the
-// same. The model is NOT fetched from Hugging Face: Logos hosts it in
-// parts under models/kokoro82/ (the service worker bypasses that path),
-// this module assembles the parts and seeds the Transformers browser
-// cache under this origin's hub-mirror URLs, and the worker's loader
-// reads them from there. Voices are seeded the same way into the
-// 'kokoro-voices' cache kokoro-js checks before it ever fetches.
+// Kokoro manager: one worker, one model (the complete Kokoro 82M at
+// q8 storage, English). Mirrors the PocketTTS manager's shape —
+// priority queue, watchdogs, progress — because Listen's contract
+// with engine.ts is the same. The model is NOT fetched from Hugging
+// Face: Logos hosts it in parts under models/kokoro82/ (the service
+// worker bypasses that path), this module streams the parts into the
+// Transformers browser cache under this origin's hub-mirror URLs, and
+// the worker's loader reads them from there. Voices are seeded the
+// same way into the 'kokoro-voices' cache kokoro-js checks before it
+// ever fetches.
+//
+// History: 1.4.143 shipped the model at fp16 (163 MB); on Oscar's
+// phone the load stacked copies (parts + assembled blob + runtime
+// inflation toward fp32) until the WebView ran out of memory and the
+// app closed. 1.4.144 (Oscar's pick) ships the SAME complete model at
+// q8 (92 MB, integer kernels), streams the seed so peak memory stays
+// near one part, caps Kokoro at 2 threads, and always frees the other
+// engines while Kokoro loads. The fp16 parts stay hosted as fallback.
 import { createStore } from '../lib/store.ts'
 import type { KokoroRequest, KokoroResponse } from './kokoro.worker.ts'
 import type { PocketLang } from './pocket.ts'
 
-export const KOKORO_SIZE_MB = 170
+export const KOKORO_SIZE_MB = 102
 const MODEL_ID_PATH = 'onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/'
-const MODEL_BYTES = 163_234_740
-const PART_COUNT = 7
+const MODEL_BYTES = 92_361_116
+const PART_COUNT = 4
 const VOICE_BYTES = 522_240
 export const KOKORO_VOICE_IDS = [
   'af_heart', 'af_bella', 'af_alloy', 'af_aoede', 'af_jessica', 'af_kore', 'af_nicole', 'af_nova', 'af_river', 'af_sarah', 'af_sky',
@@ -65,13 +74,15 @@ function threads() {
   if (!self.crossOriginIsolated) return 1
   const forced = Number(localStorage.getItem('logos.threads'))
   if (forced) return forced
-  return Math.max(1, Math.min(4, (navigator.hardwareConcurrency ?? 2) - 2))
+  // Capped at 2 (Pocket allows 4): every ORT thread pool carries its
+  // own arena, and Kokoro's memory discipline outranks its threads.
+  return Math.max(1, Math.min(2, (navigator.hardwareConcurrency ?? 2) - 2))
 }
 
 /** Download (once) and seed every file the worker's loader will ask for. */
 async function seedFiles(): Promise<void> {
   const cache = await caches.open('transformers-cache')
-  const modelUrl = hubUrl('onnx/model_fp16.onnx')
+  const modelUrl = hubUrl('onnx/model_quantized.onnx')
   let loaded = 0
   const tick = (n: number, fromCache: boolean) => { loaded += n; loadSince = Date.now(); setLang({ loaded, total: TOTAL_BYTES, fromCache }) }
   if (await cache.match(modelUrl)) {
@@ -82,15 +93,30 @@ async function seedFiles(): Promise<void> {
       if (!res.ok) throw new Error(`Failed to fetch Kokoro ${f}`)
       await cache.put(hubUrl(f), new Response(await res.arrayBuffer(), { headers: { 'content-type': 'application/octet-stream' } }))
     }
-    const parts: BlobPart[] = []
-    for (let i = 0; i < PART_COUNT; i++) {
-      const res = await fetch(assetUrl(`models/kokoro82/parts/model_fp16.onnx.part0${i}`))
-      if (!res.ok) throw new Error('Failed to fetch the Kokoro model')
-      const buf = await res.arrayBuffer()
-      parts.push(buf)
-      tick(buf.byteLength, false)
-    }
-    await cache.put(modelUrl, new Response(new Blob(parts), { headers: { 'content-type': 'application/octet-stream' } }))
+    // Retire any fp16 seed a 1.4.143 attempt left behind.
+    await cache.delete(hubUrl('onnx/model_fp16.onnx'))
+    // Stream the parts through into the cache: the writer consumes
+    // each chunk as it arrives, so peak memory stays near one chunk
+    // instead of the whole 92 MB — never stack the model in the page.
+    const stream = new ReadableStream<Uint8Array>({
+      async start(ctrl) {
+        try {
+          for (let i = 0; i < PART_COUNT; i++) {
+            const res = await fetch(assetUrl(`models/kokoro82/parts-q8/model_q8.onnx.part0${i}`))
+            if (!res.ok || !res.body) throw new Error('Failed to fetch the Kokoro model')
+            const reader = res.body.getReader()
+            for (;;) {
+              const { done, value } = await reader.read()
+              if (done) break
+              ctrl.enqueue(value)
+              tick(value.byteLength, false)
+            }
+          }
+          ctrl.close()
+        } catch (e) { ctrl.error(e instanceof Error ? e : new Error(String(e))) }
+      },
+    })
+    await cache.put(modelUrl, new Response(stream, { headers: { 'content-type': 'application/octet-stream' } }))
   }
   const voices = await caches.open('kokoro-voices')
   for (const kid of KOKORO_VOICE_IDS) {
@@ -281,7 +307,7 @@ export async function kokoroDelete() {
   seeding = null
   try {
     const cache = await caches.open('transformers-cache')
-    for (const f of ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model_fp16.onnx']) await cache.delete(hubUrl(f))
+    for (const f of ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model_quantized.onnx', 'onnx/model_fp16.onnx']) await cache.delete(hubUrl(f))
   } catch { /* ignore */ }
   try { await caches.delete('kokoro-voices') } catch { /* ignore */ }
 }
@@ -290,7 +316,7 @@ export async function kokoroDelete() {
 export async function kokoroCached(): Promise<boolean> {
   try {
     const cache = await caches.open('transformers-cache')
-    return Boolean(await cache.match(hubUrl('onnx/model_fp16.onnx')))
+    return Boolean(await cache.match(hubUrl('onnx/model_quantized.onnx')))
   } catch { return false }
 }
 

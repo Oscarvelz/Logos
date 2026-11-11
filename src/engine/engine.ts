@@ -68,7 +68,7 @@ onPhononBeforeLoad((lang) => {
   if (!roomy()) { pocketRelease(); kokoroRelease(); for (const l of phononLoaded()) if (l !== lang) phononRelease(l) }
 })
 onPocketBeforeLoad(() => { if (!roomy()) { kokoroRelease(); for (const l of phononLoaded()) phononRelease(l) } })
-onKokoroBeforeLoad(() => { if (!roomy()) { pocketRelease(); for (const l of phononLoaded()) phononRelease(l) } })
+onKokoroBeforeLoad(() => { pocketRelease(); for (const l of phononLoaded()) phononRelease(l) })
 
 function compute(): EngineState {
   const k = activeKind()
