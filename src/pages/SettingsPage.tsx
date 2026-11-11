@@ -6,13 +6,13 @@ import { useStore } from '../lib/store.ts'
 import { settings, applyTheme, READER_SCALES, stepReaderScale, type Theme } from '../lib/settings.ts'
 import { bubbleSupported, bubbleNativeState, setBubble, openBubblePermission, type BubbleNativeState } from '../lib/bubble.ts'
 import { keep } from '../engine/keep.ts'
-import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHONON_SIZE_MB, DISTILL_SIZE_MB, modelCacheBytes } from '../engine/engine.ts'
+import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHONON_SIZE_MB, modelCacheBytes } from '../engine/engine.ts'
 import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.141'
+const VERSION = '1.4.142'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -147,12 +147,10 @@ export function SettingsPage() {
               {warming
                 ? t('On this device · loading into memory in the background')
                 : e.status === 'ready'
-                  ? `${e.kind === 'phonon' ? 'Phonon by Gradium' : e.kind === 'distill' ? 'PocketTTS by Kyutai · Fast' : 'PocketTTS by Kyutai'} · ${t(e.lang === 'es' ? 'Spanish' : 'English')}${e.lastRtf ? t(' · {x}× real-time', { x: (1 / e.lastRtf).toFixed(1) }) : ''}`
+                  ? `${e.kind === 'phonon' ? 'Phonon by Gradium' : 'PocketTTS by Kyutai'} · ${t(e.lang === 'es' ? 'Spanish' : 'English')}${e.lastRtf ? t(' · {x}× real-time', { x: (1 / e.lastRtf).toFixed(1) }) : ''}`
                   : e.kind === 'phonon'
                     ? t('Phonon by Gradium · ~{n} MB for English and Spanish, then offline', { n: PHONON_SIZE_MB })
-                    : e.kind === 'distill'
-                      ? t('PocketTTS by Kyutai · the distilled English model · ~{n} MB, then offline', { n: DISTILL_SIZE_MB })
-                      : t('PocketTTS by Kyutai · ~{n} MB per language, then offline', { n: POCKET_SIZE_MB })}
+                    : t('PocketTTS by Kyutai · ~{n} MB per language, then offline', { n: POCKET_SIZE_MB })}
             </div>
           </div>
         </div>

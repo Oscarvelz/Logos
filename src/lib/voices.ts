@@ -1,12 +1,11 @@
 // Logos voices, from engines that run on the phone's processor:
-// Phonon by Gradium (one model, English and Spanish, 50 voices), PocketTTS
-// by Kyutai (one model per language), and Pocket Fast — Kyutai's distilled
-// PocketTTS (English only), riding the same runtime as Phonon.
+// Phonon by Gradium (one model, English and Spanish, 50 voices) and
+// PocketTTS by Kyutai (one model per language).
 import phononVoices from './phonon-voices.json'
 
 export type Lang = 'en' | 'es'
 export type Accent = 'US' | 'UK' | 'ES' | 'MX'
-export type EngineKind = 'phonon' | 'pocket' | 'distill'
+export type EngineKind = 'phonon' | 'pocket'
 
 export type Voice = {
   id: string
@@ -30,23 +29,12 @@ const POCKET_VOICES: Omit<Voice, 'engine'>[] = [
   { id: 'pk_javert', name: 'Javert', lang: 'es', accent: 'ES', gender: 'Male', tagline: 'Voz masculina serena' },
 ]
 
-const DISTILL_VOICES: Omit<Voice, 'engine'>[] = [
-  { id: 'ds_jane', name: 'Jane', lang: 'en', accent: 'US', gender: 'Female', tagline: 'Clear, classic narrator' },
-  { id: 'ds_alba', name: 'Alba', lang: 'en', accent: 'US', gender: 'Female', tagline: 'Natural, warm narrator' },
-  { id: 'ds_anna', name: 'Anna', lang: 'en', accent: 'US', gender: 'Female', tagline: 'Calm and clear' },
-  { id: 'ds_mary', name: 'Mary', lang: 'en', accent: 'US', gender: 'Female', tagline: 'Warm and steady' },
-  { id: 'ds_michael', name: 'Michael', lang: 'en', accent: 'US', gender: 'Male', tagline: 'Relaxed male voice' },
-  { id: 'ds_george', name: 'George', lang: 'en', accent: 'US', gender: 'Male', tagline: 'Deep, measured voice' },
-  { id: 'ds_paul', name: 'Paul', lang: 'en', accent: 'US', gender: 'Male', tagline: 'Bright male narrator' },
-]
-
 export const VOICES: Voice[] = [
   ...(phononVoices as Omit<Voice, 'engine'>[]).map((v) => ({ ...v, engine: 'phonon' as const })),
   ...POCKET_VOICES.map((v) => ({ ...v, engine: 'pocket' as const })),
-  ...DISTILL_VOICES.map((v) => ({ ...v, engine: 'distill' as const })),
 ]
 
-export const ENGINE_LABEL: Record<EngineKind, string> = { phonon: 'Phonon', pocket: 'Pocket', distill: 'Pocket Fast' }
+export const ENGINE_LABEL: Record<EngineKind, string> = { phonon: 'Phonon', pocket: 'Pocket' }
 export const ACCENT_LABEL: Record<Accent, string> = { US: 'American', UK: 'British', ES: 'España', MX: 'México' }
 
 export const VOICE_BY_ID = new Map(VOICES.map((v) => [v.id, v]))

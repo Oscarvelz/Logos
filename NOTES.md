@@ -1,3 +1,19 @@
+## 1.4.142 — Pocket Fast removed, by Oscar's verdict (web)
+
+He heard it and decided, in his words: «Remove Pocket Fast
+from Logos. Fast, yes, high quality voces, no.» The frame he
+set when it was built — implement first, decide after
+listening — closes here. The distilled engine is out whole:
+its seven voices, its picker section, its Settings branch,
+its preview samples, its engine wiring. Phonon and the big
+Pocket are untouched, Spanish included — the research that
+preceded the verdict found nothing that retires Pocket, and
+the distilled voices did not earn its place. A phone that
+had a Pocket Fast voice saved lands safely: the settings
+migration no longer admits ds_ ids, so a saved default falls
+back to Pocket Alba/Lola, an override clears, favorites
+filter clean — nothing dangles, nothing errors.
+
 ## 1.4.141 — the worker file never reached the server (web)
 
 Oscar's Settings card named it plainly: «phonon-tts worker
