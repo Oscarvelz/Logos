@@ -1,3 +1,28 @@
+## 1.4.140 — Pocket Fast died where only it travels (web)
+
+Oscar picked Michael, pressed play: «Engine error», zero of
+five sentences. First theory — the worker's response rewrap
+mislabelling gzip'd files — was tested against a faithful
+control (a local server that gzips everything, the model
+inside the worker's scope, Michael himself) and DISPROVEN:
+desktop Chromium loads Pocket Fast through the old worker
+without blinking. What survives every test is the delta
+itself: Pocket Fast is the only engine whose model lives on
+Logos' own pages, so it is the only one whose 25 MB body the
+service worker fetches, rewraps and streams out of
+respondWith() — and Android's WebView is precisely where a
+synthesized body that size cannot be trusted, while every
+direct-fetch engine (Phonon, Pocket, both from Hugging
+Face, passed through untouched) works on the same phone.
+The worker now steps aside for everything under models/:
+the browser fetches those files straight from the server,
+the road every working engine already travels. The rewrap
+also drops Content-Encoding and Content-Length — the body
+it hands on is the decoded stream, and its headers now say
+so. If a first-attempt download left a truncated copy in
+the model's cache, Settings → Pocket Fast → Delete model
+clears it; the next play downloads clean.
+
 ## 1.4.139 — Pocket Fast voices get their play buttons (web)
 
 Oscar, with the picker fixed: «I am still missing the
