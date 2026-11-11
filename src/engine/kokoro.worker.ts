@@ -1,14 +1,17 @@
 /// <reference lib="webworker" />
-// Kokoro 82M (hexgrad, Apache-2.0) — the FULL model at fp16, Oscar's
-// explicit choice on 2026-11-11 ("Kokoro el completo, no el destilado").
-// Runs on ONNX Runtime WASM through kokoro-js / Transformers.js. The
-// model bytes never come from Hugging Face at runtime: the manager
-// (kokoro.ts) downloads our own hosted parts, assembles them and seeds
-// the Transformers browser cache under this origin's hub-mirror URLs;
-// the loader below reads them from that cache. Voices arrive the same
-// way through the 'kokoro-voices' cache. Proven end to end in the
-// 2026-11-11 spike (~/workspace/logos-kokoro-spike/SPIKE.md lineage:
-// distill spike rig, Kokoro notes in the ship log).
+// Kokoro 82M (hexgrad, Apache-2.0) — the COMPLETE model. It shipped
+// at fp16 in 1.4.143 (Oscar's "Kokoro el completo, no el destilado")
+// and crashed his phone on load: fp16 storage plus the runtime's
+// inflation toward fp32 outgrew the WebView's memory. From 1.4.144 it
+// runs at q8 storage — the same architecture, all 82M weights, stored
+// at 8 bits and executed on integer kernels; quantization is not
+// distillation, and Oscar picked this route himself. Runs on ONNX
+// Runtime WASM through kokoro-js / Transformers.js. The model bytes
+// never come from Hugging Face at runtime: the manager (kokoro.ts)
+// streams our hosted parts into the Transformers browser cache under
+// this origin's hub-mirror URLs; the loader below reads them from
+// that cache. Voices arrive the same way through the 'kokoro-voices'
+// cache. Proven in the 2026-11-11 spike (q8 spoke identically to fp16).
 import { KokoroTTS } from 'kokoro-js'
 import { env } from '@huggingface/transformers'
 
@@ -52,7 +55,7 @@ async function load(m: Extract<KokoroRequest, { type: 'load' }>) {
     wasm.wasmPaths = m.ortBase
     wasm.numThreads = m.threads
     tts = await KokoroTTS.from_pretrained(MODEL_ID, {
-      dtype: 'fp16',
+      dtype: 'q8',
       device: 'wasm',
       progress_callback: (p: { status?: string; file?: string; loaded?: number; total?: number }) => {
         if (p && p.status === 'progress' && typeof p.loaded === 'number' && typeof p.total === 'number') {
