@@ -1,3 +1,18 @@
+## 1.4.138 — Jane was missing from the picker (web)
+
+Oscar opened the voice picker on his phone and asked:
+«Missing Jane?» She was in the app — the Voices tab listed
+her — but the picker sheet (chrome.tsx) builds its sections
+by hand, and 1.4.137 never gave Pocket Fast a section there,
+so none of its seven voices could be chosen from Listen,
+which is where voices are actually picked. Fixed: a «Pocket
+Fast» section now sits right after «Pocket» («7 voices ·
+Distilled engine»), with the same treatment as its family —
+accent badges in the section, a «Pocket Fast» badge when one
+of its voices appears under Favorites. My miss, recorded
+plainly: the 1.4.137 bench proved the Voices tab and the
+engine, but never opened the picker.
+
 ## 1.4.137 — Pocket Fast: the distilled Pocket arrives (web)
 
 Oscar asked whether Kyutai's distilled Pocket models (October

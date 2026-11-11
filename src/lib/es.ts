@@ -406,6 +406,8 @@ export const ES: Record<string, string> = {
   '{n} voice': '{n} voz',
   '{n} voices': '{n} voces',
   ' · Classic engine': ' · Motor clásico',
+  'Distilled engine': 'Motor destilado',
+  ' · Distilled engine': ' · Motor destilado',
   'Remove {name} from favorites': 'Quitar a {name} de favoritas',
   'Add {name} to favorites': 'Añadir a {name} a favoritas',
   'Getting the neural voice ready…': 'Preparando la voz neuronal…',
