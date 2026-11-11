@@ -168,7 +168,7 @@ export function MiniPlayer() {
 
 type PickGroup = { key: string; title: string; sub: string; list: Voice[] }
 
-/** Picker sections: Favorites, Pocket, then one per accent. */
+/** Picker sections: Favorites, Pocket, Pocket Fast, then one per accent. */
 function pickerGroups(favorites: string[], lang?: Lang | 'auto'): PickGroup[] {
   const want = (v: Voice) => !lang || lang === 'auto' || v.lang === lang
   const ph = (l: Lang, a: string) => VOICES.filter((v) => v.engine === 'phonon' && v.lang === l && v.accent === a && want(v))
@@ -176,6 +176,7 @@ function pickerGroups(favorites: string[], lang?: Lang | 'auto'): PickGroup[] {
   const groups: PickGroup[] = [
     { key: 'fav', title: 'Favorites', sub: 'Your starred voices', list: favoriteVoices(favorites).filter(want) },
     { key: 'pocket', title: 'Pocket', sub: 'Classic engine', list: VOICES.filter((v) => v.engine === 'pocket' && want(v)) },
+    { key: 'distill', title: 'Pocket Fast', sub: 'Distilled engine', list: VOICES.filter((v) => v.engine === 'distill' && want(v)) },
     { key: 'es-ES', title: 'Spanish', sub: 'Spain', list: ph('es', 'ES') },
     { key: 'es-MX', title: 'Spanish', sub: 'Mexico', list: ph('es', 'MX') },
     { key: 'en-US', title: 'English', sub: 'American', list: ph('en', 'US') },
@@ -218,8 +219,8 @@ export function VoicePicker({ open, onClose, value, onPick, lang }: { open: bool
                   {g.list.slice(0, 3).map((v) => { const [a, b] = voiceHue(v.id); return <i key={v.id} style={{ background: `linear-gradient(135deg, hsl(${a} 62% 56%), hsl(${b} 58% 32%))` }} /> })}
                 </span>
                 <span className="vgroup-text">
-                  <span className="vgroup-title">{g.key === 'fav' && <Star size={14} fill="var(--accent)" color="var(--accent)" />}{t(g.title)}{g.key !== 'fav' && g.key !== 'pocket' && <span className="vgroup-sub">{t(g.sub)}</span>}</span>
-                  <span className="vgroup-meta">{chosen && !isOpen ? <>{t('Selected · ')}<b>{chosen.name}</b></> : `${g.list.length === 1 ? t('{n} voice', { n: 1 }) : t('{n} voices', { n: g.list.length })}${g.key === 'pocket' ? t(' · Classic engine') : ''}`}</span>
+                  <span className="vgroup-title">{g.key === 'fav' && <Star size={14} fill="var(--accent)" color="var(--accent)" />}{t(g.title)}{g.key !== 'fav' && g.key !== 'pocket' && g.key !== 'distill' && <span className="vgroup-sub">{t(g.sub)}</span>}</span>
+                  <span className="vgroup-meta">{chosen && !isOpen ? <>{t('Selected · ')}<b>{chosen.name}</b></> : `${g.list.length === 1 ? t('{n} voice', { n: 1 }) : t('{n} voices', { n: g.list.length })}${g.key === 'pocket' ? t(' · Classic engine') : g.key === 'distill' ? t(' · Distilled engine') : ''}`}</span>
                 </span>
                 <ChevronDown size={20} className="vgroup-chev" />
               </button>
@@ -231,7 +232,7 @@ export function VoicePicker({ open, onClose, value, onPick, lang }: { open: bool
                     <div key={v.id} className={`pick ${value === v.id ? 'on' : ''}`} role="button" tabIndex={isOpen ? 0 : -1} onClick={pick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick() } }}>
                       <Avatar voice={v} />
                       <div className="grow">
-                        <div className="voice-name"><span className="vn">{v.name}</span><PreviewBtn v={v} tab={isOpen ? 0 : -1} />{(g.key === 'fav' || g.key === 'pocket') && <span className="badge">{v.accent}</span>}{g.key === 'fav' && v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
+                        <div className="voice-name"><span className="vn">{v.name}</span><PreviewBtn v={v} tab={isOpen ? 0 : -1} />{(g.key === 'fav' || g.key === 'pocket' || g.key === 'distill') && <span className="badge">{v.accent}</span>}{g.key === 'fav' && v.engine === 'pocket' && <span className="badge">Pocket</span>}{g.key === 'fav' && v.engine === 'distill' && <span className="badge">Pocket Fast</span>}</div>
                         <div className="voice-tag">{t(v.tagline)}</div>
                       </div>
                       {value === v.id && <Check size={20} color="var(--accent)" />}
