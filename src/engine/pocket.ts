@@ -48,8 +48,11 @@ function threads() {
   if (!self.crossOriginIsolated) return 1
   const forced = Number(localStorage.getItem('logos.threads'))
   if (forced) return forced
-  // Kyutai built PocketTTS around two cores; a third helps phones a little.
-  return Math.max(1, Math.min(3, (navigator.hardwareConcurrency ?? 2) - 2))
+  // Kyutai built PocketTTS around two DESKTOP cores; phone cores are
+  // several times weaker, so phones take one more thread than the old
+  // cap (Oscar, 2026-11-11: Pocket's processing felt endless). Four is
+  // the ceiling — past it the pool waits on its slowest member.
+  return Math.max(1, Math.min(4, (navigator.hardwareConcurrency ?? 2) - 2))
 }
 
 function dropWorker(lang: PocketLang) {
