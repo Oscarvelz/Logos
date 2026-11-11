@@ -1,4 +1,27 @@
-## 1.4.135 — A scrubbed sentence enters square (shell)
+## 1.4.136 — Pocket takes a fourth thread (web)
+
+Oscar: Pocket voices take too long processing, and they stop.
+The whole path was audited before touching anything. Already at
+their stops: cross-origin isolation (the service worker's
+COOP/COEP is what lets WASM threads exist at all), the sampler
+at 1 decode step — its fastest setting, read from the model's
+own published config — the voice encoder fetched lazily (never
+for built-in voices), the disk render cache, the 400-sentence
+prefetch window, and the RTF-aware cushion. This library's
+models have no int8 edition; that faster bundle belongs to a
+different runtime, and adopting it would be an engine
+transplant, not a setting.
+
+The one knob left: Pocket's thread cap rises from 3 to 4.
+Kyutai tuned for two desktop cores; phone cores are several
+times weaker, and four is where the pool starts waiting on its
+slowest member. Everything else in the release is the honest
+arithmetic, told to Oscar in the delivery: at 1.5x listening
+speed a renderer that works at ~1x real time falls behind no
+matter the cushion — the stops at that speed are math, not a
+malfunction. Web only; the shell stays 1.4.135's.
+
+## ## 1.4.135 — A scrubbed sentence enters square (shell)
 
 Oscar's crops: after scrubbing by swiping the words, the text
 stayed displaced — lines starting mid-word at one edge, cut off
