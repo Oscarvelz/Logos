@@ -1832,6 +1832,14 @@ class BubbleService : Service() {
         gripV?.visibility = View.VISIBLE
         if (sentChanged) {
             wv.animate().cancel()
+            // The new sentence enters SQUARE (Oscar, 2026-11-11): the
+            // cancel above also killed the scrub's lean-return, so a
+            // scrubbed sentence stayed displaced — cut off by the
+            // panel's edge, never centring. The lean belongs to the
+            // gesture and dies with its sentence; the horizontal
+            // scroll is pinned home in the same breath.
+            wv.translationX = 0f
+            if (wv.scrollX != 0) wv.scrollTo(0, wv.scrollY)
             wv.alpha = if (wasGone) 0f else 0.45f
             wv.animate().alpha(1f).setDuration(if (wasGone) 240 else 180).start()
         }

@@ -1,4 +1,22 @@
-## 1.4.134 — The speed keys answer the finger (shell)
+## 1.4.135 — A scrubbed sentence enters square (shell)
+
+Oscar's crops: after scrubbing by swiping the words, the text
+stayed displaced — lines starting mid-word at one edge, cut off
+by the panel, never centring. The mechanism, found in
+updateWords: a sentence change calls wv.animate().cancel() to
+restart the fade — an indiscriminate cancel that also killed
+the scrub's lean-return (scrubCommit animates translationX
+home over 140 ms; the refresh lands at 60 ms). The words froze
+mid-lean, wearing the dead gesture's displacement forever.
+
+Now a sentence change restores the words square in the same
+breath: translationX set to 0 and any horizontal scroll pinned
+home before the fade — the lean belongs to the gesture and
+dies with its sentence. Same-sentence scrubs keep their glide
+home; the vertical centring of the amber word is untouched.
+Shell only.
+
+## ## 1.4.134 — The speed keys answer the finger (shell)
 
 Oscar: the panel's − / + speed keys change the rate but give no
 feedback — "make the bubble feel more intentional." The keys
