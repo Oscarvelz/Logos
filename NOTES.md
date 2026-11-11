@@ -1,3 +1,18 @@
+## 1.4.139 — Pocket Fast voices get their play buttons (web)
+
+Oscar, with the picker fixed: «I am still missing the
+playback option that allows me to listen to the voice before
+choosing any of them.» Right — the picker's play button only
+exists for voices with a baked sample file, and Pocket Fast
+arrived with none. Baked now, with the shipped model build
+itself (the same 24.6 MB GGUF his phone downloads): all seven
+voices speak the standard sample line («Words carry meaning.
+Here is how I sound when I read to you.»), encoded exactly
+like the existing samples (24 kHz mono MP3, 64 kb/s), and
+registered in the preview list — so the ▶ appears beside
+every Pocket Fast name in the picker, and the Voices tab
+plays the same instant samples instead of warming the model.
+
 ## 1.4.138 — Jane was missing from the picker (web)
 
 Oscar opened the voice picker on his phone and asked:
