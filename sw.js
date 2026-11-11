@@ -1,7 +1,7 @@
 // Logos service worker — offline app shell + cross-origin isolation headers.
 // Adapted from BetterTTS by SysAdminDoc (MIT). Voice models are cached by
 // pocket-tts-onnx itself (Cache Storage: pocket-tts-models-v2).
-const CACHE_NAME = 'logos-shell-1794409636185'
+const CACHE_NAME = 'logos-shell-1794411992797'
 const ORT_CACHE = 'logos-ort' // .wasm assets survive deploys: the 21 MB runtime is content-hashed and rarely changes
 const SCOPE = new URL('./', self.location).href
 const POCKET_META = 'logos-pocket-meta'
@@ -32,6 +32,15 @@ function isolate(response) {
   headers.set('Cross-Origin-Embedder-Policy', COEP_VALUE)
   headers.set('Cross-Origin-Opener-Policy', 'same-origin')
   headers.set('Cross-Origin-Resource-Policy', 'cross-origin')
+  // 1.4.140: response.body is the DECODED stream, but the copied headers still
+  // describe the wire form — GitHub Pages gzips everything (even the Pocket
+  // Fast GGUF: content-length 21,839,718 on the wire vs 24,574,176 decoded).
+  // Handing a worker decoded bytes labelled gzip with the compressed length
+  // corrupts every same-origin model file; the loader died on them all
+  // ("Engine error", 0 sentences). The rebuilt response must describe the
+  // body it actually carries: no encoding, no promised length.
+  headers.delete('Content-Encoding')
+  headers.delete('Content-Length')
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
@@ -82,6 +91,17 @@ self.addEventListener('fetch', (event) => {
     return
   }
   if (url.origin !== self.location.origin || !req.url.startsWith(SCOPE) || req.url.startsWith(SCOPE + 'lab/')) return // lab pages are separate
+
+  // 1.4.140: voice-model files (Pocket Fast lives under models/) never travel
+  // through this worker. Every other engine's model arrives by direct fetch
+  // (Hugging Face — the guard above already passes those through), but Pocket
+  // Fast's files sit inside this scope, so the worker would fetch, rewrap and
+  // stream a 25 MB body out of respondWith(). Android's WebView is exactly
+  // where that path cannot be trusted with a body this size — on the phone
+  // the load died before the first sentence while every direct-fetch engine
+  // works. Same-origin data fetches need nothing from this worker: let the
+  // browser fetch them straight from the server, like all the others.
+  if (req.url.startsWith(SCOPE + 'models/')) return
 
   // Navigations (including share-target ?text=...) → network first, cached shell offline.
   if (req.mode === 'navigate') {
