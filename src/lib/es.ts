@@ -21,6 +21,7 @@ export const ES: Record<string, string> = {
   ' · {x}× real-time': ' · {x}× tiempo real',
   'Phonon by Gradium · ~{n} MB for English and Spanish, then offline': 'Phonon de Gradium · ~{n} MB para inglés y español, sin conexión después',
   'PocketTTS by Kyutai · ~{n} MB per language, then offline': 'PocketTTS de Kyutai · ~{n} MB por idioma, sin conexión después',
+  'PocketTTS by Kyutai · the distilled English model · ~{n} MB, then offline': 'PocketTTS de Kyutai · el modelo inglés destilado · ~{n} MB, sin conexión después',
   '{a} of {b}': '{a} de {b}',
   'Delete the voice model?': '¿Eliminar el modelo de voz?',
   'The downloaded neural voice will be removed from this device. You can download it again whenever you want.': 'La voz neuronal descargada se quitará de este dispositivo. Puedes descargarla de nuevo cuando quieras.',

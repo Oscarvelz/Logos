@@ -89,10 +89,10 @@ try {
     if (initial.deviceFallback) { initial.deviceFallback = false; migrateEngine = true }
   }
 } catch { /* storage blocked */ }
-// Voices are Phonon (ph_) or PocketTTS (pk_). Anything else saved by an older
-// version of Logos is dropped here.
+// Voices are Phonon (ph_), PocketTTS (pk_) or Pocket Fast (ds_). Anything
+// else saved by an older version of Logos is dropped here.
 try {
-  const ok = (id: string | null | undefined) => Boolean(id && (id.startsWith('pk_') || id.startsWith('ph_')))
+  const ok = (id: string | null | undefined) => Boolean(id && (id.startsWith('pk_') || id.startsWith('ph_') || id.startsWith('ds_')))
   const d = initial.defaultVoice
   if (!ok(d.en) || !ok(d.es)) { initial.defaultVoice = { en: ok(d.en) ? d.en : 'pk_alba', es: ok(d.es) ? d.es : 'pk_lola' }; migrateEngine = true }
   if (initial.voiceOverride && !ok(initial.voiceOverride)) { initial.voiceOverride = null; migrateEngine = true }
