@@ -11,13 +11,14 @@ import { FavStar, Avatar, toast } from '../components/ui.tsx'
 import { t } from '../lib/i18n.ts'
 import previews from '../lib/previews.json'
 
-type Filter = 'all' | 'fav' | 'en' | 'es' | 'pocket'
+type Filter = 'all' | 'fav' | 'en' | 'es' | 'pocket' | 'kokoro'
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'all', label: 'All voices' },
   { value: 'fav', label: 'Favorites' },
   { value: 'en', label: 'English' },
   { value: 'es', label: 'Español' },
   { value: 'pocket', label: 'Pocket' },
+  { value: 'kokoro', label: 'Kokoro' },
 ]
 
 const HAS_PREVIEW = new Set<string>(previews as string[])
@@ -28,7 +29,7 @@ export function VoicesPage() {
   const [filter, setFilter] = useState<Filter>('all')
   const rank = (id: string) => { const i = st.favorites.indexOf(id); return i < 0 ? Infinity : i }
   const list = VOICES
-    .filter((v) => filter === 'all' || (filter === 'fav' ? st.favorites.includes(v.id) : filter === 'pocket' ? v.engine === 'pocket' : v.lang === filter))
+    .filter((v) => filter === 'all' || (filter === 'fav' ? st.favorites.includes(v.id) : filter === 'pocket' ? v.engine === 'pocket' : filter === 'kokoro' ? v.engine === 'kokoro' : v.lang === filter))
     .map((v, i) => ({ v, i }))
     .sort((a, b) => rank(a.v.id) - rank(b.v.id) || a.i - b.i)
     .map((x) => x.v)

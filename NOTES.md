@@ -1,3 +1,40 @@
+## 1.4.143 — Kokoro, the full model (web)
+
+Oscar's word, minutes after Pocket Fast left: «Instala
+Kokoro. Déjame convencerme» — and, underlined, «Kokoro el
+completo, no el destilado». So this is the whole Kokoro 82M
+(hexgrad, Apache-2.0) at fp16 — the complete model, not a
+distilled or cut-down edition — as a third engine beside
+Phonon and Pocket. Twenty-eight English voices, American and
+British, each carrying its community quality grade in its
+tagline (Heart is the flagship, Grade A; the male bench tops
+out at C+, which the research predicted and the taglines say
+out loud). Every voice has a baked preview, baked with the
+shipped fp16 build itself. Kokoro is English only: Spanish
+stays with Pocket and Phonon, exactly as the research found.
+
+Hosting follows the spike proven the same afternoon
+(~/workspace/logos-kokoro-spike): the 163 MB model travels as
+seven parts under models/kokoro82/ (the service worker
+bypasses that path), the app assembles them on the phone and
+seeds the Transformers browser cache under this origin's
+hub-mirror URLs; the voices seed into the kokoro-voices cache
+the same way. Nothing is fetched from Hugging Face at
+runtime, and the download works offline-first like the other
+engines after it lands. Synthesis runs in a worker on ONNX
+Runtime WASM (assets bundled under ort/), never on the UI
+thread. The legacy-cache purge no longer touches
+transformers-cache / kokoro-voices — they are Kokoro's again.
+
+Declared limits: fp32 (326 MB) cannot live in a phone
+browser, so fp16 is the complete model's practical form —
+same weights, half-precision storage, indistinguishable in
+the spike's measurements (fp16 and q8 both spoke; fp16 kept
+for fidelity). Kokoro's speed on Oscar's phone is his
+measurement to make; the Settings card shows its real-time
+factor once it has read. Whether Kokoro stays is, as with
+Pocket Fast, his ear's decision.
+
 ## 1.4.142 — Pocket Fast removed, by Oscar's verdict (web)
 
 He heard it and decided, in his words: «Remove Pocket Fast
