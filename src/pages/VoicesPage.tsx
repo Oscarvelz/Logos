@@ -28,7 +28,7 @@ export function VoicesPage() {
   const [filter, setFilter] = useState<Filter>('all')
   const rank = (id: string) => { const i = st.favorites.indexOf(id); return i < 0 ? Infinity : i }
   const list = VOICES
-    .filter((v) => filter === 'all' || (filter === 'fav' ? st.favorites.includes(v.id) : filter === 'pocket' ? v.engine === 'pocket' : v.lang === filter))
+    .filter((v) => filter === 'all' || (filter === 'fav' ? st.favorites.includes(v.id) : filter === 'pocket' ? v.engine !== 'phonon' : v.lang === filter))
     .map((v, i) => ({ v, i }))
     .sort((a, b) => rank(a.v.id) - rank(b.v.id) || a.i - b.i)
     .map((x) => x.v)
@@ -86,7 +86,7 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
       {isDefault && <span className="default-flag">{t('Default · {l}', { l: v.lang === 'en' ? t('English') : 'Español' })}</span>}
       <Avatar voice={v} playing={playing} />
       <div className="grow" style={{ minWidth: 0 }}>
-        <div className="voice-name">{v.name} <span className="badge" title={t(ACCENT_LABEL[v.accent])}>{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
+        <div className="voice-name">{v.name} <span className="badge" title={t(ACCENT_LABEL[v.accent])}>{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}{v.engine === 'distill' && <span className="badge">Pocket Fast</span>}</div>
         <div className="voice-tag">{t(v.tagline)}</div>
         {!isDefault && (
           <button className="btn sm ghost" style={{ height: 32, padding: '0 8px', marginLeft: -8, marginTop: 2, fontSize: 13, color: 'var(--text-2)' }}

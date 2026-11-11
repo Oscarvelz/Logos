@@ -1,3 +1,37 @@
+## 1.4.137 — Pocket Fast: the distilled Pocket arrives (web)
+
+Oscar asked whether Kyutai's distilled Pocket models (October
+2026) could be implemented, and to decide about the big Pocket
+afterwards — its Spanish voices are his reason it may stay.
+Investigation first: the small models are a different
+architecture (one-step drifting flow head, separate 128-d Mimi
+decoder), no ONNX export of them exists anywhere, so the current
+Pocket stack could never run them. But Gradium's xn-ptts runtime
+supports them, and its browser package — phonon-tts, already in
+Logos for the Phonon engine — loads Pocket checkpoints directly.
+Proven by spike before integration: the 18.2M checkpoint
+synthesized in headless Chromium through that exact stack, at
+real-time speed on a throttled sandbox; Kyutai publishes 9.9×
+real-time on one desktop thread (WER 0.85%, better than the
+100M's 0.92%). Weights quantized with xn-ptts's own tool to a
+24.6 MB q8+bf16 GGUF (from 112 MB f32), verified speaking in
+the same harness; the hosted build omits the speaker encoder —
+it drops only cloning a voice from a recording, which this
+engine never offered; the precomputed voices are unaffected. NEW: a third engine, «Pocket Fast», English only —
+seven voices (Jane, Alba, Anna, Mary, Michael, George, Paul)
+under the Voices page's Pocket filter with a «Pocket Fast»
+badge; the model is hosted on Logos' own pages and downloads
+once, then works offline. Engine routing, memory discipline and
+queue/timeout laws mirror the existing engines; phonon-tts
+bumped 0.6.0 → 0.7.0 (the API Logos uses is unchanged). The big
+Pocket and its Spanish voices are untouched. His ear is the
+judge: intelligibility is measured, not transcription-verified.
+Found on the bench and fixed in the same wave: the settings
+migration that drops voice ids from older versions only knew
+the ph_/pk_ prefixes — it would have silently eaten a Pocket
+Fast default or favorite on the next cold start; ds_ is now
+whitelisted beside them.
+
 ## 1.4.136 — Pocket takes a fourth thread (web)
 
 Oscar: Pocket voices take too long processing, and they stop.
