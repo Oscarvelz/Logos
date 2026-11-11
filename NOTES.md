@@ -1,3 +1,25 @@
+## 1.4.141 — the worker file never reached the server (web)
+
+Oscar's Settings card named it plainly: «phonon-tts worker
+failed: could not start». Not the download, not the worker
+of 1.4.140's theory — the worker SCRIPT itself. When
+Pocket Fast arrived (1.4.137, phonon-tts 0.7.0), the build
+minted a new family of chunks — the engine worker, its
+helpers, three loader pieces, plus two lazy chunks — and
+eight of them were never committed to the site. The list
+checked at publish time covered what the page references
+directly; files the app fetches by computed name at runtime
+fell through the hole, and every bench ran on a complete
+local build, so nothing caught it. On the phone the worker
+request answered 404 and the engine died before its first
+fetch — while Phonon, whose worker predates the bump and
+was already on the server, kept working. 1.4.140's service-
+worker change stands as harmless hygiene, but it was NOT
+the cure and is not claimed as one. The eight files are
+committed now, and the publish check has changed for good:
+the branch's full file tree is diffed against the build —
+no candidate lists.
+
 ## 1.4.140 — Pocket Fast died where only it travels (web)
 
 Oscar picked Michael, pressed play: «Engine error», zero of
