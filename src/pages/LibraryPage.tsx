@@ -74,7 +74,10 @@ export function LibraryPage() {
   const bk = useStore(books)
   const big = useMediaQuery('(min-width: 1500px)')
   const picker = useBookPicker()
-  useEffect(() => { void refreshLibrary() }, [])
+  // No mount-time refreshLibrary() (1.4.148): it re-read every clip —
+  // audio blobs included — from IndexedDB on EVERY visit, and the cost
+  // grew with his saved audio. Startup and every mutation already
+  // refresh the library; the job effect below covers imports.
   // Books shared from another app (share sheet): import them all, one after another.
   useEffect(() => { void takeSharedFiles().then((files) => { if (files.length) { setShelf('books'); void importMany(files) } }) }, [])
   useEffect(() => { if (job.status === 'done' || job.status === 'idle') void refreshLibrary() }, [job.status])

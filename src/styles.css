@@ -140,16 +140,16 @@ button:disabled { cursor: default; opacity: .45; }
   max-width: 760px;
   margin: 0 auto;
   padding: 4px 18px calc(var(--nav-h) + var(--safe-b) + 28px);
-  animation: pageIn .42s var(--ease) both;
+  animation: pageIn .2s var(--ease) both;
 }
 .page.has-mini { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 96px); }
+/* One short fade for every page (1.4.148): the old recipe stacked a
+   view-transition cross-fade on top of a 420 ms entrance that blurred
+   and scaled the whole page — three animations in series for a tab
+   tap, and the blur repainted the full viewport every frame. Opacity
+   and a small rise only: the compositor can carry those for free. */
 @keyframes pageIn {
-  from { opacity: 0; transform: translateY(14px) scale(.992); filter: blur(4px); }
-  to { opacity: 1; transform: none; filter: none; }
-}
-.page.long { animation-name: pageInLong; }
-@keyframes pageInLong {
-  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) { .page { animation: none; } }
@@ -493,7 +493,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .voice-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 640px) { .voice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 1180px) { .voice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.voice-card { min-width: 0; display: flex; align-items: center; gap: 14px; padding: 14px 14px 14px 14px; border-radius: var(--radius-l); background: var(--surface); border: 1px solid var(--line); position: relative; transition: border-color .25s, transform .2s var(--ease); }
+.voice-card { min-width: 0; display: flex; align-items: center; gap: 14px; padding: 14px 14px 14px 14px; border-radius: var(--radius-l); background: var(--surface); border: 1px solid var(--line); position: relative; transition: border-color .25s, transform .2s var(--ease); content-visibility: auto; contain-intrinsic-size: auto 76px; }
 .voice-card.is-default { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 .avatar { width: 52px; height: 52px; border-radius: 16px; flex: none; display: grid; place-items: center; font-family: var(--font-display); font-size: 28px; color: #fff; position: relative; overflow: hidden; }
 .avatar::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 30% 20%, rgba(255,255,255,.35), transparent 55%); }
