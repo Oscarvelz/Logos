@@ -13,9 +13,23 @@
 const CACHE = "pocket-tts-models-v2";
 async function openCache() { try { return await caches.open(CACHE); } catch { return null; } }
 async function cacheGet(key) {
-    const hit = await (await openCache())?.match(key);
+    const cache = await openCache();
+    const hit = await cache?.match(key);
     if (!hit) return null;
-    return { size: Number(hit.headers.get("content-length") ?? 0), bytes: () => hit.arrayBuffer() };
+    const size = Number(hit.headers.get("content-length") ?? 0);
+    const buf = await hit.arrayBuffer();
+    // A cache write interrupted by the app dying leaves a truncated body
+    // under a truthful header — and in the Kokoro days (1.4.143–1.4.145)
+    // the app died over and over, mid-write included. Serving those
+    // bytes onward hands the runtime a broken model and the load kills
+    // the app outright, every time (Oscar, 2026-11-12: Pocket "forces
+    // the app to stop"; it worked before Kokoro). Refuse the entry:
+    // drop it and report a miss, so the file downloads fresh and whole.
+    if (size > 0 && buf.byteLength !== size) {
+        try { await cache?.delete(key); } catch { /* nothing */ }
+        return null;
+    }
+    return { size, bytes: () => Promise.resolve(buf) };
 }
 async function cacheClear() { try { await caches.delete(CACHE); } catch { /* nothing */ } }
 async function readLocal() { return null; }
