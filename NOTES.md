@@ -1,3 +1,12 @@
+## 1.4.147 — Pocket heals its own cache (Oscar's report: Pocket now stops the app)
+
+His words (2026-11-12): since the Kokoro install, Pocket "forces the app to stop — that didn't happen before installing Kokoro, so something is missing there"; and the Storage card's "loaded but couldn't be saved" note did not clear after playing Pocket (the play itself died). He was right that something was missing — not a file on the site (the published tree was re-diffed: Pocket's worker and its runtime are byte-identical to the pre-Kokoro build, and everything it needs is live), but the integrity of Pocket's saved model ON HIS PHONE.
+
+The mechanism, from the app's own patched asset layer (src/engine/pocket-assets.js, whose header already feared this family): Pocket's model lives in the 'pocket-tts-models-v2' cache; a cache write interrupted by the app DYING can leave a truncated body under a truthful content-length header — and during 1.4.143–1.4.145 the app died repeatedly, mid-write included. cacheGet never checked: it handed the truncated bytes onward as a whole model, the runtime choked on them at load, and the app stopped — deterministically, every Pocket attempt. The keep.ts "couldn't be saved" note was the same wound seen from the other side.
+
+- **The fix is a refusal**: cacheGet now measures the body against its header; a mismatch drops the entry and reports a miss, so that one file downloads fresh and whole on the next Pocket load. Nothing else changes — no bucket wipe, no full 179 MB re-download unless the big file itself is the truncated one; healthy entries are served exactly as before. After the healed load, the keep stamp finds Pocket saved and the Storage note clears itself.
+- Declared: if Pocket still stops the app after a guaranteed-whole cache, the fault is in the load itself (threads/memory) and the next lever is Pocket's thread count — but the evidence (worked before Kokoro; died in the era of interrupted writes; the note that would not clear) points at the cache, and this makes the cache self-healing permanently, not just once.
+
 ## 1.4.146 — Kokoro removed, completely (Oscar's verdict)
 
 His words (2026-11-12): «Kokoro es demasiado para la aplicación o que la cierra. Elimínalo completo sin tocar el resto.» The q8 build of 1.4.144 closed the app on his phone too — the engine is simply too heavy for this WebView at any storage precision worth having, and two strikes was the whole trial. Removed whole, the 1.4.142 way, touching nothing else:
