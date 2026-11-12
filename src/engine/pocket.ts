@@ -243,9 +243,28 @@ export async function pocketCached(lang: PocketLang = 'en'): Promise<boolean> {
   try {
     const cache = await caches.open(CACHE)
     const keys = await cache.keys()
-    const want = lang === 'es' ? 'spanish' : 'english'
-    return keys.some((k) => k.url.includes(`pocket-tts-${want}`) && !k.url.includes('ipa'))
-  } catch { return false }
+    // The loader files the model under its manifest name and digest —
+    // 'model.onnx?v=<sha>' — never under the library's display name.
+    // The old probe searched the keys for 'pocket-tts-english', could
+    // never match, and answered "not saved" forever: the Storage note
+    // was a false alarm even while the model sat saved (proven
+    // 2026-11-12 against the loader's live manifest: the English
+    // model is 176,992,315 B + a 39 MB encoder + assets — exactly
+    // the bytes Settings counts in this bucket).
+    try {
+      const m = await (await fetch(`https://huggingface.co/thewh1teagle/pocket-tts-onnx/resolve/main/${lang}/manifest.json`)).json() as { model?: { file?: string; sha256?: string } }
+      const file = m.model?.file
+      const sha = m.model?.sha256
+      if (file && sha) return keys.some((k) => k.url.includes(`${file}?v=${sha}`))
+    } catch { /* offline — fall through to the shape probe */ }
+    for (const k of keys) {
+      if (!k.url.includes('model.onnx')) continue
+      const res = await cache.match(k)
+      const len = Number(res?.headers.get('content-length') ?? 0) || (res ? (await res.blob()).size : 0)
+      if (len > 100_000_000) return true
+    }
+  } catch { /* ignore */ }
+  return false
 }
 
 export async function pocketCacheBytes(): Promise<number> {
