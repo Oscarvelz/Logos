@@ -13,11 +13,8 @@ const listeners = new Set<() => void>()
 window.addEventListener('hashchange', () => {
   const next = parse()
   if (next === current) return
-  const apply = () => { current = next; listeners.forEach((l) => l()) }
-  // Smooth cross-fade where supported; CSS keyframes handle the rest.
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown }
-  if (doc.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) doc.startViewTransition(apply)
-  else apply()
+  current = next
+  listeners.forEach((l) => l())
   window.scrollTo({ top: 0 })
 })
 
