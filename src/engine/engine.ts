@@ -1,8 +1,9 @@
-// Logos voice engines: Phonon (Gradium), PocketTTS (Kyutai) and Kokoro
-// (hexgrad), all running on the phone's processor. This module is the
-// one door the rest of the app uses: model status for the UI, loading,
-// and a prioritised synthesis queue (Listen jumps the line). Each voice
-// belongs to one engine.
+// Logos voice engines: Phonon (Gradium) and PocketTTS (Kyutai), both
+// running on the phone's processor. This module is the one door the
+// rest of the app uses: model status for the UI, loading, and a
+// prioritised synthesis queue (Listen jumps the line). Each voice
+// belongs to one engine. (A third engine, Kokoro, was removed whole
+// in 1.4.146 — see removeKokoroCaches below.)
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
 import { voiceById, type EngineKind } from '../lib/voices.ts'
@@ -10,7 +11,6 @@ import { timeStretch } from '../lib/audio.ts'
 import { t } from '../lib/i18n.ts'
 import { pocket, pocketEnsure, pocketSynth, pocketPromote, pocketClear, pocketDelete, pocketCached, pocketCacheBytes, pocketRelease, onPocketBeforeLoad, POCKET_SIZE_MB, type PocketLang } from './pocket.ts'
 import { phonon, phononEnsure, phononSynth, phononPromote, phononClear, phononDelete, phononCached, phononCacheBytes, phononRelease, phononLoaded, onPhononBeforeLoad, PHONON_SIZE_MB } from './phonon.ts'
-import { kokoro, kokoroEnsure, kokoroSynth, kokoroPromote, kokoroClear, kokoroDelete, kokoroCached, kokoroCacheBytes, kokoroRelease, onKokoroBeforeLoad, KOKORO_SIZE_MB } from './kokoro.ts'
 
 export type ModelStatus = 'idle' | 'loading' | 'ready' | 'error'
 export type SynthResult = { samples: Float32Array; sampleRate: number; ms: number }
@@ -37,10 +37,10 @@ export type EngineState = {
   threads: number | null
 }
 
-export { POCKET_SIZE_MB, PHONON_SIZE_MB, KOKORO_SIZE_MB, pocketCacheBytes }
+export { POCKET_SIZE_MB, PHONON_SIZE_MB, pocketCacheBytes }
 export async function modelCacheBytes(): Promise<number> {
-  const [a, b, c] = await Promise.all([pocketCacheBytes(), phononCacheBytes(), kokoroCacheBytes()])
-  return a + b + c
+  const [a, b] = await Promise.all([pocketCacheBytes(), phononCacheBytes()])
+  return a + b
 }
 
 const ls = {
@@ -59,20 +59,19 @@ function activeKind(): EngineKind {
   const id = st.voiceOverride ?? st.defaultVoice[wantedLang()]
   return voiceById(id)?.engine ?? 'phonon'
 }
-const kindOf = (voice: string): EngineKind => voiceById(voice)?.engine ?? (voice.startsWith('pk_') ? 'pocket' : voice.startsWith('kk_') ? 'kokoro' : 'phonon')
+const kindOf = (voice: string): EngineKind => voiceById(voice)?.engine ?? (voice.startsWith('pk_') ? 'pocket' : 'phonon')
 
 // Phones run out of memory with several models loaded: loading one engine
 // frees the other unless the device has plenty of memory.
 const roomy = () => ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4) >= 8
 onPhononBeforeLoad((lang) => {
-  if (!roomy()) { pocketRelease(); kokoroRelease(); for (const l of phononLoaded()) if (l !== lang) phononRelease(l) }
+  if (!roomy()) { pocketRelease(); for (const l of phononLoaded()) if (l !== lang) phononRelease(l) }
 })
-onPocketBeforeLoad(() => { if (!roomy()) { kokoroRelease(); for (const l of phononLoaded()) phononRelease(l) } })
-onKokoroBeforeLoad(() => { pocketRelease(); for (const l of phononLoaded()) phononRelease(l) })
+onPocketBeforeLoad(() => { if (!roomy()) { for (const l of phononLoaded()) phononRelease(l) } })
 
 function compute(): EngineState {
   const k = activeKind()
-  return k === 'phonon' ? computeFrom(phonon.get(), 'phonon') : k === 'kokoro' ? computeFrom(kokoro.get(), 'kokoro') : computeFrom(pocket.get(), 'pocket')
+  return k === 'phonon' ? computeFrom(phonon.get(), 'phonon') : computeFrom(pocket.get(), 'pocket')
 }
 
 /** A download that died on the network says so in human words, never the
@@ -105,7 +104,6 @@ function computeFrom(p: { langs: Record<PocketLang, { status: string; loaded: nu
 export const engine = createStore<EngineState>(compute())
 pocket.subscribe(() => engine.set(compute()))
 phonon.subscribe(() => engine.set(compute()))
-kokoro.subscribe(() => engine.set(compute()))
 settings.subscribe(() => { lastKind = null; engine.set(compute()) })
 
 // Crash guard: if the app closed while loading last time, don't auto-load on
@@ -120,18 +118,16 @@ export function lastLoadCrashed(): boolean {
   return crashedLastTime
 }
 const watchLoading = () => {
-  const busy = (['en', 'es'] as PocketLang[]).some((x) => pocket.get().langs[x].status === 'loading' || phonon.get().langs[x].status === 'loading') || kokoro.get().langs.en.status === 'loading'
+  const busy = (['en', 'es'] as PocketLang[]).some((x) => pocket.get().langs[x].status === 'loading' || phonon.get().langs[x].status === 'loading')
   if (busy) { if (!ls.get(LOADING_KEY)) ls.set(LOADING_KEY, String(Date.now())) } else ls.del(LOADING_KEY)
 }
 pocket.subscribe(watchLoading)
 phonon.subscribe(watchLoading)
-kokoro.subscribe(watchLoading)
 
 /** Load the voice (from the phone after the first download). */
 export function ensureModel(): Promise<void> {
   const k = activeKind()
   if (k === 'phonon') return phononEnsure(phonon.get().active ?? wantedLang())
-  if (k === 'kokoro') return kokoroEnsure()
   return pocketEnsure(pocket.get().active ?? wantedLang())
 }
 
@@ -140,17 +136,17 @@ export function synthesize(text: string, voice: string, speed: number, opts: { p
   const lang: PocketLang = v?.lang === 'es' ? 'es' : 'en'
   const kind = kindOf(voice)
   if (opts.priority && opts.priority >= 1000 && kind !== lastKind) { lastKind = kind; engine.set(compute()) }
-  const job = kind === 'phonon' ? phononSynth(text, lang, voice, opts) : kind === 'kokoro' ? kokoroSynth(text, v?.kid ?? 'af_heart', opts) : pocketSynth(text, lang, voice.replace(/^pk_/, ''), opts)
+  const job = kind === 'phonon' ? phononSynth(text, lang, voice, opts) : pocketSynth(text, lang, voice.replace(/^pk_/, ''), opts)
   return job.then((r) =>
     speed && Math.abs(speed - 1) > 0.01 ? { ...r, samples: timeStretch(r.samples, r.sampleRate, speed) } : r)
 }
 
-export function promote(signal: AbortSignal, priority: number) { pocketPromote(signal, priority); phononPromote(signal, priority); kokoroPromote(signal, priority) }
-export function clearQueue(maxPriority?: number) { pocketClear(maxPriority); phononClear(maxPriority); kokoroClear(maxPriority) }
+export function promote(signal: AbortSignal, priority: number) { pocketPromote(signal, priority); phononPromote(signal, priority) }
+export function clearQueue(maxPriority?: number) { pocketClear(maxPriority); phononClear(maxPriority) }
 
 export async function isModelCached(): Promise<boolean> {
   const k = activeKind()
-  cachedFlag = k === 'phonon' ? await phononCached() : k === 'kokoro' ? await kokoroCached() : await pocketCached(wantedLang())
+  cachedFlag = k === 'phonon' ? await phononCached() : await pocketCached(wantedLang())
   engine.set(compute())
   return cachedFlag
 }
@@ -159,7 +155,6 @@ export async function isModelCached(): Promise<boolean> {
 export async function deleteModel() {
   await pocketDelete()
   await phononDelete()
-  await kokoroDelete()
   cachedFlag = false
   engine.set(compute())
 }
@@ -174,9 +169,21 @@ export async function storageEstimate(): Promise<{ quota: number; usage: number 
  */
 export async function removeLegacyEngine() {
   if (ls.get('logos.legacyRemoved') === '1') return
-  // The 'transformers-cache' and 'kokoro-voices' caches are NOT purged:
-  // they belonged to the old engine this cleanup was written for, and
-  // since 1.4.143 they belong to Kokoro again, a first-class engine.
   for (const k of ['logos.gpuBroken', 'logos.gpuFp16Broken', 'logos.gpuWhy', 'logos.mig110', 'logos.mig123', 'logos.spin']) ls.del(k)
   ls.set('logos.legacyRemoved', '1')
+}
+
+/**
+ * Kokoro (1.4.143–1.4.145) was removed whole in 1.4.146 by Oscar's
+ * verdict — too heavy for the app; its load closed the app on his
+ * phone. Its downloads live in two Cache Storage buckets nothing else
+ * uses; delete them once so the phone gets its ~100–270 MB back.
+ * Saved kk_ voice choices are migrated by settings.ts (they land on
+ * Pocket Alba/Lola like every removed engine before them).
+ */
+export async function removeKokoroCaches() {
+  if (ls.get('logos.kokoroRemoved') === '1') return
+  try { await caches.delete('transformers-cache') } catch { /* unsupported */ }
+  try { await caches.delete('kokoro-voices') } catch { /* unsupported */ }
+  ls.set('logos.kokoroRemoved', '1')
 }

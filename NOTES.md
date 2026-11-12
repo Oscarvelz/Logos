@@ -1,3 +1,14 @@
+## 1.4.146 — Kokoro removed, completely (Oscar's verdict)
+
+His words (2026-11-12): «Kokoro es demasiado para la aplicación o que la cierra. Elimínalo completo sin tocar el resto.» The q8 build of 1.4.144 closed the app on his phone too — the engine is simply too heavy for this WebView at any storage precision worth having, and two strikes was the whole trial. Removed whole, the 1.4.142 way, touching nothing else:
+
+- **Engine out**: `src/engine/kokoro.ts` and `kokoro.worker.ts` deleted; every kokoro branch in engine.ts (routing, queue, cache accounting, cross-engine release) gone; deps `kokoro-js` and `@huggingface/transformers` uninstalled; the bundled `public/ort/` runtime deleted. The one piece of Kokoro that stays is its cleanup: `removeKokoroCaches()` runs once per device and deletes the `transformers-cache` and `kokoro-voices` Cache Storage buckets — nothing else uses them — so his phone recovers the ~100–270 MB Kokoro downloaded.
+- **Voices out**: the 28 kk_ voices leave the catalog (85 → 57 voices: 50 Phonon + 7 Pocket, exactly the pre-Kokoro fleet); the picker loses its Kokoro section, the Voices page its Kokoro filter, Settings its Kokoro branch and credits line, es.ts its three Kokoro strings.
+- **Previews out**: the 25 kk_ preview MP3s and their previews.json entries removed (82 → 57 ids).
+- **Settings migrate**: `kk_` leaves the settings whitelist, so a saved Kokoro default lands on Pocket Alba/Lola, a Kokoro override clears, Kokoro favorites filter out — the same landing every removed engine gets.
+- **Hosted files deleted** from the site: all of `models/kokoro82/` (fp16 parts, q8 parts, voices, meta) and `previews/kk_*.mp3`, plus the ORT runtime files. Pocket's and Phonon's models, voices, previews and behavior are byte-for-byte untouched.
+- Restoration path (only if Oscar ever reverses): pre-removal snapshot in ~/workspace/backups/logos-pre-1.4.146-files/ (incl. both engine files); the Kokoro spike rig and models remain in ~/workspace/logos-kokoro-spike/.
+
 ## 1.4.145 — The Continue listening card goes on a diet (Oscar's screenshot)
 
 His words over the screenshot: the Continue listening chips "should be way smaller so they don't get confused with the text player. Reduce its height. No reason to be as it is to say so little." Right — the card was spending a header line plus a two-line row (title stacked over "12% read") on a title and a percentage, at near-player visual weight.
