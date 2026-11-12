@@ -6,13 +6,13 @@ import { useStore } from '../lib/store.ts'
 import { settings, applyTheme, READER_SCALES, stepReaderScale, type Theme } from '../lib/settings.ts'
 import { bubbleSupported, bubbleNativeState, setBubble, openBubblePermission, type BubbleNativeState } from '../lib/bubble.ts'
 import { keep } from '../engine/keep.ts'
-import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHONON_SIZE_MB, KOKORO_SIZE_MB, modelCacheBytes } from '../engine/engine.ts'
+import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHONON_SIZE_MB, modelCacheBytes } from '../engine/engine.ts'
 import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.145'
+const VERSION = '1.4.146'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -147,12 +147,10 @@ export function SettingsPage() {
               {warming
                 ? t('On this device · loading into memory in the background')
                 : e.status === 'ready'
-                  ? `${e.kind === 'phonon' ? 'Phonon by Gradium' : e.kind === 'kokoro' ? 'Kokoro · Full model' : 'PocketTTS by Kyutai'} · ${t(e.lang === 'es' ? 'Spanish' : 'English')}${e.lastRtf ? t(' · {x}× real-time', { x: (1 / e.lastRtf).toFixed(1) }) : ''}`
+                  ? `${e.kind === 'phonon' ? 'Phonon by Gradium' : 'PocketTTS by Kyutai'} · ${t(e.lang === 'es' ? 'Spanish' : 'English')}${e.lastRtf ? t(' · {x}× real-time', { x: (1 / e.lastRtf).toFixed(1) }) : ''}`
                   : e.kind === 'phonon'
                     ? t('Phonon by Gradium · ~{n} MB for English and Spanish, then offline', { n: PHONON_SIZE_MB })
-                    : e.kind === 'kokoro'
-                      ? t('Kokoro · the full 82M model · ~{n} MB for English, then offline', { n: KOKORO_SIZE_MB })
-                      : t('PocketTTS by Kyutai · ~{n} MB per language, then offline', { n: POCKET_SIZE_MB })}
+                    : t('PocketTTS by Kyutai · ~{n} MB per language, then offline', { n: POCKET_SIZE_MB })}
             </div>
           </div>
         </div>
@@ -324,7 +322,6 @@ export function SettingsPage() {
         <p><strong>Based on <a href="https://github.com/SysAdminDoc/BetterTTS" target="_blank" rel="noreferrer">BetterTTS</a> by SysAdminDoc</strong> (MIT License). Logos is a simplified, phone-first rebuild; its listening player, export and service-worker isolation grew out of it.</p>
         <p>Voices: <a href="https://huggingface.co/gradium/phonon-40m-multilingual" target="_blank" rel="noreferrer">Phonon 40m multilingual</a> by Gradium, CC BY-NC 4.0 (non-commercial), with voices from <a href="https://huggingface.co/gradium/phonon-voices" target="_blank" rel="noreferrer">gradium/phonon-voices</a> (Apache 2.0), run with phonon-tts (MIT/Apache 2.0).</p>
         <p>Also <a href="https://github.com/kyutai-labs/pocket-tts" target="_blank" rel="noreferrer">Pocket TTS</a> by Kyutai (Manu Orsini, Simon Rouard, Gabriel De Marmiesse, Václav Volhejn, Neil Zeghidour, Alexandre Défossez), CC BY 4.0, run in the browser with <a href="https://github.com/thewh1teagle/pocket-tts-onnx" target="_blank" rel="noreferrer">pocket-tts-onnx</a> by thewh1teagle (CC BY 4.0) and ONNX Runtime Web.</p>
-        <p>Also <a href="https://github.com/hexgrad/kokoro" target="_blank" rel="noreferrer">Kokoro 82M</a> by hexgrad (Apache-2.0) — the full model — run in the browser with kokoro-js and Transformers.js (Apache-2.0) and ONNX Runtime Web.</p>
         <p>MP3 encoding: lamejs (LGPL-3.0). Fonts: Manrope & Instrument Serif (OFL).</p>
         <p className="muted small" style={{ marginBottom: 0 }}>© 2026 SysAdminDoc · © 2026 Oscar Arnoldo Velasquez (Logos modifications). Released under the MIT License.</p>
       </div>

@@ -7,7 +7,7 @@ import { listen, installMediaSession } from './player/listen.ts'
 import { initBubble } from './lib/bubble.ts'
 import { initResumeTracking } from './lib/resume.ts'
 import { navPin } from './lib/navpin.ts'
-import { isModelCached, ensureModel, lastLoadCrashed, removeLegacyEngine } from './engine/engine.ts'
+import { isModelCached, ensureModel, lastLoadCrashed, removeLegacyEngine, removeKokoroCaches } from './engine/engine.ts'
 import { refreshLibrary } from './lib/library.ts'
 import { BottomNav, SideRail, StatusPill, MiniPlayer, BubbleMark } from './components/chrome.tsx'
 import { Toasts, ConfirmHost } from './components/ui.tsx'
@@ -47,6 +47,7 @@ export default function App() {
     // Skipped when the last start never finished (the tab crashed), so a bad
     // load can never turn into a reload loop; play still loads it on demand.
     void removeLegacyEngine()
+    void removeKokoroCaches()
     if (!lastLoadCrashed()) void isModelCached().then((cached) => { if (cached) ensureModel().catch(() => {}) })
   }, [])
 

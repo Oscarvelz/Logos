@@ -89,13 +89,13 @@ try {
     if (initial.deviceFallback) { initial.deviceFallback = false; migrateEngine = true }
   }
 } catch { /* storage blocked */ }
-// Voices are Phonon (ph_), PocketTTS (pk_) or Kokoro (kk_). Anything
-// else saved by an older version of Logos is dropped here — including
-// Pocket Fast (ds_), removed in 1.4.142 by Oscar's verdict: a saved ds_
-// default lands on Pocket Alba/Lola, an override clears, favorites
-// filter out.
+// Voices are Phonon (ph_) or PocketTTS (pk_). Anything else saved by
+// an older version of Logos is dropped here — including Pocket Fast
+// (ds_), removed in 1.4.142, and Kokoro (kk_), removed in 1.4.146,
+// both by Oscar's verdict: a saved removed-engine default lands on
+// Pocket Alba/Lola, an override clears, favorites filter out.
 try {
-  const ok = (id: string | null | undefined) => Boolean(id && (id.startsWith('pk_') || id.startsWith('ph_') || id.startsWith('kk_')))
+  const ok = (id: string | null | undefined) => Boolean(id && (id.startsWith('pk_') || id.startsWith('ph_')))
   const d = initial.defaultVoice
   if (!ok(d.en) || !ok(d.es)) { initial.defaultVoice = { en: ok(d.en) ? d.en : 'pk_alba', es: ok(d.es) ? d.es : 'pk_lola' }; migrateEngine = true }
   if (initial.voiceOverride && !ok(initial.voiceOverride)) { initial.voiceOverride = null; migrateEngine = true }
