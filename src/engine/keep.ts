@@ -57,6 +57,11 @@ async function checkStamps() {
     write(KEY, kept)
     setNote({ kind: 'cleared', engine: e, lang: l, at: Date.now(), keptAt: at })
   }
+  // A 'notSaved' note whose model is in fact saved is a false alarm
+  // (Pocket's probe lied about exactly this until 1.4.149); clear it on
+  // sight instead of waiting for the next load's stamp to retire it.
+  const n = keep.get().note
+  if (n?.kind === 'notSaved' && (await isCached(n.engine, n.lang))) setNote(null)
 }
 
 export function startKeeping() {

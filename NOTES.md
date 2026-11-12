@@ -1,3 +1,11 @@
+## 1.4.149 — The Pocket warning was a false alarm: the checker used a name Pocket never files under
+
+Oscar, same day (17:13 EST): he played a Pocket voice exactly as instructed and the Storage note stood unchanged — "Normal, yet?" No. It was the checker, not the saving, that was broken. `pocketCached()` searched Pocket's cache keys for `pocket-tts-english` — the library's display name for the model — but the loader files the model under its manifest name and digest: `model.onnx?v=<sha>`. The manifest is public and settles it: the English model is 176,992,315 B, its encoder 39,183,564 B, its assets 1,654,421 B — together precisely the ~218 MB this bucket holds inside Settings' 291 MB total. The probe could never match, so every Pocket load "proved" the model unsaved and the note re-set itself forever; no amount of playing could clear it. This entry also corrects 1.4.147's note, which promised the warning would clear itself after the healed load — with the probe broken, it could not.
+
+- **pocketCached asks for the real key now**: it reads the language's manifest (a few hundred bytes), matches `model.onnx?v=<that digest>` among the cache keys, and falls back to a shape check (a model-sized `model.onnx` entry) when the manifest can't be fetched.
+- **keep.ts retires the standing false note**: checkStamps now clears a 'notSaved' note at startup when the model is in fact saved, so his current warning dies on this version's first launch — no play required.
+- Untouched: 1.4.147's integrity refusal (the crash-side fix) and everything else. The crash and the note were two different faults wearing one coat.
+
 ## 1.4.148 — The bottom desk learns to hurry (Oscar: tab switches feel slow)
 
 His words (2026-11-12): "work on the smoothness and fastness present in the bottom desk. I feel they take too long to move from one page to the other one." A read-only investigation mapped the switch path first; the felt slowness was mostly theatre stacked in series, plus two real costs:
