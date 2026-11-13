@@ -45,7 +45,12 @@ class PlaybackService : Service() {
                 override fun onRewind() { act("prev") }
                 override fun onFastForward() { act("next") }
             })
-            isActive = true
+            // Born asleep (1.4.154): the session wakes only while the
+            // voice is playing — see build(), where each published
+            // state sets this. A paused session that stays active
+            // keeps holding the system's media-button router, and
+            // orders that were never Oscar's land on it.
+            isActive = false
         }
         wake = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Logos:reading").apply { setReferenceCounted(false) }
     }
@@ -129,15 +134,32 @@ class PlaybackService : Service() {
             .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bmp)
             .putBitmap(MediaMetadata.METADATA_KEY_ART, bmp)
             .build())
-        // The session speaks seek, not skip (1.4.153): these keys step
-        // one sentence — they have never skipped a recording or a book.
-        // Declaring SKIP made the system's media card draw the barred
-        // track glyphs (and promise a deed the keys don't do); REWIND /
-        // FAST_FORWARD draw the plain double triangles the panel keys
-        // adopted in 1.4.118, which is what the buttons are.
+        // Both vocabularies are declared (1.4.154, correcting 153):
+        // the keys step one sentence — they have never skipped a
+        // recording or a book — but the system's media card only
+        // OFFERS previous/next buttons to a session that declares
+        // SKIP, and it draws those two buttons itself, in its own
+        // glyphs; no session can lend that surface its icons. (153
+        // declared only REWIND/FAST_FORWARD and the card dropped the
+        // buttons entirely — worse than the wrong glyphs.) So SKIP
+        // stands for the card's sake, REWIND/FAST_FORWARD for the
+        // surfaces that speak seek, and every word of either
+        // vocabulary lands on the same one-sentence step. The shade's
+        // own buttons wear the app's double triangles, as they have
+        // since the beginning — that surface takes the app's icons.
         s.setPlaybackState(PlaybackState.Builder()
-            .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD)
+            .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD)
             .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f).build())
+        // The session is awake only while the voice is (1.4.154):
+        // while paused-but-active it held the media-button router,
+        // and a PLAY nobody pressed — the kind a dictation session's
+        // start or stop shakes loose on this phone — resumed the
+        // reading in the middle of his typing elsewhere. Asleep, the
+        // router has no Logos to hand stray orders to. His own taps
+        // keep their roads: the card's buttons travel the controller
+        // road, which reaches the callback awake or asleep, and the
+        // shade's buttons are this service's own intents.
+        s.isActive = playing
         val open = PendingIntent.getActivity(this, 9, Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CH)
             .setSmallIcon(R.drawable.ic_note)
