@@ -292,6 +292,7 @@ class BubbleService : Service() {
     private var haloAnim: ObjectAnimator? = null
     private var seekBar: SeekBar? = null
     private var saveHint: View? = null
+    private var saveHintScrim: View? = null
     private var saveHintRun: Runnable? = null
     private var lockBtn: TextView? = null
     private var spectrum: SpectrumView? = null
@@ -1652,14 +1653,50 @@ class BubbleService : Service() {
         dismissSaveHint()
         val w = wm ?: return
         val c = cardPal()
+        // The dimmed world (1.4.152, the direction Oscar picked): a warm
+        // veil settles over everything behind the card, so the question
+        // is asked in a hushed room. The veil takes no touches
+        // (NOT_TOUCHABLE) — the panel beneath answers the finger exactly
+        // as it did before the veil existed. Company, not a lock.
+        val scrim = View(this).apply {
+            setBackgroundColor(if (panelLight) Color.argb(90, 62, 48, 28) else Color.argb(118, 10, 8, 5))
+            alpha = 0f
+        }
+        runCatching {
+            w.addView(scrim, WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, PixelFormat.TRANSLUCENT))
+        }
+        saveHintScrim = scrim
+        scrim.animate().alpha(1f).setDuration(220).start()
+        // The card itself becomes a small stage, like the panel's: a rim
+        // that is lit rather than drawn — bright gold at the top-left,
+        // dying into the edge below — around the settled face, and the
+        // panel's own gold glow breathing from its top. cardPal() always
+        // carried a "glow" colour for this card; it was never wired in.
+        val rim = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(mixCol(c["gold"]!!, c["ink"]!!, 0.35f), c["gold"]!!, mixCol(c["gold"]!!, c["bg2"]!!, 0.60f))).apply {
+            cornerRadius = dp(21).toFloat()
+        }
+        val face = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c["bg1"]!!, mixCol(c["bg1"]!!, c["bg2"]!!, 0.5f), c["bg2"]!!)).apply {
+            cornerRadius = dp(20).toFloat()
+        }
+        val stage = FrameLayout(this).apply {
+            background = android.graphics.drawable.LayerDrawable(arrayOf(rim, face)).apply { setLayerInset(1, dp(1), dp(1), dp(1), dp(1)) }
+            elevation = dp(24).toFloat()
+        }
+        val glowV = View(this).apply {
+            background = GradientDrawable().apply {
+                gradientType = GradientDrawable.RADIAL_GRADIENT
+                gradientRadius = dp(170).toFloat()
+                colors = intArrayOf(c["glow"]!!, Color.TRANSPARENT)
+            }
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(96), Gravity.TOP)
+            alpha = 0f
+        }
+        stage.addView(glowV)
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(16), dp(18), dp(14))
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c["bg1"]!!, c["bg2"]!!)).apply {
-                cornerRadius = dp(20).toFloat()
-                setStroke(dp(1), c["line"]!!)
-            }
-            elevation = dp(16).toFloat()
         }
         card.addView(TextView(this).apply {
             text = title
@@ -1687,12 +1724,18 @@ class BubbleService : Service() {
             setOnClickListener { dismissSaveHint(); action() }
         })
         card.addView(row)
+        stage.addView(card, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         val p = WindowManager.LayoutParams(dp(300), WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT).apply { gravity = Gravity.CENTER }
-        runCatching { w.addView(card, p) }
-        saveHint = card
-        card.alpha = 0f; card.animate().alpha(1f).setDuration(160).start()
+        runCatching { w.addView(stage, p) }
+        saveHint = stage
+        // The arrival, in two beats: the object settles (a grow and a
+        // fade on the house's decelerate), and the light arrives a
+        // breath after it — as if a lamp were switched on above it.
+        stage.scaleX = 0.90f; stage.scaleY = 0.90f; stage.alpha = 0f
+        stage.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(230).setInterpolator(DecelerateInterpolator()).start()
+        handler.postDelayed({ if (saveHint === stage) glowV.animate().alpha(1f).setDuration(240).start() }, 60)
         val r = Runnable { dismissSaveHint() }
         saveHintRun = r
         handler.postDelayed(r, 9000)
@@ -1767,8 +1810,16 @@ class BubbleService : Service() {
 
     private fun dismissSaveHint() {
         saveHintRun?.let { handler.removeCallbacks(it) }; saveHintRun = null
-        saveHint?.let { v -> runCatching { wm?.removeView(v) } }
-        saveHint = null
+        val v = saveHint; saveHint = null
+        val veil = saveHintScrim; saveHintScrim = null
+        // Leaving is quicker than arriving, and the two layers leave
+        // together (1.4.152): the card folds a breath faster than the
+        // veil lifts. The views are captured before the fields clear,
+        // so a new card can be born while the old one is still fading.
+        if (v != null) v.animate().alpha(0f).scaleX(0.96f).scaleY(0.96f).setDuration(130)
+            .withEndAction { runCatching { wm?.removeView(v) } }.start()
+        if (veil != null) veil.animate().alpha(0f).setDuration(160)
+            .withEndAction { runCatching { wm?.removeView(veil) } }.start()
     }
 
     private fun collapsePanel(now: Boolean = false) {
@@ -2028,6 +2079,10 @@ class BubbleService : Service() {
         retireHoldFile(this)
         handler.removeCallbacks(fadeRun)
         hideTargets()
+        // The hint card and its veil die with the house, instantly —
+        // a dimmed world must never outlive the bubble (1.4.152).
+        saveHint?.let { runCatching { wm?.removeView(it) } }; saveHint = null
+        saveHintScrim?.let { runCatching { wm?.removeView(it) } }; saveHintScrim = null
         collapsePanel(now = true)
         bubble?.let { runCatching { wm?.removeView(it) } }
         bubble = null
