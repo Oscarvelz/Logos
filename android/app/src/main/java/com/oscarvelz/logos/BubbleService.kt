@@ -60,6 +60,22 @@ class BubbleService : Service() {
         var poke: ((String) -> Unit)? = null
         /** A transport press that found the page asleep; the page collects it as it wakes. */
         @Volatile var pendingCmd: String? = null
+        @Volatile var pendingCmdAt: Long = 0
+
+        /** Store a press for a sleeping page, stamped with its moment. */
+        fun storePendingCmd(cmd: String) { pendingCmd = cmd; pendingCmdAt = System.currentTimeMillis() }
+
+        /** Collect the stored press — within twenty seconds it means
+         *  what it meant; older, it is a stranger's order and is
+         *  dropped, never obeyed (1.4.153). Only "pause" was ever
+         *  audited for staleness (1.4.89's law); the audit now covers
+         *  every kind, because a stale "play" collected at some later
+         *  reload is an autoplay nobody ordered. */
+        fun takePendingCmd(): String? {
+            val cmd = pendingCmd ?: return null
+            pendingCmd = null
+            return if (System.currentTimeMillis() - pendingCmdAt <= 20_000) cmd else null
+        }
         @Volatile private var wakeLock: PowerManager.WakeLock? = null
 
         /** Oscar's law: one tap, then the icon does the work — even with the
@@ -184,7 +200,7 @@ class BubbleService : Service() {
          *  stored pause again: the newest word is his. */
         fun notePagePaused() {
             nativeGen++ // his stop also ends the delivery chain (1.4.125)
-            pendingCmd = "pause"
+            storePendingCmd("pause")
             runCatching { poke?.invoke("pause") }
         }
 
@@ -226,7 +242,7 @@ class BubbleService : Service() {
         fun wakeForPending(c: Context, cmd: String) {
             if (cmd == "pause") nativeGen++ // a stored stop ends the chain too (1.4.125)
             if (NativeSpeaker.active) { NativeSpeaker.handle(cmd); return }
-            pendingCmd = cmd
+            storePendingCmd(cmd)
             if (backstageServe()) return
             runCatching { c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(c, 0, 0).toBundle()) }
         }
@@ -236,8 +252,8 @@ class BubbleService : Service() {
         fun backstageServe(): Boolean {
             val p = poke ?: return false
             if (!Backstage.active) return false
-            val cmd = pendingCmd
-            if (cmd != null) { pendingCmd = null; p(cmd) }
+            val cmd = takePendingCmd()
+            if (cmd != null) p(cmd)
             else if (clipText != null) p("clip")
             return true
         }
@@ -662,7 +678,7 @@ class BubbleService : Service() {
         if (NativeSpeaker.active) { NativeSpeaker.handle(cmd); return }
         val p = poke
         if (p != null && !force) { p(cmd); return }
-        pendingCmd = cmd
+        storePendingCmd(cmd)
         noteTry(this, s("panel key visited Logos", "la tecla del panel visitó Logos"))
         ghostWake()
     }

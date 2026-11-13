@@ -215,6 +215,16 @@ export function initBubble() {
   }
   setTimeout(collectPending, 700)
   setTimeout(collectPending, 2200)
+  // …and on every surfacing after that (1.4.153): a press stored while
+  // this page merely slept — a ghost resume that never re-ran the
+  // script — used to wait for the next full reload to be collected,
+  // landing minutes later on whatever session was current by then.
+  // The clip pull below learned this lesson first (a poke can fall
+  // into a sleeping page); the pending command collects at the same
+  // doors. The shell stamps each stored press and drops it after
+  // twenty seconds, so a late collection can never obey a stale one.
+  addEventListener('focus', collectPending)
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) collectPending() })
   // …and theirs is pulled up when the bubble's switch moves.
   addEventListener('logosandroid-lever', () => {
     try {
