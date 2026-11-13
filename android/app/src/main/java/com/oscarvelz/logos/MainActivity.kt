@@ -53,6 +53,11 @@ class MainActivity : Activity() {
     private var ghost = false
     private var ghostLeaving = false
     private var ghostSeq = 0
+    // The bubble visit (1.4.150, Oscar): the panel's headphones key sends
+    // him to the listening area itself, and the visit stays a visit —
+    // Back from there returns him to the place he was listening from.
+    private var bubbleVisit = false
+    private var pendingListen = false
     private var intentDriven = false
     private var resumed = false
     private var ghostBegan = 0L
@@ -112,8 +117,10 @@ class MainActivity : Activity() {
         if (BubbleService.prefs(this).getBoolean("on", false) && !BubbleService.running && Settings.canDrawOverlays(this))
             runCatching { startForegroundService(Intent(this, BubbleService::class.java)) }
         val target = shareUrl(intent)
+        if (intent?.getBooleanExtra("logos.listen", false) == true) bubbleVisit = true
         when {
             target != null -> web.loadUrl(target)
+            bubbleVisit -> web.loadUrl("$home#/listen")
             state != null -> web.restoreState(state)
             else -> web.loadUrl(home)
         }
@@ -149,6 +156,12 @@ class MainActivity : Activity() {
                 v.loadDataWithBaseURL(home, "<html><body style=\"background:#0A0A0F;color:#eee;font:18px sans-serif;padding:32px\">" +
                     "<p>Logos needs the internet the first time it opens. After that it works offline.</p>" +
                     "<p><a style=\"color:#e9bd72\" href=\"$home\">Try again</a></p></body></html>", "text/html", "utf-8", null)
+            }
+            override fun onPageFinished(v: WebView, url: String?) {
+                // A bubble visit that arrived while the page was still
+                // loading: land it on the listening area now that the
+                // page can hear the word.
+                if (pendingListen) { pendingListen = false; runCatching { v.evaluateJavascript("location.hash='#/listen'", null) } }
             }
             override fun onRenderProcessGone(v: WebView, detail: RenderProcessGoneDetail): Boolean { recoverWeb(v); return true }
         }
@@ -234,6 +247,11 @@ class MainActivity : Activity() {
         else if (ghost && (intent.action == Intent.ACTION_MAIN || intent.action == Intent.ACTION_VIEW ||
             intent.action == Intent.ACTION_SEND || intent.action == Intent.ACTION_SEND_MULTIPLE ||
             intent.action == "logos.INSTALL")) exitGhost()
+        // The bubble's headphones key (1.4.150): land on the listening
+        // area, as a visit. Any other plain arrival is a stay, and a
+        // stay dissolves a visit that never got its Back.
+        if (intent.getBooleanExtra("logos.listen", false)) goListen()
+        else if (intent.action == Intent.ACTION_MAIN) bubbleVisit = false
         if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
         if (intent.action == "logos.INSTALL") { installResult(intent); return }
         shareUrl(intent)?.let { web.loadUrl(it) }
@@ -310,6 +328,24 @@ class MainActivity : Activity() {
             if (seq != ghostSeq || !ghost || answered) return@postDelayed
             runCatching { web.reload() }
         }, 2500)
+    }
+
+    /** The bubble visit's landing (1.4.150): steer the living page to
+     *  the listening area. If the page is mid-load the word may land on
+     *  a dying page — pendingListen stays up and onPageFinished says it
+     *  again to the fresh one. */
+    private fun goListen() {
+        bubbleVisit = true
+        pendingListen = true
+        runCatching { web.evaluateJavascript("location.hash='#/listen'") { v -> if (v?.contains("listen") == true) pendingListen = false } }
+    }
+
+    /** Is the page showing the listening area? A page still loading
+     *  under a visit counts as yes — it is headed there. */
+    private fun atListen(): Boolean {
+        val u = web.url ?: return true
+        val frag = u.substringAfter('#', "")
+        return frag.isEmpty() || frag.startsWith("/listen")
     }
 
     /** A real arrival (his tap on the icon, a share) while a visit is on:
@@ -627,6 +663,11 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
+        // A bubble visit ends where it began (1.4.150, Oscar): Back on
+        // the listening area sends Logos to the back — the app he was
+        // listening from resurfaces — instead of rewinding Logos' own
+        // pages under him. Anywhere else, Back keeps its manners.
+        if (bubbleVisit && atListen()) { bubbleVisit = false; moveTaskToBack(true); return }
         if (web.canGoBack()) { web.goBack(); return }
         val now = System.currentTimeMillis()
         if (now - lastBack < 2000) moveTaskToBack(true)

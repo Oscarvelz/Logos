@@ -1416,13 +1416,72 @@ class BubbleService : Service() {
         // Paste now is gone (1.4.117, Oscar): a copied text arrives on its
         // own now — the catch delivers it without being asked — so a manual
         // paste key in the footer only repeated what already happened.
-        val hideB = TextView(this).apply {
-            text = s("Hide bubble", "Ocultar")
-            setTextColor(c["muted"]!!); textSize = 12.5f
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(16) }
-            setOnClickListener { showHideHint() }
+        // The footer's two doors wear icons now, not words (1.4.150,
+        // Oscar): an eye for the bubble's removal — still behind its
+        // confirmation card — and headphones for the road into Logos'
+        // listening area. A word in the footer read cheap beside the
+        // discs above it; these wear the same disc, answer the finger
+        // the same way the speed keys do, and say their names only to
+        // accessibility.
+        fun footBtn(desc: String, glyph: (cv: android.graphics.Canvas, ink: Int, cx: Float, cy: Float, r: Float) -> Unit, act: () -> Unit): View {
+            val v = object : View(this) {
+                override fun onDraw(cv: android.graphics.Canvas) {
+                    super.onDraw(cv)
+                    glyph(cv, if (isPressed) c["gold"]!! else c["muted"]!!, width / 2f, height / 2f, dp(10).toFloat())
+                }
+                override fun drawableStateChanged() { super.drawableStateChanged(); invalidate() }
+            }
+            fun disc(fill: Int, ringC: Int) = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(fill)
+                setStroke(dp(1), ringC)
+            }
+            v.background = android.graphics.drawable.StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_pressed), disc(mixCol(c["disc"]!!, c["gold"]!!, 0.28f), c["gold"]!!))
+                addState(intArrayOf(), disc(c["disc"]!!, c["discLine"]!!))
+            }
+            v.contentDescription = desc
+            v.setOnTouchListener { view, e ->
+                when (e.action) {
+                    MotionEvent.ACTION_DOWN -> view.animate().scaleX(0.9f).scaleY(0.9f).setDuration(90).start()
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.animate().scaleX(1f).scaleY(1f).setDuration(150).setInterpolator(DecelerateInterpolator()).start()
+                }
+                false
+            }
+            v.setOnClickListener { act() }
+            return v
         }
-        clipRow.addView(hideB)
+        fun inkPaint(ink: Int) = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = ink; style = android.graphics.Paint.Style.STROKE
+            strokeWidth = dp(2).toFloat(); strokeCap = android.graphics.Paint.Cap.ROUND
+        }
+        val listenB = footBtn(s("Go to the listening area", "Ir a la zona de escucha"), { cv, ink, cx, cy, r ->
+            val p = inkPaint(ink)
+            // The band: a half-arc over the top.
+            cv.drawArc(android.graphics.RectF(cx - r, cy - r * 0.95f, cx + r, cy + r * 0.95f), 180f, 180f, false, p)
+            // The pads: two short capsules hanging from the band's ends.
+            p.strokeWidth = dp(3).toFloat()
+            cv.drawLine(cx - r, cy + r * 0.02f, cx - r, cy + r * 0.78f, p)
+            cv.drawLine(cx + r, cy + r * 0.02f, cx + r, cy + r * 0.78f, p)
+        }) {
+            collapsePanel()
+            runCatching { startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("logos.listen", true)) }
+        }
+        listenB.layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { leftMargin = dp(16) }
+        clipRow.addView(listenB)
+        val eyeB = footBtn(s("Hide bubble", "Ocultar burbuja"), { cv, ink, cx, cy, r ->
+            val p = inkPaint(ink)
+            val eye = android.graphics.Path()
+            eye.moveTo(cx - r, cy)
+            eye.quadTo(cx, cy - r * 1.3f, cx + r, cy)
+            eye.quadTo(cx, cy + r * 1.3f, cx - r, cy)
+            cv.drawPath(eye, p)
+            cv.drawCircle(cx, cy, r * 0.46f, p)
+            p.style = android.graphics.Paint.Style.FILL
+            cv.drawCircle(cx, cy, r * 0.18f, p)
+        }) { showHideHint() }
+        eyeB.layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { leftMargin = dp(10) }
+        clipRow.addView(eyeB)
         card.addView(clipRow)
         // The reader's grip: two small gold ticks hugging the panel's free
         // corner. Drag it and the reader stretches (see applyReaderScale).
