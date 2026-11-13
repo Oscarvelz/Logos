@@ -1427,7 +1427,7 @@ class BubbleService : Service() {
             val v = object : View(this) {
                 override fun onDraw(cv: android.graphics.Canvas) {
                     super.onDraw(cv)
-                    glyph(cv, if (isPressed) c["gold"]!! else c["muted"]!!, width / 2f, height / 2f, dp(10).toFloat())
+                    glyph(cv, if (isPressed) c["gold"]!! else c["muted"]!!, width / 2f, height / 2f, dp(8).toFloat())
                 }
                 override fun drawableStateChanged() { super.drawableStateChanged(); invalidate() }
             }
@@ -1458,16 +1458,21 @@ class BubbleService : Service() {
         val listenB = footBtn(s("Go to the listening area", "Ir a la zona de escucha"), { cv, ink, cx, cy, r ->
             val p = inkPaint(ink)
             // The band: a half-arc over the top.
-            cv.drawArc(android.graphics.RectF(cx - r, cy - r * 0.95f, cx + r, cy + r * 0.95f), 180f, 180f, false, p)
-            // The pads: two short capsules hanging from the band's ends.
-            p.strokeWidth = dp(3).toFloat()
-            cv.drawLine(cx - r, cy + r * 0.02f, cx - r, cy + r * 0.78f, p)
-            cv.drawLine(cx + r, cy + r * 0.02f, cx + r, cy + r * 0.78f, p)
+            cv.drawArc(android.graphics.RectF(cx - r, cy - r * 0.92f, cx + r, cy + r * 0.92f), 180f, 180f, false, p)
+            // The cups: two filled capsules hanging from the band's
+            // ends (1.4.151 — the first drawing's bare line pads read
+            // as a horseshoe at panel size; a cup with a body to it
+            // reads as headphones at a glance).
+            val fill = android.graphics.Paint(p).apply { style = android.graphics.Paint.Style.FILL }
+            val w = r * 0.54f; val h = r * 0.92f; val rad = w * 0.5f
+            val top = cy - r * 0.06f
+            cv.drawRoundRect(android.graphics.RectF(cx - r - w / 2, top, cx - r + w / 2, top + h), rad, rad, fill)
+            cv.drawRoundRect(android.graphics.RectF(cx + r - w / 2, top, cx + r + w / 2, top + h), rad, rad, fill)
         }) {
             collapsePanel()
             runCatching { startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("logos.listen", true)) }
         }
-        listenB.layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { leftMargin = dp(16) }
+        listenB.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(12) }
         clipRow.addView(listenB)
         val eyeB = footBtn(s("Hide bubble", "Ocultar burbuja"), { cv, ink, cx, cy, r ->
             val p = inkPaint(ink)
@@ -1480,7 +1485,7 @@ class BubbleService : Service() {
             p.style = android.graphics.Paint.Style.FILL
             cv.drawCircle(cx, cy, r * 0.18f, p)
         }) { showHideHint() }
-        eyeB.layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { leftMargin = dp(10) }
+        eyeB.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(8) }
         clipRow.addView(eyeB)
         card.addView(clipRow)
         // The reader's grip: two small gold ticks hugging the panel's free

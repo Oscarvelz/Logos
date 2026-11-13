@@ -1,3 +1,10 @@
+## 1.4.151 — The footer icons take their proper size; the headphones get cups (shell only)
+
+Oscar's verdict on 1.4.150 (2026-11-13, photo of the footer on his phone): "Excellent. It's just that the icons are too big as they are right now for the small windows in my phone. Could you make a better icon for the listen icon?" Both halves obeyed:
+
+- **Smaller.** Both discs shrink 38 → 30 dp and their glyphs with them (radius 10 → 8 dp); the pair now takes 80 dp of the footer instead of 102, in proportion with the Auto switch they sit beside. Nothing else in the row moved.
+- **A better listen icon.** The first headphones were a band and two bare line pads — at panel size they read as a horseshoe. The band stays; the pads are now filled capsules — ear cups with a body to them — and the mark reads as headphones at a glance. Same ink, same pressed warmth; only the drawing changed.
+
 ## 1.4.150 — The panel's footer trades its word for two icons (shell only; Oscar's design order)
 
 His words (2026-11-13, with a photo of the panel footer): "To make it look more premium, instead of hide bubble, add a small eye that will hide the bubble when you tap over it after the confirmation window. Also add a second icon next to it that, just by tapping over it, I'm sent to the listening area of logos. Has to be an icon. I'm thinking that by pressing the back button of my phone, I am taken back to the very place I was listening using the bubble."
