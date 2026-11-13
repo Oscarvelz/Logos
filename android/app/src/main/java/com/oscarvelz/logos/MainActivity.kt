@@ -53,6 +53,12 @@ class MainActivity : Activity() {
     private var ghost = false
     private var ghostLeaving = false
     private var ghostSeq = 0
+
+    /** When the latest ghost intent arrived (1.4.153): an intent that
+     *  lands mid-transition can pass through onNewIntent without its
+     *  dressing; onResume re-dresses from this stamp while it is fresh.
+     *  Cleared wherever a visit ends or becomes a stay. */
+    private var ghostIntentAt = 0L
     // The bubble visit (1.4.150, Oscar): the panel's headphones key sends
     // him to the listening area itself, and the visit stays a visit —
     // Back from there returns him to the place he was listening from.
@@ -239,7 +245,7 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intentDriven = true
-        if (intent.getBooleanExtra("logos.ghost", false)) { if (!resumed && !ghost) enterGhost() }
+        if (intent.getBooleanExtra("logos.ghost", false)) { ghostIntentAt = System.currentTimeMillis(); if (!resumed && !ghost) enterGhost() }
         // Only a HUMAN arrival converts a visit into a stay (1.4.120):
         // his icon, his share, his notification and gate all carry a
         // real action; a bare system redelivery does not get to strip
@@ -261,6 +267,14 @@ class MainActivity : Activity() {
         super.onResume()
         bringWebHome()
         resumed = true
+        // A ghost intent that arrived mid-transition can miss its
+        // dressing in onNewIntent (the black pull-back, 1.4.153): if
+        // one landed within the last two seconds and this resume is
+        // that arrival completing, dress now — before any logic below
+        // decides the visit is a stay. A human opening the task
+        // himself carries no fresh ghost stamp, so his stay is never
+        // dressed by mistake.
+        if (!ghost && ghostIntentAt > 0 && System.currentTimeMillis() - ghostIntentAt < 2000) enterGhost()
         // Back without any intent behind it — he opened the task himself
         // (Recents, a notification): a visit still wearing its ghost
         // clothes simply becomes his stay.
@@ -352,6 +366,7 @@ class MainActivity : Activity() {
      *  the visit simply becomes his stay — screen back, flags off. */
     private fun exitGhost() {
         ghost = false
+        ghostIntentAt = 0
         ghostHandler.removeCallbacks(ghostLeave)
         unGhost()
     }
@@ -364,6 +379,7 @@ class MainActivity : Activity() {
     private fun leaveGhost() {
         if (!ghost) return
         ghost = false
+        ghostIntentAt = 0
         ghostHandler.removeCallbacks(ghostLeave)
         // To the BACK, never finish() (1.4.89): finishing destroys the
         // only activity there is — and the WebView with it — so the page
@@ -501,11 +517,10 @@ class MainActivity : Activity() {
         @JavascriptInterface fun bubbleLock(): Boolean = BubbleService.isLocked(this@MainActivity)
 
         /** A transport press that arrived while the page was asleep, pulled once as it wakes. */
-        @JavascriptInterface fun bubblePendingCmd(): String {
-            val c = BubbleService.pendingCmd
-            BubbleService.pendingCmd = null
-            return c ?: ""
-        }
+        /** The pending command, collected once — and only while it is
+         *  still the press he just made (1.4.153: takePendingCmd drops
+         *  a stored order older than twenty seconds). */
+        @JavascriptInterface fun bubblePendingCmd(): String = BubbleService.takePendingCmd() ?: ""
 
         /** The panel's seek bar: the chosen fraction, pulled once by the page. */
         /** The page hands its session to the shell's device voice

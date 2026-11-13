@@ -23,7 +23,7 @@ import android.os.PowerManager
  */
 class PlaybackService : Service() {
     companion object {
-        /** Set by the activity: "toggle", "next" or "prev" from the notification. */
+        /** Set by the activity: the press's own name for the page ("play", "pause", "prev", "next"). */
         var onAction: ((String) -> Unit)? = null
         const val CH = "reading"
     }
@@ -42,6 +42,8 @@ class PlaybackService : Service() {
                 override fun onPause() { act("pause") }
                 override fun onSkipToNext() { act("next") }
                 override fun onSkipToPrevious() { act("prev") }
+                override fun onRewind() { act("prev") }
+                override fun onFastForward() { act("next") }
             })
             isActive = true
         }
@@ -80,18 +82,26 @@ class PlaybackService : Service() {
     private var lastPlaying = false
 
     /** Route a button press. While the activity lives it hears the press
-     *  exactly as before (play/pause travel as its "toggle"). When Android
-     *  has retired the activity and revived this service alone, the press
-     *  used to fall on a null lambda and die with a visible notification
-     *  and dead buttons (audit E-3): now it is stored as a DEFINITE play
-     *  or pause where the page collects pending commands, and the page
-     *  gets a ghost visit — the panel keys' safety net, extended here. */
+     *  exactly as before. When Android has retired the activity and
+     *  revived this service alone, the press used to fall on a null
+     *  lambda and die with a visible notification and dead buttons
+     *  (audit E-3): now it is stored as a DEFINITE play or pause where
+     *  the page collects pending commands, and the page gets a ghost
+     *  visit — the panel keys' safety net, extended here.
+     *
+     *  A press keeps its meaning on this road too (1.4.153): play and
+     *  pause used to be flattened into a bare "toggle" for the page —
+     *  a flip judged against the page's own bit, which is precisely
+     *  the bit a desynchronised session gets wrong. Oscar's card
+     *  "refused to cooperate": his definite pause, flipped, resumed.
+     *  The page has definite doors (logosandroid-play/pause); the
+     *  press now travels under its own name the whole way. */
     private fun act(kind: String) {
         // While the shell's own voice holds the stage, the media keys are
         // its (1.4.112) — the page is the one that failed to flow.
         if (NativeSpeaker.active) { NativeSpeaker.handle(kind); return }
         val a = onAction
-        if (a != null) { a(if (kind == "play" || kind == "pause") "toggle" else kind); return }
+        if (a != null) { a(kind); return }
         BubbleService.wakeForPending(this, kind)
     }
 
@@ -119,8 +129,14 @@ class PlaybackService : Service() {
             .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bmp)
             .putBitmap(MediaMetadata.METADATA_KEY_ART, bmp)
             .build())
+        // The session speaks seek, not skip (1.4.153): these keys step
+        // one sentence — they have never skipped a recording or a book.
+        // Declaring SKIP made the system's media card draw the barred
+        // track glyphs (and promise a deed the keys don't do); REWIND /
+        // FAST_FORWARD draw the plain double triangles the panel keys
+        // adopted in 1.4.118, which is what the buttons are.
         s.setPlaybackState(PlaybackState.Builder()
-            .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS)
+            .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD)
             .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f).build())
         val open = PendingIntent.getActivity(this, 9, Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CH)
