@@ -187,6 +187,13 @@ class BubbleService : Service() {
             lookHook?.invoke()
         }
 
+        /** The time-jump seconds (1.4.163): the page's Settings keep
+         *  them; the panel's jump keys and the shade's icons read
+         *  them from here, so every surface leaps the same distance. */
+        fun setJump(c: Context, jb: Int, jf: Int) {
+            prefs(c).edit().putInt("jump_b", jb.coerceIn(1, 600)).putInt("jump_f", jf.coerceIn(1, 600)).apply()
+        }
+
         fun readClipboard(c: Context): String = runCatching {
             val cm = c.getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             val clip = cm.primaryClip ?: return@runCatching ""
@@ -1375,13 +1382,67 @@ class BubbleService : Service() {
             layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(10) }
             setOnClickListener { pokeOrWake(cmd); handler.postDelayed({ refreshPanel() }, 350) }
         }
+        // The time-jump key (1.4.163, Oscar): a circular arrow wearing
+        // its seconds, drawn on the disc — the double triangles retire
+        // from the panel, because these keys no longer step a sentence:
+        // they leap the seconds Settings names. The number is read
+        // from the prefs at every draw, so a changed setting shows
+        // itself the next time the panel opens. Same disc, same press
+        // answer as the keys around it.
+        fun jumpBtn(label: String, cmd: String, dir: Int): View {
+            val v = object : View(this) {
+                override fun onDraw(cv: android.graphics.Canvas) {
+                    super.onDraw(cv)
+                    val ink = if (isPressed) c["gold"]!! else c["ink"]!!
+                    val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                        color = ink; style = android.graphics.Paint.Style.STROKE
+                        strokeWidth = dp(2).toFloat(); strokeCap = android.graphics.Paint.Cap.ROUND
+                    }
+                    val cx = width / 2f; val cy = height / 2f; val r = dp(10).toFloat()
+                    val sec = prefs(this@BubbleService).getInt(if (dir < 0) "jump_b" else "jump_f", if (dir < 0) 15 else 30)
+                    val a0 = Math.toRadians(if (dir > 0) -55.0 else 235.0)
+                    cv.drawArc(android.graphics.RectF(cx - r, cy - r, cx + r, cy + r), if (dir > 0) -55f else 235f, if (dir > 0) 290f else -290f, false, p)
+                    val hx = (cx + r * Math.cos(a0)).toFloat(); val hy = (cy + r * Math.sin(a0)).toFloat()
+                    val tang = a0 + if (dir > 0) Math.PI / 2 else -Math.PI / 2
+                    for (w in doubleArrayOf(0.65, -0.65)) {
+                        val wa = tang + Math.PI + w
+                        cv.drawLine(hx, hy, (hx + dp(5) * Math.cos(wa)).toFloat(), (hy + dp(5) * Math.sin(wa)).toFloat(), p)
+                    }
+                    p.style = android.graphics.Paint.Style.FILL
+                    p.textSize = dp(11).toFloat(); p.textAlign = android.graphics.Paint.Align.CENTER
+                    p.typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                    cv.drawText(sec.toString(), cx, cy + dp(4).toFloat(), p)
+                }
+                override fun drawableStateChanged() { super.drawableStateChanged(); invalidate() }
+            }
+            v.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(c["disc"]!!)
+                setStroke(dp(1), c["discLine"]!!)
+            }
+            v.contentDescription = label
+            v.setOnTouchListener { view, e ->
+                when (e.action) {
+                    MotionEvent.ACTION_DOWN -> view.animate().scaleX(0.9f).scaleY(0.9f).setDuration(90).start()
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.animate().scaleX(1f).scaleY(1f).setDuration(150).setInterpolator(DecelerateInterpolator()).start()
+                }
+                false
+            }
+            v.setOnClickListener { pokeOrWake(cmd); handler.postDelayed({ refreshPanel() }, 350) }
+            v.layoutParams = LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(10) }
+            return v
+        }
         val slowB = speedBtn("−", "Slower", "slower")
         // Seek glyphs, not track glyphs (1.4.118, Oscar): the bar promised
         // another audio; these keys step one sentence — a few seconds — so
         // they wear the double triangle of rew/ff, kin to play/pause.
-        val prevB = mediaBtn(android.R.drawable.ic_media_rew, "Previous sentence", "prev", 46, c["discLine"]!!)
+        // (Superseded 1.4.163, Oscar's browser-player photo: the keys
+        // leap by TIME now and wear the circular arrow with its
+        // seconds — jumpBtn above. The sentence step keeps the media
+        // session's SKIP keys, the book-to-book seat.)
+        val prevB = jumpBtn("Jump back", "jumpback", -1)
         toggleB = mediaBtn(android.R.drawable.ic_media_play, "Play or pause", "toggle", 54, c["gold"]!!)
-        val nextB = mediaBtn(android.R.drawable.ic_media_ff, "Next sentence", "next", 46, c["discLine"]!!)
+        val nextB = jumpBtn("Jump forward", "jumpfwd", 1)
         val fastB = speedBtn("+", "Faster", "faster")
         fastB.layoutParams = (fastB.layoutParams as LinearLayout.LayoutParams).apply { marginEnd = 0 }
         // The watchdog (Oscar: 'no responde al tacto'): a landed toggle always

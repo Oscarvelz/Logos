@@ -166,10 +166,10 @@ export function initBubble() {
   let pushedLook = ''
   const pushLook = () => {
     const st = settings.get()
-    const key = `${st.bubbleAlpha}|${st.panelAlpha}|${st.bubbleFade}|${st.bubbleSize}`
+    const key = `${st.bubbleAlpha}|${st.panelAlpha}|${st.bubbleFade}|${st.bubbleSize}|${st.jumpBackSec}|${st.jumpFwdSec}`
     if (key === pushedLook) return
     pushedLook = key
-    try { d.bubbleLook?.(JSON.stringify({ ba: st.bubbleAlpha, pa: st.panelAlpha, fade: st.bubbleFade, size: st.bubbleSize })) } catch { /* ignore */ }
+    try { d.bubbleLook?.(JSON.stringify({ ba: st.bubbleAlpha, pa: st.panelAlpha, fade: st.bubbleFade, size: st.bubbleSize, jb: st.jumpBackSec, jf: st.jumpFwdSec })) } catch { /* ignore */ }
   }
   pushLook()
   settings.subscribe(pushLook)

@@ -12,7 +12,11 @@ import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
 import android.graphics.drawable.Icon
 import android.os.IBinder
 import android.os.PowerManager
@@ -61,8 +65,13 @@ class PlaybackService : Service() {
                 override fun onPause() { act("pause") }
                 override fun onSkipToNext() { act("next") }
                 override fun onSkipToPrevious() { act("prev") }
-                override fun onRewind() { act("prev") }
-                override fun onFastForward() { act("next") }
+                // The seek vocabulary means TIME now (1.4.163, Oscar):
+                // rewind and fast-forward leap the seconds Settings
+                // names, the way a podcast player leaps. SKIP keeps
+                // the step it has — today a sentence, the book-to-book
+                // seat when a queue exists.
+                override fun onRewind() { act("jumpback") }
+                override fun onFastForward() { act("jumpfwd") }
             })
             // Born asleep (1.4.154): the session wakes only while the
             // voice is playing — see build(), where each published
@@ -79,7 +88,7 @@ class PlaybackService : Service() {
             // The toggle's truth is the driver's (1.4.116): while the
             // shell's own device voice holds the stage, the page's last
             // published state is a dead letter — ask the speaker.
-            "toggle", "next", "prev" -> { act(if (intent.action == "toggle") (if (if (NativeSpeaker.active) NativeSpeaker.playing else lastPlaying) "pause" else "play") else intent.action!!); return START_NOT_STICKY }
+            "toggle", "next", "prev", "jumpback", "jumpfwd" -> { act(if (intent.action == "toggle") (if (if (NativeSpeaker.active) NativeSpeaker.playing else lastPlaying) "pause" else "play") else intent.action!!); return START_NOT_STICKY }
             "stop" -> { cardUp = false; stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf(); return START_NOT_STICKY }
         }
         val playing = intent?.getBooleanExtra("playing", false) ?: false
@@ -137,6 +146,36 @@ class PlaybackService : Service() {
     private fun pi(action: String, rq: Int): PendingIntent =
         PendingIntent.getService(this, rq, Intent(this, PlaybackService::class.java).setAction(action), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
+    /**
+     * The jump key's face for the shade (1.4.163, Oscar): a circular
+     * arrow wearing its seconds — the look he brought from a browser
+     * player — drawn fresh each build so the number is always the
+     * setting's current truth (the page keeps the seconds in the
+     * bubble prefs through the look bridge).
+     */
+    private fun jumpIcon(sec: Int, dir: Int): Icon {
+        val size = 96
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; style = Paint.Style.STROKE
+            strokeWidth = 7f; strokeCap = Paint.Cap.ROUND
+        }
+        val cx = size / 2f; val cy = size / 2f; val r = 30f
+        val a0 = Math.toRadians(if (dir > 0) -55.0 else 235.0)
+        cv.drawArc(RectF(cx - r, cy - r, cx + r, cy + r), if (dir > 0) -55f else 235f, if (dir > 0) 290f else -290f, false, p)
+        val hx = (cx + r * Math.cos(a0)).toFloat(); val hy = (cy + r * Math.sin(a0)).toFloat()
+        val tang = a0 + if (dir > 0) Math.PI / 2 else -Math.PI / 2
+        for (w in doubleArrayOf(0.65, -0.65)) {
+            val wa = tang + Math.PI + w
+            cv.drawLine(hx, hy, (hx + 15 * Math.cos(wa)).toFloat(), (hy + 15 * Math.sin(wa)).toFloat(), p)
+        }
+        p.style = Paint.Style.FILL; p.textSize = 30f; p.textAlign = Paint.Align.CENTER
+        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        cv.drawText(sec.toString(), cx, cy + 11f, p)
+        return Icon.createWithBitmap(bmp)
+    }
+
     private var artBmp: Bitmap? = null
     /** The card's face: the app's warm-charcoal-and-gold artwork, bundled in the APK. Without a
      *  bitmap anywhere, Android paints the media card a stock system colour (a plain blue pill)
@@ -171,6 +210,11 @@ class PlaybackService : Service() {
         // vocabulary lands on the same one-sentence step. The shade's
         // own buttons wear the app's double triangles, as they have
         // since the beginning — that surface takes the app's icons.
+        // (Amended 1.4.163, Oscar: REWIND/FAST_FORWARD now leap by
+        // TIME — his configured seconds — on every surface that
+        // speaks seek, shade buttons included; SKIP alone keeps the
+        // step, the book-to-book seat. The session still declares
+        // both vocabularies, for the card's sake as 154 established.)
         s.setPlaybackState(PlaybackState.Builder()
             .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD)
             .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f).build())
@@ -205,9 +249,9 @@ class PlaybackService : Service() {
             .setDeleteIntent(pi("stop", 4))
             .setOngoing(playing)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .addAction(Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.ic_media_rew), "Previous", pi("prev", 1)).build())
+            .addAction(Notification.Action.Builder(jumpIcon(getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_b", 15), -1), "Jump back", pi("jumpback", 1)).build())
             .addAction(Notification.Action.Builder(Icon.createWithResource(this, if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play), if (playing) "Pause" else "Play", pi("toggle", 2)).build())
-            .addAction(Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.ic_media_ff), "Next", pi("next", 3)).build())
+            .addAction(Notification.Action.Builder(jumpIcon(getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_f", 30), 1), "Jump forward", pi("jumpfwd", 3)).build())
             .setStyle(Notification.MediaStyle().setMediaSession(s.sessionToken).setShowActionsInCompactView(0, 1, 2))
             .build()
     }

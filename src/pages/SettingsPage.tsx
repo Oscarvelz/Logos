@@ -12,7 +12,7 @@ import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.162'
+const VERSION = '1.4.163'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -213,6 +213,16 @@ export function SettingsPage() {
         <div className="list-row col">
           <div className="row between"><div className="t">{t('Pause between sentences')}</div><span className="mono muted">{st.sentencePauseMs} ms</span></div>
           <Range label={t('Pause between sentences')} min={0} max={800} step={20} value={st.sentencePauseMs} onChange={(v) => settings.set({ sentencePauseMs: v })} />
+        </div>
+        <div className="list-row">
+          <div className="grow"><div className="t">{t('Jump back')}</div><div className="d">{t('The rewind key leaps this far, in seconds — across sentences, not by line.')}</div></div>
+          <input className="text-input mono" type="number" min={1} max={600} step={1} style={{ height: 40, width: 76, textAlign: 'center' }} aria-label={t('Jump back, seconds')} value={st.jumpBackSec}
+            onChange={(e) => { const v = Math.round(Number(e.target.value)); if (Number.isFinite(v)) settings.set({ jumpBackSec: Math.min(600, Math.max(1, v)) }) }} />
+        </div>
+        <div className="list-row">
+          <div className="grow"><div className="t">{t('Jump forward')}</div><div className="d">{t('The forward key leaps this far, in seconds.')}</div></div>
+          <input className="text-input mono" type="number" min={1} max={600} step={1} style={{ height: 40, width: 76, textAlign: 'center' }} aria-label={t('Jump forward, seconds')} value={st.jumpFwdSec}
+            onChange={(e) => { const v = Math.round(Number(e.target.value)); if (Number.isFinite(v)) settings.set({ jumpFwdSec: Math.min(600, Math.max(1, v)) }) }} />
         </div>
         <div className="list-row">
           <div className="grow"><div className="t">{t('Highlight current sentence')}</div></div>

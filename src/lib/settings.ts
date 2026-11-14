@@ -37,6 +37,10 @@ export type Settings = {
   wordLeadMs: number
   /** Listen reader text size, as a multiplier of the base size. */
   readerScale: number
+  /** Time jumps (1.4.163, Oscar): the rewind key leaps this many seconds back… */
+  jumpBackSec: number
+  /** …and the forward key this many ahead. His defaults: 15 and 30. */
+  jumpFwdSec: number
 }
 
 const KEY = 'logos.settings.v1'
@@ -70,6 +74,8 @@ const DEFAULTS: Settings = {
   highlight: true,
   wordLeadMs: 90,
   readerScale: 1,
+  jumpBackSec: 15,
+  jumpFwdSec: 30,
 }
 
 /** The reader's size ladder — A− and A+ walk it one rung at a time. */

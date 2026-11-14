@@ -711,8 +711,13 @@ export function seekFraction(f: number) {
   if (!s.active || !s.segments.length) return
   const n = s.segments.length
   const pos = Math.max(0, Math.min(n - 1e-6, f * n))
-  const idx = Math.floor(pos)
-  const frac = pos - idx
+  seekTo(Math.floor(pos), pos - Math.floor(pos))
+}
+
+/** Land on sentence `idx`, `frac` of the way through it. */
+export function seekTo(idx: number, frac: number) {
+  const s = listen.get()
+  if (!s.active || !s.segments.length) return
   const r = cache.get(idx)
   if (s.mode === 'neural' && audio && r && onTrack() && idx >= track!.start && idx < track!.end) {
     // Already in the playing track: just move the playhead.
@@ -736,6 +741,51 @@ export function seekFraction(f: number) {
   } else if (neuralUsable()) prefetch(idx)
   updateMediaSession()
 }
+
+/**
+ * Leap by TIME, not by sentence (1.4.163, Oscar): the rewind and
+ * forward keys jump the seconds Settings names (15 back, 30 ahead
+ * out of the box), crossing as many sentences as the leap spans.
+ * The walk runs on the buffer's own timeline — a rendered sentence
+ * knows its true length; one not yet rendered is estimated from
+ * its words — and lands through the same door as the scrubber.
+ * The device voice reads whole sentences, so there the leap lands
+ * on the nearest sentence start: the sentence is right, the offset
+ * is the sentence's own beginning.
+ */
+export function jumpBy(deltaSec: number) {
+  const s = listen.get()
+  if (!s.active || !s.segments.length || !deltaSec) return
+  const n = s.segments.length
+  const dur = (i: number): number => {
+    const r = cache.get(i)
+    return r ? r.duration : Math.max(0.4, estimateSeconds(s.segments[i].text, 1))
+  }
+  let idx = s.current
+  let off = s.mode === 'neural' && onTrack() && cache.get(idx) ? localTime() : 0
+  let rem = Math.abs(deltaSec) * (settings.get().listenSpeed || 1)
+  if (deltaSec > 0) {
+    for (;;) {
+      const d = dur(idx)
+      if (off + rem < d) { seekTo(idx, (off + rem) / d); return }
+      rem -= d - off
+      idx++; off = 0
+      if (idx >= n) { seekTo(n - 1, 0.999); return }
+    }
+  }
+  for (;;) {
+    const d = dur(idx)
+    if (off - rem >= 0) { seekTo(idx, (off - rem) / d); return }
+    rem -= off
+    idx--
+    if (idx < 0) { seekTo(0, 0); return }
+    off = dur(idx)
+  }
+}
+
+/** The configured leaps, clamped to the sane field Oscar set: 1..600 s. */
+export const jumpBack = () => jumpBy(-Math.min(600, Math.max(1, settings.get().jumpBackSec || 15)))
+export const jumpFwd = () => jumpBy(Math.min(600, Math.max(1, settings.get().jumpFwdSec || 30)))
 
 export function next() {
   const s = listen.get()
@@ -917,8 +967,8 @@ export function installMediaSession() {
   set('stop', () => stop())
   set('nexttrack', () => next())
   set('previoustrack', () => prev())
-  set('seekforward', () => next())
-  set('seekbackward', () => prev())
+  set('seekforward', () => jumpFwd())
+  set('seekbackward', () => jumpBack())
 }
 
 // Starting a Library clip or a voice preview pauses listening (never two at once).
@@ -988,5 +1038,7 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
     addEventListener('logosandroid-toggle', () => { const cp = clipStage(); if (cp) { if (cp.playing) pauseClip(); else resumeClip(); return } toggle() })
     addEventListener('logosandroid-next', () => { if (clipStage()) { stepClip(15); return } next() })
     addEventListener('logosandroid-prev', () => { if (clipStage()) { stepClip(-15); return } prev() })
+    addEventListener('logosandroid-jumpfwd', () => { if (clipStage()) { stepClip(Math.min(600, Math.max(1, settings.get().jumpFwdSec || 30))); return } jumpFwd() })
+    addEventListener('logosandroid-jumpback', () => { if (clipStage()) { stepClip(-Math.min(600, Math.max(1, settings.get().jumpBackSec || 15))); return } jumpBack() })
   }
 }
