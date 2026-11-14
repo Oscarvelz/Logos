@@ -1,5 +1,5 @@
 import { isOriginalFavorite } from '../lib/settings.ts'
-import { Check, ChevronDown, Star, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Lock, LockOpen, Star, Trash2 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { createStore, useStore } from '../lib/store.ts'
@@ -122,12 +122,30 @@ export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boo
   return <button role="switch" aria-checked={on} aria-label={label} className={`switch ${on ? 'on' : ''}`} onClick={() => onChange(!on)} />
 }
 
-export function Range({ value, min, max, step, onChange, label }: { value: number; min: number; max: number; step: number; onChange: (v: number) => void; label: string }) {
+export function Range({ value, min, max, step, onChange, label, guarded }: { value: number; min: number; max: number; step: number; onChange: (v: number) => void; label: string; guarded?: boolean }) {
   const pct = ((value - min) / (max - min)) * 100
-  return (
+  // The little lock (Oscar, 1.4.164): a guarded slider rests LOCKED —
+  // its lock lit gold — so a finger scrolling through Settings
+  // slides past without changing a thing by mistake. One tap on
+  // the lock (it answers with a small pop as the shackle opens)
+  // frees the bar; another tap locks it again, lit.
+  const [locked, setLocked] = useState(true)
+  const input = (
     <input type="range" aria-label={label} min={min} max={max} step={step} value={value}
+      disabled={guarded && locked}
+      className={guarded ? (locked ? 'range-locked' : 'range-free') : undefined}
       style={{ ['--pct' as string]: `${pct}%` }}
       onChange={(e) => onChange(Number(e.target.value))} />
+  )
+  if (!guarded) return input
+  return (
+    <div className="range-wrap">
+      {input}
+      <button type="button" className={`range-lock ${locked ? 'on' : ''}`} aria-label={t(locked ? 'Unlock slider' : 'Lock slider')} title={t(locked ? 'Unlock slider' : 'Lock slider')}
+        onClick={() => setLocked((v) => !v)}>
+        <span className="range-lock-ic" key={locked ? 'l' : 'u'}>{locked ? <Lock size={15} /> : <LockOpen size={15} />}</span>
+      </button>
+    </div>
   )
 }
 
