@@ -1,3 +1,14 @@
+## 1.4.157 — The floating window gets a look of its own (web + shell)
+
+Oscar's ask (2026-11-14): if it isn't already there, add a Settings option to configure the floating player's look — the bubble's transparency above all, plus whatever else is fitting. It wasn't there: the bubble card carried only the on/off switch, the lever, and the words. Now, in the same card, four look controls, all travelling the lever's own road (Settings → page push → Bridge → the service's prefs, repainted in place):
+
+- **Bubble transparency** (40–100%): the λ's resting opacity. The idle whisper is now that opacity at the house's fade depth — at 100% the fade lands exactly where it always has (45% tablet, 15% phone).
+- **Panel transparency** (60–100%): the panel card's opacity, entrance included.
+- **Dim when idle** (on, as today): off, the bubble keeps the set transparency always.
+- **Bubble size** (Small / Standard / Large): window, face, halo and λ scale together; the change relayouts the living bubble where it floats.
+
+Shell: BubbleService keeps the look in its prefs (look_ba/look_pa/look_fade/look_size) with `setLook` + a `lookHook` repaint, mirroring onNow; every wake/birth animation that used to aim at full opacity now aims at the set one. No rollback snapshot this wave — the VM's write-guard was mid-flap and shell copies failed EPERM; the git source branch at 1.4.156 (05695ad) is the rollback point, named here so it isn't lost. Web 1.4.156 → 1.4.157.
+
 ## 1.4.156 — Two players, one stage: the bubble sees recordings too (web only)
 
 Oscar's report (2026-11-14): he starts an audio in the app, leaves to do other things, and cannot check it from the bubble — "la burbuja mantiene, al parecer, desconexión con la app principal." His own asymmetry was the clue: bubble-started audio shows in the app, app-started audio never shows in the bubble. Proven in the code: the house has TWO players. The reading voice (the listen store) is the only one the bubble's panel has ever mirrored — and everything the bubble starts is a reading. Finished audio (Library recordings, Create results) plays through clip.ts's own player and its own store, which never wrote a word to the listen store: the panel sat at "Ready" while a recording sounded.

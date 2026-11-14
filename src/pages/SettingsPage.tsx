@@ -12,7 +12,7 @@ import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.156'
+const VERSION = '1.4.157'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -309,6 +309,25 @@ export function SettingsPage() {
             <div className="d">{t("The bubble's panel reads along: the sentence being read, in the open. On the tablet the panel widens and the sentences before and after ride along dimmed — a glance catches what the ear missed.")}</div>
           </div>
           <Switch label={t('Words in the panel')} on={st.bubbleText} onChange={(v) => settings.set({ bubbleText: v })} />
+        </div>
+        <div className="list-row col">
+          <div className="row between"><div className="t">{t('Bubble transparency')}</div><span className="mono muted">{st.bubbleAlpha}%</span></div>
+          <Range label={t('Bubble transparency')} min={40} max={100} step={5} value={st.bubbleAlpha} onChange={(v) => settings.set({ bubbleAlpha: v })} />
+        </div>
+        <div className="list-row col">
+          <div className="row between"><div className="t">{t('Panel transparency')}</div><span className="mono muted">{st.panelAlpha}%</span></div>
+          <Range label={t('Panel transparency')} min={60} max={100} step={5} value={st.panelAlpha} onChange={(v) => settings.set({ panelAlpha: v })} />
+        </div>
+        <div className="list-row">
+          <div className="grow">
+            <div className="t">{t('Dim when idle')}</div>
+            <div className="d">{t('Untouched for a few seconds, the bubble fades to a whisper so it never competes with what you are doing. Off: it keeps the transparency you set, always.')}</div>
+          </div>
+          <Switch label={t('Dim when idle')} on={st.bubbleFade} onChange={(v) => settings.set({ bubbleFade: v })} />
+        </div>
+        <div className="list-row col">
+          <div className="t">{t('Bubble size')}</div>
+          <Seg value={st.bubbleSize} onChange={(v) => settings.set({ bubbleSize: v })} label={t('Bubble size')} options={[{ value: 's', label: t('Small') }, { value: 'm', label: t('Standard') }, { value: 'l', label: t('Large') }]} />
         </div>
       </div>
       {bState?.last ? <div className="muted small" style={{ marginTop: 10, padding: '0 4px' }}>{t('Last clipboard try: ')}{bState.last}</div> : null}

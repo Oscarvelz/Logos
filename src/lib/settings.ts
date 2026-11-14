@@ -24,6 +24,14 @@ export type Settings = {
   bubbleAuto: boolean
   /** The bubble's panel shows the words being read. */
   bubbleText: boolean
+  /** The floating window's look (1.4.157): the bubble's resting opacity, percent. */
+  bubbleAlpha: number
+  /** The panel card's opacity, percent. */
+  panelAlpha: number
+  /** The bubble dims to a whisper when idle. */
+  bubbleFade: boolean
+  /** The bubble's size: 's' | 'm' | 'l'. */
+  bubbleSize: string
   highlight: boolean
   /** Word highlight timing nudge in ms (+ = earlier). For Bluetooth delay. */
   wordLeadMs: number
@@ -55,6 +63,10 @@ const DEFAULTS: Settings = {
   bubbleOn: false,
   bubbleAuto: true,
   bubbleText: true,
+  bubbleAlpha: 100,
+  panelAlpha: 100,
+  bubbleFade: true,
+  bubbleSize: 'm',
   highlight: true,
   wordLeadMs: 90,
   readerScale: 1,

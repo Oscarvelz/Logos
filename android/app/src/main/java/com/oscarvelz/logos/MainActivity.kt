@@ -571,6 +571,14 @@ class MainActivity : Activity() {
         }
         @JavascriptInterface fun bubbleAuto(): Boolean = BubbleService.lever(this@MainActivity)
 
+        /** The floating window's look (1.4.157): opacities, idle fade, size — from Settings, via the page. */
+        @JavascriptInterface fun bubbleLook(json: String) {
+            runCatching {
+                val j = JSONObject(json)
+                BubbleService.setLook(this@MainActivity, j.optInt("ba", 100), j.optInt("pa", 100), j.optBoolean("fade", true), j.optString("size", "m"))
+            }
+        }
+
         /** Player state for the bubble's panel (title, sentence, play state). */
         @JavascriptInterface fun bubbleNow(json: String) {
             BubbleService.nowJson = json

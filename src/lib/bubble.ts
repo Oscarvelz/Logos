@@ -29,6 +29,7 @@ type DroidBubble = {
   bubble?: (on: boolean) => void
   bubblePermission?: () => void
   bubblePrefs?: (auto: boolean) => void
+  bubbleLook?: (json: string) => void
   bubbleAuto?: () => boolean
   bubbleNow?: (json: string) => void
   bubbleClip?: () => string
@@ -159,6 +160,19 @@ export function initBubble() {
   }
   pushPrefs()
   settings.subscribe(pushPrefs)
+  // The floating window's look (1.4.157) rides the same road: pushed
+  // down whenever it changes, the shell keeps it in its own prefs and
+  // repaints the bubble and the panel in place.
+  let pushedLook = ''
+  const pushLook = () => {
+    const st = settings.get()
+    const key = `${st.bubbleAlpha}|${st.panelAlpha}|${st.bubbleFade}|${st.bubbleSize}`
+    if (key === pushedLook) return
+    pushedLook = key
+    try { d.bubbleLook?.(JSON.stringify({ ba: st.bubbleAlpha, pa: st.panelAlpha, fade: st.bubbleFade, size: st.bubbleSize })) } catch { /* ignore */ }
+  }
+  pushLook()
+  settings.subscribe(pushLook)
   // A panel key pressed while this page was asleep is remembered natively and
   // collected now, as the page wakes — the press is never silently lost. And
   // when the page died outright, the session died with it: rebuild what was
