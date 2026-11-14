@@ -178,8 +178,8 @@ class BubbleService : Service() {
          *  the idle fade, the bubble's size. Kept here so a service
          *  reborn mid-session dresses the same way. */
         @Volatile var lookHook: (() -> Unit)? = null
-        fun lookBa(c: Context) = prefs(c).getInt("look_ba", 100).coerceIn(40, 100) / 100f
-        fun lookPa(c: Context) = prefs(c).getInt("look_pa", 100).coerceIn(60, 100) / 100f
+        fun lookBa(c: Context) = prefs(c).getInt("look_ba", 100).coerceIn(0, 100) / 100f
+        fun lookPa(c: Context) = prefs(c).getInt("look_pa", 100).coerceIn(0, 100) / 100f
         fun lookFade(c: Context) = prefs(c).getBoolean("look_fade", true)
         fun lookSize(c: Context) = prefs(c).getString("look_size", "m") ?: "m"
         fun setLook(c: Context, ba: Int, pa: Int, fade: Boolean, size: String) {

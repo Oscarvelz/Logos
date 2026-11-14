@@ -12,7 +12,7 @@ import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.157'
+const VERSION = '1.4.158'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -240,10 +240,12 @@ export function SettingsPage() {
       <div className="list">
         <div className="list-row col">
           <div className="grow"><div className="t">{t('Say it your way')}</div><div className="d">{t('Applies to listening and to exported audio, in every book. Codes and links are already named, not spelled out.')}</div></div>
-          <div className="row" style={{ gap: 8, marginTop: 10 }}>
-            <input className="text-input" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder={t('Word in the book')} value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
-            <input className="text-input" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder={t('Say it as')} value={pTo} onChange={(e) => setPTo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPron() }} />
-            <button className="btn primary" onClick={addPron} disabled={!pFrom.trim() || !pTo.trim()}><Plus size={17} /> {t('Add')}</button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+            <input className="text-input" style={{ height: 44, width: '100%' }} placeholder={t('Word in the book')} value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
+            <div className="row" style={{ gap: 8 }}>
+              <input className="text-input" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder={t('Say it as')} value={pTo} onChange={(e) => setPTo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPron() }} />
+              <button className="btn primary" onClick={addPron} disabled={!pFrom.trim() || !pTo.trim()}><Plus size={17} /> {t('Add')}</button>
+            </div>
           </div>
         </div>
         {pron.map((e) => (
@@ -312,11 +314,11 @@ export function SettingsPage() {
         </div>
         <div className="list-row col">
           <div className="row between"><div className="t">{t('Bubble transparency')}</div><span className="mono muted">{st.bubbleAlpha}%</span></div>
-          <Range label={t('Bubble transparency')} min={40} max={100} step={5} value={st.bubbleAlpha} onChange={(v) => settings.set({ bubbleAlpha: v })} />
+          <Range label={t('Bubble transparency')} min={0} max={100} step={5} value={st.bubbleAlpha} onChange={(v) => settings.set({ bubbleAlpha: v })} />
         </div>
         <div className="list-row col">
           <div className="row between"><div className="t">{t('Panel transparency')}</div><span className="mono muted">{st.panelAlpha}%</span></div>
-          <Range label={t('Panel transparency')} min={60} max={100} step={5} value={st.panelAlpha} onChange={(v) => settings.set({ panelAlpha: v })} />
+          <Range label={t('Panel transparency')} min={0} max={100} step={5} value={st.panelAlpha} onChange={(v) => settings.set({ panelAlpha: v })} />
         </div>
         <div className="list-row">
           <div className="grow">

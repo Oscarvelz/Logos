@@ -1,3 +1,9 @@
+## 1.4.158 — Down to zero, his word; and the pronunciation fields get their room (web + shell)
+
+Oscar's verdict on 1.4.157, from his phone (2026-11-14): "Make it arrive to 0, let the user make their mind. It's theirs to choose. Same for panel transparency. You can very well suggest settings." So both transparency sliders now run the full 0–100 (page Range mins and the shell's lookBa/lookPa clamps alike); 100% stays as the standing suggestion — the default the app offers, never a fence. At 0 the bubble is invisible yet still floats where it was, tappable as ever; that is the user's choice to make, stated here so nobody calls it a bug.
+
+His second catch, same photos: in Pronunciation, the "Word in the book" field showed its text cut mid-word ("Word in th…") and the focused field's ring crowded off — two fields plus the Add button on one phone-width row left each field ~99px, less than its own placeholder. The pair is stacked now: the book word takes a full-width line; "Say it as" and Add share the second. Both placeholders and the selection ring render whole at phone width. Web 1.4.157 → 1.4.158.
+
 ## 1.4.157 — The floating window gets a look of its own (web + shell)
 
 Oscar's ask (2026-11-14): if it isn't already there, add a Settings option to configure the floating player's look — the bubble's transparency above all, plus whatever else is fitting. It wasn't there: the bubble card carried only the on/off switch, the lever, and the words. Now, in the same card, four look controls, all travelling the lever's own road (Settings → page push → Bridge → the service's prefs, repainted in place):
