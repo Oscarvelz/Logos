@@ -1481,28 +1481,6 @@ class BubbleService : Service() {
         clipRow.addView(leverS)
         val spacer2 = View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) }
         clipRow.addView(spacer2)
-        // Paste now left the footer as a WORD in 1.4.117 (Oscar): a
-        // copied text arrives on its own, so the key repeated what
-        // already happened. It returns in 1.4.162 at his word, as an
-        // ICON in the corner at the same 30 dp — for the catch the
-        // automatic road cannot see: re-copying the SAME text. The
-        // automatic dedupe reads a repeated copy as no news; a hand
-        // ask is news by definition (deliver() has always bypassed
-        // lock and hash for manual reads), so this disc runs the old
-        // guaranteed-floor read: panel, blink, then Logos itself.
-        val pasteB = footBtn(s("Paste now", "Pegar ahora"), { cv, ink, cx, cy, r ->
-            val p = inkPaint(ink)
-            // The board.
-            cv.drawRoundRect(android.graphics.RectF(cx - r * 0.78f, cy - r * 0.68f, cx + r * 0.78f, cy + r * 0.95f), dp(2).toFloat(), dp(2).toFloat(), p)
-            // The clip across its top.
-            cv.drawRoundRect(android.graphics.RectF(cx - r * 0.42f, cy - r * 1.05f, cx + r * 0.42f, cy - r * 0.5f), dp(2).toFloat(), dp(2).toFloat(), p)
-            // The arrow coming down into it: this brings the words in.
-            cv.drawLine(cx, cy - r * 0.3f, cx, cy + r * 0.42f, p)
-            cv.drawLine(cx - r * 0.3f, cy + r * 0.14f, cx, cy + r * 0.44f, p)
-            cv.drawLine(cx + r * 0.3f, cy + r * 0.14f, cx, cy + r * 0.44f, p)
-        }) { readClip(true) }
-        pasteB.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(12) }
-        clipRow.addView(pasteB)
         fun footBtn(desc: String, glyph: (cv: android.graphics.Canvas, ink: Int, cx: Float, cy: Float, r: Float) -> Unit, act: () -> Unit): View {
             val v = object : View(this) {
                 override fun onDraw(cv: android.graphics.Canvas) {
@@ -1535,6 +1513,28 @@ class BubbleService : Service() {
             color = ink; style = android.graphics.Paint.Style.STROKE
             strokeWidth = dp(2).toFloat(); strokeCap = android.graphics.Paint.Cap.ROUND
         }
+        // Paste now left the footer as a WORD in 1.4.117 (Oscar): a
+        // copied text arrives on its own, so the key repeated what
+        // already happened. It returns in 1.4.162 at his word, as an
+        // ICON in the corner at the same 30 dp — for the catch the
+        // automatic road cannot see: re-copying the SAME text. The
+        // automatic dedupe reads a repeated copy as no news; a hand
+        // ask is news by definition (deliver() has always bypassed
+        // lock and hash for manual reads), so this disc runs the old
+        // guaranteed-floor read: panel, blink, then Logos itself.
+        val pasteB = footBtn(s("Paste now", "Pegar ahora"), { cv, ink, cx, cy, r ->
+            val p = inkPaint(ink)
+            // The board.
+            cv.drawRoundRect(android.graphics.RectF(cx - r * 0.78f, cy - r * 0.68f, cx + r * 0.78f, cy + r * 0.95f), dp(2).toFloat(), dp(2).toFloat(), p)
+            // The clip across its top.
+            cv.drawRoundRect(android.graphics.RectF(cx - r * 0.42f, cy - r * 1.05f, cx + r * 0.42f, cy - r * 0.5f), dp(2).toFloat(), dp(2).toFloat(), p)
+            // The arrow coming down into it: this brings the words in.
+            cv.drawLine(cx, cy - r * 0.3f, cx, cy + r * 0.42f, p)
+            cv.drawLine(cx - r * 0.3f, cy + r * 0.14f, cx, cy + r * 0.44f, p)
+            cv.drawLine(cx + r * 0.3f, cy + r * 0.14f, cx, cy + r * 0.44f, p)
+        }) { readClip(true) }
+        pasteB.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(12) }
+        clipRow.addView(pasteB)
         val listenB = footBtn(s("Go to the listening area", "Ir a la zona de escucha"), { cv, ink, cx, cy, r ->
             val p = inkPaint(ink)
             // The band: a half-arc over the top.
