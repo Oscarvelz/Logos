@@ -1,10 +1,14 @@
 import { createStore } from './store.ts'
 import type { Lang } from './voices.ts'
 
-export type Theme = 'dark' | 'light' | 'system'
+export type Theme = 'dark' | 'light' | 'system' | 'tron' | 'cyberpunk'
+/** The original family — the electric themes are guests beside it. */
+export type LegacyTheme = 'dark' | 'light' | 'system'
 
 export type Settings = {
   theme: Theme
+  /** The Legacy mode he last chose — returning to Legacy restores it (1.4.165). */
+  lastLegacy: LegacyTheme
   /** The app's own language — every word of the interface. */
   uiLang: 'en' | 'es'
   listenSpeed: number
@@ -53,6 +57,7 @@ export const isOriginalFavorite = (id: string) => ORIGINAL_FAVORITES.includes(id
 
 const DEFAULTS: Settings = {
   theme: 'dark',
+  lastLegacy: 'dark',
   uiLang: 'en',
   listenSpeed: 1,
   exportSpeed: 1,
@@ -91,7 +96,10 @@ function load(): Settings {
     const raw = localStorage.getItem(KEY)
     if (!raw) return DEFAULTS
     const parsed = JSON.parse(raw) as Partial<Settings>
-    return { ...DEFAULTS, ...parsed, defaultVoice: { ...DEFAULTS.defaultVoice, ...(parsed.defaultVoice ?? {}) } }
+    const out = { ...DEFAULTS, ...parsed, defaultVoice: { ...DEFAULTS.defaultVoice, ...(parsed.defaultVoice ?? {}) } }
+    if (!['dark', 'light', 'system', 'tron', 'cyberpunk'].includes(out.theme)) out.theme = 'dark'
+    if (!['dark', 'light', 'system'].includes(out.lastLegacy)) out.lastLegacy = 'dark'
+    return out
   } catch {
     return DEFAULTS
   }
@@ -157,7 +165,18 @@ export function saveLastText(text: string) {
 }
 
 export function applyTheme(theme: Theme) {
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (theme === 'tron') {
+    document.documentElement.dataset.theme = 'tron'
+    meta?.setAttribute('content', '#02060c')
+    return
+  }
+  if (theme === 'cyberpunk') {
+    document.documentElement.dataset.theme = 'cyberpunk'
+    meta?.setAttribute('content', '#0b0a08')
+    return
+  }
   const dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
   document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0a0a0f' : '#f6f2ea')
+  meta?.setAttribute('content', dark ? '#0a0a0f' : '#f6f2ea')
 }

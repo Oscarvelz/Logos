@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { exportBackup, importBackup } from '../lib/backup.ts'
-import { ChevronDown, Cpu, Download, HardDrive, Languages, Loader2, Mic, Palette, PictureInPicture2, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, Cpu, Download, HardDrive, Languages, Loader2, Mic, Palette, PictureInPicture2, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { t } from '../lib/i18n.ts'
 import { useStore } from '../lib/store.ts'
-import { settings, applyTheme, READER_SCALES, stepReaderScale, type Theme } from '../lib/settings.ts'
+import { settings, applyTheme, READER_SCALES, stepReaderScale, type Theme, type LegacyTheme } from '../lib/settings.ts'
 import { bubbleSupported, bubbleNativeState, setBubble, openBubblePermission, type BubbleNativeState } from '../lib/bubble.ts'
 import { keep } from '../engine/keep.ts'
 import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHONON_SIZE_MB, modelCacheBytes } from '../engine/engine.ts'
@@ -12,7 +12,7 @@ import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.164'
+const VERSION = '1.4.165'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -273,10 +273,34 @@ export function SettingsPage() {
       <section className="set-group">
       <SetCard icon={<Palette size={19} />} title={t('Appearance')} sub={t('The light of the room.')}>
       <div className="list">
-        <div className="list-row col">
-          <div className="t">{t('Theme')}</div>
-          <Seg value={st.theme} label={t('Theme')} onChange={(t: Theme) => { settings.set({ theme: t }); applyTheme(t) }} options={[{ value: 'dark', label: t('Dark') }, { value: 'light', label: t('Light') }, { value: 'system', label: t('System') }]} />
-        </div>
+        {([
+          { id: 'legacy', name: t('Legacy'), desc: t('Charcoal and gold — the original.'), sw: ['#17130c', '#e9bd72'] },
+          { id: 'tron', name: 'Tron', desc: t('Light lines on the deep black of the Grid.'), sw: ['#02060c', '#00e5ff'] },
+          { id: 'cyberpunk', name: 'Cyberpunk', desc: t('Signal yellow print on warm black.'), sw: ['#0b0a08', '#fcee0a'] },
+        ] as const).map((th) => {
+          const fam = st.theme === 'tron' ? 'tron' : st.theme === 'cyberpunk' ? 'cyberpunk' : 'legacy'
+          const on = fam === th.id
+          return (
+            <button key={th.id} type="button" className={`theme-row ${on ? 'on' : ''}`} aria-pressed={on}
+              onClick={() => {
+                if (th.id === 'legacy') { settings.set({ theme: st.lastLegacy }); applyTheme(st.lastLegacy) }
+                else { const v = th.id as Theme; settings.set({ theme: v }); applyTheme(v) }
+              }}>
+              <span className="theme-sw" style={{ background: `linear-gradient(135deg, ${th.sw[0]} 50%, ${th.sw[1]} 50%)` }} />
+              <span className="grow">
+                <span className="t">{th.name}</span>
+                <span className="d">{th.desc}</span>
+              </span>
+              {on && <Check size={18} className="theme-check" />}
+            </button>
+          )
+        })}
+        {(st.theme !== 'tron' && st.theme !== 'cyberpunk') && (
+          <div className="list-row col">
+            <div className="t">{t('Legacy mode')}</div>
+            <Seg value={st.lastLegacy} label={t('Legacy mode')} onChange={(v: LegacyTheme) => { settings.set({ theme: v, lastLegacy: v }); applyTheme(v) }} options={[{ value: 'dark', label: t('Dark') }, { value: 'light', label: t('Light') }, { value: 'system', label: t('System') }]} />
+          </div>
+        )}
       </div>
       </SetCard>
       </section>
