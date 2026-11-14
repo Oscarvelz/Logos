@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
-import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, FastForward, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, Rewind, X } from 'lucide-react'
+import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings, READER_SCALES, stepReaderScale } from '../lib/settings.ts'
@@ -23,7 +23,7 @@ import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { WebImport } from '../components/webimport.tsx'
 import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
-import { EngineNote, StatusPill, VoicePicker } from '../components/chrome.tsx'
+import { EngineNote, JumpKey, StatusPill, VoicePicker } from '../components/chrome.tsx'
 import { Range, Sheet, toast, useMediaQuery } from '../components/ui.tsx'
 import { t } from '../lib/i18n.ts'
 import { TabletDesk, TextMap } from '../components/desk.tsx'
@@ -220,11 +220,11 @@ export function ListenPage() {
             {s.playing
               ? <button className="icon-btn" onClick={() => navPin.set({ pinned: !pin.pinned })} aria-label={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')} title={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')}>{pin.pinned ? <PanelBottomClose size={20} /> : <PanelBottomOpen size={20} />}</button>
               : <span aria-hidden />}
-            <button className="icon-btn filled" onClick={prev} disabled={!reading} aria-label={t('Previous sentence')}><Rewind size={22} /></button>
+            <JumpKey dir="back" size={25} disabled={!reading} />
             <button className={`play-btn ${s.buffering ? 'busy' : ''}`} onClick={reading ? toggle : start} aria-label={s.playing ? t('Pause') : t('Play')}>
               <span className="pb-icon" key={s.buffering ? 'b' : s.playing ? 'p' : 'l'}>{s.buffering ? <Loader2 size={32} className="spin" /> : s.playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" style={{ marginLeft: 4 }} />}</span>
             </button>
-            <button className="icon-btn filled" onClick={next} disabled={!reading} aria-label={t('Next sentence')}><FastForward size={22} /></button>
+            <JumpKey dir="fwd" size={25} disabled={!reading} />
             <button className="icon-btn" onClick={() => void markAndToast()} disabled={!reading} aria-label={t('Mark this moment')} title={t('Mark this moment')}><Bookmark size={20} /></button>
           </div>
 

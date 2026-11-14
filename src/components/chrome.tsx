@@ -1,8 +1,8 @@
-import { AudioLines, Library, Mic2, Pause, Play, Settings2, FastForward, Rewind, Sparkles, Star, Check, Download, Loader2, ChevronDown } from 'lucide-react'
+import { AudioLines, Library, Mic2, Pause, Play, Settings2, RotateCcw, RotateCw, Sparkles, Star, Check, Download, Loader2, ChevronDown } from 'lucide-react'
 import { navigate, useRoute, type Route } from '../lib/router.ts'
 import { useStore } from '../lib/store.ts'
 import { engine, ensureModel, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
-import { listen, toggle, next, prev } from '../player/listen.ts'
+import { listen, toggle, jumpBack, jumpFwd } from '../player/listen.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
 import { useEffect, useState } from 'react'
 import { VOICES, favoriteVoices, type Lang, type Voice } from '../lib/voices.ts'
@@ -145,6 +145,26 @@ export function StatusPill({ compact }: { compact?: boolean }) {
   )
 }
 
+/**
+ * The time-jump key (1.4.163, Oscar): a circular arrow wearing its
+ * seconds, the look he brought from a browser player — it replaces
+ * the double-arrow sentence keys on every transport. The number is
+ * the user's own setting, read live, so the key always tells the
+ * truth about what it will do.
+ */
+export function JumpKey({ dir, size = 24, filled = true, disabled }: { dir: 'back' | 'fwd'; size?: number; filled?: boolean; disabled?: boolean }) {
+  const st = useStore(settings)
+  const sec = dir === 'back' ? st.jumpBackSec : st.jumpFwdSec
+  const Icon = dir === 'back' ? RotateCcw : RotateCw
+  return (
+    <button className={`icon-btn jump-key ${filled ? 'filled' : ''}`} disabled={disabled} onClick={dir === 'back' ? jumpBack : jumpFwd}
+      aria-label={t(dir === 'back' ? 'Jump back {n} seconds' : 'Jump forward {n} seconds', { n: sec })}>
+      <Icon size={size} />
+      <span className="jump-n" style={{ fontSize: Math.max(8, size * 0.4) }} aria-hidden>{sec}</span>
+    </button>
+  )
+}
+
 export function MiniPlayer() {
   const s = useStore(listen)
   const route = useRoute()
@@ -156,11 +176,11 @@ export function MiniPlayer() {
   // body (not a key) still opens Listen.
   return (
     <div className="mini" role="region" aria-label={t('Now playing')} onClick={(e) => { if (e.target === e.currentTarget) navigate('listen') }}>
-      <button className="icon-btn" onClick={prev} aria-label={t('Previous sentence')}><Rewind size={20} /></button>
+      <JumpKey dir="back" size={21} filled={false} />
       <button className="mini-play" onClick={toggle} aria-label={s.playing ? t('Pause') : t('Play')}>
         {s.buffering ? <Loader2 size={20} className="spin" /> : s.playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" style={{ marginLeft: 2 }} />}
       </button>
-      <button className="icon-btn" onClick={next} aria-label={t('Next sentence')}><FastForward size={20} /></button>
+      <JumpKey dir="fwd" size={21} filled={false} />
       <span className="mini-prog" style={{ width: `${((s.current + (s.playing ? 0.5 : 0)) / Math.max(1, s.segments.length)) * 100}%` }} />
     </div>
   )

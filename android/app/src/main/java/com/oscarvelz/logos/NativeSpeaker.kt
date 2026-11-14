@@ -233,6 +233,26 @@ object NativeSpeaker {
         if (playing) speakCurrent() else notifyUi()
     }
 
+    /**
+     * Leap by time (1.4.163): the device voice speaks whole
+     * sentences, so the leap becomes a count of sentences — the
+     * configured seconds divided by the text's own average sentence
+     * length at this rate (~13.5 chars per second at 1.0×). The
+     * landing sentence is the honest approximation of the moment.
+     */
+    fun jump(dir: Int) {
+        if (!active || sentences.isEmpty()) return
+        val sec = runCatching {
+            appCtx?.getSharedPreferences("bubble", Context.MODE_PRIVATE)
+                ?.getInt(if (dir < 0) "jump_b" else "jump_f", if (dir < 0) 15 else 30) ?: if (dir < 0) 15 else 30
+        }.getOrDefault(if (dir < 0) 15 else 30)
+        val avgChars = max(1, sentences.sumOf { it.length } / sentences.size)
+        val cps = 13.5f * RATES[ratePos]
+        val steps = max(1, Math.round(sec * cps / avgChars))
+        idx = (idx + dir * steps).coerceIn(0, sentences.size - 1)
+        if (playing) speakCurrent() else notifyUi()
+    }
+
     fun faster() {
         if (!active) return
         ratePos = min(ratePos + 1, RATES.size - 1)
@@ -259,6 +279,8 @@ object NativeSpeaker {
             "toggle" -> toggle()
             "next" -> next()
             "prev" -> prev()
+            "jumpback" -> jump(-1)
+            "jumpfwd" -> jump(1)
             "faster" -> faster()
             "slower" -> slower()
         }
