@@ -12,7 +12,7 @@ import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.160'
+const VERSION = '1.4.161'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -56,8 +56,11 @@ function BackupCard() {
 
 function SetCard({ icon, title, sub, children, defaultOpen }: { icon: ReactNode; title: string; sub: string; children: ReactNode; defaultOpen?: boolean }) {
   // The cards fold (Oscar, 2026-11-10): a Settings page that opens as
-  // a tidy index of headers, each unfolding at a tap. The first card
-  // — the voice engine, with its live status — arrives open.
+  // a tidy index of headers, each unfolding at a tap. The voice
+  // engine's card arrives open only while it still has something to
+  // ask of him — a download to offer, a progress to watch, an error
+  // to answer; once the model is downloaded it presents folded
+  // like every other card (Oscar, 2026-11-14).
   const [open, setOpen] = useState(!!defaultOpen)
   return (
     <div className={"card set-card" + (open ? " open" : "")}>
@@ -138,7 +141,7 @@ export function SettingsPage() {
 
       <div className="set-cols">
       <section className="set-group">
-      <SetCard defaultOpen icon={<Cpu size={19} />} title={t('Neural voice')} sub={t('The reading voice — it lives on this device, downloads once, then works offline.')}>
+      <SetCard defaultOpen={e.status === 'loading' || e.status === 'error' || (e.status !== 'ready' && !e.cached)} icon={<Cpu size={19} />} title={t('Neural voice')} sub={t('The reading voice — it lives on this device, downloads once, then works offline.')}>
       <div className="engine-card stack">
         <div className="row between">
           <div>

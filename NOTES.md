@@ -1,3 +1,7 @@
+## 1.4.161 — Once the model is home, its card presents folded (web)
+
+Oscar's word, with his Settings photo (2026-11-14): "Once the audio model has been downloaded, there is no need for these settings to be unfolded, so it should present itself folded, just as if the model is not downloaded." The Neural voice card was hard-coded `defaultOpen` — it arrived unfolded in every state, forever showing him the Ready details he no longer needs. Now the card arrives open only while it still has something to ask of him: no model yet (the download offer), a download in progress, or an error to answer. Once the model is downloaded — loaded and ready, or resting in storage — the card presents folded like every other card on the page, its contents one tap away as always. If he is standing on the page while a download completes, the card stays open until his next visit; a card never folds itself out from under the person using it. Web 1.4.160 → 1.4.161.
+
 ## 1.4.160 — The finished reading parks, so the headphone can bring it back (web + shell)
 
 Oscar's scenario, with his photo of the panel standing over a finished reading (2026-11-14): "Un audio se terminó, se pausó, pero quiero reiniciarlo tocando el botón de play de mi audífono… sin necesidad de volver a copiar nada, solo utilizando el botón de mis auriculares."
