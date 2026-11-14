@@ -489,7 +489,12 @@ export function initBubble() {
       const text = t.trim()
       if (!text) return
       if (!want && clipKey(text) === lastClip) return
-      if (text === drafts.get().listen.trim()) { seenClip(text); return }
+      // The draft gate keeps the automatic road from re-playing what
+      // a delivery itself put there — but a hand paste (want) of the
+      // very same words is a restart ask, not a loop (1.4.162):
+      // Oscar re-copies a text the dedupe reads as no news, and only
+      // his finger on the paste icon can say "again".
+      if (!want && text === drafts.get().listen.trim()) { seenClip(text); return }
       playClipboardText(text)
     }).catch(() => { /* clipboard blocked */ })
   })
