@@ -168,6 +168,13 @@ class MainActivity : Activity() {
                 // loading: land it on the listening area now that the
                 // page can hear the word.
                 if (pendingListen) { pendingListen = false; runCatching { v.evaluateJavascript("location.hash='#/listen'", null) } }
+                // A fresh page owns no session (1.4.155): any media
+                // card still standing belongs to the page this one
+                // replaced — its last published state, frozen over
+                // silence, and a foreground card cannot be swiped
+                // away. Put it away now; if this page starts a
+                // reading, its own publishes raise the card again.
+                if (PlaybackService.cardUp) PlaybackService.instance?.forceStop()
             }
             override fun onRenderProcessGone(v: WebView, detail: RenderProcessGoneDetail): Boolean { recoverWeb(v); return true }
         }
@@ -702,7 +709,15 @@ class MainActivity : Activity() {
             BubbleService.poke = null
         }
         PlaybackService.onAction = null
-        runCatching { startService(Intent(this, PlaybackService::class.java).setAction("stop")) }
+        // The card's fate follows the page's (1.4.155): while the
+        // bubble lives, the page may live on backstage and keep the
+        // card honest — leave it standing. When it doesn't, this
+        // activity was the page's last home, so put the card away
+        // in-process: the startService("stop") this replaces could
+        // die undelivered from a dying, backgrounded activity
+        // (silently, inside its runCatching), leaving the card
+        // standing over silence with no way to swipe it away.
+        if (!BubbleService.running) PlaybackService.instance?.forceStop()
         super.onDestroy()
     }
 }

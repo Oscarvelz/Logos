@@ -26,6 +26,24 @@ class PlaybackService : Service() {
         /** Set by the activity: the press's own name for the page ("play", "pause", "prev", "next"). */
         var onAction: ((String) -> Unit)? = null
         const val CH = "reading"
+
+        /** True while this service holds a media card in the shade. */
+        @Volatile var cardUp = false
+
+        /** The living service (1.4.155), so the house can put the card
+         *  away in-process: an intent sent to a backgrounded, dying
+         *  activity can die undelivered, and a card that outlives its
+         *  page is a lie that cannot be swiped away. */
+        var instance: PlaybackService? = null
+    }
+
+    /** Put the card away now (1.4.155): foreground ended, card gone.
+     *  The session itself is released in onDestroy, as before. */
+    fun forceStop() {
+        cardUp = false
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        wake?.let { if (it.isHeld) it.release() }
+        stopSelf()
     }
     private var session: MediaSession? = null
     private var wake: PowerManager.WakeLock? = null
@@ -34,6 +52,7 @@ class PlaybackService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CH, "Reading aloud", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
         session = MediaSession(this, "Logos").apply {
@@ -61,7 +80,7 @@ class PlaybackService : Service() {
             // shell's own device voice holds the stage, the page's last
             // published state is a dead letter — ask the speaker.
             "toggle", "next", "prev" -> { act(if (intent.action == "toggle") (if (if (NativeSpeaker.active) NativeSpeaker.playing else lastPlaying) "pause" else "play") else intent.action!!); return START_NOT_STICKY }
-            "stop" -> { stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf(); return START_NOT_STICKY }
+            "stop" -> { cardUp = false; stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf(); return START_NOT_STICKY }
         }
         val playing = intent?.getBooleanExtra("playing", false) ?: false
         lastPlaying = playing
@@ -72,11 +91,13 @@ class PlaybackService : Service() {
         val text = intent?.getStringExtra("text") ?: ""
         if (!playing && text.isBlank()) {
             // Nothing loaded any more: put the notification away (after the start Android requires).
+            cardUp = false
             startForeground(1, build(false, "", artist, ""), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
             stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf()
             return START_NOT_STICKY
         }
         // Stay a foreground service while paused too, so play from the lock screen always works.
+        cardUp = true
         startForeground(1, build(playing, book, artist, text), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         if (playing) wake?.acquire(3 * 60 * 60 * 1000L) else wake?.let { if (it.isHeld) it.release() }
         return START_NOT_STICKY
@@ -179,6 +200,8 @@ class PlaybackService : Service() {
     }
 
     override fun onDestroy() {
+        cardUp = false
+        if (instance === this) instance = null
         wake?.let { if (it.isHeld) it.release() }
         session?.release()
         super.onDestroy()

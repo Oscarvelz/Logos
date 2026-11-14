@@ -948,10 +948,15 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
       if (on) started = true
       if (!started) return
       if (!s.active) started = false
+      // A finished reading is over (1.4.155): the card must not linger
+      // wearing the book's face after the last sentence — publish the
+      // blank truth and the shell puts the card away. Before, finish
+      // published a paused card that stayed in the shade indefinitely.
+      const ended = !s.active || s.finished
       const v = voiceById(s.voices[s.current])
-      const book = nowReadingFor(s.text)
-      const sentence = s.active ? (s.segments[s.current]?.text.slice(0, 120) ?? '') : ''
-      const key = `${on}|${s.current}|${s.active}|${book?.title ?? ''}`
+      const book = ended ? null : nowReadingFor(s.text)
+      const sentence = !ended && s.active ? (s.segments[s.current]?.text.slice(0, 120) ?? '') : ''
+      const key = `${on}|${s.current}|${s.active}|${s.finished}|${book?.title ?? ''}`
       if (key === last) return
       last = key
       // Shell 17+ gets the book's title and the artist line separately, so its media card heads
