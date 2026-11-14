@@ -12,7 +12,7 @@ import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.163'
+const VERSION = '1.4.164'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -208,11 +208,11 @@ export function SettingsPage() {
       <div className="list">
         <div className="list-row col">
           <div className="row between"><div className="t">{t('Listening speed')}</div><span className="mono muted">{st.listenSpeed.toFixed(2)}×</span></div>
-          <Range label={t('Listening speed')} min={0.5} max={2.5} step={0.05} value={st.listenSpeed} onChange={(v) => settings.set({ listenSpeed: v })} />
+          <Range guarded label={t('Listening speed')} min={0.5} max={2.5} step={0.05} value={st.listenSpeed} onChange={(v) => settings.set({ listenSpeed: v })} />
         </div>
         <div className="list-row col">
           <div className="row between"><div className="t">{t('Pause between sentences')}</div><span className="mono muted">{st.sentencePauseMs} ms</span></div>
-          <Range label={t('Pause between sentences')} min={0} max={800} step={20} value={st.sentencePauseMs} onChange={(v) => settings.set({ sentencePauseMs: v })} />
+          <Range guarded label={t('Pause between sentences')} min={0} max={800} step={20} value={st.sentencePauseMs} onChange={(v) => settings.set({ sentencePauseMs: v })} />
         </div>
         <div className="list-row">
           <div className="grow"><div className="t">{t('Jump back')}</div><div className="d">{t('The rewind key leaps this far, in seconds — across sentences, not by line.')}</div></div>
@@ -327,11 +327,11 @@ export function SettingsPage() {
         </div>
         <div className="list-row col">
           <div className="row between"><div className="t">{t('Bubble transparency')}</div><span className="mono muted">{st.bubbleAlpha}%</span></div>
-          <Range label={t('Bubble transparency')} min={0} max={100} step={5} value={st.bubbleAlpha} onChange={(v) => settings.set({ bubbleAlpha: v })} />
+          <Range guarded label={t('Bubble transparency')} min={0} max={100} step={5} value={st.bubbleAlpha} onChange={(v) => settings.set({ bubbleAlpha: v })} />
         </div>
         <div className="list-row col">
           <div className="row between"><div className="t">{t('Panel transparency')}</div><span className="mono muted">{st.panelAlpha}%</span></div>
-          <Range label={t('Panel transparency')} min={0} max={100} step={5} value={st.panelAlpha} onChange={(v) => settings.set({ panelAlpha: v })} />
+          <Range guarded label={t('Panel transparency')} min={0} max={100} step={5} value={st.panelAlpha} onChange={(v) => settings.set({ panelAlpha: v })} />
         </div>
         <div className="list-row">
           <div className="grow">

@@ -47,6 +47,8 @@ export const ES: Record<string, string> = {
   'Playback': 'Escucha',
   'How listening feels, sentence by sentence.': 'Cómo se siente escuchar, oración por oración.',
   'Listening speed': 'Velocidad de escucha',
+  'Lock slider': 'Bloquear la barra',
+  'Unlock slider': 'Desbloquear la barra',
   'Jump back': 'Salto atrás',
   'Jump forward': 'Salto adelante',
   'The rewind key leaps this far, in seconds — across sentences, not by line.': 'La tecla de retroceso salta esta distancia, en segundos — cruzando oraciones, no por línea.',
