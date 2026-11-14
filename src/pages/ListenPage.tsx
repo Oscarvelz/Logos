@@ -10,6 +10,7 @@ import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate,
 import { markAndToast, textKey } from '../lib/marks.ts'
 import { loadSessionResume } from '../lib/resume.ts'
 import { ContinueRow } from '../components/continue.tsx'
+import { clipPlayer } from '../player/clip.ts'
 import { navPin } from '../lib/navpin.ts'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
@@ -32,6 +33,7 @@ const SPEEDS = RATE_STEPS
 export function ListenPage() {
   const d = useStore(drafts)
   const s = useStore(listen)
+  const cp = useStore(clipPlayer)
   const pin = useStore(navPin)
   const st = useStore(settings)
   const e = useStore(engine)
@@ -138,7 +140,15 @@ export function ListenPage() {
     <div className="page wide listen-page">
       <ListenHead text={reading ? s.text : text} lang={lang} playing={s.playing && reading} remaining={remaining} />
 
-      <ContinueRow onResume={() => setEditing(false)} />
+      {/* While anything sounds in the main listening area, the
+          Continue card folds itself away (Oscar, 2026-11-14): the
+          text takes the whole stage. When the audio stops, the card
+          unfolds back — both ways on the house fold transition. */}
+      <div className={`continue-fold${s.playing || s.buffering || cp.playing ? '' : ' open'}`} aria-hidden={s.playing || s.buffering || cp.playing}>
+        <div className="set-fold-in">
+          <ContinueRow onResume={() => setEditing(false)} />
+        </div>
+      </div>
 
       <div className="listen-grid">
         <div className="card" style={{ overflow: 'hidden' }}>

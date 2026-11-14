@@ -1,3 +1,9 @@
+## 1.4.159 — While it sounds, the Continue card steps aside (web)
+
+Oscar's ask, with his screenshot (2026-11-14): "It would be appropriate that if I play any audio that is there in the major listening area, the card above that is showcasing the continuous listening hides itself to allow the main listening area of the text [to] fulfil all its potential and use its position. If I stop the audio, then a transition would make the continuous listening card again appear."
+
+Built exactly so: the Continue Listening card on the Listen screen now sits in a fold (the house grid-rows fold, worn the other way round — open at rest). While anything sounds in the main listening area — the reading playing or buffering, or a recording sounding through the clip player — the card folds itself away on the transition and the text takes the whole stage; the moment the audio stops (pause, end, session closed), the card unfolds back. It never unmounts, so its place and contents are exactly as they were. His reading of "stop" includes pause — his word governs; if he wants the card to stay away while paused mid-book, one word changes it. Web 1.4.158 → 1.4.159.
+
 ## 1.4.158 — Down to zero, his word; and the pronunciation fields get their room (web + shell)
 
 Oscar's verdict on 1.4.157, from his phone (2026-11-14): "Make it arrive to 0, let the user make their mind. It's theirs to choose. Same for panel transparency. You can very well suggest settings." So both transparency sliders now run the full 0–100 (page Range mins and the shell's lookBa/lookPa clamps alike); 100% stays as the standing suggestion — the default the app offers, never a fence. At 0 the bubble is invisible yet still floats where it was, tappable as ever; that is the user's choice to make, stated here so nobody calls it a bug.
