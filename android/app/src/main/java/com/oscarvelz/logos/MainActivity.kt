@@ -507,6 +507,17 @@ class MainActivity : Activity() {
             }
         }
 
+        /** The finished reading's publish (1.4.160): same road as
+         *  media(), plus the finished mark, so the service parks a
+         *  standing replay card instead of retiring. Older pages never
+         *  call this; newer pages fall back to media() without it. */
+        @JavascriptInterface fun mediaF(on: Boolean, book: String, artist: String, text: String) {
+            val i = Intent(this@MainActivity, PlaybackService::class.java).putExtra("playing", on).putExtra("book", book).putExtra("artist", artist).putExtra("text", text).putExtra("finished", true)
+            runOnUiThread {
+                runCatching { startForegroundService(i) }
+            }
+        }
+
         // ── The floating bubble (shell android-18) ──────────────────────────
         /** The bubble's native truth for the Settings card: permission + service + the last clipboard try. */
         @JavascriptInterface fun bubbleState(): String =
