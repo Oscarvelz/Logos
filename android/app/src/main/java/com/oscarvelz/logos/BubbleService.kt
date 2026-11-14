@@ -173,6 +173,20 @@ class BubbleService : Service() {
         fun prefs(c: Context) = c.getSharedPreferences("bubble", Context.MODE_PRIVATE)
         fun lever(c: Context) = prefs(c).getBoolean("auto", true)
 
+        /** The floating window's look (1.4.157), set from Settings via
+         *  the page: the bubble's resting opacity, the panel's opacity,
+         *  the idle fade, the bubble's size. Kept here so a service
+         *  reborn mid-session dresses the same way. */
+        @Volatile var lookHook: (() -> Unit)? = null
+        fun lookBa(c: Context) = prefs(c).getInt("look_ba", 100).coerceIn(40, 100) / 100f
+        fun lookPa(c: Context) = prefs(c).getInt("look_pa", 100).coerceIn(60, 100) / 100f
+        fun lookFade(c: Context) = prefs(c).getBoolean("look_fade", true)
+        fun lookSize(c: Context) = prefs(c).getString("look_size", "m") ?: "m"
+        fun setLook(c: Context, ba: Int, pa: Int, fade: Boolean, size: String) {
+            prefs(c).edit().putInt("look_ba", ba).putInt("look_pa", pa).putBoolean("look_fade", fade).putString("look_size", size).apply()
+            lookHook?.invoke()
+        }
+
         fun readClipboard(c: Context): String = runCatching {
             val cm = c.getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             val clip = cm.primaryClip ?: return@runCatching ""
@@ -305,6 +319,8 @@ class BubbleService : Service() {
     private var bubble: FrameLayout? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var halo: View? = null
+    private var bubbleFaceV: FrameLayout? = null
+    private var bubbleLambdaV: TextView? = null
     private var haloAnim: ObjectAnimator? = null
     private var seekBar: SeekBar? = null
     private var saveHint: View? = null
@@ -384,7 +400,8 @@ class BubbleService : Service() {
     private val fadeRun = Runnable {
         val b = bubble ?: return@Runnable
         if (panel != null || dragTargets.isNotEmpty()) return@Runnable
-        b.animate().alpha(if (isTablet()) 0.45f else 0.15f).setDuration(700).start()
+        if (!lookFade(this)) return@Runnable
+        b.animate().alpha(idleAlpha()).setDuration(700).start()
     }
 
     private fun invite(times: Int = 3, force: Boolean = false) {
@@ -395,7 +412,7 @@ class BubbleService : Service() {
         lastInvite = now
         val h = halo ?: return
         rippleAnims.forEach { it.cancel() }
-        if (root.alpha < 1f) root.animate().alpha(1f).setDuration(220).start()
+        if (root.alpha < awakeAlpha()) root.animate().alpha(awakeAlpha()).setDuration(220).start()
         h.visibility = View.VISIBLE
         val sx = ObjectAnimator.ofFloat(h, "scaleX", 1f, 1.55f).apply { duration = 780; repeatCount = times - 1 }
         val sy = ObjectAnimator.ofFloat(h, "scaleY", 1f, 1.55f).apply { duration = 780; repeatCount = times - 1 }
@@ -422,7 +439,7 @@ class BubbleService : Service() {
         lastCheer = now
         rippleAnims.forEach { it.cancel() }
         haloAnim?.cancel(); haloAnim = null
-        if (root.alpha < 1f) root.animate().alpha(1f).setDuration(200).start()
+        if (root.alpha < awakeAlpha()) root.animate().alpha(awakeAlpha()).setDuration(200).start()
         h.visibility = View.VISIBLE
         val sx = ObjectAnimator.ofFloat(h, "scaleX", 1f, 1.55f).apply { duration = 620; repeatCount = 1 }
         val sy = ObjectAnimator.ofFloat(h, "scaleY", 1f, 1.55f).apply { duration = 620; repeatCount = 1 }
@@ -695,7 +712,7 @@ class BubbleService : Service() {
     private fun wakeBubble(schedule: Boolean = true) {
         handler.removeCallbacks(fadeRun)
         val b = bubble ?: return
-        if (b.alpha < 1f) b.animate().alpha(1f).setDuration(140).start()
+        if (b.alpha < awakeAlpha()) b.animate().alpha(awakeAlpha()).setDuration(140).start()
         if (schedule) handler.postDelayed(fadeRun, 4000)
     }
 
@@ -714,9 +731,40 @@ class BubbleService : Service() {
             ch(android.graphics.Color.blue(a), android.graphics.Color.blue(b))
         )
     }
-    private fun bubbleSize() = if (isTablet()) dp(76) else dp(58)
-    private fun bubbleFace() = if (isTablet()) dp(60) else dp(46)
-    private fun bubbleHalo() = if (isTablet()) dp(66) else dp(52)
+    private fun sizeFactor() = when (lookSize(this)) { "s" -> 0.85f; "l" -> 1.18f; else -> 1f }
+    private fun bubbleSize() = ((if (isTablet()) dp(76) else dp(58)) * sizeFactor()).toInt()
+    private fun bubbleFace() = ((if (isTablet()) dp(60) else dp(46)) * sizeFactor()).toInt()
+    private fun bubbleHalo() = ((if (isTablet()) dp(66) else dp(52)) * sizeFactor()).toInt()
+
+    /** The look's alphas (1.4.157): the bubble at rest wears the
+     *  opacity Oscar set; the idle whisper is that same opacity at
+     *  the house's fade depth (45% tablet, 15% phone — at 100% these
+     *  are exactly the values the bubble has always faded to). */
+    private fun awakeAlpha() = lookBa(this)
+    private fun panelAlpha() = lookPa(this)
+    private fun idleAlpha() = if (!lookFade(this)) awakeAlpha() else awakeAlpha() * if (isTablet()) 0.45f else 0.15f
+
+    /** Repaint the floating window with the look as it now stands:
+     *  sizes relaid out in place, alphas set, the fade re-armed. */
+    private fun applyLook() {
+        handler.post {
+            val b = bubble
+            if (b != null) {
+                val bp = bubbleParams
+                if (bp != null) {
+                    bp.width = bubbleSize(); bp.height = bubbleSize()
+                    runCatching { wm?.updateViewLayout(b, bp) }
+                }
+                halo?.layoutParams = FrameLayout.LayoutParams(bubbleHalo(), bubbleHalo(), Gravity.CENTER)
+                bubbleFaceV?.layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
+                bubbleLambdaV?.textSize = (if (isTablet()) 28f else 22f) * sizeFactor()
+                b.animate().cancel(); b.alpha = awakeAlpha()
+                handler.removeCallbacks(fadeRun)
+                if (panel == null) handler.postDelayed(fadeRun, 4000)
+            }
+            panel?.let { it.alpha = panelAlpha() }
+        }
+    }
     private fun bubbleHalf() = bubbleSize() / 2
     // The panel's width: the words (1.4.102) earn the tablet a wider window.
     private fun panelWidth(): Int {
@@ -808,6 +856,7 @@ class BubbleService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("bubble", "Floating bubble", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
         onNow = { refreshPanel() }
+        lookHook = { applyLook() }
         onDelivery = { armDeliveryWatch(); armNativeFallback() }
         NativeSpeaker.listener = { refreshPanel() }
         inviteHook = { invite(3) }
@@ -887,12 +936,14 @@ class BubbleService : Service() {
         val lambda = TextView(this).apply {
             text = "λ"
             setTextColor(gold)
-            textSize = if (isTablet()) 28f else 22f
+            textSize = (if (isTablet()) 28f else 22f) * sizeFactor()
             typeface = Typeface.SERIF
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         face.addView(lambda)
+        bubbleFaceV = face
+        bubbleLambdaV = lambda
         root.addView(haloV)
         root.addView(face)
         halo = haloV
@@ -918,7 +969,7 @@ class BubbleService : Service() {
         runCatching { w.addView(root, p) }
         bubble = root
         root.alpha = 0f; root.scaleX = 0.5f; root.scaleY = 0.5f
-        root.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(240).setInterpolator(DecelerateInterpolator()).start()
+        root.animate().alpha(awakeAlpha()).scaleX(1f).scaleY(1f).setDuration(240).setInterpolator(DecelerateInterpolator()).start()
         handler.postDelayed(fadeRun, 4000)
         handler.postDelayed({ invite(2, force = true) }, 420)
     }
@@ -1566,14 +1617,14 @@ class BubbleService : Service() {
         panel = stage
         positionPanel()
         handler.removeCallbacks(fadeRun)
-        bubble?.let { if (it.alpha < 1f) { it.animate().cancel(); it.alpha = 1f } }
+        bubble?.let { if (it.alpha < awakeAlpha()) { it.animate().cancel(); it.alpha = awakeAlpha() } }
         // A short, smooth birth: the panel grows out of the λ's own position.
         val bp2 = bubbleParams
         stage.pivotX = panelPivotX ?: if (seatRight) panelWidth().toFloat() else 0f
         // It grows out of the very corner that grazes the λ.
         stage.pivotY = if (seatBottom) dp(320).toFloat() else 0f
         stage.scaleX = 0.86f; stage.scaleY = 0.86f; stage.alpha = 0f
-        stage.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(190).setInterpolator(DecelerateInterpolator()).start()
+        stage.animate().scaleX(1f).scaleY(1f).alpha(panelAlpha()).setDuration(190).setInterpolator(DecelerateInterpolator()).start()
         // Once laid out, its real height gets the final word on the spot.
         stage.post { positionPanel() }
         refreshPanel()
@@ -2102,8 +2153,11 @@ class BubbleService : Service() {
         collapsePanel(now = true)
         bubble?.let { runCatching { wm?.removeView(it) } }
         bubble = null
+        bubbleFaceV = null
+        bubbleLambdaV = null
         haloAnim?.cancel()
         if (onNow != null) onNow = null
+        if (lookHook != null) lookHook = null
         running = false
         super.onDestroy()
     }
