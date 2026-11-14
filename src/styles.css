@@ -231,6 +231,13 @@ button.set-card-h { width: 100%; background: none; border: 0; padding: 0; cursor
 .set-fold { display: grid; grid-template-rows: 0fr; }
 .set-fold.open { grid-template-rows: 1fr; }
 .set-fold-in { overflow: hidden; min-height: 0; min-width: 0; }
+/* The Continue card's self-fold (1.4.159): open at rest, folded
+   while audio sounds — the vgroup fold, worn the other way round. */
+.continue-fold { display: grid; grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
+.continue-fold.open { grid-template-rows: 1fr; opacity: 1; pointer-events: auto; }
+@media (prefers-reduced-motion: no-preference) {
+  .continue-fold { transition: grid-template-rows .38s var(--ease), opacity .3s; }
+}
 /* The fleet's closing line (1.4.131): the version, last on the screen. */
 .set-version { text-align: center; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; margin: 22px 0 10px; }
 .set-ic { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; flex: none; color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent); }
