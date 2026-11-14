@@ -132,6 +132,7 @@ export const ES: Record<string, string> = {
   'Playback speed {x}': 'Velocidad {x}',
   'Voice': 'Voz',
   'Sentence {a} of {b}': 'Oración {a} de {b}',
+  'That key belongs to readings': 'Esa tecla es de las lecturas',
   'Device voice · ': 'Voz del teléfono · ',
   '{d} left': 'quedan {d}',
   'Previous sentence': 'Oración anterior',

@@ -19,7 +19,7 @@ import { saveForLater, library, getClipBlob } from './library.ts'
 import { books } from './books.ts'
 import { playBook } from './book/playbook.ts'
 import { t } from './i18n.ts'
-import { playClip } from '../player/clip.ts'
+import { playClip, clipPlayer, pauseClip, resumeClip, seekClip } from '../player/clip.ts'
 import { loadSessionResume } from './resume.ts'
 import { estimateSeconds } from './text.ts'
 import { toast } from '../components/ui.tsx'
@@ -62,6 +62,7 @@ export function openBubblePermission() {
 
 const clipKey = (t: string) => `${t.length}:${t.slice(0, 48)}:${t.slice(-48)}`
 const fmtRate = (r: number) => `${Math.round(r * 100) / 100}×`
+const fmtClock = (sec: number) => { const v = isFinite(sec) && sec > 0 ? sec : 0; return `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, '0')}` }
 let lastClip = (() => { try { return localStorage.getItem('logos.bubble.lastClip') ?? '' } catch { return '' } })()
 function seenClip(t: string) {
   lastClip = clipKey(t)
@@ -198,7 +199,7 @@ export function initBubble() {
       // pause became a play, visit after visit.
       if (cmd === 'pause') { if (listen.get().playing) pauseFromShell(); return }
       if (cmd === 'play') { dispatchEvent(new Event('logosandroid-play')); return }
-      if (cmd === 'slower' || cmd === 'faster' || listen.get().active) {
+      if (cmd === 'slower' || cmd === 'faster' || listen.get().active || clipOwns()) {
         dispatchEvent(new Event(`logosandroid-${cmd}`))
         return
       }
@@ -236,24 +237,28 @@ export function initBubble() {
   // The panel's definite transport intents (1.4.89): the shell reads the
   // pushed state at press time and sends PLAY or PAUSE, never a bare
   // toggle, so a press keeps its meaning however it travels.
-  addEventListener('logosandroid-pause', () => { if (listen.get().playing) pauseFromShell() })
+  addEventListener('logosandroid-pause', () => { if (clipOwns()) { pauseClip(); return } if (listen.get().playing) pauseFromShell() })
   addEventListener('logosandroid-play', () => {
+    if (clipOwns()) { resumeClip(); return }
     const s = listen.get()
     if (s.active) { if (!s.playing) void play() }
     else void recoverSession()
   })
   // The panel's − / + keys: one step along the same ladder the Listen sheet uses.
-  addEventListener('logosandroid-slower', () => stepRate(-1))
-  addEventListener('logosandroid-faster', () => stepRate(1))
+  // While a recording holds the stage, the reading-only keys say so
+  // instead of landing nowhere (1.4.156).
+  addEventListener('logosandroid-slower', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } stepRate(-1) })
+  addEventListener('logosandroid-faster', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } stepRate(1) })
   // The panel's seek bar: the shell holds the fraction, the page pulls it.
   addEventListener('logosandroid-seek', () => {
-    try { const f = parseFloat(d.bubbleSeek?.() ?? ''); if (Number.isFinite(f)) seekFraction(f) } catch { /* ignore */ }
+    try { const f = parseFloat(d.bubbleSeek?.() ?? ''); if (Number.isFinite(f)) { if (clipOwns()) { seekClip(f) } else { seekFraction(f) } } } catch { /* ignore */ }
   })
   // The panel's bookmark key, and the bubble's long-press voice wheel.
-  addEventListener('logosandroid-mark', () => void markAndToast())
+  addEventListener('logosandroid-mark', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } void markAndToast() })
   // The panel's save key: the copied text that is only visiting becomes a
   // permanent Library resident (a Listen-later text; audio is made on demand).
   addEventListener('logosandroid-save', () => {
+    if (clipOwns()) { toast(t('That key belongs to readings')); return }
     const s = listen.get()
     const text = (s.active ? s.text : drafts.get().listen).trim()
     if (!text) { toast(t('Nothing to save yet')); return }
@@ -269,6 +274,7 @@ export function initBubble() {
     }).then(() => toast(t('Saved to Library — it stays now')))
   })
   addEventListener('logosandroid-voice', () => {
+    if (clipOwns()) { toast(t('That key belongs to readings')); return }
     const s = listen.get()
     const lang = s.active ? (s.segments[s.current]?.lang ?? detectLang(s.text.slice(0, 2000)).lang) : detectLang(drafts.get().listen.slice(0, 2000)).lang
     const favs = favoriteVoices(settings.get().favorites).filter((v) => v.lang === lang)
@@ -351,12 +357,58 @@ export function initBubble() {
     for (let i = 0; i < words.length; i++) { acc += words[i].length + 1; if (acc > target) return i }
     return words.length - 1
   }
+  // The house has TWO players (1.4.156): the reading voice (the listen
+  // store — the only one this panel has ever mirrored) and the
+  // finished-audio player (clip.ts: Library recordings, Create
+  // results), which never wrote to the listen store. A recording
+  // started in the app therefore played invisibly to the bubble —
+  // the disconnection Oscar reported: bubble-started readings showed
+  // in the app, app-started recordings never showed in the bubble.
+  // The panel now follows whichever player holds the stage. Voice
+  // samples (preview: keys) are not sessions and never take it.
+  const clipView = () => {
+    const cp = clipPlayer.get()
+    return cp.key && !cp.key.startsWith('preview:') ? cp : null
+  }
+  const clipOwns = () => {
+    const cp = clipView()
+    return !!cp && (cp.playing || !listen.get().active)
+  }
   const barTmp = new Float32Array(18)
   const push = () => {
     const s = listen.get()
     const text = s.active ? s.text : drafts.get().listen
     const th = settings.get().theme
     const light = th === 'light' || (th === 'system' && !window.matchMedia('(prefers-color-scheme: dark)').matches)
+    const cp = clipOwns() ? clipView() : null
+    if (cp) {
+      // The recording's face: its title, its clock, its fraction. No
+      // sentences, no words — it is a recording, and the panel says so
+      // by what it shows. `saved` is true (it already lives in the
+      // Library); the reading-only keys are gated page-side below.
+      const info = {
+        playing: cp.playing,
+        busy: false,
+        err: 0,
+        saved: true,
+        active: true,
+        frac: cp.duration > 0 ? Math.min(1, cp.time / cp.duration) : 0,
+        ci: -1,
+        ct: 0,
+        bars: null,
+        light,
+        lang: settings.get().uiLang,
+        words: settings.get().bubbleText,
+        tp: '', tc: '', tn: '', wi: -1,
+        title: cp.title || 'Logos',
+        sub: t('{a} of {b}', { a: fmtClock(cp.time), b: fmtClock(cp.duration) }),
+      }
+      const key = JSON.stringify(info)
+      if (key === last) return
+      last = key
+      try { d.bubbleNow?.(key) } catch { /* ignore */ }
+      return
+    }
     const info = {
       playing: s.playing || s.buffering,
       busy: s.buffering && !s.cushion,
@@ -390,9 +442,10 @@ export function initBubble() {
     try { d.bubbleNow?.(key) } catch { /* ignore */ }
   }
   listen.subscribe(push)
+  clipPlayer.subscribe(push)
   // While playing, feed the panel's spectrum and its amber word — push()
   // dedupes unchanged states, so this costs nothing at rest.
-  setInterval(() => { if (listen.get().playing) push() }, 120)
+  setInterval(() => { if (listen.get().playing || clipPlayer.get().playing) push() }, 120)
   drafts.subscribe(push)
   settings.subscribe(push)
   push()

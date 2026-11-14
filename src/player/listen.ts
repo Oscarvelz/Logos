@@ -8,7 +8,7 @@ import { voiceById, type Lang } from '../lib/voices.ts'
 import { encodeWav, envelope, silence, trimSilence, concat, applyGain, levelGain } from '../lib/audio.ts'
 import { engine, ensureModel, synthesize, promote } from '../engine/engine.ts'
 import { speakDevice, cancelDevice, deviceSpeechAvailable } from '../engine/device-voice.ts'
-import { stopClipPlayer, onClipPlay } from './clip.ts'
+import { stopClipPlayer, onClipPlay, clipPlayer, pauseClip, resumeClip, stepClip } from './clip.ts'
 import { nowReadingFor } from '../lib/book/nowreading.ts'
 import { alignWords } from './wordsync.ts'
 import { renderKey, getPersistedRender, putPersistedRender, hasPersistedRender, dropPersistedRender } from './rendercache.ts'
@@ -967,8 +967,18 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
         else droid.playing(on, `Logos · ${v?.name ?? 'Voice'}`, sentence)
       } catch { /* old shell */ }
     })
-    addEventListener('logosandroid-toggle', () => toggle())
-    addEventListener('logosandroid-next', () => next())
-    addEventListener('logosandroid-prev', () => prev())
+    // The shell's keys serve whichever player holds the stage
+    // (1.4.156): while a finished-audio clip owns it — sounding now,
+    // or standing loaded with no reading session live — the toggle
+    // works the clip and prev/next walk its timeline by fifteen
+    // seconds; a recording has no sentences to step. Voice samples
+    // (preview: keys) never own the stage.
+    const clipStage = () => {
+      const cp = clipPlayer.get()
+      return cp.key && !cp.key.startsWith('preview:') && (cp.playing || !listen.get().active) ? cp : null
+    }
+    addEventListener('logosandroid-toggle', () => { const cp = clipStage(); if (cp) { if (cp.playing) pauseClip(); else resumeClip(); return } toggle() })
+    addEventListener('logosandroid-next', () => { if (clipStage()) { stepClip(15); return } next() })
+    addEventListener('logosandroid-prev', () => { if (clipStage()) { stepClip(-15); return } prev() })
   }
 }
