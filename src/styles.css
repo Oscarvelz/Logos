@@ -2,6 +2,11 @@
 @import '@fontsource/instrument-serif/latin-400.css';
 @import '@fontsource/instrument-serif/latin-ext-400.css';
 @import '@fontsource/instrument-serif/latin-400-italic.css';
+@import '@fontsource/orbitron/500.css';
+@import '@fontsource/orbitron/700.css';
+@import '@fontsource/rajdhani/500.css';
+@import '@fontsource/rajdhani/600.css';
+@import '@fontsource/rajdhani/700.css';
 
 /* ── Tokens ─────────────────────────────────────────────── */
 :root {
@@ -77,6 +82,107 @@
   --aurora-b: rgba(110, 90, 230, 0.08);
   --sheen: rgba(255, 255, 255, 0.65);
   color-scheme: light;
+}
+
+/* ── Tron (1.4.165) ─────────────────────────────────────────
+   Light lines on the deep black of the Grid, adapted from the
+   fleet's canon (Faro's tokens, Cadence's glass law): colour
+   lives at contours, seams and labels — interiors stay deep and
+   clean. Cyan is the light; Clu's orange holds the violet seat
+   (the second voice); red is errors only. A night theme. */
+[data-theme='tron'] {
+  --bg: #02060c;
+  --bg-2: #04101d;
+  --bg-3: #0a1c2e;
+  --surface: rgba(0, 229, 255, 0.045);
+  --surface-2: rgba(0, 229, 255, 0.08);
+  --surface-3: rgba(0, 229, 255, 0.13);
+  --line: rgba(0, 229, 255, 0.16);
+  --line-2: rgba(0, 229, 255, 0.34);
+  --text: #e6faff;
+  --text-2: #b9dfea;
+  --muted: #8fb6c8;
+  --accent: #00e5ff;
+  --accent-2: #6fe3ff;
+  --accent-ink: #001319;
+  --accent-soft: rgba(0, 229, 255, 0.13);
+  --accent-glow: rgba(0, 229, 255, 0.4);
+  --violet: #ff9d2a;
+  --danger: #ff2a2a;
+  --ok: #3fd6f5;
+  --shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.8);
+  --glass: rgba(4, 16, 29, 0.78);
+  --aurora-a: rgba(0, 229, 255, 0.1);
+  --aurora-b: rgba(255, 157, 42, 0.05);
+  --sheen: rgba(0, 229, 255, 0.05);
+  --font-display: 'Orbitron', 'Manrope Variable', sans-serif;
+  --radius-s: 8px;
+  --radius: 12px;
+  --radius-l: 16px;
+  color-scheme: dark;
+}
+[data-theme='tron'] body {
+  background-image: linear-gradient(rgba(0, 229, 255, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 229, 255, 0.045) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+[data-theme='tron'] .card {
+  box-shadow: inset 0 1px 0 rgba(0, 229, 255, 0.16), 0 0 22px rgba(0, 229, 255, 0.05);
+}
+[data-theme='tron'] ::selection { background: rgba(0, 229, 255, 0.35); }
+
+/* ── Cyberpunk (1.4.165) ────────────────────────────────────
+   Signal yellow PRINT on warm black, Faro's corrected identity:
+   yellow is a flat surface, never a halo; cyan is data only
+   (the violet seat); magenta is danger. Chamfered corners on
+   filled shapes, a hazard stripe only at the threshold. A
+   night theme. */
+[data-theme='cyberpunk'] {
+  --bg: #0b0a08;
+  --bg-2: #100d0a;
+  --bg-3: #161310;
+  --surface: rgba(255, 240, 200, 0.04);
+  --surface-2: rgba(255, 240, 200, 0.07);
+  --surface-3: rgba(255, 240, 200, 0.11);
+  --line: #3a332a;
+  --line-2: #57503f;
+  --text: #f2eee3;
+  --text-2: #d8d2c2;
+  --muted: #aca294;
+  --accent: #fcee0a;
+  --accent-2: #ffe94d;
+  --accent-ink: #0b0a08;
+  --accent-soft: rgba(252, 238, 10, 0.12);
+  --accent-glow: rgba(252, 238, 10, 0.35);
+  --violet: #00f0ff;
+  --danger: #ff2a6d;
+  --ok: #00e67a;
+  --shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.85);
+  --glass: rgba(11, 10, 8, 0.84);
+  --aurora-a: rgba(252, 238, 10, 0.05);
+  --aurora-b: rgba(255, 42, 109, 0.05);
+  --sheen: rgba(252, 238, 10, 0.03);
+  --font-display: 'Rajdhani', 'Manrope Variable', sans-serif;
+  --radius-s: 6px;
+  --radius: 10px;
+  --radius-l: 14px;
+  color-scheme: dark;
+}
+[data-theme='cyberpunk'] ::selection { background: #fcee0a; color: #0b0a08; }
+/* Print law: filled shapes wear flat ink — no halo, no top light —
+   and take the chamfer; the round play key keeps its circle (the
+   player's own shape) but loses every blurred glow. */
+[data-theme='cyberpunk'] .btn.primary {
+  background: var(--accent); box-shadow: none;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+[data-theme='cyberpunk'] .play-btn {
+  background: var(--accent);
+  box-shadow: 0 0 0 8px var(--accent-soft);
+}
+[data-theme='cyberpunk'] .brand-name { filter: none; }
+[data-theme='cyberpunk'] .topbar::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; opacity: .5;
+  background: repeating-linear-gradient(45deg, #fcee0a 0 9px, #0b0a08 9px 18px);
 }
 
 /* ── Base ───────────────────────────────────────────────── */
@@ -312,6 +418,16 @@ input[type='range'] { -webkit-appearance: none; appearance: none; width: 100%; h
 .range-lock-ic { display: flex; animation: lockpop .3s ease; }
 @keyframes lockpop { 0% { transform: scale(.6); } 55% { transform: scale(1.22); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .range-lock-ic { animation: none; } }
+/* The theme rows in Appearance (1.4.165): a split-disc swatch in
+   each family's own colours, the check riding the accent. */
+.theme-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; text-align: left; background: transparent; border: none; border-bottom: 1px solid var(--line); color: var(--text); cursor: pointer; }
+.theme-row:last-child { border-bottom: none; }
+.theme-row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.theme-row .t { font-weight: 650; font-size: 15px; }
+.theme-row .d { color: var(--muted); font-size: 13px; line-height: 1.4; margin-top: 2px; }
+.theme-row.on { background: var(--accent-soft); }
+.theme-sw { flex: none; width: 30px; height: 30px; border-radius: 99px; border: 1px solid var(--line-2); }
+.theme-check { flex: none; color: var(--accent); }
 input[type='range']::-webkit-slider-runnable-track { height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--accent) var(--pct, 50%), var(--surface-3) var(--pct, 50%)); }
 input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 99px; background: var(--text); margin-top: -9px; box-shadow: 0 2px 10px rgba(0,0,0,.4), 0 0 0 4px var(--accent-soft); }
 input[type='range']::-moz-range-track { height: 6px; border-radius: 99px; background: var(--surface-3); }

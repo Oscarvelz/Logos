@@ -166,10 +166,13 @@ export function initBubble() {
   let pushedLook = ''
   const pushLook = () => {
     const st = settings.get()
-    const key = `${st.bubbleAlpha}|${st.panelAlpha}|${st.bubbleFade}|${st.bubbleSize}|${st.jumpBackSec}|${st.jumpFwdSec}`
+    const th = st.theme
+    const light = th === 'light' || (th === 'system' && !window.matchMedia('(prefers-color-scheme: dark)').matches)
+    const fam = th === 'tron' ? 'tron' : th === 'cyberpunk' ? 'cyberpunk' : light ? 'light' : 'dark'
+    const key = `${st.bubbleAlpha}|${st.panelAlpha}|${st.bubbleFade}|${st.bubbleSize}|${st.jumpBackSec}|${st.jumpFwdSec}|${fam}`
     if (key === pushedLook) return
     pushedLook = key
-    try { d.bubbleLook?.(JSON.stringify({ ba: st.bubbleAlpha, pa: st.panelAlpha, fade: st.bubbleFade, size: st.bubbleSize, jb: st.jumpBackSec, jf: st.jumpFwdSec })) } catch { /* ignore */ }
+    try { d.bubbleLook?.(JSON.stringify({ ba: st.bubbleAlpha, pa: st.panelAlpha, fade: st.bubbleFade, size: st.bubbleSize, jb: st.jumpBackSec, jf: st.jumpFwdSec, th: fam })) } catch { /* ignore */ }
   }
   pushLook()
   settings.subscribe(pushLook)
@@ -394,6 +397,9 @@ export function initBubble() {
     const text = s.active ? s.text : drafts.get().listen
     const th = settings.get().theme
     const light = th === 'light' || (th === 'system' && !window.matchMedia('(prefers-color-scheme: dark)').matches)
+    // The theme family rides along (1.4.165): the shell dresses the
+    // bubble, the panel and the hint cards in the same palette.
+    const fam = th === 'tron' ? 'tron' : th === 'cyberpunk' ? 'cyberpunk' : light ? 'light' : 'dark'
     const cp = clipOwns() ? clipView() : null
     if (cp) {
       // The recording's face: its title, its clock, its fraction. No
@@ -411,6 +417,7 @@ export function initBubble() {
         ct: 0,
         bars: null,
         light,
+        fam,
         lang: settings.get().uiLang,
         words: settings.get().bubbleText,
         tp: '', tc: '', tn: '', wi: -1,
@@ -441,6 +448,7 @@ export function initBubble() {
       ct: s.active ? s.segments.length : 0,
       bars: s.active && levels(18, barTmp) ? Array.from(barTmp, (v) => Math.round(Math.max(0, Math.min(1, v)) * 100)) : null,
       light,
+      fam,
       lang: settings.get().uiLang,
       words: settings.get().bubbleText,
       tp: s.active ? capSent(cleanSent(s.segments[s.current - 1]?.text ?? ''), 160) : '',

@@ -194,6 +194,16 @@ class BubbleService : Service() {
             prefs(c).edit().putInt("jump_b", jb.coerceIn(1, 600)).putInt("jump_f", jf.coerceIn(1, 600)).apply()
         }
 
+        /** The theme family (1.4.165): 'dark' | 'light' | 'tron' |
+         *  'cyberpunk', kept in prefs so the bubble wears its theme
+         *  even before the page wakes; a change repaints in place. */
+        fun themeFam(c: Context) = prefs(c).getString("theme_fam", "dark") ?: "dark"
+        fun setTheme(c: Context, fam: String) {
+            if (themeFam(c) == fam) return
+            prefs(c).edit().putString("theme_fam", fam).apply()
+            lookHook?.invoke()
+        }
+
         fun readClipboard(c: Context): String = runCatching {
             val cm = c.getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             val clip = cm.primaryClip ?: return@runCatching ""
@@ -763,6 +773,7 @@ class BubbleService : Service() {
                     runCatching { wm?.updateViewLayout(b, bp) }
                 }
                 halo?.layoutParams = FrameLayout.LayoutParams(bubbleHalo(), bubbleHalo(), Gravity.CENTER)
+                repaintFace()
                 bubbleFaceV?.layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
                 bubbleLambdaV?.textSize = (if (isTablet()) 28f else 22f) * sizeFactor()
                 b.animate().cancel(); b.alpha = awakeAlpha()
@@ -916,13 +927,39 @@ class BubbleService : Service() {
         if (sw > 0) setStroke(sw, stroke)
     }
 
+    /** The bubble face's paint per theme family (1.4.165): top tone,
+     *  deep tone, ring + λ colour. Legacy keeps its charcoal jewel. */
+    private fun facePaint(): Triple<Int, Int, Int> = when (themeFam(this)) {
+        "tron" -> Triple(Color.rgb(10, 42, 64), Color.rgb(2, 6, 12), Color.rgb(0, 229, 255))
+        "cyberpunk" -> Triple(Color.rgb(43, 37, 27), Color.rgb(11, 10, 8), Color.rgb(252, 238, 10))
+        else -> Triple(Color.rgb(58, 49, 35), Color.rgb(21, 17, 13), gold)
+    }
+
+    /** Repaint the living bubble in the current family (a theme
+     *  change lands while it floats — Oscar sees it turn). */
+    private fun repaintFace() {
+        val face = bubbleFaceV ?: return
+        val (top, deep, ring) = facePaint()
+        face.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            gradientType = GradientDrawable.RADIAL_GRADIENT
+            gradientRadius = dp(30).toFloat()
+            setGradientCenter(0.35f, 0.3f)
+            colors = intArrayOf(top, deep)
+            setStroke(dp(2), ring)
+        }
+        bubbleLambdaV?.setTextColor(ring)
+        halo?.background = oval(ring, 0, 0, -1f).apply { alpha = 70 }
+    }
+
     private fun showBubble() {
         val w = getSystemService(WindowManager::class.java)
         wm = w
         val size = bubbleSize() // the window carries a halo ring around the face
         val root = FrameLayout(this)
+        val faceCols = facePaint()
         val haloV = View(this).apply {
-            background = oval(gold, 0, 0, -1f).apply { alpha = 70 }
+            background = oval(faceCols.third, 0, 0, -1f).apply { alpha = 70 }
             layoutParams = FrameLayout.LayoutParams(bubbleHalo(), bubbleHalo(), Gravity.CENTER)
             visibility = View.INVISIBLE
         }
@@ -934,15 +971,15 @@ class BubbleService : Service() {
                 gradientType = GradientDrawable.RADIAL_GRADIENT
                 gradientRadius = dp(30).toFloat()
                 setGradientCenter(0.35f, 0.3f)
-                colors = intArrayOf(Color.rgb(58, 49, 35), Color.rgb(21, 17, 13))
-                setStroke(dp(2), gold)
+                colors = intArrayOf(faceCols.first, faceCols.second)
+                setStroke(dp(2), faceCols.third)
             }
             elevation = dp(5).toFloat()
             layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
         }
         val lambda = TextView(this).apply {
             text = "λ"
-            setTextColor(gold)
+            setTextColor(faceCols.third)
             textSize = (if (isTablet()) 28f else 22f) * sizeFactor()
             typeface = Typeface.SERIF
             gravity = Gravity.CENTER
@@ -1175,6 +1212,8 @@ class BubbleService : Service() {
     // player's warm charcoal gradient with its soft gold glow on top — or, when
     // Logos itself is in its light theme, the warm paper of that room.
     private var panelLight = false
+    /** The theme family the panel dresses in (1.4.165). */
+    private var panelFam = "dark"
     private var wordsV: TextView? = null
     private var gripV: View? = null
     private var gripFreeR = true
@@ -1199,12 +1238,49 @@ class BubbleService : Service() {
         "discLine" to Color.rgb(74, 64, 51), "gold" to gold,
         "glow" to Color.argb(64, 233, 189, 114), "div" to Color.rgb(58, 50, 40)
     )
-    private fun pal(): Map<String, Int> = if (panelLight) lightPal else darkPal
+    // Tron (1.4.165): the fleet's tokens carried to the panel — cyan
+    // is the light and the accent seat, ice text, deep blue-black.
+    private val tronPal = mapOf(
+        "bg1" to Color.rgb(6, 18, 32), "bg2" to Color.rgb(2, 6, 12),
+        "line" to Color.rgb(0, 110, 135), "ink" to Color.rgb(230, 250, 255),
+        "muted" to Color.rgb(143, 182, 200), "disc" to Color.rgb(8, 26, 42),
+        "discLine" to Color.rgb(0, 90, 112), "gold" to Color.rgb(0, 229, 255),
+        "glow" to Color.argb(64, 0, 229, 255), "div" to Color.rgb(10, 30, 48)
+    )
+    // Cyberpunk (1.4.165): signal yellow print on warm black — the
+    // accent seat carries the yellow; everything else stays warm.
+    private val cyberPal = mapOf(
+        "bg1" to Color.rgb(22, 19, 16), "bg2" to Color.rgb(11, 10, 8),
+        "line" to Color.rgb(58, 51, 42), "ink" to Color.rgb(242, 238, 227),
+        "muted" to Color.rgb(172, 162, 148), "disc" to Color.rgb(32, 27, 22),
+        "discLine" to Color.rgb(70, 62, 50), "gold" to Color.rgb(252, 238, 10),
+        "glow" to Color.argb(56, 252, 238, 10), "div" to Color.rgb(40, 35, 29)
+    )
+    private fun pal(): Map<String, Int> = when (panelFam) {
+        "tron" -> tronPal
+        "cyberpunk" -> cyberPal
+        else -> if (panelLight) lightPal else darkPal
+    }
     /** The explainer cards step ONE tone away from the player (Oscar, refined):
      *  a warm charcoal — a dark gray that never nears pure black — on the dark
      *  player, a deeper parchment on the light one. The full pole-swap was too
      *  stark; the player's own tone was invisible. Never Android gray. */
-    private fun cardPal(): Map<String, Int> = if (panelLight) mapOf(
+    private fun cardPal(): Map<String, Int> = when (panelFam) {
+        "tron" -> mapOf(
+            "bg1" to Color.rgb(12, 40, 62), "bg2" to Color.rgb(7, 24, 40),
+            "line" to Color.rgb(0, 140, 170), "ink" to Color.rgb(230, 250, 255),
+            "muted" to Color.rgb(178, 216, 230), "disc" to Color.rgb(16, 48, 72),
+            "discLine" to Color.rgb(0, 110, 140), "gold" to Color.rgb(0, 229, 255),
+            "glow" to Color.argb(64, 0, 229, 255), "div" to Color.rgb(20, 56, 82)
+        )
+        "cyberpunk" -> mapOf(
+            "bg1" to Color.rgb(44, 39, 32), "bg2" to Color.rgb(34, 30, 25),
+            "line" to Color.rgb(96, 86, 70), "ink" to Color.rgb(244, 240, 230),
+            "muted" to Color.rgb(216, 208, 192), "disc" to Color.rgb(56, 50, 42),
+            "discLine" to Color.rgb(96, 86, 68), "gold" to Color.rgb(252, 238, 10),
+            "glow" to Color.argb(56, 252, 238, 10), "div" to Color.rgb(66, 59, 50)
+        )
+        else -> if (panelLight) mapOf(
         "bg1" to Color.rgb(238, 227, 199), "bg2" to Color.rgb(226, 210, 172),
         "line" to Color.rgb(178, 152, 100), "ink" to Color.rgb(34, 28, 18),
         "muted" to Color.rgb(84, 72, 50), "disc" to Color.rgb(255, 255, 255),
@@ -1217,10 +1293,12 @@ class BubbleService : Service() {
         "discLine" to Color.rgb(120, 106, 82), "gold" to gold,
         "glow" to Color.argb(64, 233, 189, 114), "div" to Color.rgb(96, 86, 70)
     )
+    }
 
     private fun openPanel() {
         val w = wm ?: return
         panelLight = runCatching { JSONObject(nowJson).optBoolean("light") }.getOrDefault(false)
+        panelFam = runCatching { JSONObject(nowJson).optString("fam", "") }.getOrDefault("").ifEmpty { themeFam(this) }
         wordsOn = runCatching { JSONObject(nowJson).optBoolean("words", true) }.getOrDefault(true)
         val c = pal()
         // The panel is a small stage: gradient card, a gold glow lying on its top

@@ -588,6 +588,7 @@ class MainActivity : Activity() {
                 val j = JSONObject(json)
                 BubbleService.setLook(this@MainActivity, j.optInt("ba", 100), j.optInt("pa", 100), j.optBoolean("fade", true), j.optString("size", "m"))
                 if (j.has("jb") || j.has("jf")) BubbleService.setJump(this@MainActivity, j.optInt("jb", 15), j.optInt("jf", 30))
+                if (j.has("th")) BubbleService.setTheme(this@MainActivity, j.optString("th", "dark"))
             }
         }
 
