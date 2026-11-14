@@ -83,6 +83,7 @@ class PlaybackService : Service() {
             "stop" -> { cardUp = false; stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf(); return START_NOT_STICKY }
         }
         val playing = intent?.getBooleanExtra("playing", false) ?: false
+        val finished = intent?.getBooleanExtra("finished", false) ?: false
         lastPlaying = playing
         // Shell 17's page sends book + artist separately; the older playing() call folded the
         // artist line into "title" and the current sentence into "text".
@@ -97,8 +98,10 @@ class PlaybackService : Service() {
             return START_NOT_STICKY
         }
         // Stay a foreground service while paused too, so play from the lock screen always works.
+        // A finished reading parks here as well (1.4.160): the card
+        // stands saying Finished, and it is the headphone's door back.
         cardUp = true
-        startForeground(1, build(playing, book, artist, text), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        startForeground(1, build(playing, book, artist, text, finished), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         if (playing) wake?.acquire(3 * 60 * 60 * 1000L) else wake?.let { if (it.isHeld) it.release() }
         return START_NOT_STICKY
     }
@@ -143,7 +146,7 @@ class PlaybackService : Service() {
         return artBmp!!
     }
 
-    private fun build(playing: Boolean, book: String, artist: String, text: String): Notification {
+    private fun build(playing: Boolean, book: String, artist: String, text: String, finished: Boolean = false): Notification {
         val s = session!!
         // The card heads with the book's title (the current sentence scrolling across it was the
         // 1.4.49 complaint); pasted text without a book falls back to the sentence itself.
@@ -180,7 +183,17 @@ class PlaybackService : Service() {
         // keep their roads: the card's buttons travel the controller
         // road, which reaches the callback awake or asleep, and the
         // shade's buttons are this service's own intents.
-        s.isActive = playing
+        //
+        // The one exception is Oscar's own word (1.4.160): a FINISHED
+        // reading parks awake. He asked to restart a finished audio
+        // from his headphone button, and a sleeping session is a door
+        // that button cannot open — so the parked session stays the
+        // router's target, and its play replays the reading from the
+        // first sentence (the page has always restarted a finished
+        // session at 0). The trade is his to close: dismiss the
+        // finished card and the door shuts with it. A mid-book pause
+        // still sleeps — that protection stands untouched.
+        s.isActive = playing || finished
         val open = PendingIntent.getActivity(this, 9, Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CH)
             .setSmallIcon(R.drawable.ic_note)

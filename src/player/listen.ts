@@ -10,6 +10,7 @@ import { engine, ensureModel, synthesize, promote } from '../engine/engine.ts'
 import { speakDevice, cancelDevice, deviceSpeechAvailable } from '../engine/device-voice.ts'
 import { stopClipPlayer, onClipPlay, clipPlayer, pauseClip, resumeClip, stepClip } from './clip.ts'
 import { nowReadingFor } from '../lib/book/nowreading.ts'
+import { t } from '../lib/i18n.ts'
 import { alignWords } from './wordsync.ts'
 import { renderKey, getPersistedRender, putPersistedRender, hasPersistedRender, dropPersistedRender } from './rendercache.ts'
 
@@ -936,7 +937,7 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
 // Android app: keep the phone's media notification (and the app awake while reading) in step with playback,
 // and take play/pause/next/previous from that notification.
 {
-  type Droid = { playing(on: boolean, title: string, text: string): void; media?: (on: boolean, book: string, artist: string, text: string) => void }
+  type Droid = { playing(on: boolean, title: string, text: string): void; media?: (on: boolean, book: string, artist: string, text: string) => void; mediaF?: (on: boolean, book: string, artist: string, text: string) => void }
   const droid = (window as unknown as { LogosAndroid?: Droid }).LogosAndroid
   if (droid?.playing) {
     let last = ''
@@ -948,13 +949,19 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
       if (on) started = true
       if (!started) return
       if (!s.active) started = false
-      // A finished reading is over (1.4.155): the card must not linger
-      // wearing the book's face after the last sentence — publish the
-      // blank truth and the shell puts the card away. Before, finish
-      // published a paused card that stayed in the shade indefinitely.
+      // A closed session is over (1.4.155): publish the blank truth
+      // and the shell puts the card away. A FINISHED reading is a
+      // different truth since 1.4.160 — see the mediaF publish below:
+      // it parks instead of retiring, by Oscar's word.
       const ended = !s.active || s.finished
       const v = voiceById(s.voices[s.current])
-      const book = ended ? null : nowReadingFor(s.text)
+      // A finished reading keeps its book (1.4.160): its publish is
+      // not the blank retirement — through mediaF it parks a standing
+      // card that says Finished, the handle for Oscar's headphone
+      // replay. Only a closed session (!active) publishes the blank
+      // truth 1.4.155 established, and old shells (no mediaF) keep
+      // receiving exactly that blank for a finish, as before.
+      const book = !s.active ? null : nowReadingFor(s.text)
       const sentence = !ended && s.active ? (s.segments[s.current]?.text.slice(0, 120) ?? '') : ''
       const key = `${on}|${s.current}|${s.active}|${s.finished}|${book?.title ?? ''}`
       if (key === last) return
@@ -963,7 +970,8 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
       // with the book and wears the bundled charcoal-and-gold artwork; older shells keep the
       // original call (their card scrolls the current sentence — the 1.4.49 complaint).
       try {
-        if (droid.media) droid.media(on, book?.title ?? '', `Logos · ${v?.name ?? 'Voice'}`, sentence)
+        if (s.active && s.finished && droid.mediaF) droid.mediaF(false, book?.title ?? '', `Logos · ${v?.name ?? 'Voice'}`, t('Finished'))
+        else if (droid.media) droid.media(on, ended ? '' : (book?.title ?? ''), `Logos · ${v?.name ?? 'Voice'}`, sentence)
         else droid.playing(on, `Logos · ${v?.name ?? 'Voice'}`, sentence)
       } catch { /* old shell */ }
     })
