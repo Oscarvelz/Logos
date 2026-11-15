@@ -88,7 +88,7 @@ export function ContinueRow({ onResume }: { onResume?: () => void }) {
       {entries.map((e, i) => {
         const I = Icon[e.kind]
         return (
-          <button key={`${e.kind}-${i}`} className="continue-row" onClick={e.run}>
+          <button key={`${e.kind}-${i}`} className="continue-row" data-present={e.kind === 'book' ? 'listen-continue-book' : e.kind === 'clip' ? 'listen-continue-clip' : 'listen-continue-text'} onClick={e.run}>
             <span className="continue-ic"><I size={13} /></span>
             <span className="grow continue-tx">
               <span className="continue-t">{e.title}</span>

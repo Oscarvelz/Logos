@@ -33,7 +33,7 @@ export function MarksSection() {
   }
 
   return (
-    <div className="card" style={{ padding: '12px 16px 6px', marginBottom: 14 }}>
+    <div className="card" data-present="lib-marks" style={{ padding: '12px 16px 6px', marginBottom: 14 }}>
       <div className="continue-h">{t('Marks')}</div>
       {rows.slice(0, 30).map((r) => (
         <div key={`${r.kind}-${r.at}-${r.kind === 'book' ? r.bookId : r.mark.id}`} className="mark-row" role="button" tabIndex={0}
@@ -47,7 +47,7 @@ export function MarksSection() {
             <span className="mark-s">{r.kind === 'book' ? r.sentence : r.mark.sentence}</span>
             <span className="mark-when">{when(r.at)}</span>
           </span>
-          <button className="mark-del" aria-label={t('Remove mark')} onClick={(e) => { e.stopPropagation(); const s = r.kind === 'book' ? r.sentence : r.mark.sentence; void confirmDelete(t('Remove this mark?'), s.length > 90 ? s.slice(0, 90) + '…' : s).then((ok) => { if (ok) void drop(r) }) }}><Trash2 size={15} /></button>
+          <button className="mark-del" data-present="lib-mark-remove" aria-label={t('Remove mark')} onClick={(e) => { e.stopPropagation(); const s = r.kind === 'book' ? r.sentence : r.mark.sentence; void confirmDelete(t('Remove this mark?'), s.length > 90 ? s.slice(0, 90) + '…' : s).then((ok) => { if (ok) void drop(r) }) }}><Trash2 size={15} /></button>
         </div>
       ))}
     </div>

@@ -83,7 +83,7 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     draw()
     return () => { cancelAnimationFrame(raf); themeObs.disconnect() }
   }, [bars])
-  return <canvas ref={ref} className="viz" aria-hidden />
+  return <canvas ref={ref} className="viz" data-present="listen-visualizer" aria-hidden />
 }
 
 /**

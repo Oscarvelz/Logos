@@ -34,7 +34,7 @@ export function VoicesPage() {
     .map((x) => x.v)
   return (
     <div className="page wide">
-      <div className="page-head">
+      <div className="page-head" data-present="voices-head">
         <div>
           <h1 className="page-title">{t('Voices')}</h1>
           <p className="page-sub">{t('{n} natural voices that run right on your phone. Star your favorites, set a default per language.', { n: VOICES.length })}</p>
@@ -42,11 +42,11 @@ export function VoicesPage() {
       </div>
       <div className="filter-row" role="tablist">
         {FILTERS.map((f) => (
-          <button key={f.value} role="tab" aria-selected={filter === f.value} className={`chip ${filter === f.value ? 'accent' : ''}`} onClick={() => setFilter(f.value)}>{t(f.label)}</button>
+          <button key={f.value} role="tab" aria-selected={filter === f.value} className={`chip ${filter === f.value ? 'accent' : ''}`} data-present="voices-filter" data-filter={f.value} onClick={() => setFilter(f.value)}>{t(f.label)}</button>
         ))}
       </div>
-      {list.length === 0 && <div className="card empty"><h3>{t('No favorites yet')}</h3><p>{t('Tap the star on any voice.')}</p></div>}
-      <div className="voice-grid">
+      {list.length === 0 && <div className="card empty" data-present="voices-empty-fav"><h3>{t('No favorites yet')}</h3><p>{t('Tap the star on any voice.')}</p></div>}
+      <div className="voice-grid" data-present="voices-grid">
         {list.map((v) => <VoiceCard key={v.id} voice={v} />)}
       </div>
     </div>
@@ -82,24 +82,24 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
   }
 
   return (
-    <div className={`voice-card ${isDefault ? 'is-default' : ''}`}>
+    <div className={`voice-card ${isDefault ? 'is-default' : ''}`} data-present="voice-card" data-voice-id={v.id}>
       {isDefault && <span className="default-flag">{t('Default · {l}', { l: v.lang === 'en' ? t('English') : 'Español' })}</span>}
       <Avatar voice={v} playing={playing} />
       <div className="grow" style={{ minWidth: 0 }}>
         <div className="voice-name">{v.name} <span className="badge" title={t(ACCENT_LABEL[v.accent])}>{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
         <div className="voice-tag">{t(v.tagline)}</div>
         {!isDefault && (
-          <button className="btn sm ghost" style={{ height: 32, padding: '0 8px', marginLeft: -8, marginTop: 2, fontSize: 13, color: 'var(--text-2)' }}
+          <button className="btn sm ghost" data-present="voice-card:make-default" data-voice-id={v.id} style={{ height: 32, padding: '0 8px', marginLeft: -8, marginTop: 2, fontSize: 13, color: 'var(--text-2)' }}
             onClick={() => { settings.set((s) => ({ defaultVoice: { ...s.defaultVoice, [v.lang]: v.id } })); refreshVoices(); toast(t('{name} is now your {lang} default', { name: v.name, lang: v.lang === 'en' ? t('English') : 'Español' })) }}>
             <Check size={14} /> {t('Make default')}
           </button>
         )}
       </div>
       <div className="voice-actions">
-        <button className={`icon-btn ${fav ? 'on' : ''}`} onClick={() => toggleFavorite(v.id)} aria-label={fav ? t('Remove favorite') : t('Add favorite')} aria-pressed={fav}>
+        <button className={`icon-btn ${fav ? 'on' : ''}`} data-present="voice-card:star" data-voice-id={v.id} onClick={() => toggleFavorite(v.id)} aria-label={fav ? t('Remove favorite') : t('Add favorite')} aria-pressed={fav}>
           <FavStar id={v.id} on={fav} size={21} />
         </button>
-        <button className="icon-btn filled" onClick={preview} aria-label={playing ? t('Pause preview') : t('Preview {name}', { name: v.name })}>
+        <button className="icon-btn filled" data-present="voice-card:preview" data-voice-id={v.id} onClick={preview} aria-label={playing ? t('Pause preview') : t('Preview {name}', { name: v.name })}>
           {loading ? <Loader2 size={20} className="spin" /> : playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" style={{ marginLeft: 2 }} />}
         </button>
       </div>

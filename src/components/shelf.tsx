@@ -89,7 +89,7 @@ export function BookShelf({ onPick }: { onPick: () => void }) {
   return (
     <div className="shelf">
       {st.importing && (
-        <div className="card render-card">
+        <div className="card render-card" data-present="bk-importing">
           <span className="keep-ic"><BookPlus size={20} /></span>
           <div className="grow" style={{ minWidth: 0 }}>
             <div className="rc-title">{t('Importing')}{st.importing.batch ? ` ${st.importing.batch}` : ''} · {st.importing.name}</div>
@@ -104,12 +104,12 @@ export function BookShelf({ onPick }: { onPick: () => void }) {
           <div className="glyph">λ</div>
           <h3>{t('Your bookshelf')}</h3>
           <p style={{ margin: '0 auto 18px', maxWidth: 340 }}>{t('Import EPUB, PDF, Word, FB2, Markdown, text or web files. Each book gets its own contents, working links, search, and a voice to read it to you.')}</p>
-          <button className="btn primary" onClick={onPick}><BookPlus size={18} /> {t('Import a book')}</button>
+          <button className="btn primary" data-present="bk-shelf-import" onClick={onPick}><BookPlus size={18} /> {t('Import a book')}</button>
         </div>
       ) : st.list.length > 0 && (
         <>
           {reading && !q && filter === 'all' && (
-            <button className="card shelf-continue" onClick={() => openBook(reading.id)}>
+            <button className="card shelf-continue" data-present="bk-shelf-continue" onClick={() => openBook(reading.id)}>
               <BookCover meta={reading} small />
               <div className="grow" style={{ minWidth: 0, textAlign: 'left' }}>
                 <div className="clip-kicker"><BookOpen size={12} /><span className="ck-status prog">{t('Continue reading')}</span></div>
@@ -122,15 +122,15 @@ export function BookShelf({ onPick }: { onPick: () => void }) {
           )}
           <label className="lib-search">
             <Search size={18} />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Search titles and authors')} aria-label={t('Search books')} />
+            <input data-present="bk-shelf-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Search titles and authors')} aria-label={t('Search books')} />
             {q && <button onClick={() => setQ('')} aria-label={t('Clear search')}><X size={16} /></button>}
           </label>
           <div className="lib-filters" role="tablist" aria-label={t('Filter books')}>
             {FILTERS.filter((f) => f.id === 'all' || counts[f.id] > 0).map((f) => (
-              <button key={f.id} role="tab" aria-selected={filter === f.id} className={`chip ${filter === f.id ? 'accent' : ''}`} onClick={() => setFilter(f.id)}>{t(f.label)}<span className="lf-n">{counts[f.id]}</span></button>
+              <button key={f.id} role="tab" data-present="bk-filter" data-filter={f.id} aria-selected={filter === f.id} className={`chip ${filter === f.id ? 'accent' : ''}`} onClick={() => setFilter(f.id)}>{t(f.label)}<span className="lf-n">{counts[f.id]}</span></button>
             ))}
           </div>
-          <div className="lib-sort">
+          <div className="lib-sort" data-present="bk-shelf-sort">
             <span className="muted small">{shown.length === 1 ? t('1 book') : t('{n} books', { n: shown.length })}</span>
             <div className="lib-sort-r">
               <div className="cover-size" role="radiogroup" aria-label={t('Cover size')}>
@@ -143,7 +143,7 @@ export function BookShelf({ onPick }: { onPick: () => void }) {
           </div>
           <div className={`shelf-grid size-${size}`}>
             {shown.map((b) => <BookTile key={b.id} b={b} sort={sort} onMore={() => setMenu(b)} />)}
-            <button className="shelf-add" onClick={onPick} aria-label={t('Import a book')}><BookPlus size={26} /><span>{t('Import')}</span></button>
+            <button className="shelf-add" data-present="bk-shelf-import" onClick={onPick} aria-label={t('Import a book')}><BookPlus size={26} /><span>{t('Import')}</span></button>
           </div>
         </>
       )}
@@ -171,13 +171,13 @@ function BookTile({ b, sort, onMore }: { b: BookMeta; sort: Sort; onMore: () => 
   const end = () => { if (press.current) clearTimeout(press.current); press.current = null }
   const pct = Math.round(b.progress * 100)
   return (
-    <div className={`book-tile ${b.done ? 'is-done' : ''}`}>
+    <div className={`book-tile ${b.done ? 'is-done' : ''}`} data-present="bk-tile">
       <button className="book-tile-cover" onClick={() => { if (!long.current) openBook(b.id) }} onPointerDown={start} onPointerUp={end} onPointerLeave={end} onPointerCancel={end}
         onContextMenu={(e) => { e.preventDefault(); onMore() }} aria-label={t('Open {title}', { title: b.title })}>
         <BookCover meta={b} />
         <span className="book-fmt">{b.format.toUpperCase()}</span>
         {b.fav && <span className="book-fav"><Star size={13} fill="currentColor" /></span>}
-        <span className={`book-temp ${b.temp ? 'is-temp' : ''}`} role="button" aria-label={b.temp ? t('Keep {title}', { title: b.title }) : t('Keep {title} only once', { title: b.title })} title={b.temp ? t('Only once — removed when you move to another book') : t('Kept in your library')} onClick={(e) => { e.stopPropagation(); void updateBook(b.id, { temp: !b.temp }) }}>{b.temp ? <><Clock size={11} /> {t('Once')}</> : <><Pin size={11} /> {t('Keep')}</>}</span>
+        <span className={`book-temp ${b.temp ? 'is-temp' : ''}`} data-present="bk-tile-temp" role="button" aria-label={b.temp ? t('Keep {title}', { title: b.title }) : t('Keep {title} only once', { title: b.title })} title={b.temp ? t('Only once — removed when you move to another book') : t('Kept in your library')} onClick={(e) => { e.stopPropagation(); void updateBook(b.id, { temp: !b.temp }) }}>{b.temp ? <><Clock size={11} /> {t('Once')}</> : <><Pin size={11} /> {t('Keep')}</>}</span>
         <span className="book-prog"><i style={{ width: `${b.done ? 100 : pct}%` }} /></span>
       </button>
       <div className="book-tile-info">
@@ -185,7 +185,7 @@ function BookTile({ b, sort, onMore }: { b: BookMeta; sort: Sort; onMore: () => 
           <div className="book-tile-title">{b.title}</div>
           <div className="book-tile-sub">{b.done ? t('Finished') : pct > 0 ? `${pct}%` : t('New')}{sort === 'recent' ? ` · ${whenRead(b.openedAt ?? b.addedAt)}` : ''}{b.author ? ` · ${b.author}` : ''}</div>
         </div>
-        <button className="icon-btn book-more" onClick={onMore} aria-label={t('More for {title}', { title: b.title })}><MoreHorizontal size={18} /></button>
+        <button className="icon-btn book-more" data-present="bk-tile-more" onClick={onMore} aria-label={t('More for {title}', { title: b.title })}><MoreHorizontal size={18} /></button>
       </div>
     </div>
   )
@@ -211,11 +211,11 @@ export function KeepAskSheet() {
   const one = ask.titles.length === 1
   return (
     <Sheet open onClose={forNow} title={one ? t('Keep this book?') : t('Keep these {n} books?', { n: ask.titles.length })}>
-      <p className="keepask-body"><b>{t('Keep')}</b>{one ? t(' saves it.') : t(' saves them.')}<br /><b>{t('Once')}</b>{one ? t(' removes it later.') : t(' removes them later.')}</p>
+      <p className="keepask-body" data-present="bk-keepask"><b>{t('Keep')}</b>{one ? t(' saves it.') : t(' saves them.')}<br /><b>{t('Once')}</b>{one ? t(' removes it later.') : t(' removes them later.')}</p>
       <div className="keepask-bar"><i key={ask.ids.join(',')} style={{ animationDuration: '5s' }} /></div>
       <div className="row" style={{ gap: 8 }}>
-        <button className="btn ghost grow" onClick={forNow}>{t('Once')} · {left}</button>
-        <button className="btn primary grow" onClick={keep}><Pin size={16} /> {t('Keep')}</button>
+        <button className="btn ghost grow" data-present="bk-keepask-once" onClick={forNow}>{t('Once')} · {left}</button>
+        <button className="btn primary grow" data-present="bk-keepask-keep" onClick={keep}><Pin size={16} /> {t('Keep')}</button>
       </div>
     </Sheet>
   )
@@ -233,13 +233,13 @@ function BookMenu({ b, onClose, onRename }: { b: BookMeta | null; onClose: () =>
   return (
     <Sheet open onClose={onClose} title={b.title.length > 34 ? t('Book') : b.title}>
       <div className="menu-list">
-        <button onClick={run(() => openBook(b.id))}><BookOpen size={20} /> {b.progress > 0.002 ? t('Continue reading') : t('Start reading')}</button>
-        <button onClick={run(() => updateBook(b.id, { fav: !b.fav }, false))}><Star size={20} /> {b.fav ? t('Remove from favorites') : t('Add to favorites')}</button>
-        <button onClick={run(() => updateBook(b.id, { temp: !b.temp }, false))}>{b.temp ? <Pin size={20} /> : <Clock size={20} />} {b.temp ? t('Keep this book') : t('Only once')}</button>
-        <button onClick={run(() => updateBook(b.id, b.done ? { done: false } : { done: true, progress: 1 }, false))}><CircleCheck size={20} /> {b.done ? t('Mark as not finished') : t('Mark as finished')}</button>
-        {b.progress > 0 && <button onClick={run(() => updateBook(b.id, { pos: { ch: 0, b: 0 }, progress: 0, done: false }, false))}><BookOpen size={20} /> {t('Start over')}</button>}
-        <button onClick={() => onRename(b)}><Pencil size={20} /> {t('Rename')}</button>
-        <button className="danger" onClick={run(remove)}><Trash2 size={20} /> {t('Delete')}</button>
+        <button data-present="bk-menu-open" onClick={run(() => openBook(b.id))}><BookOpen size={20} /> {b.progress > 0.002 ? t('Continue reading') : t('Start reading')}</button>
+        <button data-present="bk-menu-fav" onClick={run(() => updateBook(b.id, { fav: !b.fav }, false))}><Star size={20} /> {b.fav ? t('Remove from favorites') : t('Add to favorites')}</button>
+        <button data-present="bk-menu-temp" onClick={run(() => updateBook(b.id, { temp: !b.temp }, false))}>{b.temp ? <Pin size={20} /> : <Clock size={20} />} {b.temp ? t('Keep this book') : t('Only once')}</button>
+        <button data-present="bk-menu-done" onClick={run(() => updateBook(b.id, b.done ? { done: false } : { done: true, progress: 1 }, false))}><CircleCheck size={20} /> {b.done ? t('Mark as not finished') : t('Mark as finished')}</button>
+        {b.progress > 0 && <button data-present="bk-menu-startover" onClick={run(() => updateBook(b.id, { pos: { ch: 0, b: 0 }, progress: 0, done: false }, false))}><BookOpen size={20} /> {t('Start over')}</button>}
+        <button data-present="bk-menu-rename" onClick={() => onRename(b)}><Pencil size={20} /> {t('Rename')}</button>
+        <button className="danger" data-present="bk-menu-delete" onClick={run(remove)}><Trash2 size={20} /> {t('Delete')}</button>
       </div>
     </Sheet>
   )
@@ -253,8 +253,8 @@ function RenameBook({ b, onClose }: { b: BookMeta | null; onClose: () => void })
   const save = () => { if (title.trim()) void updateBook(b.id, { title: title.trim(), author: a.trim() }, false); onClose() }
   return (
     <Sheet open onClose={onClose} title={t('Rename')}>
-      <input className="text-input" value={title} onChange={(e) => setT(e.target.value)} placeholder={t('Title')} aria-label={t('Title')} autoFocus />
-      <input className="text-input" style={{ marginTop: 8 }} value={a} onChange={(e) => setA(e.target.value)} placeholder={t('Author')} aria-label={t('Author')} onKeyDown={(e) => { if (e.key === 'Enter') save() }} />
+      <input className="text-input" data-present="bk-rename-title" value={title} onChange={(e) => setT(e.target.value)} placeholder={t('Title')} aria-label={t('Title')} autoFocus />
+      <input className="text-input" data-present="bk-rename-author" style={{ marginTop: 8 }} value={a} onChange={(e) => setA(e.target.value)} placeholder={t('Author')} aria-label={t('Author')} onKeyDown={(e) => { if (e.key === 'Enter') save() }} />
       <div className="row" style={{ gap: 8, marginTop: 12 }}>
         <button className="btn ghost grow" onClick={onClose}>{t('Cancel')}</button>
         <button className="btn primary grow" onClick={save} disabled={!title.trim()}>{t('Save')}</button>
