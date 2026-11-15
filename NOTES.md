@@ -1,3 +1,13 @@
+## 1.4.171 — Settings learns clusters (web)
+
+The house pattern arrives at the last flat Settings page in the fleet. Oscar pointed at his memory instead of explaining — the pattern is consecrated there (born in Vela, kept in Brizna 1.5.81 and Faro 1.3.285) — and this wave applies it to Logos exactly as written: sunken trays grouped by territory, each with a short name in the app's voice and one line saying what it holds; the cards inside intact (content, anchors, ids untouched); the loose pieces at the foot, outside the trays.
+
+**The five territories.** *The voice* — Neural voice, Pronunciation. *Listening* — Playback, Floating player. *The screen* — Appearance, Language. *Learn* — Presentations (search and index). *Your data* — Backup. About Logos and the version line stay loose at the foot, as the pattern prescribes. Two cards changed seats to make the territories true: Playback and the Floating player moved below Pronunciation, so The voice holds both of its cards and Listening both of its own — moves of whole sections, byte-identical inside (verified: every `set-*` anchor still resolves exactly once).
+
+**The tray.** Painted from the active theme's tokens under the Calibration Law: one tone under the page (`text 4%` over `bg`), the 1px edge stack (hairline, top light, short shadow), never a big jump of light. Each theme keeps its grammar — Tron lights the tray's fillet in its sovereign cyan with the glow contained in the edge; Cyberpunk prints flat, signal yellow only on the top fillet and the tray's name; Legacy light gets a white top light. At tablet widths the masonry distributes by tray (`break-inside: avoid` on the cluster), as the fleet's houses do.
+
+**Presentation review.** Every settings anchor survives exactly once in the same cards; the lessons' landings are unchanged. The fiction stage keeps its own flat Settings arrangement for now — mirroring the trays on stage is a refresh item for the Presentation lane, stated here, not silently absorbed.
+
 ## 1.4.170 — The bubble names itself; its cards learn calibration (shell)
 
 Two orders Oscar gave from the Cadence workshop (2026-11-14 22:41–22:42), relayed to this desk.
