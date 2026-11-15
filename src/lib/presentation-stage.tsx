@@ -985,7 +985,7 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
 
       <div className="pstage-card" data-present="set-about">
         <strong>About Logos</strong>
-        <p className="pstage-note" data-present="set-version">Version 1.4.175</p>
+        <p className="pstage-note" data-present="set-version">Version 1.4.176</p>
       </div>
     </div>
   )

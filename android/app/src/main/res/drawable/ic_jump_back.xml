@@ -1,0 +1,15 @@
+<!-- The jump-back face for the media session's custom actions
+     (1.4.176): the corrected arrow of 1.4.173/174 as a vector —
+     the arc arrives at the head, the base centered on the arc's
+     end. Same geometry as the player's JumpKey (viewBox 24). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path
+        android:pathData="M7.47,5.93 A7.9,7.9 0 1,0 14.04,4.77"
+        android:strokeColor="#FFFFFF" android:strokeWidth="2.1"
+        android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path
+        android:pathData="M10.57,3.84 L14.89,1.58 L13.19,7.96 Z"
+        android:fillColor="#FFFFFF" />
+</vector>
