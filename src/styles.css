@@ -762,6 +762,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
    veil, never blurred) and the card seated at the screen's center
    in the sheet's grammar, difficult to miss. */
 .pres-offer-veil { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.55); backdrop-filter: saturate(.65); animation: fadeIn .25s both; }
+/* The two searches and their seats (1.4.177): the lesson search
+   inside the opened Presentations index; the Settings search at
+   the very top of its page, its hits plain rows that land home. */
+.pres-search { margin: 2px 0 14px; }
+.set-search { margin-bottom: 18px; }
+.set-search-hit { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 10px 4px 2px; background: none; border: none; color: var(--text); cursor: pointer; font: inherit; }
 .pres-offer-card {
   position: fixed; left: 50%; top: 50%; z-index: 71; width: min(400px, calc(100vw - 40px));
   transform: translate(-50%, -50%); animation: popIn .34s var(--ease) both;

@@ -133,6 +133,9 @@ export const ES: Record<string, string> = {
   'Your whole library in one file — out, and back in.': 'Toda tu biblioteca en un archivo — sale y vuelve a entrar.',
   // ── Presentation search + first-run offer (1.4.166) ──
   'Find a lesson or a function': 'Busca una lección o una función',
+  'Search settings': 'Buscar en Ajustes',
+  'Try “voice”, “bubble”, “backup”…': 'Prueba «voz», «burbuja», «respaldo»…',
+  'Nothing in Settings matches that yet.': 'Nada en Ajustes coincide con eso todavía.',
   'Try “sleep”, “bubble”, “pronunciation”…': 'Prueba «sueño», «burbuja», «pronunciación»…',
   'Nothing in the lessons matches that yet.': 'Ninguna lección coincide con eso todavía.',
   'Watch': 'Ver',

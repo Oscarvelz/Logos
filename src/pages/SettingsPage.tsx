@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { exportBackup, importBackup } from '../lib/backup.ts'
-import { Check, ChevronDown, Cpu, Download, HardDrive, Languages, Loader2, Mic, Palette, PictureInPicture2, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Cpu, Download, HardDrive, Languages, Loader2, Mic, Palette, PictureInPicture2, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { t } from '../lib/i18n.ts'
 import { useStore } from '../lib/store.ts'
 import { settings, applyTheme, READER_SCALES, stepReaderScale, type Theme, type LegacyTheme } from '../lib/settings.ts'
@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.176'
+const VERSION = '1.4.177'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -100,6 +100,71 @@ function SetCluster({ name, line, children }: { name: string; line: string; chil
   )
 }
 
+// ── The Settings search (1.4.177, Oscar) ────────────────────────
+// A general search at the very top of the page, in the same field
+// grammar as the lesson search — which in this same wave moved
+// inside Presentations, at his word: a search lives with what it
+// searches. A result here names its card; tapping it opens that
+// card where it lives and scrolls it into view. The search opens
+// the result's home; it never paints a copy of the setting here.
+const SETTING_INDEX: { anchor: string; title: string; sub: string; keys: string }[] = [
+  { anchor: 'set-neural', title: 'Neural voice', sub: 'The reading voice — it lives on this device, downloads once, then works offline.', keys: 'voice engine download model voz neuronal descargar motor' },
+  { anchor: 'set-pron', title: 'Pronunciation', sub: 'Words said your way — names, places, terms of art.', keys: 'pronounce names words say pronunciación nombres palabras' },
+  { anchor: 'set-playback', title: 'Playback', sub: 'How listening feels, sentence by sentence.', keys: 'speed pause highlight jump seconds reproducción velocidad pausa saltos' },
+  { anchor: 'set-bubble', title: 'Floating player', sub: 'A small λ that floats over your other apps.', keys: 'bubble floating overlay size burbuja flotante reproductor tamaño' },
+  { anchor: 'set-card-appearance', title: 'Appearance', sub: 'The light of the room.', keys: 'theme dark light tron cyberpunk apariencia tema oscuro claro' },
+  { anchor: 'set-card-language', title: 'Language', sub: 'The app’s own words — everything on screen.', keys: 'english español spanish idioma lenguaje inglés' },
+  { anchor: 'set-presentations', title: 'Presentations', sub: 'Learn the whole app, guided, at your pace', keys: 'lessons tour guided learn presentaciones lecciones aprender guía' },
+  { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy copia respaldo exportar importar archivo' },
+  { anchor: 'set-about', title: 'About Logos', sub: 'Version {v} · private, on-device text-to-speech', keys: 'version about acerca versión' },
+]
+
+function SettingsSearch() {
+  const [query, setQuery] = useState('')
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const hits = useMemo(() => {
+    const terms = norm(query).split(/\s+/).filter((x) => x.length >= 2)
+    if (!terms.length) return []
+    return SETTING_INDEX.filter((e) => {
+      const hay = norm(`${e.title} ${e.sub} ${e.keys} ${t(e.title)} ${t(e.sub, { v: VERSION })}`)
+      return terms.every((term) => hay.includes(term))
+    })
+  }, [query])
+  const land = (anchor: string) => {
+    setQuery('')
+    const root = document.querySelector(`[data-present="${anchor}"]`)
+    if (!root) return
+    const head = root.querySelector<HTMLElement>('.set-card-h[aria-expanded="false"]')
+    if (head) head.click()
+    window.setTimeout(() => root.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60)
+    window.setTimeout(() => root.scrollIntoView({ block: 'start', behavior: 'smooth' }), 480)
+  }
+  return (
+    <div className="set-search">
+      <div className="field-label"><span>{t('Search settings')}</span></div>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={t('Try “voice”, “bubble”, “backup”…')}
+        aria-label={t('Search settings')}
+        style={{ width: '100%', height: 48, borderRadius: 14, border: '1px solid var(--line)', background: 'var(--surface)', padding: '0 14px', outline: 'none' }}
+      />
+      {query.trim().length >= 2 && hits.length === 0 && (
+        <p className="muted small" style={{ margin: '10px 4px 0' }}>{t('Nothing in Settings matches that yet.')}</p>
+      )}
+      {hits.map((e) => (
+        <button key={e.anchor} className="set-search-hit" onClick={() => land(e.anchor)}>
+          <span className="grow" style={{ minWidth: 0 }}>
+            <span style={{ fontWeight: 650, display: 'block' }}>{t(e.title)}</span>
+            <span className="muted small" style={{ display: 'block' }}>{t(e.sub, { v: VERSION })}</span>
+          </span>
+          <ChevronRight size={17} className="set-chev" />
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const st = useStore(settings)
   const e = useStore(engine)
@@ -159,6 +224,8 @@ export function SettingsPage() {
           <p className="page-sub">{t('Everything runs on this device. No account, no cloud.')}</p>
         </div>
       </div>
+
+      <SettingsSearch />
 
       <div className="set-cols">
       <SetCluster name={t('The voice')} line={t('The voice that reads to you, and how it says your words.')}>
@@ -402,8 +469,7 @@ export function SettingsPage() {
       </SetCluster>
       <SetCluster name={t('Learn')} line={t('Guided lessons that walk the whole app with you.')}>
       <section className="set-group" data-present="set-presentations">
-      <PresentationSearch />
-      <PresentationsCard onLaunch={launchPresentation} />
+      <PresentationsCard onLaunch={launchPresentation} searchSlot={<PresentationSearch />} />
       </section>
       </SetCluster>
       <SetCluster name={t('Your data')} line={t('Your whole library in one file — out, and back in.')}>

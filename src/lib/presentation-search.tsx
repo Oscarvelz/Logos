@@ -158,12 +158,15 @@ function cssEscape(v: string): string {
   return v.replace(/["\\]/g, '\\$&')
 }
 
-// ── The search block (Settings, above the index card) ─────────────
+// ── The search block (inside the opened Presentations index) ─────
+// It lived in Settings above the card until 1.4.177 — Oscar: the
+// search belongs inside Presentations, after it opens, never
+// outside it. The index gives it its seat via the searchSlot prop.
 export function PresentationSearch() {
   const [query, setQuery] = useState('')
   const hits = useMemo(() => searchScenes(query), [query])
   return (
-    <div className="card card-pad pres-search">
+    <div className="pres-search">
       <div className="field-label"><span>{t('Find a lesson or a function')}</span></div>
       <input
         value={query}

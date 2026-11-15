@@ -75,7 +75,7 @@ class PlaybackService : Service() {
                 override fun onFastForward() { act("jumpfwd") }
                 // The session's own jump actions (1.4.176): the card
                 // buttons that wear the arrow face — see build().
-                override fun onCustomAction(action: String, extras: Bundle) {
+                override fun onCustomAction(action: String, extras: Bundle?) {
                     when (action) {
                         "jumpback" -> act("jumpback")
                         "jumpfwd" -> act("jumpfwd")
