@@ -18,6 +18,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.Icon
+import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
 
@@ -72,6 +73,14 @@ class PlaybackService : Service() {
                 // seat when a queue exists.
                 override fun onRewind() { act("jumpback") }
                 override fun onFastForward() { act("jumpfwd") }
+                // The session's own jump actions (1.4.176): the card
+                // buttons that wear the arrow face — see build().
+                override fun onCustomAction(action: String?, extras: Bundle?) {
+                    when (action) {
+                        "jumpback" -> act("jumpback")
+                        "jumpfwd" -> act("jumpfwd")
+                    }
+                }
             })
             // Born asleep (1.4.154): the session wakes only while the
             // voice is playing — see build(), where each published
@@ -247,12 +256,34 @@ class PlaybackService : Service() {
         // no surface can offer him a track skip that does not exist.
         // The page's publish carries the distinction: `book` holds a
         // title only when a book is playing.
+        //
+        // (Corrected 1.4.176, Oscar, with his screenshot of the
+        // finished card wearing a lone play button): the prediction
+        // above failed on his phone — the system's media card does
+        // NOT fall back to REWIND/FAST_FORWARD for its side slots;
+        // with no SKIP declared it showed no side buttons at all,
+        // and the 173 sleep left the finished card the same. «The
+        // latest update removed the two buttons… Bring them back
+        // with a new design.» The jumps now ride as the session's
+        // OWN custom actions on every reading — book, text and
+        // finished alike: their face is the corrected arrow (a
+        // vector resource; the platform takes only resource icons
+        // for session actions, so the drawn number cannot ride
+        // here — it lives in the action's NAME, read live from the
+        // same prefs the shade's numbered bitmap buttons draw
+        // from, and the shade notification keeps the numbered
+        // faces themselves). SKIP's seat is unchanged: books keep
+        // it, texts never declare it.
         val cardActions = if (book.isNotBlank())
             PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
         else
             PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
+        val jbSec = getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_b", 15)
+        val jfSec = getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_f", 30)
         s.setPlaybackState(PlaybackState.Builder()
             .setActions(cardActions)
+            .addCustomAction("jumpback", "Jump back $jbSec seconds", R.drawable.ic_jump_back)
+            .addCustomAction("jumpfwd", "Jump forward $jfSec seconds", R.drawable.ic_jump_fwd)
             .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f).build())
         // The session is awake only while the voice is (1.4.154):
         // while paused-but-active it held the media-button router,
