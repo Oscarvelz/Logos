@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { AudioLines, BookOpen, FileText, Gauge, ListTree, Pause, Play, Star } from 'lucide-react'
+import { useEffect } from 'react'
+import { AudioLines, BookOpen, FileText, Gauge, Pause, Play, Star } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { library, refreshLibrary, kindOf, getClipBlob, type ClipMeta } from '../lib/library.ts'
 import { clipPlayer, playClip, pauseClip } from '../player/clip.ts'
@@ -7,7 +7,7 @@ import { books, refreshBooks } from '../lib/books.ts'
 import { settings } from '../lib/settings.ts'
 import { drafts } from '../lib/drafts.ts'
 import { voiceById } from '../lib/voices.ts'
-import { listen, loadText, refreshVoices, seek } from '../player/listen.ts'
+import { listen, loadText, refreshVoices } from '../player/listen.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { BookCover } from './bookcover.tsx'
 import { t } from '../lib/i18n.ts'
@@ -69,24 +69,28 @@ export function TabletDesk({ onOpen }: { onOpen: (text: string) => void }) {
   )
 }
 
-/** Big tablet (≥1500 px): what's in the text, and a map of its paragraphs to jump around while listening. */
+/** Big tablet (≥1500 px): what's in the text, and the reader's books.
+    Until 1.4.167 the second card mapped the text's paragraphs — the
+    very words already on stage in the main window. Oscar (2026-11-14):
+    that column earns its place as his books instead, the ones he
+    starred as favorites first of all. The star itself was already the
+    books' own (the shelf menu's «Add to favorites», BookMeta.fav);
+    nothing new had to be built for the pin to exist — this card is
+    where it pays off. With no favorites yet, the card shows his books
+    and says how a star pins one here. */
 export function TextMap({ text, reading }: { text: string; reading: boolean }) {
   const s = useStore(listen)
   const st = useStore(settings)
+  const bk = useStore(books)
+  useEffect(() => { if (!bk.loaded) void refreshBooks() }, [bk.loaded])
   const src = reading ? s.text : text
   const words = wordCount(src)
   const paras = src.split(/\n\s*\n|\n/).map((p) => p.trim()).filter(Boolean)
   const sentences = reading ? s.segments.length : (src.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g) ?? []).filter((x) => x.trim()).length
   const lang = src.trim() ? detectLang(src).lang : null
-  // Paragraph map from the live session: first sentence index of each paragraph.
-  const map: { start: number; end: number; text: string }[] = []
-  if (reading) {
-    let start = 0
-    s.segments.forEach((g, i) => { if (g.paraEnd || i === s.segments.length - 1) { map.push({ start, end: i, text: s.segments[start].text.replace(/\*\*|__|`/g, '') }); start = i + 1 } })
-  }
-  const curPara = map.findIndex((m) => s.current >= m.start && s.current <= m.end)
-  const listRef = useRef<HTMLDivElement>(null)
-  useEffect(() => { listRef.current?.querySelector('.now')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) }, [curPara])
+  const favBooks = [...bk.list].filter((b) => b.fav).sort((a, b) => (b.openedAt ?? b.addedAt) - (a.openedAt ?? a.addedAt))
+  const pinned = favBooks.length > 0
+  const shown = (pinned ? favBooks : [...bk.list].sort((a, b) => (b.openedAt ?? b.addedAt) - (a.openedAt ?? a.addedAt))).slice(0, 8)
 
   return (
     <div className="desk desk-map">
@@ -103,17 +107,22 @@ export function TextMap({ text, reading }: { text: string; reading: boolean }) {
           </div>
         ) : <p className="desk-empty">{t('Paste or share a text and its length, language and listening time show up here.')}</p>}
       </div>
-      <div className="card desk-outline" data-present="desk-textmap-paragraphs">
-        <div className="desk-kicker"><ListTree size={13} /> {t('Paragraphs')}</div>
-        {reading && map.length ? (
-          <div className="desk-list" ref={listRef}>
-            {map.map((m, i) => (
-              <button key={i} className={`desk-para ${i === curPara ? 'now' : ''} ${i < curPara ? 'past' : ''}`} onClick={() => seek(m.start)}>
-                <span className="dp-n">{i + 1}</span><span className="grow">{m.text}</span>
-              </button>
+      <div className="card desk-outline">
+        <div className="desk-kicker">{pinned ? <Star size={13} /> : <BookOpen size={13} />} {pinned ? t('Favorite books') : t('Your books')}</div>
+        {shown.length ? (
+          <div className="desk-list">
+            {shown.map((b) => (
+              <a key={b.id} className="desk-item" href={`#/book/${b.id}`}>
+                <span className="desk-ic"><BookOpen size={16} /></span>
+                <span className="grow desk-item-t">{b.title}
+                  <span className="desk-item-sub">{b.author ? `${b.author} · ` : ''}{b.done ? t('Finished') : t('{n}% read', { n: Math.round(b.progress * 100) })}</span>
+                </span>
+                {b.fav && <Star size={14} className="desk-fav-star" fill="currentColor" />}
+              </a>
             ))}
           </div>
-        ) : <p className="desk-empty">{t('Press play and every paragraph appears here. Tap one to jump straight to it.')}</p>}
+        ) : <p className="desk-empty">{t('Books you import land here. Star one in its menu and it stays pinned.')}</p>}
+        {!pinned && shown.length > 0 && <p className="desk-hint">{t('Star a book in its menu and it pins here as a favorite.')}</p>}
       </div>
     </div>
   )

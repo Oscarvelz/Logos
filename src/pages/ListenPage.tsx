@@ -140,15 +140,21 @@ export function ListenPage() {
     <div className="page wide listen-page">
       <ListenHead text={reading ? s.text : text} lang={lang} playing={s.playing && reading} remaining={remaining} />
 
-      {/* While anything sounds in the main listening area, the
+      {/* Phone: while anything sounds in the main listening area, the
           Continue card folds itself away (Oscar, 2026-11-14): the
           text takes the whole stage. When the audio stops, the card
-          unfolds back — both ways on the house fold transition. */}
-      <div className={`continue-fold${s.playing || s.buffering || cp.playing ? '' : ' open'}`} aria-hidden={s.playing || s.buffering || cp.playing}>
-        <div className="set-fold-in">
-          <ContinueRow onResume={() => setEditing(false)} />
+          unfolds back — since 1.4.167 both ways on the immersive
+          glide's own clock. Tablet (wide) has room to spare, so there
+          the card never folds at all: it lives below the player, in
+          the side column (Oscar, 2026-11-14) — rendered there, not
+          here. */}
+      {!wide && (
+        <div className={`continue-fold${s.playing || s.buffering || cp.playing ? '' : ' open'}`} aria-hidden={s.playing || s.buffering || cp.playing}>
+          <div className="set-fold-in">
+            <ContinueRow onResume={() => setEditing(false)} />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="listen-grid">
         <div className="card" style={{ overflow: 'hidden' }}>
@@ -251,6 +257,7 @@ export function ListenPage() {
           {s.error && <div className="error-note">{s.error}</div>}
           {e.status === 'error' && <div className="error-note">{t('Neural engine: ')}{e.error}</div>}
         </div>
+        {wide && <ContinueRow onResume={() => setEditing(false)} />}
         {wide && <TabletDesk onOpen={(t) => { setText(t); setEditing(false) }} />}
         </div>
         {big && <TextMap text={text} reading={reading} />}
