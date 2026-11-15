@@ -209,14 +209,25 @@ export function PresentationOffer() {
     if (start) launchPresentation('Q0')
   }
   return (
-    <div className="card card-pad pres-offer" style={{ margin: '14px 16px 0' }}>
-      <div style={{ fontWeight: 700, fontSize: 16 }}>{t('New here? Logos can teach you itself.')}</div>
-      <p className="muted small" style={{ margin: '6px 0 12px', lineHeight: 1.5 }}>
-        {t('Short guided lessons walk the whole app, on a practice stage — your own library is never touched.')}
-      </p>
-      <div className="row" style={{ gap: 8 }}>
-        <button className="btn primary" onClick={() => answer(true)}>{t('Start the tour')}</button>
-        <button className="btn ghost" onClick={() => answer(false)}>{t('Not now')}</button>
+    // Centered, over a dimmed world (1.4.175, Oscar): the offer
+    // used to stand in flow at the top of the page, where a first
+    // run could scroll past it unseen — «should be at the center
+    // of the screen, not at the top, to make it difficult to
+    // miss». It now wears the house's centered-window grammar
+    // (the sheet's seat and entrance), over the presentation
+    // family's veil — darkened and slightly desaturated, never
+    // blurred. The veil takes the taps: the choice is the point,
+    // and both answers live on the card.
+    <div className="pres-offer-veil">
+      <div className="card card-pad pres-offer-card" role="dialog" aria-modal="true">
+        <div style={{ fontWeight: 700, fontSize: 16 }}>{t('New here? Logos can teach you itself.')}</div>
+        <p className="muted small" style={{ margin: '6px 0 12px', lineHeight: 1.5 }}>
+          {t('Short guided lessons walk the whole app, on a practice stage — your own library is never touched.')}
+        </p>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn primary" onClick={() => answer(true)}>{t('Start the tour')}</button>
+          <button className="btn ghost" onClick={() => answer(false)}>{t('Not now')}</button>
+        </div>
       </div>
     </div>
   )

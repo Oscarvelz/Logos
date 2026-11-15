@@ -757,6 +757,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   box-shadow: 0 30px 80px -24px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.02), inset 0 1px 0 rgba(255,255,255,.05);
 }
 .sheet-grip { display: none; }
+/* The first-run offer, centered (1.4.175, Oscar): a dimmed world
+   (darkened, slightly desaturated — the presentation family's
+   veil, never blurred) and the card seated at the screen's center
+   in the sheet's grammar, difficult to miss. */
+.pres-offer-veil { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.55); backdrop-filter: saturate(.65); animation: fadeIn .25s both; }
+.pres-offer-card {
+  position: fixed; left: 50%; top: 50%; z-index: 71; width: min(400px, calc(100vw - 40px));
+  transform: translate(-50%, -50%); animation: popIn .34s var(--ease) both;
+  box-shadow: 0 30px 80px -24px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.02), inset 0 1px 0 rgba(255,255,255,.05);
+}
 .sheet h3 { font-family: var(--font-display); font-weight: 400; font-size: 30px; margin: 0 4px 12px; }
 @keyframes fadeIn { from { opacity: 0; } }
 @keyframes popIn { from { opacity: 0; transform: translate(-50%, -46%) scale(.96); } }

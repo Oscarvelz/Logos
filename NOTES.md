@@ -1,3 +1,7 @@
+## 1.4.175 — The tour offer moves to the center of the screen (web only)
+
+Oscar, 2026-11-15, with his phone's screenshot: the first-run offer («New here? Logos can teach you itself.») stood in flow at the top of the Listen page — «The tour card should be at the center of the screen, not at the top, to make it difficult to miss.» It now opens as a centered window over a dimmed world: the presentation family's veil (darkened, slightly desaturated, never blurred) takes the taps, and the card sits at the screen's center in the house's sheet grammar (same seat, same popIn entrance). The offer's terms are unchanged — once, never imposed, Start the tour / Not now — only its seat moved. Web only; the shell stays 1.4.174. Presentation review: this IS the presentation system's own door; no lesson, anchor or stage behavior changes.
+
 ## 1.4.174 — The arrowhead sits centered on the circle's turn (web + shell)
 
 Oscar on 173, 2026-11-15: «Ahora sí está mejor, solo que la flecha necesita centrarse más en la vuelta del círculo… la cabeza de la flecha está demasiado arriba y entonces el círculo no se centra en el centro de la base de la flecha.» Right again: the head's base trailed behind the arc's end along the tangent, so the head rode high and the ring met the triangle off its base's center. The base is now centered exactly ON the arc's end — the ring's line passes through the middle of the base edge — in the player's JumpKey, the panel's canvas keys and the shade's bitmaps. Paint only; nothing else moves. Presentation review: no teaching surface touched.
