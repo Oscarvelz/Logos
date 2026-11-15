@@ -1,0 +1,50 @@
+/* The Presentation index's own few rules (the fold itself is the house
+   SetCard pattern — .card.set-card / .set-card-h / .set-fold — reused
+   as-is from styles.css). Painted only with the theme's variables, the
+   --accent family included; --gold is never used (census F: referenced
+   in the app but never defined). */
+
+/* The device-scope announcement at the index head (PLAN §0.1 / OQ-3). */
+.pres-note { margin: 0 0 14px; padding: 0 2px; }
+
+/* Floor heads inside the fold. */
+.pres-floor { margin-top: 18px; }
+.pres-floor:first-of-type { margin-top: 2px; }
+.pres-floor-t { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; padding: 0 2px; }
+.pres-floor-s { padding: 0 2px; margin-top: 1px; }
+.pres-floor .list { margin-top: 8px; }
+
+/* A module row: name + computed label on one line, promise beneath,
+   state and the start/resume control on their own line. Nothing on a
+   row may wrap a word away from its icon (controls never split). */
+.pres-mod-t { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.pres-dur { color: var(--accent); font-weight: 650; font-size: 13px; white-space: nowrap; }
+.pres-mod-foot { display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
+.pres-state { font-size: 12.5px; font-weight: 650; color: var(--muted, inherit); opacity: 0.85; white-space: nowrap; }
+.pres-state.seen { color: var(--accent); opacity: 1; }
+.pres-state.refresh { color: var(--accent); opacity: 1; }
+.pres-go { margin-left: auto; white-space: nowrap; }
+.pres-go > span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+/* The resume head (the first-card law): the last-used, still-incomplete
+   module lifted above both floors under Oscar's heading. It reuses the
+   floor's seat and list; the heading carries the accent so the eye
+   finds the thread first. Theme paint only. */
+.pres-resume .pres-floor-t { color: var(--accent); }
+
+/* The general progress line (the overall-progress law): ONE slim bar
+   over ALL modules, directly under the fold's intro — the card's 3px
+   progress thread is the family resemblance — with the studied
+   percentage and the counts that make it useful beneath. Painted only
+   with the theme's accent family: the soft accent grounds the track,
+   the accent itself fills what has been studied. */
+.pres-progress { margin: 0 0 4px; padding: 0 2px; }
+.pres-progress-head { display: flex; align-items: baseline; gap: 8px; }
+.pres-progress-pct { font-size: 17px; font-weight: 750; letter-spacing: -0.01em; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pres-progress-lead { font-size: 13.5px; font-weight: 600; }
+.pres-progress-bar { height: 3px; border-radius: 99px; background: var(--accent-soft); margin-top: 7px; overflow: hidden; }
+.pres-progress-fill { height: 100%; border-radius: 99px; background: var(--accent); }
+.pres-progress-counts { margin-top: 6px; }
+
+/* «My scenes» sits under the floors, in the same fold. */
+.pres-mine { margin-top: 20px; }
