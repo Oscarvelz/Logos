@@ -1663,14 +1663,24 @@ class BubbleService : Service() {
         // guaranteed-floor read: panel, blink, then Logos itself.
         val pasteB = footBtn(s("Paste now", "Pegar ahora"), { cv, ink, cx, cy, r ->
             val p = inkPaint(ink)
-            // The board.
-            cv.drawRoundRect(android.graphics.RectF(cx - r * 0.78f, cy - r * 0.68f, cx + r * 0.78f, cy + r * 0.95f), dp(2).toFloat(), dp(2).toFloat(), p)
-            // The clip across its top.
-            cv.drawRoundRect(android.graphics.RectF(cx - r * 0.42f, cy - r * 1.05f, cx + r * 0.42f, cy - r * 0.5f), dp(2).toFloat(), dp(2).toFloat(), p)
-            // The arrow coming down into it: this brings the words in.
-            cv.drawLine(cx, cy - r * 0.3f, cx, cy + r * 0.42f, p)
-            cv.drawLine(cx - r * 0.3f, cy + r * 0.14f, cx, cy + r * 0.44f, p)
-            cv.drawLine(cx + r * 0.3f, cy + r * 0.14f, cx, cy + r * 0.44f, p)
+            // The wheel, not reinvented (Oscar, 2026-11-14, with the
+            // glyph in hand): the standard paste symbol — two pages,
+            // the back one peeking out at the top-left, the front one
+            // clean before it. The 162 drawing (a board, a clip, an
+            // arrow of my own) is retired. The front page is first
+            // filled with the disc's own colour so the back page's
+            // lines stop at its edge, exactly as the symbol is drawn
+            // everywhere else; pressed, ink runs gold and the fill
+            // warms with the disc, as the disc itself does.
+            val rad = r * 0.30f
+            cv.drawRoundRect(android.graphics.RectF(cx - r * 0.82f, cy - r * 0.98f, cx + r * 0.30f, cy + r * 0.14f), rad, rad, p)
+            val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                style = android.graphics.Paint.Style.FILL
+                color = if (ink == c["gold"]!!) mixCol(c["disc"]!!, c["gold"]!!, 0.28f) else c["disc"]!!
+            }
+            val front = android.graphics.RectF(cx - r * 0.30f, cy - r * 0.14f, cx + r * 0.82f, cy + r * 0.98f)
+            cv.drawRoundRect(front, rad, rad, fill)
+            cv.drawRoundRect(front, rad, rad, p)
         }) { readClip(true) }
         pasteB.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(12) }
         clipRow.addView(pasteB)

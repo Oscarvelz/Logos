@@ -342,7 +342,14 @@ button.set-card-h { width: 100%; background: none; border: 0; padding: 0; cursor
 .continue-fold { display: grid; grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
 .continue-fold.open { grid-template-rows: 1fr; opacity: 1; pointer-events: auto; }
 @media (prefers-reduced-motion: no-preference) {
-  .continue-fold { transition: grid-template-rows .38s var(--ease), opacity .3s; }
+  /* 1.4.167 (Oscar): the fold rides the immersive glide's own clock —
+     the same durations and easing the bottom bar and the page's own
+     padding use when the player takes position, per direction, so
+     the card, the bar and the stage hide and return as one movement.
+     Before, the card folded in .38s while the stage took .95s: the
+     card vanished first and the eye read it as a jump. */
+  .continue-fold { transition: grid-template-rows var(--glide) var(--ease-glide), opacity calc(var(--glide) * .7) ease calc(var(--glide) * .25); }
+  .continue-fold.open { transition: grid-template-rows calc(var(--glide) * .8) var(--ease-glide), opacity .5s ease .1s; }
 }
 /* The fleet's closing line (1.4.131): the version, last on the screen. */
 .set-version { text-align: center; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; margin: 22px 0 10px; }
