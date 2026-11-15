@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.168'
+const VERSION = '1.4.169'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -278,8 +278,8 @@ export function SettingsPage() {
       <div className="list">
         {([
           { id: 'legacy', name: t('Legacy'), desc: t('Charcoal and gold — the original.'), sw: ['#17130c', '#e9bd72'] },
-          { id: 'tron', name: 'Tron', desc: t('Light lines on the deep black of the Grid.'), sw: ['#02060c', '#00e5ff'] },
-          { id: 'cyberpunk', name: 'Cyberpunk', desc: t('Signal yellow print on warm black.'), sw: ['#0b0a08', '#fcee0a'] },
+          { id: 'tron', name: 'Tron', desc: t('Light lines on the deep black of the Grid.'), sw: ['#02060c', '#00e5ff', '#ff1e14'] },
+          { id: 'cyberpunk', name: 'Cyberpunk', desc: t('Signal yellow print on warm black.'), sw: ['#0b0a08', '#fcee0a', '#ff2a6d'] },
         ] as const).map((th) => {
           const fam = st.theme === 'tron' ? 'tron' : st.theme === 'cyberpunk' ? 'cyberpunk' : 'legacy'
           const on = fam === th.id
@@ -289,7 +289,7 @@ export function SettingsPage() {
                 if (th.id === 'legacy') { settings.set({ theme: st.lastLegacy }); applyTheme(st.lastLegacy) }
                 else { const v = th.id as Theme; settings.set({ theme: v }); applyTheme(v) }
               }}>
-              <span className="theme-sw" style={{ background: `linear-gradient(135deg, ${th.sw[0]} 50%, ${th.sw[1]} 50%)` }} />
+              <span className="theme-sw" style={{ background: th.sw.length >= 3 ? `linear-gradient(135deg, ${th.sw[0]} 0 45%, ${th.sw[1]} 45% 78%, ${th.sw[2]} 78% 100%)` : `linear-gradient(135deg, ${th.sw[0]} 50%, ${th.sw[1]} 50%)` }} />
               <span className="grow">
                 <span className="t">{th.name}</span>
                 <span className="d">{th.desc}</span>

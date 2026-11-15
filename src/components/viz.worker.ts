@@ -7,7 +7,7 @@ type Mode = 'live' | 'device' | 'buffering' | 'idle'
 type Msg =
   | { type: 'init'; canvas: OffscreenCanvas; bars: number }
   | { type: 'size'; w: number; h: number; dpr: number }
-  | { type: 'colors'; a: string; b: string }
+  | { type: 'colors'; a: string; b: string; e: string }
   | { type: 'env'; key: string; env: Float32Array | null }
   | { type: 'clock'; key: string; time: number; rate: number; running: boolean; mode: Mode }
 
@@ -39,7 +39,7 @@ self.onmessage = (e: MessageEvent<Msg>) => {
     if (canvas) { canvas.width = Math.max(1, Math.round(W * DPR)); canvas.height = Math.max(1, Math.round(H * DPR)) }
     grad = null
   } else if (m.type === 'colors') {
-    colors = [m.a, m.b]; grad = null
+    colors = [m.a, m.b, m.e]; grad = null
   } else if (m.type === 'env') {
     envKey = m.key; env = m.env
   } else if (m.type === 'clock') {
@@ -92,7 +92,7 @@ function frame(now: number) {
   if (!grad || key !== gradKey) {
     gradKey = key
     grad = ctx.createLinearGradient(0, 0, W, 0)
-    grad.addColorStop(0, colors[0] + '33'); grad.addColorStop(0.5, colors[1]); grad.addColorStop(1, colors[0] + '33')
+    grad.addColorStop(0, (colors[2] || colors[0]) + '33'); grad.addColorStop(0.5, colors[1]); grad.addColorStop(1, (colors[2] || colors[0]) + '33')
   }
   ctx.fillStyle = grad
   const k = 1 - Math.pow(1 - (live ? 0.45 : 0.12), dt * 30)
