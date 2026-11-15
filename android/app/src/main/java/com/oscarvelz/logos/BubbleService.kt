@@ -1497,10 +1497,11 @@ class BubbleService : Service() {
                     // tangent, the base trails behind it, and the arc
                     // flows into the triangle — one closed shape.
                     val txv = Math.cos(tang).toFloat(); val tyv = Math.sin(tang).toFloat()
-                    val tipX = hx + txv * dp(4.6).toFloat(); val tipY = hy + tyv * dp(4.6).toFloat()
-                    val bcx = (hx - txv * dp(3.8).toFloat()); val bcy = (hy - tyv * dp(3.8).toFloat())
+                    val dens = resources.displayMetrics.density
+                    val tipX = hx + txv * 4.6f * dens; val tipY = hy + tyv * 4.6f * dens
+                    val bcx = (hx - txv * 3.8f * dens); val bcy = (hy - tyv * 3.8f * dens)
                     val pxv = -tyv; val pyv = txv
-                    val hw = dp(4.2).toFloat()
+                    val hw = 4.2f * dens
                     val head = android.graphics.Path()
                     head.moveTo(tipX, tipY)
                     head.lineTo(bcx + pxv * hw, bcy + pyv * hw)
