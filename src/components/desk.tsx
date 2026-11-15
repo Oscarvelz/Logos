@@ -25,9 +25,9 @@ export function TabletDesk({ onOpen }: { onOpen: (text: string) => void }) {
   const open = (c: ClipMeta) => { drafts.set({ listen: c.text }); loadText(c.text); onOpen(c.text) }
 
   return (
-    <div className="desk">
+    <div className="desk" data-present="desk-tablet">
       {book && (
-        <a className="card desk-book" href={`#/book/${book.id}`}>
+        <a className="card desk-book" data-present="desk-book" href={`#/book/${book.id}`}>
           <BookCover meta={book} small />
           <div className="grow" style={{ minWidth: 0 }}>
             <div className="desk-kicker"><BookOpen size={13} /> {book.progress > 0.002 ? t('Continue reading') : t('Start reading')}</div>
@@ -39,7 +39,7 @@ export function TabletDesk({ onOpen }: { onOpen: (text: string) => void }) {
       )}
 
       {favs.length > 0 && (
-        <div className="card desk-voices">
+        <div className="card desk-voices" data-present="desk-fav-voices">
           <div className="desk-kicker"><Star size={13} /> {t('Favorite voices')}</div>
           <div className="desk-vrow">
             {favs.map((v) => (
@@ -52,7 +52,7 @@ export function TabletDesk({ onOpen }: { onOpen: (text: string) => void }) {
       )}
 
       {recent.length > 0 && (
-        <div className="card desk-recent">
+        <div className="card desk-recent" data-present="desk-recent">
           <div className="desk-kicker"><AudioLines size={13} /> {t('Recent in Library')}</div>
           <div className="desk-list">
             {recent.map((c) => (
@@ -90,7 +90,7 @@ export function TextMap({ text, reading }: { text: string; reading: boolean }) {
 
   return (
     <div className="desk desk-map">
-      <div className="card desk-stats">
+      <div className="card desk-stats" data-present="desk-textmap-stats">
         <div className="desk-kicker"><Gauge size={13} /> {t('This text')}</div>
         {src.trim() ? (
           <div className="ds-grid">
@@ -103,7 +103,7 @@ export function TextMap({ text, reading }: { text: string; reading: boolean }) {
           </div>
         ) : <p className="desk-empty">{t('Paste or share a text and its length, language and listening time show up here.')}</p>}
       </div>
-      <div className="card desk-outline">
+      <div className="card desk-outline" data-present="desk-textmap-paragraphs">
         <div className="desk-kicker"><ListTree size={13} /> {t('Paragraphs')}</div>
         {reading && map.length ? (
           <div className="desk-list" ref={listRef}>
@@ -131,7 +131,7 @@ export function RecordingsPanel() {
     const blob = await getClipBlob(c.id); if (blob) void playClip(key, blob, { title: c.title, artist: 'Logos' }, 0)
   }
   return (
-    <div className="desk desk-recs">
+    <div className="desk desk-recs" data-present="create-recordings">
       <div className="card desk-recent">
         <div className="desk-kicker"><AudioLines size={13} /> {t('Your recordings')}</div>
         {audio.length ? (

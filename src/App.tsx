@@ -19,6 +19,8 @@ import { LibraryPage } from './pages/LibraryPage.tsx'
 import { VoicesPage } from './pages/VoicesPage.tsx'
 import { SettingsPage } from './pages/SettingsPage.tsx'
 import { BookPage } from './pages/BookPage.tsx'
+import { PresentationHost, presentationLaunch } from './lib/presentation-host.tsx'
+import { PresentationOffer } from './lib/presentation-search.tsx'
 
 const PAGES = { listen: ListenPage, create: CreatePage, library: LibraryPage, voices: VoicesPage, settings: SettingsPage, book: BookPage }
 
@@ -26,6 +28,7 @@ export default function App() {
   const route = useRoute()
   const st = useStore(settings)
   const s = useStore(listen)
+  const presLaunch = useStore(presentationLaunch)
 
   useEffect(() => { applyTheme(st.theme) }, [st.theme])
   useEffect(() => { applyUiLang() }, [st.uiLang])
@@ -82,6 +85,11 @@ export default function App() {
 
   const Page = PAGES[route]
   const showMini = s.active && route !== 'listen' && (s.playing || s.current > 0 || s.mode !== null)
+  // While a presentation module runs, the player owns the screen
+  // whole — the sealed fiction stage replaces the shell, and the
+  // shell returns unchanged when the module ends (any ending).
+  if (presLaunch.current) return <PresentationHost />
+
   return (
     <>
       <div className="aurora" />
@@ -95,6 +103,7 @@ export default function App() {
             <StatusPill />
           </header>
           <main key={route === 'book' ? location.hash : route} className="page-host" style={{ display: 'contents' }}>
+            {route === 'listen' && <PresentationOffer />}
             <PageWrap mini={showMini}><Page /></PageWrap>
           </main>
         </div>

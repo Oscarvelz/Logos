@@ -10,9 +10,12 @@ import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHON
 import { formatBytes } from '../lib/audio.ts'
 import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
+import { PresentationsCard } from '../lib/presentation/presentation-index.tsx'
+import { PresentationSearch } from '../lib/presentation-search.tsx'
+import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.165'
+const VERSION = '1.4.166'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -43,10 +46,10 @@ function BackupCard() {
     if (file.current) file.current.value = ''
   }
   return (
-    <SetCard icon={<HardDrive size={19} />} title={t('Backup')} sub={t('Your books, marks, dictionary and settings in one file')}>
+    <SetCard present="set-backup" icon={<HardDrive size={19} />} title={t('Backup')} sub={t('Your books, marks, dictionary and settings in one file')}>
       <div className="set-actions">
-        <button className="btn" onClick={() => void run()} disabled={!!busy}>{busy === 'out' ? <Loader2 size={15} className="spin" /> : <Download size={15} />} {t('Export backup')}</button>
-        <button className="btn ghost" onClick={() => file.current?.click()} disabled={!!busy}>{busy === 'in' ? <Loader2 size={15} className="spin" /> : <Plus size={15} />} {t('Import backup')}</button>
+        <button className="btn" data-present="set-backup-export" onClick={() => void run()} disabled={!!busy}>{busy === 'out' ? <Loader2 size={15} className="spin" /> : <Download size={15} />} {t('Export backup')}</button>
+        <button className="btn ghost" data-present="set-backup-import" onClick={() => file.current?.click()} disabled={!!busy}>{busy === 'in' ? <Loader2 size={15} className="spin" /> : <Plus size={15} />} {t('Import backup')}</button>
         <input ref={file} type="file" accept=".json,application/json" hidden onChange={(e) => void onFile(e.target.files?.[0])} />
       </div>
       <p className="muted small" style={{ margin: '8px 0 0' }}>{t('Audio clips are not inside — they can always be made again from the books. Settings themselves stay as they are on this phone.')}</p>
@@ -54,7 +57,7 @@ function BackupCard() {
   )
 }
 
-function SetCard({ icon, title, sub, children, defaultOpen }: { icon: ReactNode; title: string; sub: string; children: ReactNode; defaultOpen?: boolean }) {
+function SetCard({ icon, title, sub, children, defaultOpen, present }: { icon: ReactNode; title: string; sub: string; children: ReactNode; defaultOpen?: boolean; present?: string }) {
   // The cards fold (Oscar, 2026-11-10): a Settings page that opens as
   // a tidy index of headers, each unfolding at a tap. The voice
   // engine's card arrives open only while it still has something to
@@ -63,7 +66,7 @@ function SetCard({ icon, title, sub, children, defaultOpen }: { icon: ReactNode;
   // like every other card (Oscar, 2026-11-14).
   const [open, setOpen] = useState(!!defaultOpen)
   return (
-    <div className={"card set-card" + (open ? " open" : "")}>
+    <div className={"card set-card" + (open ? " open" : "")} data-present={present}>
       <button className="set-card-h" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         <span className="set-ic">{icon}</span>
         <div className="grow">
@@ -132,7 +135,7 @@ export function SettingsPage() {
 
   return (
     <div className="page settings-page">
-      <div className="page-head">
+      <div className="page-head" data-present="set-page-head">
         <div>
           <h1 className="page-title">{t('Settings')}</h1>
           <p className="page-sub">{t('Everything runs on this device. No account, no cloud.')}</p>
@@ -141,9 +144,9 @@ export function SettingsPage() {
 
       <div className="set-cols">
       <section className="set-group">
-      <SetCard defaultOpen={e.status === 'loading' || e.status === 'error' || (e.status !== 'ready' && !e.cached)} icon={<Cpu size={19} />} title={t('Neural voice')} sub={t('The reading voice — it lives on this device, downloads once, then works offline.')}>
+      <SetCard present="set-neural" defaultOpen={e.status === 'loading' || e.status === 'error' || (e.status !== 'ready' && !e.cached)} icon={<Cpu size={19} />} title={t('Neural voice')} sub={t('The reading voice — it lives on this device, downloads once, then works offline.')}>
       <div className="engine-card stack">
-        <div className="row between">
+        <div className="row between" data-present="set-neural-status">
           <div>
             <div className="big">{e.status === 'ready' || warming ? t('Ready') : e.status === 'loading' ? t('Downloading') : e.status === 'error' ? t('Needs attention') : e.cached ? t('Downloaded') : t('Not downloaded')}</div>
             <div className="muted small" style={{ marginTop: 4 }}>
@@ -158,44 +161,44 @@ export function SettingsPage() {
           </div>
         </div>
         {e.status === 'loading' && !warming && (
-          <div>
+          <div data-present="set-neural-meter">
             <div className="meter"><i style={{ width: `${Math.round(e.progress * 100)}%` }} /></div>
             <div className="row between small muted mono" style={{ marginTop: 6 }}><span>{t('{a} of {b}', { a: formatBytes(e.loaded), b: e.total ? formatBytes(e.total) : '…' })}</span><span>{Math.round(e.progress * 100)}%</span></div>
           </div>
         )}
-        {e.status === 'error' && <div className="error-note">{e.error}</div>}
+        {e.status === 'error' && <div className="error-note" data-present="set-neural-error">{e.error}</div>}
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
           {e.status !== 'ready' && !warming && (
-            <button className="btn primary" onClick={() => ensureModel().then(() => toast(t('Neural voice ready — works offline now'))).catch((err) => toast((err as Error).message))} disabled={e.status === 'loading'}>
+            <button className="btn primary" data-present="set-neural-download" onClick={() => ensureModel().then(() => toast(t('Neural voice ready — works offline now'))).catch((err) => toast((err as Error).message))} disabled={e.status === 'loading'}>
               {e.status === 'loading' ? <Loader2 size={18} className="spin" /> : <Download size={18} />} {e.cached ? t('Load now') : t('Download now')}
             </button>
           )}
-          <button className="btn danger" onClick={async () => { if (!await confirmDelete(t('Delete the voice model?'), t('The downloaded neural voice will be removed from this device. You can download it again whenever you want.'))) return; endSession(); await deleteModel(); refresh(); toast(t('Voice model removed from this device')) }} disabled={e.status === 'loading' || (!modelBytes && !e.cached)}>
+          <button className="btn danger" data-present="set-neural-delete" onClick={async () => { if (!await confirmDelete(t('Delete the voice model?'), t('The downloaded neural voice will be removed from this device. You can download it again whenever you want.'))) return; endSession(); await deleteModel(); refresh(); toast(t('Voice model removed from this device')) }} disabled={e.status === 'loading' || (!modelBytes && !e.cached)}>
             <Trash2 size={18} /> {t('Delete model')}
           </button>
         </div>
       </div>
       <div className="set-div" />
       <div className="list">
-        <div className="list-row">
+        <div className="list-row" data-present="set-storage-row">
           <HardDrive size={20} className="muted" />
           <div className="grow">
             <div className="t">{t('Storage')}</div>
-            <div className="d">{t('Voice models {x}', { x: formatBytes(modelBytes) })}{usage?.quota ? t(' · {u} of {q} used', { u: formatBytes(usage.usage), q: formatBytes(usage.quota) }) : ''}</div>
-            {IN_APP ? <div className="d">{t('Kept inside the Logos app. Only clearing Logos’s own data removes it.')}</div>
-              : persisted !== null && <div className="d">{persisted ? t('Protected from automatic cleanup') : t('Not protected: the phone may clear the voice')}</div>}
+            <div className="d" data-present="set-storage-note">{t('Voice models {x}', { x: formatBytes(modelBytes) })}{usage?.quota ? t(' · {u} of {q} used', { u: formatBytes(usage.usage), q: formatBytes(usage.quota) }) : ''}</div>
+            {IN_APP ? <div className="d" data-present="set-storage-protect">{t('Kept inside the Logos app. Only clearing Logos’s own data removes it.')}</div>
+              : persisted !== null && <div className="d" data-present="set-storage-protect">{persisted ? t('Protected from automatic cleanup') : t('Not protected: the phone may clear the voice')}</div>}
             {kn.note && <div className="d" style={{ color: 'var(--accent)' }}>{kn.note.kind === 'cleared'
               ? t('The phone cleared the saved {eng} voice (noticed {when}).', { eng: kn.note.engine === 'pocket' ? 'Pocket' : 'Phonon', when: new Date(kn.note.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) })
               : t('The {eng} voice loaded but couldn’t be saved on this phone.', { eng: kn.note.engine === 'pocket' ? 'Pocket' : 'Phonon' })}</div>}
           </div>
           {!IN_APP && persisted === false && <button className="btn sm" onClick={async () => { const ok = await navigator.storage?.persist?.(); setPersisted(Boolean(ok)); toast(ok ? t('Storage protected from automatic cleanup') : t('The browser declined — install the app to keep storage')) }}>{t('Protect')}</button>}
         </div>
-        <div className="list-row">
+        <div className="list-row" data-present="set-auto-download">
           <div className="grow"><div className="t">{t('Download on first play')}</div><div className="d">{t('Fetch the neural voice automatically the first time you press play.')}</div></div>
           <Switch label={t('Download on first play')} on={st.autoDownload} onChange={(v) => settings.set({ autoDownload: v })} />
         </div>
         {!IN_APP && (
-        <div className="list-row">
+        <div className="list-row" data-present="set-device-bridge">
           <div className="grow"><div className="t">{t('Device voice bridge')}</div><div className="d">{t('Speak instantly with your phone’s built-in voice while the neural model downloads.')}</div></div>
           <Switch label={t('Device voice bridge')} on={st.deviceFallback} onChange={(v) => settings.set({ deviceFallback: v })} />
         </div>
@@ -204,13 +207,13 @@ export function SettingsPage() {
       </SetCard>
       </section>
       <section className="set-group">
-      <SetCard icon={<SlidersHorizontal size={19} />} title={t('Playback')} sub={t('How listening feels, sentence by sentence.')}>
+      <SetCard present="set-playback" icon={<SlidersHorizontal size={19} />} title={t('Playback')} sub={t('How listening feels, sentence by sentence.')}>
       <div className="list">
-        <div className="list-row col">
+        <div className="list-row col" data-present="set-speed">
           <div className="row between"><div className="t">{t('Listening speed')}</div><span className="mono muted">{st.listenSpeed.toFixed(2)}×</span></div>
           <Range guarded label={t('Listening speed')} min={0.5} max={2.5} step={0.05} value={st.listenSpeed} onChange={(v) => settings.set({ listenSpeed: v })} />
         </div>
-        <div className="list-row col">
+        <div className="list-row col" data-present="set-sentence-pause">
           <div className="row between"><div className="t">{t('Pause between sentences')}</div><span className="mono muted">{st.sentencePauseMs} ms</span></div>
           <Range guarded label={t('Pause between sentences')} min={0} max={800} step={20} value={st.sentencePauseMs} onChange={(v) => settings.set({ sentencePauseMs: v })} />
         </div>
@@ -224,54 +227,54 @@ export function SettingsPage() {
           <input className="text-input mono" type="number" min={1} max={600} step={1} style={{ height: 40, width: 76, textAlign: 'center' }} aria-label={t('Jump forward, seconds')} value={st.jumpFwdSec}
             onChange={(e) => { const v = Math.round(Number(e.target.value)); if (Number.isFinite(v)) settings.set({ jumpFwdSec: Math.min(600, Math.max(1, v)) }) }} />
         </div>
-        <div className="list-row">
+        <div className="list-row" data-present="set-highlight">
           <div className="grow"><div className="t">{t('Highlight current sentence')}</div></div>
           <Switch label={t('Highlight current sentence')} on={st.highlight} onChange={(v) => settings.set({ highlight: v })} />
         </div>
-        <div className="list-row">
+        <div className="list-row" data-present="set-reader-size">
           <div className="grow"><div className="t">{t('Reader text size')}</div><div className="d">{t('The Listen reading view — bigger or smaller, on phone and tablet alike.')}</div></div>
           <div className="row" style={{ gap: 6 }}>
-            <button className="btn sm ghost" aria-label={t('Smaller text')} disabled={st.readerScale <= READER_SCALES[0]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, -1) })}>−</button>
-            <button className="btn sm ghost" aria-label={t('Reset text size')} onClick={() => settings.set({ readerScale: 1 })} style={{ minWidth: 0, padding: '0 8px', opacity: st.readerScale === 1 ? .4 : 1 }}>↺</button>
+            <button className="btn sm ghost" data-present="set-reader-size-minus" aria-label={t('Smaller text')} disabled={st.readerScale <= READER_SCALES[0]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, -1) })}>−</button>
+            <button className="btn sm ghost" data-present="set-reader-size-reset" aria-label={t('Reset text size')} onClick={() => settings.set({ readerScale: 1 })} style={{ minWidth: 0, padding: '0 8px', opacity: st.readerScale === 1 ? .4 : 1 }}>↺</button>
             <span className="mono muted" style={{ minWidth: 40, textAlign: 'center' }}>{Math.round(st.readerScale * 100)}%</span>
-            <button className="btn sm ghost" aria-label={t('Bigger text')} disabled={st.readerScale >= READER_SCALES[READER_SCALES.length - 1]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, 1) })}>+</button>
+            <button className="btn sm ghost" data-present="set-reader-size-plus" aria-label={t('Bigger text')} disabled={st.readerScale >= READER_SCALES[READER_SCALES.length - 1]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, 1) })}>+</button>
           </div>
         </div>
-        <div className="list-row">
+        <div className="list-row" data-present="set-word-timing">
           <div className="grow"><div className="t">{t('Word timing')}</div><div className="d">{st.wordLeadMs === 90 ? t('Tuned for the phone speaker') : st.wordLeadMs > 90 ? t('{n} ms earlier · for Bluetooth delay', { n: st.wordLeadMs - 90 }) : t('{n} ms later', { n: 90 - st.wordLeadMs })}</div></div>
           <div className="row" style={{ gap: 6 }}>
-            <button className="btn sm ghost" aria-label={t('Highlight later')} onClick={() => settings.set({ wordLeadMs: Math.max(-150, st.wordLeadMs - 30) })}>−</button>
-            <button className="btn sm ghost" aria-label={t('Reset word timing')} onClick={() => settings.set({ wordLeadMs: 90 })} style={{ minWidth: 0, padding: '0 8px', opacity: st.wordLeadMs === 90 ? .4 : 1 }}>↺</button>
-            <button className="btn sm ghost" aria-label={t('Highlight earlier')} onClick={() => settings.set({ wordLeadMs: Math.min(450, st.wordLeadMs + 30) })}>+</button>
+            <button className="btn sm ghost" data-present="set-word-timing-minus" aria-label={t('Highlight later')} onClick={() => settings.set({ wordLeadMs: Math.max(-150, st.wordLeadMs - 30) })}>−</button>
+            <button className="btn sm ghost" data-present="set-word-timing-reset" aria-label={t('Reset word timing')} onClick={() => settings.set({ wordLeadMs: 90 })} style={{ minWidth: 0, padding: '0 8px', opacity: st.wordLeadMs === 90 ? .4 : 1 }}>↺</button>
+            <button className="btn sm ghost" data-present="set-word-timing-plus" aria-label={t('Highlight earlier')} onClick={() => settings.set({ wordLeadMs: Math.min(450, st.wordLeadMs + 30) })}>+</button>
           </div>
         </div>
       </div>
       </SetCard>
       </section>
       <section className="set-group">
-      <SetCard icon={<Mic size={19} />} title={t('Pronunciation')} sub={t('Words said your way — names, places, terms of art.')}>
+      <SetCard present="set-pron" icon={<Mic size={19} />} title={t('Pronunciation')} sub={t('Words said your way — names, places, terms of art.')}>
       <div className="list">
         <div className="list-row col">
-          <div className="grow"><div className="t">{t('Say it your way')}</div><div className="d">{t('Applies to listening and to exported audio, in every book. Codes and links are already named, not spelled out.')}</div></div>
+          <div className="grow"><div className="t">{t('Say it your way')}</div><div className="d" data-present="set-pron-scope">{t('Applies to listening and to exported audio, in every book. Codes and links are already named, not spelled out.')}</div></div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-            <input className="text-input" style={{ height: 44, width: '100%' }} placeholder={t('Word in the book')} value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
+            <input className="text-input" data-present="set-pron-from" style={{ height: 44, width: '100%' }} placeholder={t('Word in the book')} value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
             <div className="row" style={{ gap: 8 }}>
-              <input className="text-input" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder={t('Say it as')} value={pTo} onChange={(e) => setPTo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPron() }} />
-              <button className="btn primary" onClick={addPron} disabled={!pFrom.trim() || !pTo.trim()}><Plus size={17} /> {t('Add')}</button>
+              <input className="text-input" data-present="set-pron-to" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder={t('Say it as')} value={pTo} onChange={(e) => setPTo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPron() }} />
+              <button className="btn primary" data-present="set-pron-add" onClick={addPron} disabled={!pFrom.trim() || !pTo.trim()}><Plus size={17} /> {t('Add')}</button>
             </div>
           </div>
         </div>
         {pron.map((e) => (
-          <div className="list-row" key={e.from}>
+          <div className="list-row" data-present="set-pron-entry" key={e.from}>
             <div className="grow"><div className="t">{e.from}</div><div className="d">{t('read as “{to}”', { to: e.to })}</div></div>
-            <button className="btn sm ghost" aria-label={t('Remove {from}', { from: e.from })} onClick={() => savePron(pron.filter((x) => x !== e))}><X size={16} /></button>
+            <button className="btn sm ghost" data-present="set-pron-remove" aria-label={t('Remove {from}', { from: e.from })} onClick={() => savePron(pron.filter((x) => x !== e))}><X size={16} /></button>
           </div>
         ))}
       </div>
       </SetCard>
       </section>
       <section className="set-group">
-      <SetCard icon={<Palette size={19} />} title={t('Appearance')} sub={t('The light of the room.')}>
+      <SetCard present="set-card-appearance" icon={<Palette size={19} />} title={t('Appearance')} sub={t('The light of the room.')}>
       <div className="list">
         {([
           { id: 'legacy', name: t('Legacy'), desc: t('Charcoal and gold — the original.'), sw: ['#17130c', '#e9bd72'] },
@@ -298,28 +301,28 @@ export function SettingsPage() {
         {(st.theme !== 'tron' && st.theme !== 'cyberpunk') && (
           <div className="list-row col">
             <div className="t">{t('Legacy mode')}</div>
-            <Seg value={st.lastLegacy} label={t('Legacy mode')} onChange={(v: LegacyTheme) => { settings.set({ theme: v, lastLegacy: v }); applyTheme(v) }} options={[{ value: 'dark', label: t('Dark') }, { value: 'light', label: t('Light') }, { value: 'system', label: t('System') }]} />
+            <Seg present="set-theme" value={st.lastLegacy} label={t('Legacy mode')} onChange={(v: LegacyTheme) => { settings.set({ theme: v, lastLegacy: v }); applyTheme(v) }} options={[{ value: 'dark', label: t('Dark') }, { value: 'light', label: t('Light') }, { value: 'system', label: t('System') }]} />
           </div>
         )}
       </div>
       </SetCard>
       </section>
       <section className="set-group">
-      <SetCard icon={<Languages size={19} />} title={t('Language')} sub={t('The app’s own words — everything on screen.')}>
+      <SetCard present="set-card-language" icon={<Languages size={19} />} title={t('Language')} sub={t('The app’s own words — everything on screen.')}>
       <div className="list">
         <div className="list-row col">
-          <Seg value={st.uiLang} label={t('Language')} onChange={(v: 'en' | 'es') => settings.set({ uiLang: v })} options={[{ value: 'en', label: 'English' }, { value: 'es', label: 'Español' }]} />
+          <Seg present="set-ui-lang" presentLang={st.uiLang} value={st.uiLang} label={t('Language')} onChange={(v: 'en' | 'es') => settings.set({ uiLang: v })} options={[{ value: 'en', label: 'English' }, { value: 'es', label: 'Español' }]} />
         </div>
       </div>
       </SetCard>
       </section>
       <section className="set-group">
-      <SetCard icon={<PictureInPicture2 size={19} />} title={t('Floating player')} sub={t('A small λ that floats over your other apps.')}>
+      <SetCard present="set-bubble" icon={<PictureInPicture2 size={19} />} title={t('Floating player')} sub={t('A small λ that floats over your other apps.')}>
       <div className="list">
-        <div className="list-row">
+        <div className="list-row" data-present="set-bubble-switch">
           <div className="grow">
             <div className="t">{t('Floating bubble')}</div>
-            <div className="d">{!IN_APP
+            <div className="d" data-present="set-bubble-desc">{!IN_APP
               ? t('Only in the Logos app.')
               : !bubbleSupported()
                 ? t('Comes with the newest Logos app — update the app and it appears here.')
@@ -335,14 +338,14 @@ export function SettingsPage() {
             setTimeout(() => setBState(bubbleNativeState()), 450)
           }} />
         </div>
-        <div className="list-row">
+        <div className="list-row" data-present="set-bubble-auto">
           <div className="grow">
             <div className="t">{t('Play the clipboard')}</div>
             <div className="d">{t('The lever. On: copy text anywhere, tap the bubble, and it plays — replacing what was playing, with an Undo so nothing is lost; opening Logos right after copying plays it too. Off: the bubble only controls playback, and pasting stays manual, as now. Android only lets Logos look at the clipboard at that tap — never in secret.')}</div>
           </div>
           <Switch label={t('Play the clipboard')} on={st.bubbleAuto} onChange={(v) => settings.set({ bubbleAuto: v })} />
         </div>
-        <div className="list-row">
+        <div className="list-row" data-present="set-bubble-text">
           <div className="grow">
             <div className="t">{t('Words in the panel')}</div>
             <div className="d">{t("The bubble's panel reads along: the sentence being read, in the open. On the tablet the panel widens and the sentences before and after ride along dimmed — a glance catches what the ear missed.")}</div>
@@ -369,13 +372,17 @@ export function SettingsPage() {
           <Seg value={st.bubbleSize} onChange={(v) => settings.set({ bubbleSize: v })} label={t('Bubble size')} options={[{ value: 's', label: t('Small') }, { value: 'm', label: t('Standard') }, { value: 'l', label: t('Large') }]} />
         </div>
       </div>
-      {bState?.last ? <div className="muted small" style={{ marginTop: 10, padding: '0 4px' }}>{t('Last clipboard try: ')}{bState.last}</div> : null}
-      {(() => { try { const j = JSON.parse(localStorage.getItem('logos.stage.journal') ?? '[]') as string[]; return j.length ? <div className="muted small" style={{ marginTop: 6, padding: '0 4px' }}>{t('Stage moves: ')}{j.slice(-4).join(' · ')}</div> : null } catch { return null } })()}
+      {bState?.last ? <div className="muted small" data-present="set-bubble-last" style={{ marginTop: 10, padding: '0 4px' }}>{t('Last clipboard try: ')}{bState.last}</div> : null}
+      {(() => { try { const j = JSON.parse(localStorage.getItem('logos.stage.journal') ?? '[]') as string[]; return j.length ? <div className="muted small" data-present="set-bubble-journal" style={{ marginTop: 6, padding: '0 4px' }}>{t('Stage moves: ')}{j.slice(-4).join(' · ')}</div> : null } catch { return null } })()}
       </SetCard>
+      </section>
+      <section className="set-group" data-present="set-presentations">
+      <PresentationSearch />
+      <PresentationsCard onLaunch={launchPresentation} />
       </section>
       <section className="set-group">
       <BackupCard />
-      <SetCard icon={<img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="" />} title={t('About Logos')} sub={t('Version {v} · private, on-device text-to-speech', { v: VERSION })}>
+      <SetCard present="set-about" icon={<img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="" />} title={t('About Logos')} sub={t('Version {v} · private, on-device text-to-speech', { v: VERSION })}>
       <div className="credits">
         <p><strong>Based on <a href="https://github.com/SysAdminDoc/BetterTTS" target="_blank" rel="noreferrer">BetterTTS</a> by SysAdminDoc</strong> (MIT License). Logos is a simplified, phone-first rebuild; its listening player, export and service-worker isolation grew out of it.</p>
         <p>Voices: <a href="https://huggingface.co/gradium/phonon-40m-multilingual" target="_blank" rel="noreferrer">Phonon 40m multilingual</a> by Gradium, CC BY-NC 4.0 (non-commercial), with voices from <a href="https://huggingface.co/gradium/phonon-voices" target="_blank" rel="noreferrer">gradium/phonon-voices</a> (Apache 2.0), run with phonon-tts (MIT/Apache 2.0).</p>
@@ -386,7 +393,7 @@ export function SettingsPage() {
       </SetCard>
       </section>
       </div>
-      <div className="set-version">{t('Version {v}', { v: VERSION })}</div>
+      <div className="set-version" data-present="set-version">{t('Version {v}', { v: VERSION })}</div>
     </div>
   )
 }

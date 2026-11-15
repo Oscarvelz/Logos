@@ -30,7 +30,7 @@ export function Toasts() {
 }
 
 // ── Sheet ──
-export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title?: string; children: ReactNode }) {
+export function Sheet({ open, onClose, title, children, present }: { open: boolean; onClose: () => void; title?: string; children: ReactNode; present?: string }) {
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -41,8 +41,8 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   // Portal: page transitions create stacking contexts that would trap the sheet under the nav.
   return createPortal(
     <>
-      <div className="scrim" onClick={onClose} />
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="scrim" data-present="shell-sheet-scrim" onClick={onClose} />
+      <div className="sheet" data-present={present ?? 'shell-sheet'} role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet-grip" />
         {title && <h3>{title}</h3>}
         {children}
@@ -69,7 +69,7 @@ export function ConfirmHost() {
   if (!req) return null
   const done = (ok: boolean) => { confirmStore.set({ req: null }); req.resolve(ok) }
   return (
-    <Sheet open onClose={() => done(false)} title={req.title}>
+    <Sheet open onClose={() => done(false)} title={req.title} present="shell-confirm-host">
       {req.body && <p className="keepask-body">{req.body}</p>}
       <div className="row" style={{ gap: 8 }}>
         <button className="btn ghost grow" onClick={() => done(false)}>{t('Cancel')}</button>
@@ -108,9 +108,9 @@ export function MenuSelect<T extends string>({ value, options, onChange, label }
 }
 
 // ── Segmented control ──
-export function Seg<T extends string | number>({ value, options, onChange, label }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void; label?: string }) {
+export function Seg<T extends string | number>({ value, options, onChange, label, present, presentLang }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void; label?: string; present?: string; presentLang?: string }) {
   return (
-    <div className="seg" role="radiogroup" aria-label={label}>
+    <div className="seg" role="radiogroup" aria-label={label} data-present={present} data-lang={presentLang}>
       {options.map((o) => (
         <button key={String(o.value)} role="radio" aria-checked={o.value === value} className={o.value === value ? 'on' : ''} onClick={() => onChange(o.value)}>{o.label}</button>
       ))}

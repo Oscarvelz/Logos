@@ -157,6 +157,7 @@ export function ListenPage() {
           ) : (
             <div className="editor">
               <textarea
+                data-present="listen-editor"
                 value={text}
                 onChange={(ev) => setText(ev.target.value)}
                 placeholder={t('Paste an article, a chapter, a poem — or share text here from any app…')}
@@ -170,10 +171,10 @@ export function ListenPage() {
                 </button>
               )}
               <div className="editor-bar">
-                <button className="icon-btn" onClick={paste} aria-label={t('Paste from clipboard')} title={t('Paste')}><ClipboardPaste size={21} /></button>
-                <button className="icon-btn" onClick={() => { setText(''); endSession() }} disabled={!text} aria-label={t('Clear text')} title={t('Clear')}><Eraser size={21} /></button>
-                <button className="icon-btn" onClick={() => setKeepOpen(true)} disabled={!text.trim()} aria-label={t('Save to Library')} title={t('Save to Library')}><BookmarkPlus size={21} /></button>
-                {s.active && <button className="icon-btn" onClick={() => { if (s.text !== text) loadText(text); setEditing(false) }} aria-label={t('Back to reading view')} title={t('Reading view')}><X size={21} /></button>}
+                <button className="icon-btn" data-present="listen-paste" onClick={paste} aria-label={t('Paste from clipboard')} title={t('Paste')}><ClipboardPaste size={21} /></button>
+                <button className="icon-btn" data-present="listen-clear" onClick={() => { setText(''); endSession() }} disabled={!text} aria-label={t('Clear text')} title={t('Clear')}><Eraser size={21} /></button>
+                <button className="icon-btn" data-present="listen-save" onClick={() => setKeepOpen(true)} disabled={!text.trim()} aria-label={t('Save to Library')} title={t('Save to Library')}><BookmarkPlus size={21} /></button>
+                {s.active && <button className="icon-btn" data-present="listen-reading-view" onClick={() => { if (s.text !== text) loadText(text); setEditing(false) }} aria-label={t('Back to reading view')} title={t('Reading view')}><X size={21} /></button>}
                 {text.trim() && <div className="editor-meta" aria-label={t('About {d} of listening, {n} words', { d: formatDuration(estimateSeconds(text, st.listenSpeed)), n: wordCount(text) })}>
                   <span className="em-time"><Clock size={12} strokeWidth={2.4} />{formatDuration(estimateSeconds(text, st.listenSpeed))}</span>
                   <span className="em-words">{t('{n} words', { n: wordCount(text).toLocaleString() })}</span>
@@ -193,7 +194,7 @@ export function ListenPage() {
               <span className="chip-txt">{st.langMode === 'auto' ? <>Auto · {mixed ? 'EN + ES' : detected.lang.toUpperCase()}</> : LANG_LABEL[st.langMode]}</span>
             </button>
             <div className="player-top-r">
-              <button className={`chip ${s.sleepLeft != null ? 'accent' : ''}`} onClick={() => setSleepOpen(true)} aria-label={t('Sleep timer')}><Moon size={15} />{s.sleepLeft != null ? formatDuration(s.sleepLeft) : null}</button>
+              <button className={`chip ${s.sleepLeft != null ? 'accent' : ''}`} data-present="listen-sleep-chip" onClick={() => setSleepOpen(true)} aria-label={t('Sleep timer')}><Moon size={15} />{s.sleepLeft != null ? formatDuration(s.sleepLeft) : null}</button>
               <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={t('Playback speed {x}', { x: fmtSpeed(st.listenSpeed) })}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
               <button className="chip accent voice-chip" onClick={() => setVoiceOpen(true)} aria-label={t('Voice')}>
                 <span className="dot" /><span className="chip-txt">{currentVoice?.name ?? ''}</span>
@@ -218,14 +219,14 @@ export function ListenPage() {
                 bar back (the player glides up) without stopping the
                 reading; tapped again, the bar slides away once more. */}
             {s.playing
-              ? <button className="icon-btn" onClick={() => navPin.set({ pinned: !pin.pinned })} aria-label={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')} title={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')}>{pin.pinned ? <PanelBottomClose size={20} /> : <PanelBottomOpen size={20} />}</button>
+              ? <button className="icon-btn" data-present="listen-nav-pin" onClick={() => navPin.set({ pinned: !pin.pinned })} aria-label={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')} title={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')}>{pin.pinned ? <PanelBottomClose size={20} /> : <PanelBottomOpen size={20} />}</button>
               : <span aria-hidden />}
-            <JumpKey dir="back" size={25} disabled={!reading} />
+            <JumpKey dir="back" size={25} disabled={!reading} present="listen-prev" />
             <button className={`play-btn ${s.buffering ? 'busy' : ''}`} onClick={reading ? toggle : start} aria-label={s.playing ? t('Pause') : t('Play')}>
               <span className="pb-icon" key={s.buffering ? 'b' : s.playing ? 'p' : 'l'}>{s.buffering ? <Loader2 size={32} className="spin" /> : s.playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" style={{ marginLeft: 4 }} />}</span>
             </button>
-            <JumpKey dir="fwd" size={25} disabled={!reading} />
-            <button className="icon-btn" onClick={() => void markAndToast()} disabled={!reading} aria-label={t('Mark this moment')} title={t('Mark this moment')}><Bookmark size={20} /></button>
+            <JumpKey dir="fwd" size={25} disabled={!reading} present="listen-next" />
+            <button className="icon-btn" data-present="listen-mark" onClick={() => void markAndToast()} disabled={!reading} aria-label={t('Mark this moment')} title={t('Mark this moment')}><Bookmark size={20} /></button>
           </div>
 
           {s.mode === 'device' && s.playing && (
@@ -261,7 +262,7 @@ export function ListenPage() {
       <WebImport open={webUrl !== null} onClose={() => setWebUrl(null)} initialUrl={webUrl ?? undefined} />
       <KeepSheet open={keepOpen} onClose={() => setKeepOpen(false)} text={reading ? s.text : text} lang={lang} />
 
-      <Sheet open={speedOpen} onClose={() => setSpeedOpen(false)} title={t('Speed')}>
+      <Sheet open={speedOpen} onClose={() => setSpeedOpen(false)} title={t('Speed')} present="listen-speed-sheet">
         <div className="speed-row" style={{ marginBottom: 14 }}>
           {SPEEDS.map((v) => <button key={v} className={Math.abs(st.listenSpeed - v) < 0.001 ? 'on' : ''} onClick={() => setRate(v)}>{v}×</button>)}
         </div>
@@ -269,7 +270,7 @@ export function ListenPage() {
         <p className="muted small" style={{ margin: '8px 4px 0' }}>{t('Changes apply instantly, pitch preserved.')}</p>
       </Sheet>
 
-      <Sheet open={sleepOpen} onClose={() => setSleepOpen(false)} title={t('Sleep timer')}>
+      <Sheet open={sleepOpen} onClose={() => setSleepOpen(false)} title={t('Sleep timer')} present="listen-sleep-sheet">
         <div className="speed-row" style={{ marginBottom: 14 }}>
           <button className={s.sleepLeft == null ? 'on' : ''} onClick={() => setSleepTimer(null)}>{t('Off')}</button>
           {[10, 15, 20, 30, 45, 60].map((m) => <button key={m} className={s.sleepMins === m ? 'on' : ''} onClick={() => setSleepTimer(m)}>{m} min</button>)}
@@ -406,10 +407,10 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
       <div className="reader-head">
         <span className="rh-hint">{t('Tap a word to start there.')}</span>
         <div className="rh-actions">
-          <button className="rh-btn" aria-label={t('Smaller text')} disabled={st.readerScale <= READER_SCALES[0]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, -1) })}><span style={{ fontSize: 10, fontWeight: 700 }}>A</span><span aria-hidden="true">−</span></button>
-          <button className="rh-btn" aria-label={t('Bigger text')} disabled={st.readerScale >= READER_SCALES[READER_SCALES.length - 1]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, 1) })}><span style={{ fontSize: 15, fontWeight: 700 }}>A</span><span aria-hidden="true">+</span></button>
-          <button className="rh-btn" onClick={onKeep} aria-label={t('Save to Library')}><BookmarkPlus size={13} /><span className="rh-label">{t('Save')}</span></button>
-          <button className="rh-btn" onClick={onEdit}><PenLine size={13} /><span className="rh-label">{t('Edit')}</span></button>
+          <button className="rh-btn" data-present="listen-text-smaller" aria-label={t('Smaller text')} disabled={st.readerScale <= READER_SCALES[0]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, -1) })}><span style={{ fontSize: 10, fontWeight: 700 }}>A</span><span aria-hidden="true">−</span></button>
+          <button className="rh-btn" data-present="listen-text-bigger" aria-label={t('Bigger text')} disabled={st.readerScale >= READER_SCALES[READER_SCALES.length - 1]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, 1) })}><span style={{ fontSize: 15, fontWeight: 700 }}>A</span><span aria-hidden="true">+</span></button>
+          <button className="rh-btn" data-present="listen-reader-save" onClick={onKeep} aria-label={t('Save to Library')}><BookmarkPlus size={13} /><span className="rh-label">{t('Save')}</span></button>
+          <button className="rh-btn" data-present="listen-reader-edit" onClick={onEdit}><PenLine size={13} /><span className="rh-label">{t('Edit')}</span></button>
         </div>
       </div>
       <div className="reader" ref={box}>{body}</div>
@@ -511,7 +512,7 @@ function ListenHead({ text, lang, playing, remaining }: { text: string; lang: La
         {has ? <span className="lh-meta">{t('{n} words · {d} · {l}', { n: words.toLocaleString(), d: formatDuration(remaining), l: LANG_LABEL[lang] })}</span> : null}
       </div>
       {book
-        ? <button className="lh-book" onClick={backToBook} aria-label={t('Back to {title}', { title: book.title })}>
+        ? <button className="lh-book" data-present="listen-back-to-book" onClick={backToBook} aria-label={t('Back to {title}', { title: book.title })}>
             <BookOpen size={17} />
             <span className="lh-book-t" lang={lang}>{book.title}</span>
             <span className="lh-book-go">{t('Back to book')}</span>
@@ -548,18 +549,18 @@ function KeepSheet({ open, onClose, text, lang }: { open: boolean; onClose: () =
     toast(t('Saved to Listen later'), { label: t('Library'), run: () => navigate('library') }, 4000)
   }
   return (
-    <Sheet open={open} onClose={onClose} title={t('Keep this')}>
+    <Sheet open={open} onClose={onClose} title={t('Keep this')} present="listen-keep-sheet">
       <div className="keep-title">{info.title}</div>
       <div className="keep-sub">{t('{n} words · about {d} at {s}', { n: words.toLocaleString(), d: formatDuration(estimateSeconds(text, speed)), s: fmtSpeed(speed) })}</div>
       <div className="keep-opts">
-        <button className="keep-opt" onClick={saveAudio}>
+        <button className="keep-opt" data-present="listen-keep-audio" onClick={saveAudio}>
           <span className="keep-ic"><AudioLines size={22} /></span>
           <span className="grow">
             <b>{t('Save the audio')}</b>
             <small>{t('{f} in {v}', { f: st.format.toUpperCase(), v: v?.name ?? t('your voice') })}{st.voiceOverride ? '' : t(' (switches by language)')}{t(' · plays offline, ready to share')}{busy ? t(' · queued after the current one') : ''}</small>
           </span>
         </button>
-        <button className="keep-opt" onClick={() => void later()}>
+        <button className="keep-opt" data-present="listen-keep-later" onClick={() => void later()}>
           <span className="keep-ic"><Clock size={22} /></span>
           <span className="grow">
             <b>{t('Listen later')}</b>
@@ -568,7 +569,7 @@ function KeepSheet({ open, onClose, text, lang }: { open: boolean; onClose: () =
         </button>
       </div>
       {(hasAudio || hasLater) && (
-        <button className="keep-note" onClick={() => { onClose(); navigate('library') }}>
+        <button className="keep-note" data-present="listen-keep-note" onClick={() => { onClose(); navigate('library') }}>
           <LibraryIcon size={16} /> {hasAudio ? t('This text is already in your Library as audio') : t('This text is already in Listen later')} · {t('Open')}
         </button>
       )}

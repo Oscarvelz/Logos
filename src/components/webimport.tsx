@@ -80,16 +80,16 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title={phase === 'ready' ? undefined : t('From a web page')}>
+    <Sheet open={open} onClose={onClose} title={phase === 'ready' ? undefined : t('From a web page')} present="web-import">
       {(phase === 'input' || phase === 'error') && (
         <>
           <form className="url-field" onSubmit={(e) => { e.preventDefault(); void go() }}>
             <Link2 size={18} />
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t('Paste a link')} inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} aria-label={t('Web address')} autoFocus={!initialUrl} />
-            <button type="button" className="icon-btn" onClick={() => void pasteUrl()} aria-label={t('Paste link')}><ClipboardPaste size={18} /></button>
+            <input data-present="web-import-url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t('Paste a link')} inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} aria-label={t('Web address')} autoFocus={!initialUrl} />
+            <button type="button" className="icon-btn" data-present="web-import-paste" onClick={() => void pasteUrl()} aria-label={t('Paste link')}><ClipboardPaste size={18} /></button>
           </form>
-          {phase === 'error' && <div className="web-err">{err}</div>}
-          <button className="btn primary block" style={{ height: 52, marginTop: 12 }} onClick={() => void go()} disabled={!url.trim()}>
+          {phase === 'error' && <div className="web-err" data-present="web-import-error">{err}</div>}
+          <button className="btn primary block" data-present="web-import-go" style={{ height: 52, marginTop: 12 }} onClick={() => void go()} disabled={!url.trim()}>
             {phase === 'error' ? <><RotateCcw size={17} /> {t('Try again')}</> : <><Globe size={17} /> {t('Bring the text')}</>}
           </button>
           <p className="muted small" style={{ margin: '10px 4px 0', lineHeight: 1.45 }}>{t('Logos keeps only the article itself: no menus, ads, links, captions or reference lists.')}</p>
@@ -97,12 +97,12 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
             <>
               <div className="or-rule"><span>{t('or')}</span></div>
               {onBookFile && (
-                <button className="keep-opt" style={{ marginBottom: 10 }} onClick={() => { onClose(); onBookFile() }}>
+                <button className="keep-opt" data-present="web-import-book-door" style={{ marginBottom: 10 }} onClick={() => { onClose(); onBookFile() }}>
                   <span className="keep-ic"><BookPlus size={22} /></span>
                   <span className="grow"><b>{t('Import a book')}</b><small>{t('EPUB, PDF, Word, FB2, Markdown or text')}</small></span>
                 </button>
               )}
-              <button className="keep-opt" onClick={() => { onClose(); onAudioFile() }}>
+              <button className="keep-opt" data-present="web-import-audio-door" onClick={() => { onClose(); onAudioFile() }}>
                 <span className="keep-ic"><FileAudio size={22} /></span>
                 <span className="grow"><b>{t('Add an audio file')}</b><small>{t('MP3, M4A, WAV or OGG from this phone')}</small></span>
               </button>
@@ -111,31 +111,31 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
         </>
       )}
       {phase === 'loading' && (
-        <div className="web-loading">
+        <div className="web-loading" data-present="web-import-loading">
           <Loader2 size={30} className="spin" />
           <div className="wl-t">{t('Reading the page')}</div>
           <div className="wl-s">{(() => { try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url } })()}</div>
-          <button className="btn sm ghost" onClick={() => { ctrl.current?.abort(); setPhase('input') }}>{t('Cancel')}</button>
+          <button className="btn sm ghost" data-present="web-import-cancel" onClick={() => { ctrl.current?.abort(); setPhase('input') }}>{t('Cancel')}</button>
         </div>
       )}
       {phase === 'ready' && res && (
         <>
-          <div className="web-site"><Globe size={13} /> {res.site}</div>
+          <div className="web-site" data-present="web-import-ready"><Globe size={13} /> {res.site}</div>
           <div className="keep-title" style={{ marginTop: 4 }}>{res.title || info?.title}</div>
           <div className="keep-sub">{t('{n} words · about {d} at {s}×', { n: res.words.toLocaleString(), d: formatDuration(estimateSeconds(res.text, speed)), s: speed })}</div>
           <div className="web-preview" lang={lang}>
             {res.text.split('\n\n').slice(1, 5).map((p, i) => <p key={i}>{p}</p>)}
           </div>
           <div className="keep-opts" style={{ marginTop: 14 }}>
-            <button className="keep-opt primary" onClick={listenNow}>
+            <button className="keep-opt primary" data-present="web-import-listen-now" onClick={listenNow}>
               <span className="keep-ic"><Play size={20} fill="currentColor" /></span>
               <span className="grow"><b>{t('Listen now')}</b><small>{t('Opens it in Listen and starts reading')}</small></span>
             </button>
-            <button className="keep-opt" onClick={() => void later()}>
+            <button className="keep-opt" data-present="web-import-later" onClick={() => void later()}>
               <span className="keep-ic"><Clock size={21} /></span>
               <span className="grow"><b>{t('Listen later')}</b><small>{t('Keeps the text in your Library')}</small></span>
             </button>
-            <button className="keep-opt" onClick={saveAudio}>
+            <button className="keep-opt" data-present="web-import-save-audio" onClick={saveAudio}>
               <span className="keep-ic"><AudioLines size={21} /></span>
               <span className="grow"><b>{t('Save the audio')}</b><small>{t('{f} you can play offline and share', { f: st.format.toUpperCase() })}</small></span>
             </button>

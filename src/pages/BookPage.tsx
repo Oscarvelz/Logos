@@ -173,7 +173,7 @@ export function BookPage() {
   }
 
   if (missing) return (
-    <div className="page book-page"><div className="card empty"><h3>{t('This book isn’t here any more')}</h3><button className="btn primary" onClick={() => { location.hash = '#/library?books' }}>{t('Back to Library')}</button></div></div>
+    <div className="page book-page"><div className="card empty" data-present="book-missing"><h3>{t('This book isn’t here any more')}</h3><button className="btn primary" onClick={() => { location.hash = '#/library?books' }}>{t('Back to Library')}</button></div></div>
   )
   if (!meta || !chapters) return <div className="page book-page"><div className="bk-loading"><span className="spin-ring" /></div></div>
 
@@ -183,37 +183,37 @@ export function BookPage() {
   const st = { '--bk-size': `${type.size}px`, '--bk-lh': type.spacing === 'airy' ? 1.72 : 1.5 } as React.CSSProperties
 
   return (
-    <div className={`page book-page bk-${type.font} ${wide ? 'has-side' : ''} ${big ? 'has-info' : ''}`} style={st}>
+    <div className={`page book-page bk-${type.font} ${wide ? 'has-side' : ''} ${big ? 'has-info' : ''}`} style={st} data-present="book-page">
       {big && <BookInfo meta={meta} chapters={chapters} ch={ch} progress={progress} onGo={(p) => jump(p, { push: true })} onSearch={() => setSheet('search')} onType={() => setSheet('type')} onListen={() => listenFrom(pos.ch === ch ? pos.b : 0)} />}
-      {wide && <aside className="bk-side" aria-label={t('Contents')}><TocBody side active meta={meta} chapters={chapters} at={{ ch, b: pos.ch === ch ? pos.b : 0 }} onGo={(p) => jump(p, { push: true })} /></aside>}
+      {wide && <aside className="bk-side" data-present="book-side-toc" aria-label={t('Contents')}><TocBody side active meta={meta} chapters={chapters} at={{ ch, b: pos.ch === ch ? pos.b : 0 }} onGo={(p) => jump(p, { push: true })} /></aside>}
       <header className="bk-head">
-        <button className="icon-btn" onClick={() => { location.hash = '#/library?books' }} aria-label={t('Back to Library')}><ArrowLeft size={21} /></button>
+        <button className="icon-btn" data-present="book-head-back" onClick={() => { location.hash = '#/library?books' }} aria-label={t('Back to Library')}><ArrowLeft size={21} /></button>
         <div className="bk-head-t">
           <div className="bk-head-book">{meta.title.split(/\s*[:—–]\s+|\s*:\s*/)[0] || meta.title}</div>
           <div className="bk-head-ch">{shortTitle(chapter.title)}</div>
         </div>
-        <button className="icon-btn" onClick={() => setSheet('search')} aria-label={t('Search this book')}><Search size={20} /></button>
-        {!wide && <button className="icon-btn" onClick={() => setSheet('toc')} aria-label={t('Contents')}><ListTree size={20} /></button>}
-        <button className="icon-btn" onClick={() => setSheet('type')} aria-label={t('Text size and font')}><Type size={20} /></button>
+        <button className="icon-btn" data-present="book-head-search" onClick={() => setSheet('search')} aria-label={t('Search this book')}><Search size={20} /></button>
+        {!wide && <button className="icon-btn" data-present="book-head-toc" onClick={() => setSheet('toc')} aria-label={t('Contents')}><ListTree size={20} /></button>}
+        <button className="icon-btn" data-present="book-head-type" onClick={() => setSheet('type')} aria-label={t('Text size and font')}><Type size={20} /></button>
       </header>
 
       {(back.length > 0 || find) && (
         <div className="bk-float">
-          {back.length > 0 && <button className="chip accent bk-back" onClick={goBack}><CornerUpLeft size={15} /> {t('Back')}</button>}
+          {back.length > 0 && <button className="chip accent bk-back" data-present="book-back" onClick={goBack}><CornerUpLeft size={15} /> {t('Back')}</button>}
           {find && (
-            <div className="bk-find">
+            <div className="bk-find" data-present="book-findbar">
               <span className="bk-find-q">“{find.q}”</span>
               <span className="bk-find-n">{t('{a} of {b}', { a: find.i + 1, b: find.hits.length })}{find.hits.length >= 500 ? '+' : ''}</span>
-              <button className="icon-btn" aria-label={t('Previous match')} onClick={() => { const i = (find.i - 1 + find.hits.length) % find.hits.length; const h = find.hits[i]; setFind({ ...find, i }); jump(h, { mark: { b: h.b, s: h.s, e: h.e } }) }}><ChevronUp size={18} /></button>
-              <button className="icon-btn" aria-label={t('Next match')} onClick={() => { const i = (find.i + 1) % find.hits.length; const h = find.hits[i]; setFind({ ...find, i }); jump(h, { mark: { b: h.b, s: h.s, e: h.e } }) }}><ChevronDown size={18} /></button>
-              <button className="icon-btn" aria-label={t('Close search')} onClick={() => { setFind(null); setMark(null) }}><X size={17} /></button>
+              <button className="icon-btn" data-present="book-find-prev" aria-label={t('Previous match')} onClick={() => { const i = (find.i - 1 + find.hits.length) % find.hits.length; const h = find.hits[i]; setFind({ ...find, i }); jump(h, { mark: { b: h.b, s: h.s, e: h.e } }) }}><ChevronUp size={18} /></button>
+              <button className="icon-btn" data-present="book-find-next" aria-label={t('Next match')} onClick={() => { const i = (find.i + 1) % find.hits.length; const h = find.hits[i]; setFind({ ...find, i }); jump(h, { mark: { b: h.b, s: h.s, e: h.e } }) }}><ChevronDown size={18} /></button>
+              <button className="icon-btn" data-present="book-find-close" aria-label={t('Close search')} onClick={() => { setFind(null); setMark(null) }}><X size={17} /></button>
             </div>
           )}
         </div>
       )}
 
       <article className="bk-text" ref={textRef} key={ch}>
-        <div className="bk-eyebrow">{ch === 0 && meta.author ? meta.author : t('Chapter {a} of {b}', { a: ch + 1, b: chapters.length })}</div>
+        <div className="bk-eyebrow" data-present="book-eyebrow">{ch === 0 && meta.author ? meta.author : t('Chapter {a} of {b}', { a: ch + 1, b: chapters.length })}</div>
         {chapter.blocks.map((b, i) => (
           <BlockView key={i} b={b} i={i} sel={sel === i} marked={marked.has(i)} mark={mark?.b === i ? mark : null} onLink={onLink}
             onTap={() => setSel((s) => (s === i ? null : i))} />
@@ -225,10 +225,10 @@ export function BookPage() {
         <>
           {sel !== null && (
             <div className="bk-actions" role="toolbar">
-              <button className="btn sm primary" onClick={() => listenFrom(sel)}><Play size={15} fill="currentColor" /> {t('Listen from here')}</button>
-              <button className="icon-btn" onClick={() => toggleBookmark(sel)} aria-label={t('Bookmark')}>{marked.has(sel) ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}</button>
-              <button className="icon-btn" onClick={() => { void navigator.clipboard?.writeText(chapter.blocks[sel].t).then(() => toast(t('Copied'))); setSel(null) }} aria-label={t('Copy')}><Copy size={18} /></button>
-              <button className="icon-btn" onClick={() => setSel(null)} aria-label={t('Close')}><X size={18} /></button>
+              <button className="btn sm primary" data-present="book-act-listen" onClick={() => listenFrom(sel)}><Play size={15} fill="currentColor" /> {t('Listen from here')}</button>
+              <button className="icon-btn" data-present="book-act-bookmark" onClick={() => toggleBookmark(sel)} aria-label={t('Bookmark')}>{marked.has(sel) ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}</button>
+              <button className="icon-btn" data-present="book-act-copy" onClick={() => { void navigator.clipboard?.writeText(chapter.blocks[sel].t).then(() => toast(t('Copied'))); setSel(null) }} aria-label={t('Copy')}><Copy size={18} /></button>
+              <button className="icon-btn" data-present="book-act-close" onClick={() => setSel(null)} aria-label={t('Close')}><X size={18} /></button>
             </div>
           )}
           <BottomBar meta={meta} chapters={chapters} ch={ch} progress={progress} onPrev={() => jump({ ch: ch - 1, b: 0 })} onNext={() => jump({ ch: ch + 1, b: 0 })}
@@ -244,21 +244,21 @@ export function BookPage() {
         <div className="bk-type">
           <div className="bk-type-row"><span>{t('Size')}</span>
             <div className="row" style={{ gap: 8 }}>
-              <button className="icon-btn" onClick={() => setType({ ...type, size: Math.max(11, type.size - 1) })} aria-label={t('Smaller')}><span style={{ fontSize: 14 }}>A</span></button>
+              <button className="icon-btn" data-present="book-type-size-minus" onClick={() => setType({ ...type, size: Math.max(11, type.size - 1) })} aria-label={t('Smaller')}><span style={{ fontSize: 14 }}>A</span></button>
               <span className="mono" style={{ minWidth: 30, textAlign: 'center' }}>{type.size}</span>
-              <button className="icon-btn" onClick={() => setType({ ...type, size: Math.min(30, type.size + 1) })} aria-label={t('Larger')}><span style={{ fontSize: 22 }}>A</span></button>
+              <button className="icon-btn" data-present="book-type-size-plus" onClick={() => setType({ ...type, size: Math.min(30, type.size + 1) })} aria-label={t('Larger')}><span style={{ fontSize: 22 }}>A</span></button>
             </div>
           </div>
-          <div className="bk-type-row"><span>{t('Font')}</span><Seg value={type.font} onChange={(font) => setType({ ...type, font })} options={[{ value: 'serif', label: 'Serif' }, { value: 'sans', label: 'Sans' }]} /></div>
-          <div className="bk-type-row"><span>{t('Lines')}</span><Seg value={type.spacing} onChange={(spacing) => setType({ ...type, spacing })} options={[{ value: 'snug', label: t('Snug') }, { value: 'airy', label: t('Airy') }]} /></div>
+          <div className="bk-type-row"><span>{t('Font')}</span><Seg present="book-type-font" value={type.font} onChange={(font) => setType({ ...type, font })} options={[{ value: 'serif', label: 'Serif' }, { value: 'sans', label: 'Sans' }]} /></div>
+          <div className="bk-type-row"><span>{t('Lines')}</span><Seg present="book-type-lines" value={type.spacing} onChange={(spacing) => setType({ ...type, spacing })} options={[{ value: 'snug', label: t('Snug') }, { value: 'airy', label: t('Airy') }]} /></div>
         </div>
       </Sheet>
       <Sheet open={!!note} onClose={() => setNote(null)} title={t('Note')}>
         {note && <>
-          <p className="bk-note">{note.text}</p>
+          <p className="bk-note" data-present="book-note-sheet">{note.text}</p>
           <div className="row" style={{ gap: 8, marginTop: 14 }}>
             <button className="btn ghost grow" onClick={() => setNote(null)}>{t('Close')}</button>
-            <button className="btn primary grow" onClick={() => { const t = note.to; setNote(null); jump(t, { push: true }) }}>{t('Go to the note')}</button>
+            <button className="btn primary grow" data-present="book-note-go" onClick={() => { const t = note.to; setNote(null); jump(t, { push: true }) }}>{t('Go to the note')}</button>
           </div>
         </>}
       </Sheet>
@@ -304,7 +304,7 @@ function BlockView({ b, i, sel, marked, mark, onLink, onTap }: { b: Block; i: nu
 function ChapterEnd({ chapters, ch, meta, onNext, onFinish }: { chapters: Chapter[]; ch: number; meta: BookMeta; onNext: () => void; onFinish: () => void }) {
   const next = chapters[ch + 1]
   if (next) return (
-    <button className="bk-next" onClick={onNext}>
+    <button className="bk-next" data-present="book-next-card" onClick={onNext}>
       <span className="bk-next-k">{t('Next · Chapter {n}', { n: ch + 2 })}</span>
       <span className="bk-next-t">{next.title}</span>
       <ChevronRight size={22} className="bk-next-ic" />
@@ -314,7 +314,7 @@ function ChapterEnd({ chapters, ch, meta, onNext, onFinish }: { chapters: Chapte
     <div className="bk-end">
       <div className="bk-end-glyph">λ</div>
       <div className="bk-end-t">{t('The end of {title}', { title: meta.title })}</div>
-      {!meta.done && <button className="btn primary" onClick={onFinish}>{t('Mark as finished')}</button>}
+      {!meta.done && <button className="btn primary" data-present="book-end-finish" onClick={onFinish}>{t('Mark as finished')}</button>}
     </div>
   )
 }
@@ -349,20 +349,20 @@ function BottomBar({ meta, chapters, ch, progress, onPrev, onNext, onToc, onList
         <div className="bk-prog-track" ref={progRef}><i style={{ width: `${shown * 100}%` }} /><span className="bk-prog-thumb" style={{ left: `${shown * 100}%` }} /></div>
         {dragF !== null && seekPos && <div className="bk-seek-tip" style={{ left: `clamp(58px, calc(14px + ${dragF * 100}% - ${dragF * 28}px), calc(100% - 58px))` }}>{Math.round(shown * 100)}% · {shortTitle(chapters[seekPos.ch].title)}</div>}
       </div>
-      <button className="icon-btn" onClick={onPrev} disabled={ch === 0} aria-label={t('Previous chapter')}><ChevronLeft size={22} /></button>
-      <button className="bk-bar-mid" onClick={onToc}>
+      <button className="icon-btn" data-present="book-prev-ch" onClick={onPrev} disabled={ch === 0} aria-label={t('Previous chapter')}><ChevronLeft size={22} /></button>
+      <button className="bk-bar-mid" data-present="book-bar-mid" onClick={onToc}>
         <b>{Math.round(shown * 100)}%</b>
         <span>{seekPos ? `${seekPos.ch + 1}/${chapters.length}` : progress >= 0.995 ? t('Finished') : `${timeLeft} · ${ch + 1}/${chapters.length}`}</span>
       </button>
       {fromHere
         ? <div className="bk-duo">
             <button className="bk-duo-play" onClick={toggle} aria-label={s.playing || s.buffering ? t('Pause') : t('Resume')}>{s.buffering ? <Loader2 size={17} className="spin" /> : s.playing ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}</button>
-            <button className="bk-duo-go" onClick={() => { location.hash = '#/listen' }} aria-label={t('Follow the text in Listen')}><AudioLines size={17} /> {t('Follow')}</button>
+            <button className="bk-duo-go" data-present="book-bar-follow" onClick={() => { location.hash = '#/listen' }} aria-label={t('Follow the text in Listen')}><AudioLines size={17} /> {t('Follow')}</button>
           </div>
         : s.active && (s.playing || s.buffering)
-        ? <button className="bk-listen" onClick={toggle} aria-label={t('Pause')}>{s.buffering ? <Loader2 size={17} className="spin" /> : <Pause size={17} fill="currentColor" />} {t('Pause')}</button>
-        : <button className="bk-listen" onClick={onListen} aria-label={t('Listen from here')}><Play size={17} fill="currentColor" /> {t('Listen')}</button>}
-      <button className="icon-btn" onClick={onNext} disabled={ch >= chapters.length - 1} aria-label={t('Next chapter')}><ChevronRight size={22} /></button>
+        ? <button className="bk-listen" data-present="book-bar-listen" onClick={toggle} aria-label={t('Pause')}>{s.buffering ? <Loader2 size={17} className="spin" /> : <Pause size={17} fill="currentColor" />} {t('Pause')}</button>
+        : <button className="bk-listen" data-present="book-bar-listen" onClick={onListen} aria-label={t('Listen from here')}><Play size={17} fill="currentColor" /> {t('Listen')}</button>}
+      <button className="icon-btn" data-present="book-next-ch" onClick={onNext} disabled={ch >= chapters.length - 1} aria-label={t('Next chapter')}><ChevronRight size={22} /></button>
     </div>
   )
 }
@@ -386,7 +386,7 @@ function BookInfo({ meta, chapters, ch, progress, onGo, onSearch, onType, onList
     toast(r === 'started' ? t('Making the audiobook in the background — find it in Library when it’s ready') : t('Queued — the audiobook starts after the audio being made now'), undefined, 6000)
   }
   return (
-    <aside className="bk-info" aria-label={t('About this book')}>
+    <aside className="bk-info" data-present="book-info" aria-label={t('About this book')}>
       <div className="card bi-prog">
         <div className="bi-ring" style={{ ['--p' as string]: `${pct * 3.6}deg` }}><span>{pct}<small>%</small></span></div>
         <div className="grow" style={{ minWidth: 0 }}>
@@ -397,14 +397,14 @@ function BookInfo({ meta, chapters, ch, progress, onGo, onSearch, onType, onList
         </div>
       </div>
       <div className="card bi-actions">
-        <button className="btn primary block" onClick={onListen}><Play size={16} fill="currentColor" /> {t('Listen from here')}</button>
-        <button className="btn block" onClick={makeAudiobook} disabled={making}><AudioLines size={16} /> {making ? t('Making audiobook · {d} of {t}', { d: job.done, t: job.total }) : t('Make audiobook')}</button>
+        <button className="btn primary block" data-present="book-info-listen" onClick={onListen}><Play size={16} fill="currentColor" /> {t('Listen from here')}</button>
+        <button className="btn block" data-present="book-info-audiobook" onClick={makeAudiobook} disabled={making}><AudioLines size={16} /> {making ? t('Making audiobook · {d} of {t}', { d: job.done, t: job.total }) : t('Make audiobook')}</button>
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn grow" onClick={onSearch}><Search size={16} /> {t('Search')}</button>
-          <button className="btn grow" onClick={onType}><Type size={16} /> {t('Text')}</button>
+          <button className="btn grow" data-present="book-info-search" onClick={onSearch}><Search size={16} /> {t('Search')}</button>
+          <button className="btn grow" data-present="book-info-type" onClick={onType}><Type size={16} /> {t('Text')}</button>
         </div>
       </div>
-      <div className="card bi-marks">
+      <div className="card bi-marks" data-present="book-info-marks">
         <div className="desk-kicker"><Bookmark size={13} /> {t('Bookmarks')}</div>
         {marks.length ? (
           <div className="desk-list">
@@ -416,7 +416,7 @@ function BookInfo({ meta, chapters, ch, progress, onGo, onSearch, onType, onList
           </div>
         ) : <p className="desk-empty">{t('Tap any paragraph, then the bookmark, and it appears here.')}</p>}
       </div>
-      <div className="bi-stats">{t('{n} words', { n: meta.words.toLocaleString() })}{t(' · {c} chapters', { c: chapters.length })}{meta.links ? t(' · {n} links', { n: meta.links.toLocaleString() }) : ''}</div>
+      <div className="bi-stats" data-present="book-info-stats">{t('{n} words', { n: meta.words.toLocaleString() })}{t(' · {c} chapters', { c: chapters.length })}{meta.links ? t(' · {n} links', { n: meta.links.toLocaleString() }) : ''}</div>
     </aside>
   )
 }
@@ -449,17 +449,17 @@ function TocBody({ active, meta, chapters, at, onGo, side = false }: { active: b
           {side && <div className="bk-side-title">{meta.title}</div>}
           {meta.author && <div className="bk-toc-author">{meta.author}</div>}
           <div className="bk-toc-stats">{t('{c} chapters · {n} words', { c: chapters.length, n: meta.words.toLocaleString() })}{meta.links ? t(' · {n} links', { n: meta.links.toLocaleString() }) : ''}</div>
-          <Seg value={tab} onChange={setTab} options={[{ value: 'toc', label: t('Contents') }, { value: 'marks', label: `${t('Bookmarks')}${marks.length ? ` ${marks.length}` : ''}` }]} />
+          <Seg present="book-toc-tabs" value={tab} onChange={setTab} options={[{ value: 'toc', label: t('Contents') }, { value: 'marks', label: `${t('Bookmarks')}${marks.length ? ` ${marks.length}` : ''}` }]} />
         </div>
       </div>
-      <div className="bk-toc" ref={listRef}>
+      <div className="bk-toc" ref={listRef} data-present={tab === 'toc' ? 'book-toc-list' : 'book-marks-list'}>
         {tab === 'toc' ? meta.toc.map((t, i) => (
-          <button key={i} className={`bk-toc-i lv${t.level} ${i === current ? 'cur' : ''}`} onClick={() => onGo({ ch: t.ch, b: t.b })}>
+          <button key={i} data-present="book-toc-row" className={`bk-toc-i lv${t.level} ${i === current ? 'cur' : ''}`} onClick={() => onGo({ ch: t.ch, b: t.b })}>
             <span className="grow">{t.title}</span>
             {t.level === 0 && <span className="bk-toc-n">{t.ch + 1}</span>}
           </button>
         )) : marks.length ? marks.map((m, i) => (
-          <button key={i} className="bk-toc-i bk-mark-i" onClick={() => onGo({ ch: m.ch, b: m.b })}>
+          <button key={i} data-present="book-marks-row" className="bk-toc-i bk-mark-i" onClick={() => onGo({ ch: m.ch, b: m.b })}>
             <span className="grow"><small>{chapters[m.ch]?.title}</small>{m.text}</span>
           </button>
         )) : <p className="muted small" style={{ padding: '14px 6px' }}>{t('Tap any paragraph, then the bookmark, to keep your place.')}</p>}
@@ -490,18 +490,18 @@ function SearchSheet({ open, onClose, chapters, initial, onPick }: { open: boole
     <Sheet open={open} onClose={onClose} title={t('Search')}>
       <label className="lib-search" style={{ marginBottom: 10 }}>
         <Search size={18} />
-        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Words, names, a phrase')} aria-label={t('Search this book')} enterKeyHint="search"
+        <input autoFocus data-present="book-search-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Words, names, a phrase')} aria-label={t('Search this book')} enterKeyHint="search"
           onKeyDown={(e) => { if (e.key === 'Enter' && hits.length) onPick(dq.trim(), hits, 0) }} />
         {q && <button onClick={() => setQ('')} aria-label={t('Clear')}><X size={16} /></button>}
       </label>
-      {dq.trim().length >= 2 && <div className="bk-s-count">{hits.length ? `${hits.length === 1 ? t('1 match') : t('{n} matches', { n: hits.length >= 500 ? '500+' : hits.length })}${chCount === 1 ? t(' in 1 chapter') : t(' in {c} chapters', { c: chCount })}` : t('No matches. Accents and capitals don’t matter.')}</div>}
+      {dq.trim().length >= 2 && <div className="bk-s-count" data-present="book-search-count">{hits.length ? `${hits.length === 1 ? t('1 match') : t('{n} matches', { n: hits.length >= 500 ? '500+' : hits.length })}${chCount === 1 ? t(' in 1 chapter') : t(' in {c} chapters', { c: chCount })}` : t('No matches. Accents and capitals don’t matter.')}</div>}
       <div className="bk-s-list">
         {hits.slice(0, 120).map((h, i) => {
           const t = chapters[h.ch].blocks[h.b].t
           let a = Math.max(0, h.s - 60); if (a > 0) { const sp = t.indexOf(' ', a); if (sp >= 0 && sp < h.s) a = sp + 1 }
           let z = Math.min(t.length, h.e + 90); if (z < t.length) { const sp = t.lastIndexOf(' ', z); if (sp > h.e) z = sp }
           return (
-            <button key={i} className="bk-s-i" onClick={() => onPick(dq.trim(), hits, i)}>
+            <button key={i} className="bk-s-i" data-present="book-search-row" onClick={() => onPick(dq.trim(), hits, i)}>
               <small>{chapters[h.ch].title}</small>
               <span>{t.slice(a, h.s)}<mark className="bk-mark">{t.slice(h.s, h.e)}</mark>{t.slice(h.e, z)}</span>
             </button>
