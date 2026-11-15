@@ -32,6 +32,15 @@ export default function App() {
 
   useEffect(() => { applyTheme(st.theme) }, [st.theme])
   useEffect(() => { applyUiLang() }, [st.uiLang])
+  // The electric themes' ambient beams pause while the tab is
+  // hidden (Weekly's discipline): html[data-hidden] stills every
+  // animation in the sheet, the beams above all.
+  useEffect(() => {
+    const onVis = () => { if (document.hidden) document.documentElement.dataset.hidden = '1'; else delete document.documentElement.dataset.hidden }
+    document.addEventListener('visibilitychange', onVis)
+    onVis()
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
   useEffect(() => {
     if (st.theme !== 'system') return
     const mq = matchMedia('(prefers-color-scheme: dark)')

@@ -19,8 +19,12 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     let t = 0
     const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e9bd72'
     const accent2 = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#f3d39c'
-    let colors = [accent(), accent2()]
-    const themeObs = new MutationObserver(() => { colors = [accent(), accent2()] })
+    // --viz-edge exists only where a theme gives the waveform an
+    // undertow (Cyberpunk's magenta); elsewhere the edges fall
+    // back to the accent, exactly as before.
+    const edge = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-edge').trim()
+    let colors = [accent(), accent2(), edge()]
+    const themeObs = new MutationObserver(() => { colors = [accent(), accent2(), edge()] })
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
     // Fallback for browsers without OffscreenCanvas: draw on the page, every frame.
@@ -57,13 +61,13 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
       ctx.clearRect(0, 0, w, h)
       const gap = w / bars
       const bw = Math.max(2, gap * 0.52)
-      const key = `${w}|${colors[0]}|${colors[1]}`
+      const key = `${w}|${colors[0]}|${colors[1]}|${colors[2]}`
       if (!grad || key !== gradKey) {
         gradKey = key
         grad = ctx.createLinearGradient(0, 0, w, 0)
-        grad.addColorStop(0, colors[0] + '33')
+        grad.addColorStop(0, (colors[2] || colors[0]) + '33')
         grad.addColorStop(0.5, colors[1])
-        grad.addColorStop(1, colors[0] + '33')
+        grad.addColorStop(1, (colors[2] || colors[0]) + '33')
       }
       ctx.fillStyle = grad
       // ease toward target at the same speed whatever the frame rate; the centre bar is "now"
@@ -104,7 +108,7 @@ function startOffThread(canvas: HTMLCanvasElement, bars: number): (() => void) |
   const w = worker
   w.postMessage({ type: 'init', canvas: offscreen, bars }, [offscreen])
   const css = (n: string, d: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || d
-  const sendColors = () => w.postMessage({ type: 'colors', a: css('--accent', '#e9bd72'), b: css('--accent-2', '#f3d39c') })
+  const sendColors = () => w.postMessage({ type: 'colors', a: css('--accent', '#e9bd72'), b: css('--accent-2', '#f3d39c'), e: css('--viz-edge', '') })
   const sendSize = () => w.postMessage({ type: 'size', w: canvas.clientWidth, h: canvas.clientHeight, dpr: Math.min(2, devicePixelRatio || 1) })
   sendColors(); sendSize()
   const themeObs = new MutationObserver(sendColors)

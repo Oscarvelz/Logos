@@ -191,9 +191,13 @@ export function ProgressRing({ value, size = 20, stroke = 2.5 }: { value: number
   )
 }
 
-/** Favorite star: gold for the starting favorites, violet with a soft glow for ones starred later. */
+/** Favorite star: the starting favorites wear the first seat, ones
+ *  starred later the second — each theme family names both seats
+ *  (--fav-first / --fav-later): Legacy keeps gold/violet, in Tron
+ *  both are Clu's orange, in Cyberpunk the later stars are the
+ *  user's magenta neon. */
 export function FavStar({ id, on = true, size = 13 }: { id: string; on?: boolean; size?: number }) {
   const later = on && !isOriginalFavorite(id)
-  const color = !on ? 'currentColor' : later ? 'var(--violet)' : 'var(--accent)'
+  const color = !on ? 'currentColor' : later ? 'var(--fav-later, var(--violet))' : 'var(--fav-first, var(--accent))'
   return <Star size={size} fill={on ? color : 'none'} color={color} className={later ? 'star-later' : undefined} aria-hidden />
 }
