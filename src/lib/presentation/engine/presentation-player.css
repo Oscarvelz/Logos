@@ -1,0 +1,458 @@
+/*
+ * The Logos C′ card (presentation-player.tsx).
+ *
+ * Paint ONLY with Logos' theme variables — the --accent family and the
+ * house tokens. (--gold is referenced in the app but never defined,
+ * census F: never use it.) No ellipsis anywhere: text wraps whole.
+ * Reduced motion is honoured here and in the component (the house's own
+ * handling is partial — the engine implements its own, census F).
+ *
+ * THE BORDER STACK IS BUILT, NEVER GENERIC (Oscar's law, Brizna lane
+ * 2026-11-14): the card's frame is born only from theme variables — a
+ * theme-MIXED border colour (the accent folded into the house line), an
+ * inner light at the top (the theme's own --sheen), and a TWO-STOREY
+ * shadow (the house depth storey, plus an accent-tinted ambient storey
+ * beneath it). No generic grey paints any part of the frame.
+ *
+ * ONE MOTION CLOCK (Oscar's law, same lane): --lp-ease and --lp-dur,
+ * defined once on .lp-player, govern ALL card motion — the card's glide
+ * between seats, its appearance, its windows' opening, the thread's
+ * fill, every control's answer to a touch. Nothing in this file keeps
+ * a duration or a curve of its own. (The focus ring's breathing is the
+ * hole's, not the card's: it lives in the component's WAAPI and stands
+ * down under reduced motion, as before.)
+ */
+
+.lp-player {
+  font-family: var(--font-ui);
+  color: var(--text);
+  --lp-ease: var(--ease);
+  --lp-dur: 0.28s;
+}
+
+/* Progress thread — 3px at the screen's top edge, accent-filled per scene. */
+.lp-thread {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 3px;
+  z-index: 120;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.lp-thread-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width var(--lp-dur) var(--lp-ease);
+}
+
+/* The veil (Oscar's corrected principle, from his phone verdict on
+   Faro 1.3.277, 2026-11-14 — it DEROGATES the earlier blurred-ground
+   wording): the background DARKENS and DESATURATES SLIGHTLY — it
+   NEVER BLURS. Four panels tile the viewport around the contained
+   hole (geometry.ts) — top and bottom span the full width, left and
+   right fill the hole's own band. Each panel tints (.55 of the theme
+   ground, as the veil always did) and slightly desaturates what lies
+   beneath it (saturate(0.65)), so the backdrop's colours read muted
+   while its buttons and layout stay clearly inferable — a module
+   touring the app is useless if the app behind cannot be seen; the
+   veil is a map's dimming, never a fog. No panel ever covers the
+   hole: the stage there stays pixel-sharp, in paint and in touch. */
+.lp-veil {
+  position: fixed;
+  z-index: 110;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: saturate(0.65);
+  -webkit-backdrop-filter: saturate(0.65);
+}
+.lp-veil-t {
+  top: 0;
+  left: 0;
+  right: 0;
+}
+.lp-veil-b {
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+.lp-veil-l {
+  left: 0;
+}
+.lp-veil-r {
+  right: 0;
+}
+/* Ring + glow in the theme accent (the breathing itself is WAAPI in the
+   component, and it stands down under reduced motion). */
+.lp-ring {
+  position: fixed;
+  z-index: 111;
+  border-radius: 18px;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px var(--accent), 0 0 26px 3px var(--accent-glow);
+}
+
+/* The card: ~370px on phones, beside the focus (positioned inline).
+   Its frame is the built border stack (see the file header): the
+   theme-mixed border, the inner top light, the two-storey shadow.
+   Its seat changes glide on the one motion clock; its appearance is
+   the lp-in fade, AT its seat — the card is born where it will live
+   (the component renders it only once a seat exists), so the fade is
+   an arrival, never a journey. */
+.lp-card {
+  position: fixed;
+  z-index: 115;
+  width: min(370px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  padding: 18px;
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line-2));
+  box-shadow:
+    inset 0 1px 0 var(--sheen),
+    0 26px 55px -22px color-mix(in srgb, var(--accent) 30%, transparent),
+    var(--shadow);
+  transition:
+    top var(--lp-dur) var(--lp-ease),
+    bottom var(--lp-dur) var(--lp-ease),
+    left var(--lp-dur) var(--lp-ease);
+  animation: lp-in var(--lp-dur) var(--lp-ease);
+}
+
+/* The one appearance: a fade in place — card and windows alike. */
+@keyframes lp-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Header, one line: counter left, quiet mini cluster right. */
+.lp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lp-counter {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+  flex: none;
+}
+.lp-cluster {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+
+/* Quiet controls (~30px, ~13px icons). Word + icon on ONE line by
+   construction: nowrap + no shrink, everywhere (controls-never-split law). */
+.lp-qbtn {
+  height: 30px;
+  padding: 0 9px;
+  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  flex: none;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  transition:
+    color var(--lp-dur) var(--lp-ease),
+    border-color var(--lp-dur) var(--lp-ease);
+}
+.lp-qbtn:hover {
+  color: var(--text);
+  border-color: var(--line-2);
+}
+.lp-qbtn svg {
+  flex: none;
+}
+.lp-qicon {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* The HEADER controls run SMALLER (Oscar's order, 2026-11-14, from his
+   own crops of this card: the ✕ stood cut by the card's corner at phone
+   width — «hazlos más pequeños para que respiren mejor»). Header-scoped:
+   25px tall, 25px icon pads, 12px icons (set in the component), tighter
+   padding and gaps — the whole row now sits inside the card's content
+   box with air to spare at 390px. The bottom row and the stay window
+   are NOT the header: they keep the 30px quiet size above. */
+.lp-head .lp-qbtn {
+  height: 25px;
+  padding: 0 7px;
+  font-size: 11.5px;
+  gap: 4px;
+}
+.lp-head .lp-qicon {
+  width: 25px;
+  padding: 0;
+}
+
+/* The integrated speed strip: all five speeds at once, current filled.
+   It unfolds on the one motion clock, like every card appearance. */
+.lp-speedstrip {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  animation: lp-in var(--lp-dur) var(--lp-ease);
+}
+.lp-speed {
+  flex: 1;
+  height: 30px;
+  border-radius: 99px;
+  font-size: 12.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.lp-speed.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+
+/* Chapters, unfolded inside the card (on the one motion clock). */
+.lp-chapters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  animation: lp-in var(--lp-dur) var(--lp-ease);
+}
+.lp-chapter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-align: left;
+  transition:
+    color var(--lp-dur) var(--lp-ease),
+    background var(--lp-dur) var(--lp-ease);
+}
+.lp-chapter:hover {
+  color: var(--text);
+}
+.lp-chapter.cur {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.lp-chapter-n {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+  flex: none;
+}
+.lp-save {
+  justify-content: flex-start;
+  gap: 6px;
+  color: var(--accent);
+}
+.lp-save svg {
+  flex: none;
+}
+.lp-save span {
+  white-space: nowrap;
+}
+
+/* The explanation — the protagonist: the largest type on the card. */
+.lp-text {
+  margin: 16px 2px 0;
+  font-size: 18px;
+  font-weight: 550;
+  line-height: 1.52;
+  color: var(--text);
+}
+.lp-question {
+  margin-left: 0;
+  margin-right: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--accent-soft);
+  font-weight: 650;
+}
+.lp-qmark {
+  margin-right: 8px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+/* The lower area (Oscar's order, 2026-11-14, from his own crops):
+   «Module · Chapter» owns its own line(s) at the FULL card width — no
+   button beside it, nothing cutting across the text's path (wraps
+   whole, never "…"). BELOW it, one actions row carries «Stay here»
+   and, in Interactive, «Show me» at the row's right end, at Stay
+   here's level; in Automatic the row carries «Stay here» alone. The
+   nav pair's seat is the header now (Oscar's order, relayed from the
+   Cadence lane 2026-11-14). */
+.lp-module {
+  margin: 16px 2px 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--muted);
+  white-space: normal;
+  overflow: visible;
+}
+.lp-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.lp-showme {
+  margin-left: auto;
+}
+/* The nav pair (Oscar's law, Brizna lane 2026-11-14; seat moved to the
+   header at Oscar's order, Cadence lane 2026-11-14): icon-only «‹ ›»
+   in the header cluster, immediately left of the mode button,
+   Interactive only. When touched, each shows
+   a SELECTION TOUCH — an accent-tinted ground + a slight shrink — so a
+   tap never answers with silence. Theme paint only: the --accent family. */
+.lp-navpair {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+.lp-navbtn {
+  transition:
+    transform var(--lp-dur) var(--lp-ease),
+    background var(--lp-dur) var(--lp-ease),
+    color var(--lp-dur) var(--lp-ease),
+    border-color var(--lp-dur) var(--lp-ease),
+    opacity var(--lp-dur) var(--lp-ease);
+}
+.lp-navbtn:active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+  transform: scale(0.9);
+}
+.lp-navbtn:disabled {
+  opacity: 0.38;
+}
+.lp-done-btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid transparent;
+}
+
+/* The card's windows — the stay-here window and the ✕ confirmation
+   window are one family (Oscar's laws, Brizna lane 2026-11-14): a small
+   pop-up unfolded on the card (the codex's context pop-up seat), framed
+   by the same built border family as the card (theme-mixed border, the
+   inner top light), opening on the one motion clock. THE WINDOW ASKS
+   BIG AND EXPLAINS SHORT: the QUESTION is the headline — protagonist
+   scale, the largest type in the window — and the body stays brief:
+   one or two short lines, never a paragraph. Theme paint only. */
+.lp-staywin,
+.lp-closewin {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line-2));
+  box-shadow: inset 0 1px 0 var(--sheen);
+  animation: lp-in var(--lp-dur) var(--lp-ease);
+}
+.lp-staywin-t,
+.lp-closewin-t {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
+}
+.lp-staywin-b,
+.lp-closewin-b {
+  margin: 6px 0 0;
+  /* 14.5px, not 13.5 (Oscar's correction, 2026-11-14, from his crop of
+     the ✕ window): at 13.5 the brief body wrapped well short of the
+     box's right edge and left the window's right side empty — the text
+     must COVER its box, lines running to the inner edge and wrapping
+     there. Measured on the rendered window (both languages, both
+     windows' bodies): first-line gap to the inner edge 4–20px at
+     14.5px, against 24–39px at 13.5px. The question stays the big
+     headline (19px/700); the body stays brief and subordinate. */
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.lp-staywin-row,
+.lp-closewin-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* Large screens: the card grows with presence; text never truncates. */
+@media (min-width: 840px) {
+  .lp-card {
+    width: min(480px, calc(100vw - 40px));
+    padding: 22px;
+  }
+  .lp-text {
+    font-size: 20px;
+  }
+}
+@media (min-width: 1500px) {
+  .lp-card {
+    width: min(550px, calc(100vw - 40px));
+    padding: 26px;
+  }
+  .lp-text {
+    font-size: 22px;
+  }
+}
+
+/* Reduced motion: the engine's own calm — no transitions, no fills
+   easing, no appearances: the card and its windows simply ARE there. */
+@media (prefers-reduced-motion: reduce) {
+  .lp-thread-fill,
+  .lp-qbtn,
+  .lp-navbtn,
+  .lp-chapter,
+  .lp-card {
+    transition: none;
+  }
+  .lp-card,
+  .lp-staywin,
+  .lp-closewin,
+  .lp-speedstrip,
+  .lp-chapters {
+    animation: none;
+  }
+}
