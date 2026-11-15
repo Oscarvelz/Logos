@@ -1,3 +1,15 @@
+## 1.4.170 — The bubble names itself; its cards learn calibration (shell)
+
+Two orders Oscar gave from the Cadence workshop (2026-11-14 22:41–22:42), relayed to this desk.
+
+**A held disc speaks its name.** The panel footer's three discs — Paste, Listen, Hide — were glyph-only, and a glyph you cannot name is a guess. Now a short hold (480 ms) floats a small pill above the disc with its name (Pegar / Escuchar / Ocultar in Spanish), with a haptic tick; the release that follows a hold does NOT run the deed, and a plain tap works exactly as before — same press squash, same actions. The pill wears the panel's own family in every theme, flat-faced with the calibrated edge (hairline, whisper of top light, short shadow), takes no touches, and dies with the finger, with the panel, or with the service. Built into `footBtn` itself, so the three discs share one behaviour and one code path.
+
+**The popup cards under the Calibration Law.** Every explainer card the bubble raises (Save to Library, Lock/Unlock the stage, the ⚑ mark, Remove the bubble — one renderer, `showHintCard`) carried the exact defect Oscar diagnosed in Vela: a white-ish wash across the top half — here a diagonal rim blazing gold from the top-left corner plus a radial gold glow breathing over the top 96 dp, switched on a breath after the card arrived like a lamp. His recipe, applied literally: separation is a band, not a direction. The face is now ONE family tone, flat (a single `cardPal` blend, no top-to-bottom ramp); the edge is the 1px stack — a hairline rim whose light lives only at the top and dies down the sides, a whisper of family light (10% of the family's gold) that dies inside the top 30 dp, and a short shadow (elevation 24 → 10). The lamp beat is gone; the card arrives in one settle. The dimmed-world scrim behind it (his 1.4.152 pick) is untouched.
+
+**Presentation review.** Shell-only plus version strings: no anchor, surface or beat is affected; the stage's About line follows the version as always.
+
+**Verification, stated plainly.** The shell has no bench: what is proven here is the code (one renderer, one button factory, teardowns on every exit path) and the CI build. The feel — the hold's timing, the pill's seat, the card's new quiet — is judged on Oscar's phone, as every bubble wave has been.
+
 ## 1.4.169 — The electric themes come alive (web)
 
 Oscar's enrichment orders (2026-11-14, with the Tron Legacy / Tron Ares / Cyberpunk 2077 posters as references), built the house way: research first, as a team — a scout dissected Weekly's Tron, two choreographers censused where each colour actually lands in Logos today. One correction the scout brought back: **Weekly has no starfield.** What reads as shooting stars is a beam system — thin bars of light with white-hot heads crossing the header (cyan out, amber back) on long rest cycles, over a static grid-and-circuits ground. That recipe, re-derived for Logos's chrome, is what shipped.
