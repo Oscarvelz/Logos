@@ -1,3 +1,15 @@
+## 1.4.172 — The jump keys learn to be arrows (web + shell)
+
+Oscar, with his reference in hand: the 1.4.163 jump keys «no parecen flechas». Two faults, one in the drawing recipe all three surfaces shared. The head was an OPEN chevron — two stroked lines meeting at a point — where his reference (and every standard rotate glyph) wears a CLOSED, filled triangle. And the arc swept 290°, a near-full ring that read as a circle and squeezed the number inside it. The widget (the bubble panel) wore it worst; the main player and the notification shade carried the same recipe.
+
+**The corrected glyph, one recipe everywhere.** The arc opens at the top — 250° of sweep, its head near one o'clock — and the head is a single filled triangle STRADDLING the arc's end: the tip leads past it along the tangent, the base trails behind it, so the arc flows into the head and the whole mark reads as one arrow. The number sits in the open middle with air around it. Drawn identically in the player's `JumpKey` (now a hand-drawn SVG in chrome.tsx; the borrowed Lucide rotate icons are retired from this duty), the panel's canvas keys in BubbleService, and the shade's bitmap icons in PlaybackService — the key looks the same everywhere it lives. The seconds, the commands and the seats are untouched; only the face changed.
+
+**The card's buttons transform (same wave, Oscar's screenshot).** His media card wore track-skip glyphs (⏮ ⏭) over a pasted text. His ruling: between books the track seat is right; over a text those buttons must become the jumps. A text session no longer declares SKIP_TO_NEXT/PREVIOUS to the system at all — the card's side slots fall to REWIND/FAST_FORWARD, which since 1.4.163 ARE the jumps by his configured seconds; a book session declares both vocabularies exactly as before. The distinction rides the publish the page already sends (`book` carries a title only for a book). The system's card draws its own faces for the standard buttons — what the session controls is which buttons exist; the numbered arrows remain the shade notification's own buttons, as they were.
+
+**The bubble's preselected size (same wave, Oscar).** Standard is the preselection: the default was already 'm' on both sides of the bridge, so a one-time migration (logos.mig172) lifts a stored Small — from before this word — to Standard; a Small chosen afterwards is the user's and stays.
+
+**Presentation review.** Paint only: no anchor, id or behavior changed (the stage's jump keys are its own drawing and keep the stage's face, as before).
+
 ## 1.4.171 — Settings learns clusters (web)
 
 The house pattern arrives at the last flat Settings page in the fleet. Oscar pointed at his memory instead of explaining — the pattern is consecrated there (born in Vela, kept in Brizna 1.5.81 and Faro 1.3.285) — and this wave applies it to Logos exactly as written: sunken trays grouped by territory, each with a short name in the app's voice and one line saying what it holds; the cards inside intact (content, anchors, ids untouched); the loose pieces at the foot, outside the trays.

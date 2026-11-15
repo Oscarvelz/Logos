@@ -141,6 +141,16 @@ try {
     migrateEngine = true
   }
 } catch { /* storage blocked */ }
+// 1.4.172 (Oscar): the bubble's preselected size is Standard — «a
+// better place for it to have as a pre-selection». A stored Small
+// from before this word becomes Standard once; a Small chosen after
+// this migration is his and stays.
+try {
+  if (localStorage.getItem('logos.mig172') !== '1') {
+    localStorage.setItem('logos.mig172', '1')
+    if (initial.bubbleSize === 's') { initial.bubbleSize = 'm'; migrateEngine = true }
+  }
+} catch { /* storage blocked */ }
 export const settings = createStore<Settings>(initial)
 settings.subscribe(() => {
   try { localStorage.setItem(KEY, JSON.stringify(settings.get())) } catch { /* storage blocked */ }
