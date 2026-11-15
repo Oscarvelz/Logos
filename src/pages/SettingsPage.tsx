@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.170'
+const VERSION = '1.4.171'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -82,6 +82,24 @@ function SetCard({ icon, title, sub, children, defaultOpen, present }: { icon: R
   )
 }
 
+/** A Settings cluster (the house pattern, born in Vela, consecrated
+ *  by Oscar 2026-11-15): a sunken tray grouping the cards by
+ *  territory — the user's mind, not the machinery. The cards inside
+ *  keep their content, anchors and order within the tray; the tray
+ *  itself is painted from the active theme's tokens under the
+ *  Calibration Law (one tone under the page, the 1px edge stack). */
+function SetCluster({ name, line, children }: { name: string; line: string; children: ReactNode }) {
+  return (
+    <div className="set-cluster">
+      <div className="set-cluster-h">
+        <div className="set-cluster-name">{name}</div>
+        <div className="set-cluster-line">{line}</div>
+      </div>
+      {children}
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const st = useStore(settings)
   const e = useStore(engine)
@@ -143,6 +161,7 @@ export function SettingsPage() {
       </div>
 
       <div className="set-cols">
+      <SetCluster name={t('The voice')} line={t('The voice that reads to you, and how it says your words.')}>
       <section className="set-group">
       <SetCard present="set-neural" defaultOpen={e.status === 'loading' || e.status === 'error' || (e.status !== 'ready' && !e.cached)} icon={<Cpu size={19} />} title={t('Neural voice')} sub={t('The reading voice — it lives on this device, downloads once, then works offline.')}>
       <div className="engine-card stack">
@@ -207,6 +226,30 @@ export function SettingsPage() {
       </SetCard>
       </section>
       <section className="set-group">
+      <SetCard present="set-pron" icon={<Mic size={19} />} title={t('Pronunciation')} sub={t('Words said your way — names, places, terms of art.')}>
+      <div className="list">
+        <div className="list-row col">
+          <div className="grow"><div className="t">{t('Say it your way')}</div><div className="d" data-present="set-pron-scope">{t('Applies to listening and to exported audio, in every book. Codes and links are already named, not spelled out.')}</div></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+            <input className="text-input" data-present="set-pron-from" style={{ height: 44, width: '100%' }} placeholder={t('Word in the book')} value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
+            <div className="row" style={{ gap: 8 }}>
+              <input className="text-input" data-present="set-pron-to" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder={t('Say it as')} value={pTo} onChange={(e) => setPTo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPron() }} />
+              <button className="btn primary" data-present="set-pron-add" onClick={addPron} disabled={!pFrom.trim() || !pTo.trim()}><Plus size={17} /> {t('Add')}</button>
+            </div>
+          </div>
+        </div>
+        {pron.map((e) => (
+          <div className="list-row" data-present="set-pron-entry" key={e.from}>
+            <div className="grow"><div className="t">{e.from}</div><div className="d">{t('read as “{to}”', { to: e.to })}</div></div>
+            <button className="btn sm ghost" data-present="set-pron-remove" aria-label={t('Remove {from}', { from: e.from })} onClick={() => savePron(pron.filter((x) => x !== e))}><X size={16} /></button>
+          </div>
+        ))}
+      </div>
+      </SetCard>
+      </section>
+      </SetCluster>
+      <SetCluster name={t('Listening')} line={t('How listening feels — here, and floating over your other apps.')}>
+      <section className="set-group">
       <SetCard present="set-playback" icon={<SlidersHorizontal size={19} />} title={t('Playback')} sub={t('How listening feels, sentence by sentence.')}>
       <div className="list">
         <div className="list-row col" data-present="set-speed">
@@ -247,71 +290,6 @@ export function SettingsPage() {
             <button className="btn sm ghost" data-present="set-word-timing-reset" aria-label={t('Reset word timing')} onClick={() => settings.set({ wordLeadMs: 90 })} style={{ minWidth: 0, padding: '0 8px', opacity: st.wordLeadMs === 90 ? .4 : 1 }}>↺</button>
             <button className="btn sm ghost" data-present="set-word-timing-plus" aria-label={t('Highlight earlier')} onClick={() => settings.set({ wordLeadMs: Math.min(450, st.wordLeadMs + 30) })}>+</button>
           </div>
-        </div>
-      </div>
-      </SetCard>
-      </section>
-      <section className="set-group">
-      <SetCard present="set-pron" icon={<Mic size={19} />} title={t('Pronunciation')} sub={t('Words said your way — names, places, terms of art.')}>
-      <div className="list">
-        <div className="list-row col">
-          <div className="grow"><div className="t">{t('Say it your way')}</div><div className="d" data-present="set-pron-scope">{t('Applies to listening and to exported audio, in every book. Codes and links are already named, not spelled out.')}</div></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-            <input className="text-input" data-present="set-pron-from" style={{ height: 44, width: '100%' }} placeholder={t('Word in the book')} value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
-            <div className="row" style={{ gap: 8 }}>
-              <input className="text-input" data-present="set-pron-to" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder={t('Say it as')} value={pTo} onChange={(e) => setPTo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPron() }} />
-              <button className="btn primary" data-present="set-pron-add" onClick={addPron} disabled={!pFrom.trim() || !pTo.trim()}><Plus size={17} /> {t('Add')}</button>
-            </div>
-          </div>
-        </div>
-        {pron.map((e) => (
-          <div className="list-row" data-present="set-pron-entry" key={e.from}>
-            <div className="grow"><div className="t">{e.from}</div><div className="d">{t('read as “{to}”', { to: e.to })}</div></div>
-            <button className="btn sm ghost" data-present="set-pron-remove" aria-label={t('Remove {from}', { from: e.from })} onClick={() => savePron(pron.filter((x) => x !== e))}><X size={16} /></button>
-          </div>
-        ))}
-      </div>
-      </SetCard>
-      </section>
-      <section className="set-group">
-      <SetCard present="set-card-appearance" icon={<Palette size={19} />} title={t('Appearance')} sub={t('The light of the room.')}>
-      <div className="list">
-        {([
-          { id: 'legacy', name: t('Legacy'), desc: t('Charcoal and gold — the original.'), sw: ['#17130c', '#e9bd72'] },
-          { id: 'tron', name: 'Tron', desc: t('Light lines on the deep black of the Grid.'), sw: ['#02060c', '#00e5ff', '#ff1e14'] },
-          { id: 'cyberpunk', name: 'Cyberpunk', desc: t('Signal yellow print on warm black.'), sw: ['#0b0a08', '#fcee0a', '#ff2a6d'] },
-        ] as const).map((th) => {
-          const fam = st.theme === 'tron' ? 'tron' : st.theme === 'cyberpunk' ? 'cyberpunk' : 'legacy'
-          const on = fam === th.id
-          return (
-            <button key={th.id} type="button" className={`theme-row ${on ? 'on' : ''}`} aria-pressed={on}
-              onClick={() => {
-                if (th.id === 'legacy') { settings.set({ theme: st.lastLegacy }); applyTheme(st.lastLegacy) }
-                else { const v = th.id as Theme; settings.set({ theme: v }); applyTheme(v) }
-              }}>
-              <span className="theme-sw" style={{ background: th.sw.length >= 3 ? `linear-gradient(135deg, ${th.sw[0]} 0 45%, ${th.sw[1]} 45% 78%, ${th.sw[2]} 78% 100%)` : `linear-gradient(135deg, ${th.sw[0]} 50%, ${th.sw[1]} 50%)` }} />
-              <span className="grow">
-                <span className="t">{th.name}</span>
-                <span className="d">{th.desc}</span>
-              </span>
-              {on && <Check size={18} className="theme-check" />}
-            </button>
-          )
-        })}
-        {(st.theme !== 'tron' && st.theme !== 'cyberpunk') && (
-          <div className="list-row col">
-            <div className="t">{t('Legacy mode')}</div>
-            <Seg present="set-theme" value={st.lastLegacy} label={t('Legacy mode')} onChange={(v: LegacyTheme) => { settings.set({ theme: v, lastLegacy: v }); applyTheme(v) }} options={[{ value: 'dark', label: t('Dark') }, { value: 'light', label: t('Light') }, { value: 'system', label: t('System') }]} />
-          </div>
-        )}
-      </div>
-      </SetCard>
-      </section>
-      <section className="set-group">
-      <SetCard present="set-card-language" icon={<Languages size={19} />} title={t('Language')} sub={t('The app’s own words — everything on screen.')}>
-      <div className="list">
-        <div className="list-row col">
-          <Seg present="set-ui-lang" presentLang={st.uiLang} value={st.uiLang} label={t('Language')} onChange={(v: 'en' | 'es') => settings.set({ uiLang: v })} options={[{ value: 'en', label: 'English' }, { value: 'es', label: 'Español' }]} />
         </div>
       </div>
       </SetCard>
@@ -376,12 +354,64 @@ export function SettingsPage() {
       {(() => { try { const j = JSON.parse(localStorage.getItem('logos.stage.journal') ?? '[]') as string[]; return j.length ? <div className="muted small" data-present="set-bubble-journal" style={{ marginTop: 6, padding: '0 4px' }}>{t('Stage moves: ')}{j.slice(-4).join(' · ')}</div> : null } catch { return null } })()}
       </SetCard>
       </section>
+      </SetCluster>
+      <SetCluster name={t('The screen')} line={t('How Logos looks, and the language it speaks.')}>
+      <section className="set-group">
+      <SetCard present="set-card-appearance" icon={<Palette size={19} />} title={t('Appearance')} sub={t('The light of the room.')}>
+      <div className="list">
+        {([
+          { id: 'legacy', name: t('Legacy'), desc: t('Charcoal and gold — the original.'), sw: ['#17130c', '#e9bd72'] },
+          { id: 'tron', name: 'Tron', desc: t('Light lines on the deep black of the Grid.'), sw: ['#02060c', '#00e5ff', '#ff1e14'] },
+          { id: 'cyberpunk', name: 'Cyberpunk', desc: t('Signal yellow print on warm black.'), sw: ['#0b0a08', '#fcee0a', '#ff2a6d'] },
+        ] as const).map((th) => {
+          const fam = st.theme === 'tron' ? 'tron' : st.theme === 'cyberpunk' ? 'cyberpunk' : 'legacy'
+          const on = fam === th.id
+          return (
+            <button key={th.id} type="button" className={`theme-row ${on ? 'on' : ''}`} aria-pressed={on}
+              onClick={() => {
+                if (th.id === 'legacy') { settings.set({ theme: st.lastLegacy }); applyTheme(st.lastLegacy) }
+                else { const v = th.id as Theme; settings.set({ theme: v }); applyTheme(v) }
+              }}>
+              <span className="theme-sw" style={{ background: th.sw.length >= 3 ? `linear-gradient(135deg, ${th.sw[0]} 0 45%, ${th.sw[1]} 45% 78%, ${th.sw[2]} 78% 100%)` : `linear-gradient(135deg, ${th.sw[0]} 50%, ${th.sw[1]} 50%)` }} />
+              <span className="grow">
+                <span className="t">{th.name}</span>
+                <span className="d">{th.desc}</span>
+              </span>
+              {on && <Check size={18} className="theme-check" />}
+            </button>
+          )
+        })}
+        {(st.theme !== 'tron' && st.theme !== 'cyberpunk') && (
+          <div className="list-row col">
+            <div className="t">{t('Legacy mode')}</div>
+            <Seg present="set-theme" value={st.lastLegacy} label={t('Legacy mode')} onChange={(v: LegacyTheme) => { settings.set({ theme: v, lastLegacy: v }); applyTheme(v) }} options={[{ value: 'dark', label: t('Dark') }, { value: 'light', label: t('Light') }, { value: 'system', label: t('System') }]} />
+          </div>
+        )}
+      </div>
+      </SetCard>
+      </section>
+      <section className="set-group">
+      <SetCard present="set-card-language" icon={<Languages size={19} />} title={t('Language')} sub={t('The app’s own words — everything on screen.')}>
+      <div className="list">
+        <div className="list-row col">
+          <Seg present="set-ui-lang" presentLang={st.uiLang} value={st.uiLang} label={t('Language')} onChange={(v: 'en' | 'es') => settings.set({ uiLang: v })} options={[{ value: 'en', label: 'English' }, { value: 'es', label: 'Español' }]} />
+        </div>
+      </div>
+      </SetCard>
+      </section>
+      </SetCluster>
+      <SetCluster name={t('Learn')} line={t('Guided lessons that walk the whole app with you.')}>
       <section className="set-group" data-present="set-presentations">
       <PresentationSearch />
       <PresentationsCard onLaunch={launchPresentation} />
       </section>
+      </SetCluster>
+      <SetCluster name={t('Your data')} line={t('Your whole library in one file — out, and back in.')}>
       <section className="set-group">
       <BackupCard />
+      </section>
+      </SetCluster>
+      <section className="set-group">
       <SetCard present="set-about" icon={<img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="" />} title={t('About Logos')} sub={t('Version {v} · private, on-device text-to-speech', { v: VERSION })}>
       <div className="credits">
         <p><strong>Based on <a href="https://github.com/SysAdminDoc/BetterTTS" target="_blank" rel="noreferrer">BetterTTS</a> by SysAdminDoc</strong> (MIT License). Logos is a simplified, phone-first rebuild; its listening player, export and service-worker isolation grew out of it.</p>

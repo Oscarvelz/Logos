@@ -453,6 +453,35 @@ button.set-card-h { width: 100%; background: none; border: 0; padding: 0; cursor
 }
 /* The fleet's closing line (1.4.131): the version, last on the screen. */
 .set-version { text-align: center; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; margin: 22px 0 10px; }
+/* Settings clusters (1.4.171 — the house pattern, born in Vela and
+   consecrated by Oscar 2026-11-15): sunken trays grouping the cards
+   by territory. One tone under the page, taken from the theme's own
+   tokens; the edge is the Calibration Law's 1px stack — hairline,
+   top light, short shadow — never a big jump of light. The cards
+   inside keep their own paint and sit above the tray. */
+.set-cluster {
+  background: color-mix(in srgb, var(--text) 4%, var(--bg));
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 9%, transparent), 0 1px 2px rgba(0, 0, 0, .16);
+  padding: 16px 12px 2px;
+  margin-bottom: 22px;
+}
+.set-cluster-h { padding: 0 8px 12px; }
+.set-cluster-name { font-weight: 750; font-size: 15.5px; letter-spacing: .01em; line-height: 1.2; }
+.set-cluster-line { color: var(--muted); font-size: 12.5px; line-height: 1.35; margin-top: 2px; }
+.set-cluster .set-card { margin-bottom: 12px; }
+[data-theme='light'] .set-cluster { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), 0 1px 2px rgba(60, 45, 20, .10); }
+/* Tron wears its grammar: the tray's fillet lit in the sovereign
+   cyan, the glow contained in the edge. */
+[data-theme='tron'] .set-cluster {
+  border-color: rgba(0, 229, 255, .30);
+  box-shadow: inset 0 1px 0 rgba(0, 229, 255, .38), inset 0 0 24px rgba(0, 229, 255, .05), 0 1px 2px rgba(0, 0, 0, .4);
+}
+/* Cyberpunk prints flat: signal yellow only on the top fillet and
+   the tray's name, exactly as the fleet's other houses print it. */
+[data-theme='cyberpunk'] .set-cluster { box-shadow: inset 0 3px 0 var(--accent), 0 1px 2px rgba(0, 0, 0, .35); }
+[data-theme='cyberpunk'] .set-cluster-name { color: var(--accent); }
 .set-ic { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; flex: none; color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent); }
 .set-ic img { width: 26px; height: 26px; border-radius: 8px; display: block; }
 .set-card-t { font-weight: 700; font-size: 16.5px; letter-spacing: -0.01em; line-height: 1.2; }
@@ -1163,6 +1192,8 @@ html, body { overflow-x: clip; }
   .settings-page { max-width: 1180px; }
   .set-cols { column-count: 2; column-gap: 28px; }
   .set-group { break-inside: avoid; display: flow-root; }
+  /* The masonry distributes by tray, as the fleet's houses do. */
+  .set-cluster { break-inside: avoid; }
   .set-group > .section-label:first-child { margin-top: 0; }
 }
 

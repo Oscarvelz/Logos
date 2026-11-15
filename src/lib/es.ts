@@ -120,6 +120,17 @@ export const ES: Record<string, string> = {
   'The backup could not be made': 'No se pudo hacer el respaldo',
   'That file is not a Logos backup': 'Ese archivo no es un respaldo de Logos',
   'About Logos': 'Acerca de Logos',
+  // ── Settings clusters (1.4.171) ──
+  'The voice': 'La voz',
+  'The voice that reads to you, and how it says your words.': 'La voz que te lee, y cómo dice tus palabras.',
+  'Listening': 'La escucha',
+  'How listening feels — here, and floating over your other apps.': 'Cómo se siente escuchar — aquí, y flotando sobre tus otras apps.',
+  'The screen': 'La pantalla',
+  'How Logos looks, and the language it speaks.': 'Cómo se ve Logos, y el idioma que habla.',
+  'Learn': 'Aprender',
+  'Guided lessons that walk the whole app with you.': 'Lecciones guiadas que recorren toda la app contigo.',
+  'Your data': 'Tus datos',
+  'Your whole library in one file — out, and back in.': 'Toda tu biblioteca en un archivo — sale y vuelve a entrar.',
   // ── Presentation search + first-run offer (1.4.166) ──
   'Find a lesson or a function': 'Busca una lección o una función',
   'Try “sleep”, “bubble”, “pronunciation”…': 'Prueba «sueño», «burbuja», «pronunciación»…',
