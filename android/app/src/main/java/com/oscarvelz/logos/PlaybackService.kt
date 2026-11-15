@@ -177,7 +177,9 @@ class PlaybackService : Service() {
         // tangent, base trailing — one closed filled triangle.
         val txv = Math.cos(tang).toFloat(); val tyv = Math.sin(tang).toFloat()
         val tipX = hx + txv * 14f; val tipY = hy + tyv * 14f
-        val bcx = (hx - txv * 11f); val bcy = (hy - tyv * 11f)
+        // The base is centered on the arc's end (1.4.174, Oscar):
+        // the ring passes through the middle of the base edge.
+        val bcx = hx; val bcy = hy
         val pxv = -tyv; val pyv = txv
         val hw = 13f
         val head = android.graphics.Path()

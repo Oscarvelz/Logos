@@ -162,9 +162,12 @@ export function JumpKey({ dir, size = 24, filled = true, disabled, present }: { 
   // the image he sent (corrected in 1.4.173 at his verdict, «las
   // puntas están invertidas»): the arc runs nearly the whole
   // circle (310°) and ARRIVES at the head — the head is a closed,
-  // filled triangle straddling the arc's END, its tip pointing
-  // along the travel into the small gap at the top, toward the
-  // arc's free tail. In 172 the head straddled the arc's start
+  // filled triangle whose BASE IS CENTERED on the arc's END (the
+  // ring's line passes through the middle of the base edge —
+  // 1.4.174, Oscar: with the base trailing behind the end, the
+  // head rode too high and the circle missed the base's center),
+  // its tip pointing along the travel into the small gap at the
+  // top, toward the arc's free tail. In 172 the head straddled the arc's start
   // with the shaft in front of the tip, and the arrows read
   // backward. The same recipe is drawn in the bubble panel and
   // the notification shade, so the key looks the same everywhere.
@@ -174,10 +177,10 @@ export function JumpKey({ dir, size = 24, filled = true, disabled, present }: { 
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
         {dir === 'fwd' ? <>
           <path d="M 16.53 5.93 A 7.9 7.9 0 1 1 9.96 4.77" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
-          <path d="M 13.44 3.84 L 7.91 8.74 L 6.21 2.36 Z" fill="currentColor" />
+          <path d="M 13.44 3.84 L 10.81 7.96 L 9.11 1.58 Z" fill="currentColor" />
         </> : <>
           <path d="M 7.47 5.93 A 7.9 7.9 0 1 0 14.04 4.77" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
-          <path d="M 10.57 3.84 L 17.79 2.36 L 16.09 8.74 Z" fill="currentColor" />
+          <path d="M 10.57 3.84 L 14.89 1.58 L 13.19 7.96 Z" fill="currentColor" />
         </>}
       </svg>
       <span className="jump-n" style={{ fontSize: Math.max(8, size * 0.4) }} aria-hidden>{sec}</span>
