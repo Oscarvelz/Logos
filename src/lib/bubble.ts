@@ -431,7 +431,12 @@ export function initBubble() {
       return
     }
     const info = {
-      playing: s.playing || s.buffering,
+      // Sound only (1.4.173): buffering rides its own `busy` flag
+      // below; counting it as playing kept the shell's watches and
+      // guards believing a paused-during-Preparing session was
+      // sounding — the same conflation that fed the dictation
+      // autoplay on the card's side.
+      playing: s.playing,
       busy: s.buffering && !s.cushion,
       // The session's error, as a flag (1.4.125): quiet-with-error is a
       // failure asking for the rescue floor; quiet-without is his pause.

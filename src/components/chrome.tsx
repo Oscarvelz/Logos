@@ -157,23 +157,27 @@ export function JumpKey({ dir, size = 24, filled = true, disabled, present }: { 
   const st = useStore(settings)
   const sec = dir === 'back' ? st.jumpBackSec : st.jumpFwdSec
   // The glyph is drawn here, not borrowed (1.4.172, Oscar): the
-  // borrowed rotate icons carried an open chevron head and a
-  // near-full circle that squeezed the number — «no parecen
-  // flechas». His reference, matched exactly: an arc open at the
-  // top (250° of sweep, never a closed ring) and a CLOSED, filled
-  // triangular head, its tip on the arc. The same recipe is drawn
-  // in the bubble panel and the notification shade, so the key
-  // looks the same everywhere it lives.
+  // borrowed rotate icons carried an open chevron head — «no
+  // parecen flechas». The geometry is his reference's own, read off
+  // the image he sent (corrected in 1.4.173 at his verdict, «las
+  // puntas están invertidas»): the arc runs nearly the whole
+  // circle (310°) and ARRIVES at the head — the head is a closed,
+  // filled triangle straddling the arc's END, its tip pointing
+  // along the travel into the small gap at the top, toward the
+  // arc's free tail. In 172 the head straddled the arc's start
+  // with the shaft in front of the tip, and the arrows read
+  // backward. The same recipe is drawn in the bubble panel and
+  // the notification shade, so the key looks the same everywhere.
   return (
     <button className={`icon-btn jump-key ${filled ? 'filled' : ''}`} data-present={present} disabled={disabled} onClick={dir === 'back' ? jumpBack : jumpFwd}
       aria-label={t(dir === 'back' ? 'Jump back {n} seconds' : 'Jump forward {n} seconds', { n: sec })}>
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
         {dir === 'fwd' ? <>
-          <path d="M 14.44 4.89 A 7.9 7.9 0 1 1 4.10 12.68" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
-          <path d="M 17.87 6.00 L 10.57 7.10 L 12.61 0.82 Z" fill="currentColor" />
+          <path d="M 16.53 5.93 A 7.9 7.9 0 1 1 9.96 4.77" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
+          <path d="M 13.44 3.84 L 7.91 8.74 L 6.21 2.36 Z" fill="currentColor" />
         </> : <>
-          <path d="M 9.56 4.89 A 7.9 7.9 0 1 0 19.90 12.68" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
-          <path d="M 6.13 6.00 L 11.39 0.82 L 13.43 7.10 Z" fill="currentColor" />
+          <path d="M 7.47 5.93 A 7.9 7.9 0 1 0 14.04 4.77" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
+          <path d="M 10.57 3.84 L 17.79 2.36 L 16.09 8.74 Z" fill="currentColor" />
         </>}
       </svg>
       <span className="jump-n" style={{ fontSize: Math.max(8, size * 0.4) }} aria-hidden>{sec}</span>

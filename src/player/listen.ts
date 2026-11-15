@@ -629,6 +629,11 @@ export function pauseFromShell() { pauseImpl(true) }
 function pauseImpl(fromShell: boolean) {
   const s = listen.get()
   if (!s.playing) {
+    // A pause spoken while a start is still preparing cancels the
+    // start's claim too (1.4.173): buffering is a promise, not
+    // sound — left standing, it kept the shell's session awake and
+    // claiming PLAYING after a pause Oscar had honestly taken.
+    if (s.buffering) listen.set({ buffering: false })
     // A session handed to the shell's voice is paused on the page but
     // still reading in the shell. A stop spoken on the page's side —
     // the sleep timer's word above all — is a stop for the whole
@@ -636,7 +641,7 @@ function pauseImpl(fromShell: boolean) {
     if (!fromShell && s.mode === 'device') stopShellVoice()
     return
   }
-  listen.set({ playing: false })
+  listen.set({ playing: false, buffering: false })
   if (s.mode === 'device') { token++; cancelDevice(); if (!fromShell) stopShellVoice() } else quietPause()
   updateMediaSession()
 }
@@ -960,6 +965,14 @@ function updatePosition() {
 
 export function installMediaSession() {
   if (!('mediaSession' in navigator)) return
+  // Inside the Android app the shell's own session is the media
+  // face, and it sleeps while no sound flows (1.4.154/1.4.173). The
+  // WebView's session would be a second door standing open beside
+  // it — a stray PLAY of the dictation kind resuming a paused
+  // reading with no hand near a Logos key. The handlers live for
+  // the browser, where no shell session exists; in the app they are
+  // never installed.
+  if ((window as unknown as { LogosAndroid?: unknown }).LogosAndroid) return
   const ms = navigator.mediaSession
   const set = (a: MediaSessionAction, h: MediaSessionActionHandler) => { try { ms.setActionHandler(a, h) } catch { /* unsupported */ } }
   set('play', () => resume())
@@ -994,7 +1007,11 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
     let started = false
     listen.subscribe(() => {
       const s = listen.get()
-      const on = s.active && (s.playing || s.buffering)
+      // Sound only (1.4.173): a buffering session is not playing,
+      // and the shell's media session wakes for sound, never for a
+      // promise — a pause taken during Preparing used to leave the
+      // session awake and targetable (the dictation autoplay).
+      const on = s.active && s.playing
       // The notification appears with the first play, not when text is merely loaded.
       if (on) started = true
       if (!started) return

@@ -162,11 +162,15 @@ class PlaybackService : Service() {
             strokeWidth = 7f; strokeCap = Paint.Cap.ROUND
         }
         val cx = size / 2f; val cy = size / 2f; val r = 30f
-        // The corrected glyph (1.4.172, Oscar): arc open at the top
-        // (250° of sweep), head a CLOSED filled triangle — the same
-        // recipe as the panel's jump keys and the player's.
-        val a0 = Math.toRadians(if (dir > 0) -72.0 else 252.0)
-        cv.drawArc(RectF(cx - r, cy - r, cx + r, cy + r), if (dir > 0) -72f else 252f, if (dir > 0) 250f else -250f, false, p)
+        // The glyph as Oscar's reference draws it (1.4.173): the
+        // arc sweeps 310° and arrives INTO the head, which straddles
+        // the arc's END — tip along the travel, into the gap at the
+        // top. (172 put the head at the arc's start; Oscar's verdict:
+        // «las puntas están invertidas».) Same recipe as the panel's.
+        val startA = if (dir > 0) -55f else 235f
+        val sweepA = if (dir > 0) 310f else -310f
+        cv.drawArc(RectF(cx - r, cy - r, cx + r, cy + r), startA, sweepA, false, p)
+        val a0 = Math.toRadians((startA + sweepA).toDouble())
         val hx = (cx + r * Math.cos(a0)).toFloat(); val hy = (cy + r * Math.sin(a0)).toFloat()
         val tang = a0 + if (dir > 0) Math.PI / 2 else -Math.PI / 2
         // The head straddles the arc's end: tip leading along the
@@ -258,16 +262,24 @@ class PlaybackService : Service() {
         // road, which reaches the callback awake or asleep, and the
         // shade's buttons are this service's own intents.
         //
-        // The one exception is Oscar's own word (1.4.160): a FINISHED
-        // reading parks awake. He asked to restart a finished audio
-        // from his headphone button, and a sleeping session is a door
-        // that button cannot open — so the parked session stays the
-        // router's target, and its play replays the reading from the
-        // first sentence (the page has always restarted a finished
-        // session at 0). The trade is his to close: dismiss the
-        // finished card and the door shuts with it. A mid-book pause
-        // still sleeps — that protection stands untouched.
-        s.isActive = playing || finished
+        // The 1.4.160 exception is CLOSED (1.4.173, Oscar's dictation
+        // verdict): a finished reading used to park AWAKE so his
+        // headphone button could replay it — but a parked session
+        // holds the media-button router, and the stray PLAY a
+        // dictation stop shakes loose landed on it and restarted the
+        // reading from the first sentence, uninvited. Once, exactly:
+        // his corrective pause was a mid-reading pause, which sleeps,
+        // so the next dictation found no door — «perhaps it does it
+        // only one time» was the park's signature. The card and the
+        // session are separate things again: the CARD stands (it is
+        // this service's own notification, and its buttons travel the
+        // service road, which reaches the callback awake or asleep —
+        // a tap on the finished card still replays from 0), while the
+        // SESSION sleeps whenever no sound is flowing, finished or
+        // paused alike. The headphone button's replay of a finished
+        // reading is the price, and it is named here so nobody reopens
+        // the exception without knowing what it cost last time.
+        s.isActive = playing
         val open = PendingIntent.getActivity(this, 9, Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CH)
             .setSmallIcon(R.drawable.ic_note)

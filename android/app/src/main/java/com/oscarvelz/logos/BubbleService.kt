@@ -1480,22 +1480,28 @@ class BubbleService : Service() {
                     }
                     val cx = width / 2f; val cy = height / 2f; val r = dp(10).toFloat()
                     val sec = prefs(this@BubbleService).getInt(if (dir < 0) "jump_b" else "jump_f", if (dir < 0) 15 else 30)
-                    // The corrected glyph (1.4.172, Oscar, with his
-                    // reference in hand): the arc opens at the top —
-                    // 250° of sweep, never the near-full ring that
-                    // squeezed the number — and the head is a CLOSED
-                    // filled triangle straddling the arc's end. The
-                    // old head was two stroked lines, an open chevron:
-                    // «no parecen flechas». Same recipe in the player
-                    // and the shade.
-                    val a0 = Math.toRadians(if (dir > 0) -72.0 else 252.0)
-                    cv.drawArc(android.graphics.RectF(cx - r, cy - r, cx + r, cy + r), if (dir > 0) -72f else 252f, if (dir > 0) 250f else -250f, false, p)
+                    // The glyph as Oscar's reference draws it
+                    // (1.4.173, correcting 172 at his verdict — «las
+                    // puntas están invertidas»): the arc runs nearly
+                    // the whole circle and ARRIVES at the head — the
+                    // head straddles the arc's END, its tip pointing
+                    // along the travel into the small gap at the top,
+                    // toward the arc's free tail. In 172 the head
+                    // straddled the arc's START with the shaft in
+                    // front of the tip, and the arrows read backward.
+                    // Forward: the arc starts at the upper right
+                    // (-55°) and sweeps 310° clockwise into a head
+                    // just left of the top; backward mirrors it.
+                    val startA = if (dir > 0) -55f else 235f
+                    val sweepA = if (dir > 0) 310f else -310f
+                    cv.drawArc(android.graphics.RectF(cx - r, cy - r, cx + r, cy + r), startA, sweepA, false, p)
+                    val a0 = Math.toRadians((startA + sweepA).toDouble())
                     val hx = (cx + r * Math.cos(a0)).toFloat(); val hy = (cy + r * Math.sin(a0)).toFloat()
                     val tang = a0 + if (dir > 0) Math.PI / 2 else -Math.PI / 2
-                    // The head straddles the arc's end, as in Oscar's
-                    // reference: the tip leads past it along the
-                    // tangent, the base trails behind it, and the arc
-                    // flows into the triangle — one closed shape.
+                    // The head straddles the arc's end: the tip
+                    // leads past it along the tangent, the base
+                    // trails behind it, and the arc flows into the
+                    // triangle — one closed shape.
                     val txv = Math.cos(tang).toFloat(); val tyv = Math.sin(tang).toFloat()
                     val dens = resources.displayMetrics.density
                     val tipX = hx + txv * 4.6f * dens; val tipY = hy + tyv * 4.6f * dens
