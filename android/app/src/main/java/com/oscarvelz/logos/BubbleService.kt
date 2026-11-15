@@ -343,6 +343,8 @@ class BubbleService : Service() {
     private var saveHint: View? = null
     private var saveHintScrim: View? = null
     private var saveHintRun: Runnable? = null
+    private var nameTag: View? = null
+    private var nameTagRun: Runnable? = null
     private var lockBtn: TextView? = null
     private var spectrum: SpectrumView? = null
     private var seekHeld = false
@@ -1620,7 +1622,7 @@ class BubbleService : Service() {
         clipRow.addView(leverS)
         val spacer2 = View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) }
         clipRow.addView(spacer2)
-        fun footBtn(desc: String, glyph: (cv: android.graphics.Canvas, ink: Int, cx: Float, cy: Float, r: Float) -> Unit, act: () -> Unit): View {
+        fun footBtn(desc: String, name: String, glyph: (cv: android.graphics.Canvas, ink: Int, cx: Float, cy: Float, r: Float) -> Unit, act: () -> Unit): View {
             val v = object : View(this) {
                 override fun onDraw(cv: android.graphics.Canvas) {
                     super.onDraw(cv)
@@ -1638,14 +1640,34 @@ class BubbleService : Service() {
                 addState(intArrayOf(), disc(c["disc"]!!, c["discLine"]!!))
             }
             v.contentDescription = desc
+            // Kept under the finger, the disc names itself (Oscar):
+            // after a short hold a small pill floats above it with
+            // its name, and that release does NOT run the deed — a
+            // plain tap still does, exactly as before.
+            var longed = false
+            var lpRun: Runnable? = null
             v.setOnTouchListener { view, e ->
                 when (e.action) {
-                    MotionEvent.ACTION_DOWN -> view.animate().scaleX(0.9f).scaleY(0.9f).setDuration(90).start()
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.animate().scaleX(1f).scaleY(1f).setDuration(150).setInterpolator(DecelerateInterpolator()).start()
+                    MotionEvent.ACTION_DOWN -> {
+                        view.animate().scaleX(0.9f).scaleY(0.9f).setDuration(90).start()
+                        longed = false
+                        val r = Runnable {
+                            longed = true
+                            view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                            showNameTag(view, name)
+                        }
+                        lpRun = r
+                        handler.postDelayed(r, 480)
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        view.animate().scaleX(1f).scaleY(1f).setDuration(150).setInterpolator(DecelerateInterpolator()).start()
+                        lpRun?.let { handler.removeCallbacks(it) }; lpRun = null
+                        if (longed) hideNameTag()
+                    }
                 }
                 false
             }
-            v.setOnClickListener { act() }
+            v.setOnClickListener { if (!longed) act() else longed = false }
             return v
         }
         fun inkPaint(ink: Int) = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -1661,7 +1683,7 @@ class BubbleService : Service() {
         // ask is news by definition (deliver() has always bypassed
         // lock and hash for manual reads), so this disc runs the old
         // guaranteed-floor read: panel, blink, then Logos itself.
-        val pasteB = footBtn(s("Paste now", "Pegar ahora"), { cv, ink, cx, cy, r ->
+        val pasteB = footBtn(s("Paste now", "Pegar ahora"), s("Paste", "Pegar"), { cv, ink, cx, cy, r ->
             val p = inkPaint(ink)
             // The wheel, not reinvented (Oscar, 2026-11-14, with the
             // glyph in hand): the standard paste symbol — two pages,
@@ -1684,7 +1706,7 @@ class BubbleService : Service() {
         }) { readClip(true) }
         pasteB.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(12) }
         clipRow.addView(pasteB)
-        val listenB = footBtn(s("Go to the listening area", "Ir a la zona de escucha"), { cv, ink, cx, cy, r ->
+        val listenB = footBtn(s("Go to the listening area", "Ir a la zona de escucha"), s("Listen", "Escuchar"), { cv, ink, cx, cy, r ->
             val p = inkPaint(ink)
             // The band: a half-arc over the top.
             cv.drawArc(android.graphics.RectF(cx - r, cy - r * 0.92f, cx + r, cy + r * 0.92f), 180f, 180f, false, p)
@@ -1703,7 +1725,7 @@ class BubbleService : Service() {
         }
         listenB.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(8) }
         clipRow.addView(listenB)
-        val eyeB = footBtn(s("Hide bubble", "Ocultar burbuja"), { cv, ink, cx, cy, r ->
+        val eyeB = footBtn(s("Hide bubble", "Ocultar burbuja"), s("Hide", "Ocultar"), { cv, ink, cx, cy, r ->
             val p = inkPaint(ink)
             val eye = android.graphics.Path()
             eye.moveTo(cx - r, cy)
@@ -1875,6 +1897,57 @@ class BubbleService : Service() {
         panel?.let { v -> runCatching { wm?.updateViewLayout(v, p) } }
     }
 
+    /** A footer disc kept under the finger names itself (Oscar): a
+     *  small pill floats above the disc with its name — Paste,
+     *  Listen, Hide — while a plain tap keeps doing the deed. The
+     *  pill wears the panel's own family (pal()), flat-faced with
+     *  the calibrated edge — hairline, a whisper of top light, a
+     *  short shadow. It takes no touches and dies with the finger. */
+    private fun showNameTag(anchor: View, name: String) {
+        hideNameTag()
+        val w = wm ?: return
+        val c = pal()
+        val tag = TextView(this).apply {
+            text = name
+            setTextColor(c["ink"]!!); textSize = 12.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+            background = GradientDrawable().apply {
+                setColor(mixCol(c["bg1"]!!, c["bg2"]!!, 0.3f))
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), mixCol(c["gold"]!!, c["bg2"]!!, 0.45f))
+            }
+            elevation = dp(8).toFloat()
+            alpha = 0f
+        }
+        val loc = IntArray(2); anchor.getLocationOnScreen(loc)
+        val p = WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, PixelFormat.TRANSLUCENT).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = loc[0]; y = (loc[1] - dp(44)).coerceAtLeast(dp(4))
+        }
+        runCatching { w.addView(tag, p) }.onFailure { return }
+        nameTag = tag
+        // Centre the pill over the disc once it has been measured.
+        tag.post {
+            if (nameTag === tag) {
+                p.x = (loc[0] + anchor.width / 2 - tag.width / 2).coerceAtLeast(dp(4))
+                runCatching { w.updateViewLayout(tag, p) }
+            }
+        }
+        tag.animate().alpha(1f).setDuration(140).start()
+        val r = Runnable { hideNameTag() }
+        nameTagRun = r
+        handler.postDelayed(r, 2200)
+    }
+
+    private fun hideNameTag() {
+        nameTagRun?.let { handler.removeCallbacks(it) }; nameTagRun = null
+        val v = nameTag; nameTag = null
+        if (v != null) runCatching { wm?.removeView(v) }
+    }
+
     /** The panel's buttons explain themselves first (Oscar): a small floating
      *  card naming what the button does, the deed one clear tap away. */
     private fun showHintCard(title: String, body: String, confirmLabel: String, cancelLabel: String, action: () -> Unit) {
@@ -1897,31 +1970,34 @@ class BubbleService : Service() {
         }
         saveHintScrim = scrim
         scrim.animate().alpha(1f).setDuration(220).start()
-        // The card itself becomes a small stage, like the panel's: a rim
-        // that is lit rather than drawn — bright gold at the top-left,
-        // dying into the edge below — around the settled face, and the
-        // panel's own gold glow breathing from its top. cardPal() always
-        // carried a "glow" colour for this card; it was never wired in.
-        val rim = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(mixCol(c["gold"]!!, c["ink"]!!, 0.35f), c["gold"]!!, mixCol(c["gold"]!!, c["bg2"]!!, 0.60f))).apply {
+        // The card under the Calibration Law (Oscar's Vela recipe,
+        // 2.2.15, applied here at his word): separation is a band,
+        // not a direction — the face is ONE family tone, flat; the
+        // edge is a 1px stack (a hairline rim whose light lives only
+        // at the top and dies down the sides, a whisper of top light
+        // that dies inside the top band, a short shadow). What this
+        // replaces: a diagonal rim blazing from the top-left corner
+        // and a radial gold glow breathing over the top 96 dp — the
+        // white wash across the card's top half that he diagnosed
+        // in Vela («es la parte alta que tiene mucho blanco, el
+        // difuminado») wearing this house's gold.
+        val rim = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(mixCol(c["gold"]!!, c["ink"]!!, 0.18f), mixCol(c["gold"]!!, c["bg2"]!!, 0.50f), mixCol(c["gold"]!!, c["bg2"]!!, 0.68f))).apply {
             cornerRadius = dp(21).toFloat()
         }
-        val face = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c["bg1"]!!, mixCol(c["bg1"]!!, c["bg2"]!!, 0.5f), c["bg2"]!!)).apply {
+        val face = GradientDrawable().apply {
+            setColor(mixCol(c["bg1"]!!, c["bg2"]!!, 0.3f))
             cornerRadius = dp(20).toFloat()
         }
         val stage = FrameLayout(this).apply {
             background = android.graphics.drawable.LayerDrawable(arrayOf(rim, face)).apply { setLayerInset(1, dp(1), dp(1), dp(1), dp(1)) }
-            elevation = dp(24).toFloat()
+            elevation = dp(10).toFloat()
         }
-        val glowV = View(this).apply {
-            background = GradientDrawable().apply {
-                gradientType = GradientDrawable.RADIAL_GRADIENT
-                gradientRadius = dp(170).toFloat()
-                colors = intArrayOf(c["glow"]!!, Color.TRANSPARENT)
-            }
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(96), Gravity.TOP)
-            alpha = 0f
+        val gold = c["gold"]!!
+        val sheenV = View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.argb(26, Color.red(gold), Color.green(gold), Color.blue(gold)), Color.TRANSPARENT))
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(30), Gravity.TOP)
         }
-        stage.addView(glowV)
+        stage.addView(sheenV)
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(16), dp(18), dp(14))
@@ -1958,12 +2034,11 @@ class BubbleService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT).apply { gravity = Gravity.CENTER }
         runCatching { w.addView(stage, p) }
         saveHint = stage
-        // The arrival, in two beats: the object settles (a grow and a
-        // fade on the house's decelerate), and the light arrives a
-        // breath after it — as if a lamp were switched on above it.
+        // The arrival is one beat now: the object settles (a grow and
+        // a fade on the house's decelerate). The lamp beat that used
+        // to follow it died with the wash it lit.
         stage.scaleX = 0.90f; stage.scaleY = 0.90f; stage.alpha = 0f
         stage.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(230).setInterpolator(DecelerateInterpolator()).start()
-        handler.postDelayed({ if (saveHint === stage) glowV.animate().alpha(1f).setDuration(240).start() }, 60)
         val r = Runnable { dismissSaveHint() }
         saveHintRun = r
         handler.postDelayed(r, 9000)
@@ -2052,6 +2127,7 @@ class BubbleService : Service() {
 
     private fun collapsePanel(now: Boolean = false) {
         dismissSaveHint()
+        hideNameTag()
         val v = panel
         panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; gripV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null; scrubTarget = -1; scrubMode = 0
         if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
@@ -2310,6 +2386,7 @@ class BubbleService : Service() {
         // The hint card and its veil die with the house, instantly —
         // a dimmed world must never outlive the bubble (1.4.152).
         saveHint?.let { runCatching { wm?.removeView(it) } }; saveHint = null
+        hideNameTag()
         saveHintScrim?.let { runCatching { wm?.removeView(it) } }; saveHintScrim = null
         collapsePanel(now = true)
         bubble?.let { runCatching { wm?.removeView(it) } }
