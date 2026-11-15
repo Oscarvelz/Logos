@@ -58,7 +58,7 @@
  *   (`overallProgress` in catalogue.ts). At an honest zero the counts
  *   give way to a short invitation — the line never nags.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ChevronDown, GraduationCap, Play, RotateCcw } from 'lucide-react'
 import { settings } from '../settings.ts'
 import { useStore } from '../store.ts'
@@ -98,6 +98,11 @@ export interface PresentationsCardProps {
   storage?: PresentationStorage
   /** Open the fold on mount (deep link / return from a module). */
   forceOpen?: boolean
+  /** The lesson search, seated at the head of the opened index
+   *  (1.4.177, Oscar: the search belongs INSIDE Presentations,
+   *  after it opens — never outside it in the Settings page). The
+   *  host owns the search component; the index gives it its seat. */
+  searchSlot?: ReactNode
 }
 
 const CARD_TITLE: BilingualText = { en: 'Presentations', es: 'Presentaciones' }
@@ -232,7 +237,7 @@ function ModuleRow({
   )
 }
 
-export function PresentationsCard({ onLaunch, storage, forceOpen }: PresentationsCardProps) {
+export function PresentationsCard({ onLaunch, storage, forceOpen, searchSlot }: PresentationsCardProps) {
   const st = useStore(settings)
   const lang: PresentationLanguage = st.uiLang === 'es' ? 'es' : 'en'
   const [open, setOpen] = useState(!!forceOpen)
@@ -281,6 +286,7 @@ export function PresentationsCard({ onLaunch, storage, forceOpen }: Presentation
         <div className="set-fold-in">
           {open ? (
             <>
+              {searchSlot}
               <p className="muted small pres-note">{pickText(PRESENTATION_ANNOUNCEMENT, lang)}</p>
               <div className="pres-progress">
                 <div className="pres-progress-head">
