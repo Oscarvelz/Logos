@@ -1480,14 +1480,34 @@ class BubbleService : Service() {
                     }
                     val cx = width / 2f; val cy = height / 2f; val r = dp(10).toFloat()
                     val sec = prefs(this@BubbleService).getInt(if (dir < 0) "jump_b" else "jump_f", if (dir < 0) 15 else 30)
-                    val a0 = Math.toRadians(if (dir > 0) -55.0 else 235.0)
-                    cv.drawArc(android.graphics.RectF(cx - r, cy - r, cx + r, cy + r), if (dir > 0) -55f else 235f, if (dir > 0) 290f else -290f, false, p)
+                    // The corrected glyph (1.4.172, Oscar, with his
+                    // reference in hand): the arc opens at the top —
+                    // 250° of sweep, never the near-full ring that
+                    // squeezed the number — and the head is a CLOSED
+                    // filled triangle straddling the arc's end. The
+                    // old head was two stroked lines, an open chevron:
+                    // «no parecen flechas». Same recipe in the player
+                    // and the shade.
+                    val a0 = Math.toRadians(if (dir > 0) -72.0 else 252.0)
+                    cv.drawArc(android.graphics.RectF(cx - r, cy - r, cx + r, cy + r), if (dir > 0) -72f else 252f, if (dir > 0) 250f else -250f, false, p)
                     val hx = (cx + r * Math.cos(a0)).toFloat(); val hy = (cy + r * Math.sin(a0)).toFloat()
                     val tang = a0 + if (dir > 0) Math.PI / 2 else -Math.PI / 2
-                    for (w in doubleArrayOf(0.65, -0.65)) {
-                        val wa = tang + Math.PI + w
-                        cv.drawLine(hx, hy, (hx + dp(5) * Math.cos(wa)).toFloat(), (hy + dp(5) * Math.sin(wa)).toFloat(), p)
-                    }
+                    // The head straddles the arc's end, as in Oscar's
+                    // reference: the tip leads past it along the
+                    // tangent, the base trails behind it, and the arc
+                    // flows into the triangle — one closed shape.
+                    val txv = Math.cos(tang).toFloat(); val tyv = Math.sin(tang).toFloat()
+                    val tipX = hx + txv * dp(4.6).toFloat(); val tipY = hy + tyv * dp(4.6).toFloat()
+                    val bcx = (hx - txv * dp(3.8).toFloat()); val bcy = (hy - tyv * dp(3.8).toFloat())
+                    val pxv = -tyv; val pyv = txv
+                    val hw = dp(4.2).toFloat()
+                    val head = android.graphics.Path()
+                    head.moveTo(tipX, tipY)
+                    head.lineTo(bcx + pxv * hw, bcy + pyv * hw)
+                    head.lineTo(bcx - pxv * hw, bcy - pyv * hw)
+                    head.close()
+                    val pf = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = ink; style = android.graphics.Paint.Style.FILL }
+                    cv.drawPath(head, pf)
                     p.style = android.graphics.Paint.Style.FILL
                     p.textSize = dp(11).toFloat(); p.textAlign = android.graphics.Paint.Align.CENTER
                     p.typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)

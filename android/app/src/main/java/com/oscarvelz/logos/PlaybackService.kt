@@ -162,14 +162,27 @@ class PlaybackService : Service() {
             strokeWidth = 7f; strokeCap = Paint.Cap.ROUND
         }
         val cx = size / 2f; val cy = size / 2f; val r = 30f
-        val a0 = Math.toRadians(if (dir > 0) -55.0 else 235.0)
-        cv.drawArc(RectF(cx - r, cy - r, cx + r, cy + r), if (dir > 0) -55f else 235f, if (dir > 0) 290f else -290f, false, p)
+        // The corrected glyph (1.4.172, Oscar): arc open at the top
+        // (250° of sweep), head a CLOSED filled triangle — the same
+        // recipe as the panel's jump keys and the player's.
+        val a0 = Math.toRadians(if (dir > 0) -72.0 else 252.0)
+        cv.drawArc(RectF(cx - r, cy - r, cx + r, cy + r), if (dir > 0) -72f else 252f, if (dir > 0) 250f else -250f, false, p)
         val hx = (cx + r * Math.cos(a0)).toFloat(); val hy = (cy + r * Math.sin(a0)).toFloat()
         val tang = a0 + if (dir > 0) Math.PI / 2 else -Math.PI / 2
-        for (w in doubleArrayOf(0.65, -0.65)) {
-            val wa = tang + Math.PI + w
-            cv.drawLine(hx, hy, (hx + 15 * Math.cos(wa)).toFloat(), (hy + 15 * Math.sin(wa)).toFloat(), p)
-        }
+        // The head straddles the arc's end: tip leading along the
+        // tangent, base trailing — one closed filled triangle.
+        val txv = Math.cos(tang).toFloat(); val tyv = Math.sin(tang).toFloat()
+        val tipX = hx + txv * 14f; val tipY = hy + tyv * 14f
+        val bcx = (hx - txv * 11f); val bcy = (hy - tyv * 11f)
+        val pxv = -tyv; val pyv = txv
+        val hw = 13f
+        val head = android.graphics.Path()
+        head.moveTo(tipX, tipY)
+        head.lineTo(bcx + pxv * hw, bcy + pyv * hw)
+        head.lineTo(bcx - pxv * hw, bcy - pyv * hw)
+        head.close()
+        val pf = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; style = Paint.Style.FILL }
+        cv.drawPath(head, pf)
         p.style = Paint.Style.FILL; p.textSize = 30f; p.textAlign = Paint.Align.CENTER
         p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         cv.drawText(sec.toString(), cx, cy + 11f, p)
@@ -215,8 +228,25 @@ class PlaybackService : Service() {
         // speaks seek, shade buttons included; SKIP alone keeps the
         // step, the book-to-book seat. The session still declares
         // both vocabularies, for the card's sake as 154 established.)
+        //
+        // (Amended 1.4.172, Oscar, with his screenshot of the card
+        // wearing track glyphs over a pasted text): the card's
+        // buttons TRANSFORM with what is playing. Between BOOKS the
+        // track seat is the truth, and SKIP stands as above. Over a
+        // TEXT there is no next track to skip to — the side buttons
+        // must be the jumps — so a text session does not declare
+        // SKIP at all: the card's side slots fall to REWIND and
+        // FAST_FORWARD, which ARE the jumps (his configured seconds,
+        // the same commands the shade's numbered buttons send), and
+        // no surface can offer him a track skip that does not exist.
+        // The page's publish carries the distinction: `book` holds a
+        // title only when a book is playing.
+        val cardActions = if (book.isNotBlank())
+            PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
+        else
+            PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
         s.setPlaybackState(PlaybackState.Builder()
-            .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD)
+            .setActions(cardActions)
             .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f).build())
         // The session is awake only while the voice is (1.4.154):
         // while paused-but-active it held the media-button router,

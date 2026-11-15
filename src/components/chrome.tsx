@@ -1,4 +1,4 @@
-import { AudioLines, Library, Mic2, Pause, Play, Settings2, RotateCcw, RotateCw, Sparkles, Star, Check, Download, Loader2, ChevronDown } from 'lucide-react'
+import { AudioLines, Library, Mic2, Pause, Play, Settings2, Sparkles, Star, Check, Download, Loader2, ChevronDown } from 'lucide-react'
 import { navigate, useRoute, type Route } from '../lib/router.ts'
 import { useStore } from '../lib/store.ts'
 import { engine, ensureModel, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
@@ -156,11 +156,26 @@ export function StatusPill({ compact }: { compact?: boolean }) {
 export function JumpKey({ dir, size = 24, filled = true, disabled, present }: { dir: 'back' | 'fwd'; size?: number; filled?: boolean; disabled?: boolean; present?: string }) {
   const st = useStore(settings)
   const sec = dir === 'back' ? st.jumpBackSec : st.jumpFwdSec
-  const Icon = dir === 'back' ? RotateCcw : RotateCw
+  // The glyph is drawn here, not borrowed (1.4.172, Oscar): the
+  // borrowed rotate icons carried an open chevron head and a
+  // near-full circle that squeezed the number — «no parecen
+  // flechas». His reference, matched exactly: an arc open at the
+  // top (250° of sweep, never a closed ring) and a CLOSED, filled
+  // triangular head, its tip on the arc. The same recipe is drawn
+  // in the bubble panel and the notification shade, so the key
+  // looks the same everywhere it lives.
   return (
     <button className={`icon-btn jump-key ${filled ? 'filled' : ''}`} data-present={present} disabled={disabled} onClick={dir === 'back' ? jumpBack : jumpFwd}
       aria-label={t(dir === 'back' ? 'Jump back {n} seconds' : 'Jump forward {n} seconds', { n: sec })}>
-      <Icon size={size} />
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+        {dir === 'fwd' ? <>
+          <path d="M 14.44 4.89 A 7.9 7.9 0 1 1 4.10 12.68" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
+          <path d="M 17.87 6.00 L 10.57 7.10 L 12.61 0.82 Z" fill="currentColor" />
+        </> : <>
+          <path d="M 9.56 4.89 A 7.9 7.9 0 1 0 19.90 12.68" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
+          <path d="M 6.13 6.00 L 11.39 0.82 L 13.43 7.10 Z" fill="currentColor" />
+        </>}
+      </svg>
       <span className="jump-n" style={{ fontSize: Math.max(8, size * 0.4) }} aria-hidden>{sec}</span>
     </button>
   )
