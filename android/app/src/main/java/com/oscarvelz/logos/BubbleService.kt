@@ -1505,7 +1505,13 @@ class BubbleService : Service() {
                     val txv = Math.cos(tang).toFloat(); val tyv = Math.sin(tang).toFloat()
                     val dens = resources.displayMetrics.density
                     val tipX = hx + txv * 4.6f * dens; val tipY = hy + tyv * 4.6f * dens
-                    val bcx = (hx - txv * 3.8f * dens); val bcy = (hy - tyv * 3.8f * dens)
+                    // The base is CENTERED on the arc's end (1.4.174,
+                    // Oscar: «la cabeza está demasiado arriba… el
+                    // círculo no se centra en el centro de la base»):
+                    // the ring's line passes through the middle of
+                    // the base edge, neither trailing inside it nor
+                    // riding above it.
+                    val bcx = hx; val bcy = hy
                     val pxv = -tyv; val pyv = txv
                     val hw = 4.2f * dens
                     val head = android.graphics.Path()
