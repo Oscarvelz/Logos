@@ -1536,9 +1536,12 @@ class BubbleService : Service() {
                     // Oscar, following the arrow's own reduction in
                     // 180): 11 → 10 dp, its baseline lift shrinking
                     // in step so it stays centered in the ring.
-                    p.textSize = 10f * dens; p.textAlign = android.graphics.Paint.Align.CENTER
+                    // (1.4.182, Oscar: «Again, make the numbers
+                    // smaller» — one more step of the same size:
+                    // 10 → 9 dp, the lift in step again.)
+                    p.textSize = 9f * dens; p.textAlign = android.graphics.Paint.Align.CENTER
                     p.typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-                    cv.drawText(sec.toString(), cx, cy + 3.6f * dens, p)
+                    cv.drawText(sec.toString(), cx, cy + 3.2f * dens, p)
                 }
                 override fun drawableStateChanged() { super.drawableStateChanged(); invalidate() }
             }
