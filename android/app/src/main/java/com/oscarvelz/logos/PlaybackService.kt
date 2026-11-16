@@ -155,6 +155,21 @@ class PlaybackService : Service() {
     private fun pi(action: String, rq: Int): PendingIntent =
         PendingIntent.getService(this, rq, Intent(this, PlaybackService::class.java).setAction(action), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
+    private val jumpIconCache = HashMap<Int, Int>()
+
+    /** The card face for a jump (1.4.179): the shipped numbered
+     *  picture for the seconds the prefs name, or the plain arrow
+     *  when the value stands outside the drawn set. Cached —
+     *  getIdentifier is not free and build() runs on every publish. */
+    private fun jumpActionIcon(sec: Int, dir: Int): Int {
+        val key = sec * 2 + (if (dir > 0) 1 else 0)
+        jumpIconCache[key]?.let { return it }
+        val named = resources.getIdentifier(if (dir > 0) "ic_jump_fwd_$sec" else "ic_jump_back_$sec", "drawable", packageName)
+        val id = if (named != 0) named else if (dir > 0) R.drawable.ic_jump_fwd else R.drawable.ic_jump_back
+        jumpIconCache[key] = id
+        return id
+    }
+
     /**
      * The jump key's face for the shade (1.4.163, Oscar): a circular
      * arrow wearing its seconds — the look he brought from a browser
@@ -274,6 +289,18 @@ class PlaybackService : Service() {
         // from, and the shade notification keeps the numbered
         // faces themselves). SKIP's seat is unchanged: books keep
         // it, texts never declare it.
+        //
+        // (Amended 1.4.179, Oscar, over the card still wearing
+        // empty arrows: «the notification player still doesn't
+        // have the numbers there. Fix that.») The number rides
+        // now — as a shipped picture. A set of numbered faces is
+        // drawn for the round values (5–60 by fives, then 75, 90,
+        // 120, 180, 240, 300) and jumpActionIcon picks the one
+        // the live prefs name; outside the set the plain arrow
+        // stands, and the action's name still tells the seconds
+        // truly. A frozen lie was the price he accepted knowingly:
+        // the set is wide, and a value outside it shows no number
+        // rather than a wrong one.
         val cardActions = if (book.isNotBlank())
             PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
         else
@@ -282,8 +309,8 @@ class PlaybackService : Service() {
         val jfSec = getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_f", 30)
         s.setPlaybackState(PlaybackState.Builder()
             .setActions(cardActions)
-            .addCustomAction("jumpback", "Jump back $jbSec seconds", R.drawable.ic_jump_back)
-            .addCustomAction("jumpfwd", "Jump forward $jfSec seconds", R.drawable.ic_jump_fwd)
+            .addCustomAction("jumpback", "Jump back $jbSec seconds", jumpActionIcon(jbSec, -1))
+            .addCustomAction("jumpfwd", "Jump forward $jfSec seconds", jumpActionIcon(jfSec, 1))
             .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f).build())
         // The session is awake only while the voice is (1.4.154):
         // while paused-but-active it held the media-button router,
