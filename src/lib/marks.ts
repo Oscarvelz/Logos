@@ -23,6 +23,15 @@ export type LooseMark = {
 }
 
 const KEY = 'logos.marks.v1'
+// Deliberately NOT given the bubble.ts clipKey cure (F8-1/T2-1): this
+// formula is the persisted identity stored inside every LooseMark
+// (logos.marks.v1) and every SessionResume record. Changing it would
+// orphan all existing marks at once — playLooseMark could never match
+// them again — while the collision harm here is only a false-positive
+// jump inside a same-length, middle-edited near-copy of the same draft,
+// never a swallowed delivery. Revisit only with a dual-accept
+// (new + legacy) check at every reader: here, resume.ts, bubble.ts
+// recoverSession, continue.tsx and ListenPage.tsx.
 export const textKey = (t: string) => `${t.length}:${t.slice(0, 48)}:${t.slice(-48)}`
 
 export function loadMarks(): LooseMark[] {
@@ -31,7 +40,16 @@ export function loadMarks(): LooseMark[] {
 function saveMarks(list: LooseMark[]) {
   try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, 120))) } catch { /* full */ }
 }
-export function addLooseMark(m: LooseMark) { saveMarks([m, ...loadMarks()]) }
+export function addLooseMark(m: LooseMark) {
+  // M-12 cure (loose half): a loose mark's identity is (draft fingerprint,
+  // sentence index) — the same moment marked twice in quick succession
+  // (a double press) is ONE mark, however different the two timestamps
+  // and ids are. Book marks get the same law at the books store's write
+  // chokepoint (dedupeBookmarks in books.ts, identity = chapter + block).
+  const cur = loadMarks()
+  if (cur.some((x) => x.key === m.key && x.idx === m.idx)) return
+  saveMarks([m, ...cur])
+}
 export function removeLooseMark(id: string) { saveMarks(loadMarks().filter((m) => m.id !== id)) }
 export function mergeMarks(incoming: LooseMark[]) {
   const have = new Set(loadMarks().map((m) => m.id))

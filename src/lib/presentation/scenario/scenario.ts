@@ -56,8 +56,14 @@ const DEFAULT_SETTINGS: ScenarioSettings = {
   bubbleText: true,
 }
 
-/** Fingerprint shape shared with the app (lib/marks.ts textKey, lib/bubble.ts
- *  clipKey): length + first 48 + last 48. */
+/** Scenario-LOCAL fingerprint: length + first 48 + last 48. This is NOT
+ *  the app's fingerprint any more — lib/bubble.ts's clipKey was cured to a
+ *  full-text fingerprint (length + two full-string cyrb53 hashes), and this
+ *  local shape deliberately does NOT follow it: every writer and reader of
+ *  these keys lives inside this sealed scenario (stageKey, the resume card,
+ *  bubble.lastClip in the scenario kv), the keys never leave the sandbox
+ *  and are never compared against a real app key, so the local shape only
+ *  has to agree with itself — which it does. Shape unchanged on purpose. */
 const textKey = (t: string) => `${t.length}:${t.slice(0, 48)}:${t.slice(-48)}`
 
 const sentencesOf = (text: string): string[] =>
@@ -74,6 +80,46 @@ export function createScenario(options: ScenarioOptions = {}) {
   const dbs = new ScenarioDbHost()
   const lambdaPort = options.lambdaPort
   const real = options.real
+
+  // ── The λ entry value + the seeded-λ state (the C-1/H-1 cure) ───────────
+  // The entry value of the REAL bubble switch, captured the moment this
+  // scenario is created — i.e. at presentation launch, before any beat can
+  // flip it. teardown() restores exactly this value, so no exit path
+  // (completion, abort, stay-here, required miss, unmount) can leak a
+  // flipped switch. Null when no port is injected (nothing real to
+  // restore) or when the port could not be read at entry.
+  let lambdaEntryOn: boolean | null = null
+  try {
+    lambdaEntryOn = lambdaPort ? lambdaPort.getBubbleOn() : null
+  } catch {
+    lambdaEntryOn = null
+  }
+  // The scenario's OWN λ state after a SEEDED tap: entry seeding replays
+  // earlier beats as silent machinery, and a seeded λ tap is absorbed
+  // here only — it never reaches the LambdaPort, so resuming or jumping
+  // into a lesson cannot flip the user's real switch before (or without)
+  // a presented beat. While this is set it is what lambdaOn() reports:
+  // the fiction stands as if the tap had been lived, the real switch
+  // stands exactly as the user left it.
+  let lambdaSeededOn: boolean | null = null
+  // True while the runner is seeding (seed-mode): ANY setLambda in that
+  // window absorbs internally instead of touching the real switch, even
+  // if it arrives through the ordinary perform path.
+  let lambdaSeeding = false
+
+  /** Restore the real bubble switch to its entry value. Idempotent: a
+   *  switch already standing at the entry value is not re-set, so a
+   *  second restore (port teardown + host safety net) makes no call. */
+  const restoreLambda = (): void => {
+    lambdaSeeding = false
+    if (!lambdaPort || lambdaEntryOn === null) return
+    try {
+      if (lambdaPort.getBubbleOn() !== lambdaEntryOn) lambdaPort.setBubbleOn(lambdaEntryOn)
+    } catch {
+      // A dead port must never break a teardown.
+    }
+    lambdaSeededOn = null
+  }
 
   let session: ScenarioSession | null = null
   let stageKey = ''
@@ -326,10 +372,43 @@ export function createScenario(options: ScenarioOptions = {}) {
      * the stage can show the gold dot.
      */
     setLambda(on: boolean): void {
+      // Seed-mode absorbs: while the runner is seeding, a λ act is
+      // machinery, not a demonstration — it lands on the scenario's own
+      // state only and the real switch is never touched (H-1 cure).
+      if (lambdaSeeding) {
+        lambdaSeededOn = on
+        patchSettings({ bubbleOn: on })
+        return
+      }
+      // A presented tap supersedes any seeded state: the real switch
+      // and the scenario copy move together, as they always have.
+      lambdaSeededOn = null
       if (lambdaPort) lambdaPort.setBubbleOn(on)
       patchSettings({ bubbleOn: on })
     },
+    /**
+     * A SEEDED λ tap (entry seeding only): the flip is absorbed by the
+     * scenario's own internal state — its settings copy and the seeded
+     * override lambdaOn() reports — and NEVER reaches the LambdaPort.
+     * The lesson's fiction is built exactly as if the tap had been
+     * lived; the user's real bubble switch does not move.
+     */
+    setLambdaSeeded(on: boolean): void {
+      lambdaSeededOn = on
+      patchSettings({ bubbleOn: on })
+    },
+    /** Enter / leave seed-mode (the runner brackets seedBefore in this). */
+    beginLambdaSeed(): void {
+      lambdaSeeding = true
+    },
+    endLambdaSeed(): void {
+      lambdaSeeding = false
+    },
     lambdaOn(): boolean {
+      // A seeded λ state is the fiction's truth until a presented tap
+      // supersedes it: report it over the real switch, which seeding
+      // deliberately left standing at its entry value.
+      if (lambdaSeededOn !== null) return lambdaSeededOn
       return lambdaPort ? lambdaPort.getBubbleOn() : getSettings().bubbleOn
     },
   }
@@ -456,6 +535,12 @@ export function createScenario(options: ScenarioOptions = {}) {
    *  ✕ mid-scene and an abort (FENCE-DESIGN §7 clause 7). After teardown the
    *  backends are empty and the databases are dropped, not merely cleared. */
   const teardown = (): void => {
+    // The λ cure's restore: EVERY exit funnels through this teardown
+    // (via the scenario port), so the real bubble switch returns to
+    // its entry value here — completion, abort, stay-here, required
+    // miss and player unmount alike. Restoring is idempotent and
+    // happens before the scenario's own state is discarded.
+    restoreLambda()
     session = null
     stageKey = ''
     resumeCard = null
@@ -488,6 +573,11 @@ export function createScenario(options: ScenarioOptions = {}) {
     allIds,
     fictionCheck,
     teardown,
+    /** The λ entry value captured at creation (null with no port), and
+     *  the restore the host can call as its own safety net on exits
+     *  that bypass the runner's teardown. Idempotent. */
+    lambdaEntryOn: () => lambdaEntryOn,
+    restoreLambda,
     isGone,
     /** Fence introspection: backend occupancy, for "scenario gone" checks. */
     backendInfo: () => ({ kvSize: kv.size, databases: dbs.databaseNames(), tornDown }),

@@ -1,14 +1,19 @@
 // The library's safety net (Oscar's ask, 2026-11-08): one file that carries
 // the irreplaceable things — books with their content and progress, reading
-// bookmarks, Listen marks, the pronunciation dictionary, drafts and settings.
-// Audio clips are NOT in it on purpose: they can always be re-made from the
-// books and texts that are.
-import { books, refreshBooks, getContent, putBook, type BookMeta, type BookContent } from './books.ts'
-import { settings } from './settings.ts'
+// bookmarks, Listen marks, the pronunciation dictionary, drafts, settings,
+// and the Library's clips (H-31 cure, 2026-11-15): listen-later text clips
+// in full, and audio clips with their audio encoded in the file — a text
+// clip's words and an imported file's audio exist ONLY as clips, so the
+// old "they can always be re-made" rationale was false for both and the
+// clips are inside now, as the "whole library in one file" promise says.
+import { books, refreshBooks, getBookCover, getContent, putBook, deleteBook, type BookMeta, type BookContent } from './books.ts'
+import { settings, saveLastText, type Settings } from './settings.ts'
 import { drafts } from './drafts.ts'
-import { pronEntries, savePronEntries, type PronEntry } from './pronounce.ts'
+import { pronEntries, savePronEntries, isValidPronEntry, type PronEntry } from './pronounce.ts'
 import { loadMarks, mergeMarks } from './marks.ts'
 import { downloadBlob } from './audio.ts'
+import { library, refreshLibrary, getClip, restoreClips, restoreClip, deleteClip, type Clip, type ClipMeta } from './library.ts'
+import { VOICE_BY_ID } from './voices.ts'
 
 type BackupFile = {
   app: 'logos'
@@ -19,6 +24,55 @@ type BackupFile = {
   marks: ReturnType<typeof loadMarks>
   drafts: { listen: string }
   books: { meta: BookMeta & { coverB64?: string }; content: unknown }[]
+  /** Library clips; the audio rides as a data-URL in blobB64, the same
+   *  shape book covers already use. Absent in backups made before H-31. */
+  clips?: (ClipMeta & { blobB64?: string })[]
+  /** Ids of books this device once had in a backup and has since
+   *  deleted (M-27 cure, 2026-11-15): an import honours the record and
+   *  never resurrects a book the user deliberately removed. Absent in
+   *  backups made before this cure — those files behave exactly as
+   *  they always did. */
+  deletedBooks?: string[]
+}
+
+// ── The deletion record (M-27 cure, 2026-11-15) ─────────────────
+// Import used to put back EVERY book in the file, so re-importing an
+// older backup resurrected books the user had deliberately deleted
+// after that backup was taken. There is no delete hook in books.ts
+// this module may call, so the record is kept here, from the two
+// moments this module sees the whole shelf: export and import.
+//   · `known` — the book ids present at the last export or import
+//     on this device. An id in `known` that is no longer on the
+//     shelf was here, was backed up, and is gone: deleted since.
+//   · `tombstones` — ids proven deleted on this device, carried
+//     forward across exports and merged with any file's own
+//     `deletedBooks` record, so an old file imported after a newer
+//     export still cannot bring a deleted book back.
+// New exports carry the record in the file; imports honour it when
+// present. A file with no record, on a device with no record, behaves
+// exactly as imports always have — stated plainly: the cure is
+// forward-only, and a book lost by storage eviction rather than by
+// the user's hand reads the same as a deletion to the `known`
+// derivation (a restore on a fresh device or profile, where no
+// record exists, still lands every book in the file).
+const TOMB_KEY = 'logos.backup.tombstones.v1'
+const KNOWN_KEY = 'logos.backup.known.v1'
+function readIdList(key: string): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? '[]') as unknown
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : []
+  } catch { return [] }
+}
+function writeIdList(key: string, ids: string[]) {
+  try { localStorage.setItem(key, JSON.stringify([...new Set(ids)])) } catch { /* storage blocked: the record is a safety net, never a gate */ }
+}
+/** Ids proven deleted on this device: recorded tombstones, plus any
+ *  id the last export/import knew that the shelf no longer holds. */
+function provenDeleted(currentIds: Set<string>): Set<string> {
+  const gone = new Set(readIdList(TOMB_KEY))
+  for (const id of readIdList(KNOWN_KEY)) if (!currentIds.has(id)) gone.add(id)
+  for (const id of currentIds) gone.delete(id)
+  return gone
 }
 
 const blobToB64 = (b: Blob) => new Promise<string>((res, rej) => {
@@ -30,6 +84,13 @@ const blobToB64 = (b: Blob) => new Promise<string>((res, rej) => {
 
 export async function exportBackup(): Promise<number> {
   await refreshBooks()
+  await refreshLibrary()
+  // The deletion record rides in the file (M-27): what this device
+  // has proven deleted since its last backup, minus anything alive.
+  const currentIds = new Set(books.get().list.map((m) => m.id))
+  const deleted = provenDeleted(currentIds)
+  writeIdList(TOMB_KEY, [...deleted])
+  writeIdList(KNOWN_KEY, [...currentIds])
   const out: BackupFile = {
     app: 'logos', version: 1, at: Date.now(),
     settings: { ...settings.get() },
@@ -37,14 +98,31 @@ export async function exportBackup(): Promise<number> {
     marks: loadMarks(),
     drafts: { listen: drafts.get().listen },
     books: [],
+    clips: [],
+    deletedBooks: [...deleted],
   }
   for (const m of books.get().list) {
     const content = await getContent(m.id)
     if (!content) continue
     const meta = { ...m } as BookMeta & { coverB64?: string }
-    if (m.cover) { try { meta.coverB64 = await blobToB64(m.cover) } catch { /* cover is decoration */ } }
+    // The list's metas are cover-free since M-11 — the cover rides
+    // only in the full record, so fetch it for this book alone.
+    const cover = m.cover ?? (await getBookCover(m.id))
+    if (cover) { try { meta.coverB64 = await blobToB64(cover) } catch { /* cover is decoration */ } }
     delete (meta as { cover?: Blob }).cover
     out.books.push({ meta, content })
+  }
+  // The clips (H-31): every Library item rides in the file — text
+  // clips in full (their text is the only copy there is) and audio
+  // clips with their blob encoded, imported audio included (its blob
+  // is the app's only copy of a file the user brought in).
+  for (const m of library.get().clips) {
+    const full = await getClip(m.id)
+    if (!full) continue
+    const { blob, ...meta } = full
+    const entry = { ...meta } as ClipMeta & { blobB64?: string }
+    if (blob) { try { entry.blobB64 = await blobToB64(blob) } catch { continue } }
+    out.clips!.push(entry)
   }
   const blob = new Blob([JSON.stringify(out)], { type: 'application/json' })
   const name = `logos-backup-${new Date().toISOString().slice(0, 10)}.json`
@@ -56,25 +134,349 @@ export async function exportBackup(): Promise<number> {
   return out.books.length
 }
 
-export async function importBackup(file: File): Promise<number> {
-  const data = JSON.parse(await file.text()) as BackupFile
-  if (data.app !== 'logos' || !Array.isArray(data.books)) throw new Error('Not a Logos backup')
-  let n = 0
+/**
+ * The settings a backup file may restore (H-5 cure, 2026-11-15): the
+ * export always carried settings but the import never read them.
+ * A backup file is not trusted blindly — this mirrors load()'s
+ * sanitisation in settings.ts: only known fields land, enum fields
+ * must match their whitelists, numbers must be finite, booleans must
+ * be booleans, favorites must be an array of strings, and
+ * defaultVoice merges over the current voices so a partial block
+ * can never hollow it out. Anything else in the block is ignored.
+ */
+function settingsPatch(raw: unknown): Partial<Settings> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const r = raw as Record<string, unknown>
+  const patch: Partial<Settings> = {}
+  if (r.theme === 'dark' || r.theme === 'light' || r.theme === 'system' || r.theme === 'tron' || r.theme === 'cyberpunk') patch.theme = r.theme
+  if (r.lastLegacy === 'dark' || r.lastLegacy === 'light' || r.lastLegacy === 'system') patch.lastLegacy = r.lastLegacy
+  if (r.uiLang === 'en' || r.uiLang === 'es') patch.uiLang = r.uiLang
+  if (r.langMode === 'en' || r.langMode === 'es' || r.langMode === 'auto') patch.langMode = r.langMode
+  if (r.format === 'mp3' || r.format === 'wav') patch.format = r.format
+  for (const k of ['autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'bubbleText', 'bubbleFade', 'highlight'] as const) {
+    if (typeof r[k] === 'boolean') patch[k] = r[k] as boolean
+  }
+  for (const k of ['listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec'] as const) {
+    if (typeof r[k] === 'number' && Number.isFinite(r[k])) patch[k] = r[k] as number
+  }
+  // Whitelisted like load() (M-28 residue): the sanitiser used to
+  // admit any string here, a value the load path would then repair —
+  // writer and reader disagreed on what a legal bubbleSize is.
+  if (r.bubbleSize === 's' || r.bubbleSize === 'm' || r.bubbleSize === 'l') patch.bubbleSize = r.bubbleSize
+  // Voice ids must EXIST, not just be strings (H-29, same gate as the
+  // settings cleanup): a backup made by a version whose catalogue had
+  // a since-removed voice must not plant that ghost as the live
+  // default/override/favorite until the next launch's cleanup.
+  if (r.voiceOverride === null) patch.voiceOverride = null
+  else if (typeof r.voiceOverride === 'string' && VOICE_BY_ID.has(r.voiceOverride)) patch.voiceOverride = r.voiceOverride
+  if (Array.isArray(r.favorites)) patch.favorites = r.favorites.filter((f): f is string => typeof f === 'string' && VOICE_BY_ID.has(f))
+  if (r.defaultVoice && typeof r.defaultVoice === 'object' && !Array.isArray(r.defaultVoice)) {
+    const dv = r.defaultVoice as Record<string, unknown>
+    const merged = { ...settings.get().defaultVoice }
+    if (typeof dv.en === 'string' && VOICE_BY_ID.has(dv.en)) merged.en = dv.en
+    if (typeof dv.es === 'string' && VOICE_BY_ID.has(dv.es)) merged.es = dv.es
+    patch.defaultVoice = merged
+  }
+  return patch
+}
+
+/** An import failure with its true reason, fit to show the user.
+ *  The Settings page toasts this message as-is; anything that is not
+ *  a BackupImportError keeps the old generic line. */
+export class BackupImportError extends Error {}
+
+/** What an import actually did — every stage reports, none is silent
+ *  (F7 cure, 2026-11-16). The Settings page turns the kept counts
+ *  into the toast, so a merge decision the user did not watch happen
+ *  is still a merge decision they are told about. */
+export type ImportReport = {
+  /** Books the backup put on the shelf: brand-new ones, plus same-id
+   *  books whose backup progress was strictly further along. */
+  books: number
+  /** Same-id books kept exactly as this phone has them, because the
+   *  phone's progress was at least as far along (their bookmarks
+   *  still merged in — the union below never loses one). */
+  keptNewer: number
+  pronAdded: number
+  /** Backup pronunciations that did NOT land because the word already
+   *  has a different reading on this phone — the phone's reading
+   *  wins, and this count is how the refusal stops being silent. */
+  pronKept: number
+  /** 'landed' — the backup's Listen draft is the draft now (the phone
+   *  had none); 'kept' — the phone already had a draft, so its text
+   *  stayed and the backup's did not replace it; 'none' — the file
+   *  carried no draft, or the same one. */
+  draft: 'landed' | 'kept' | 'none'
+  /** Marks carried in by the file (merged by id, as always). */
+  marks: number
+  /** Library clips written: new ones whole, existing ones only when
+   *  the backup supplied a blob the local copy was missing (H-31). */
+  clips: number
+}
+
+// ── Whole-file validation (F6 cure, 2026-11-16) ─────────────────
+// Import used to check two fields and then write book after book:
+// a malformed entry aborted the restore halfway, the books before
+// it stayed restored, everything after it never ran, and the page
+// told the user the file was "not a Logos backup" — for a file that
+// was one, and was now half inside the library. Now the WHOLE file
+// is proven before a single write: version, every book's meta and
+// content shape, every pronunciation, mark, clip, the draft, the
+// settings block, the deletion record. A malformed file fails at
+// the door with the true reason and zero writes. What validation
+// cannot foresee (a storage failure mid-restore) is covered by the
+// staged apply below: every write carries its before-image, and a
+// failure rolls the library back to exactly what it was.
+const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v)
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+function damaged(reason: string): never {
+  throw new BackupImportError(`This backup is damaged — ${reason}. Nothing was restored.`)
+}
+
+type ValidBackup = {
+  books: { meta: BookMeta & { coverB64?: string }; content: BookContent }[]
+  pronounce: PronEntry[]
+  marks: ReturnType<typeof loadMarks>
+  draftListen: string | null
+  clips: (ClipMeta & { blobB64?: string })[]
+  settingsRaw: unknown
+  deletedBooks: string[]
+}
+
+const BOOK_KINDS = ['h1', 'h2', 'h3', 'p', 'q', 'li', 'pre']
+function validateBook(raw: unknown, i: number): ValidBackup['books'][number] {
+  const at = `book ${i + 1}`
+  if (!isObj(raw)) damaged(`${at} is not a book entry`)
+  const meta = raw.meta
+  if (!isObj(meta)) damaged(`${at} has no details`)
+  const label = typeof meta.title === 'string' && meta.title ? ` (“${meta.title}”)` : ''
+  if (typeof meta.id !== 'string' || !meta.id) damaged(`${at}${label} has no id`)
+  if (typeof meta.title !== 'string') damaged(`${at} has no title`)
+  if (typeof meta.format !== 'string' || typeof meta.lang !== 'string') damaged(`${at}${label} is missing its format or language`)
+  if (!isNum(meta.addedAt) || !isNum(meta.progress) || !isNum(meta.words) || !isNum(meta.links) || !isNum(meta.size)) damaged(`${at}${label} has unreadable numbers in its details`)
+  if (!isObj(meta.pos) || !isNum(meta.pos.ch) || !isNum(meta.pos.b)) damaged(`${at}${label} has no reading place`)
+  if (!Array.isArray(meta.chWords) || !meta.chWords.every(isNum)) damaged(`${at}${label} has an unreadable chapter map`)
+  if (!Array.isArray(meta.toc) || !meta.toc.every(isObj)) damaged(`${at}${label} has an unreadable contents list`)
+  if (meta.openedAt !== undefined && !isNum(meta.openedAt)) damaged(`${at}${label} has an unreadable last-opened time`)
+  if (meta.pages !== undefined && !isNum(meta.pages)) damaged(`${at}${label} has an unreadable page count`)
+  for (const k of ['fav', 'done', 'temp'] as const) if (meta[k] !== undefined && typeof meta[k] !== 'boolean') damaged(`${at}${label} has an unreadable ${k} flag`)
+  if (meta.warn !== undefined && typeof meta.warn !== 'string') damaged(`${at}${label} has an unreadable warning`)
+  if (meta.coverB64 !== undefined && typeof meta.coverB64 !== 'string') damaged(`${at}${label} has an unreadable cover`)
+  if (meta.bookmarks !== undefined) {
+    if (!Array.isArray(meta.bookmarks) || !meta.bookmarks.every((m) => isObj(m) && isNum(m.ch) && isNum(m.b) && isNum(m.at) && typeof m.text === 'string')) damaged(`${at}${label} has an unreadable bookmark`)
+  }
+  const content = raw.content
+  if (!isObj(content)) damaged(`${at}${label} is missing its text`)
+  if (content.id !== meta.id) damaged(`${at}${label} — its text belongs to a different book`)
+  if (!Array.isArray(content.chapters) || !content.chapters.length) damaged(`${at}${label} has no chapters`)
+  for (const ch of content.chapters) {
+    if (!isObj(ch) || typeof ch.title !== 'string' || !Array.isArray(ch.blocks)) damaged(`${at}${label} has a chapter with no text`)
+    for (const b of ch.blocks as unknown[]) {
+      if (!isObj(b) || typeof b.k !== 'string' || !BOOK_KINDS.includes(b.k) || typeof b.t !== 'string') damaged(`${at}${label} has a passage that is not text`)
+    }
+  }
+  return { meta: meta as BookMeta & { coverB64?: string }, content: content as unknown as BookContent }
+}
+
+function validateBackup(data: unknown): ValidBackup {
+  if (!isObj(data) || data.app !== 'logos') throw new BackupImportError('That file is not a Logos backup.')
+  if (isNum(data.version) && data.version > 1) {
+    throw new BackupImportError(`This backup was made by a newer Logos (backup version ${data.version}) — update Logos, then import it again.`)
+  }
+  if (data.version !== 1) damaged('its version marker is missing or unreadable')
+  if (!Array.isArray(data.books)) damaged('its book list is missing')
+  const books = data.books.map((b, i) => validateBook(b, i))
+  let pronounce: PronEntry[] = []
+  if (data.pronounce !== undefined) {
+    if (!Array.isArray(data.pronounce)) damaged('its pronunciation list is unreadable')
+    data.pronounce.forEach((e, i) => { if (!isValidPronEntry(e)) damaged(`pronunciation entry ${i + 1} is incomplete — it needs both the word and how to say it`) })
+    pronounce = data.pronounce as PronEntry[]
+  }
+  let marks: ValidBackup['marks'] = []
+  if (data.marks !== undefined) {
+    if (!Array.isArray(data.marks)) damaged('its marks list is unreadable')
+    data.marks.forEach((m, i) => {
+      if (!isObj(m) || typeof m.id !== 'string' || !m.id || !isNum(m.at) || !isNum(m.idx) || typeof m.title !== 'string' || typeof m.sentence !== 'string' || typeof m.key !== 'string') damaged(`mark ${i + 1} is incomplete`)
+    })
+    marks = data.marks as ValidBackup['marks']
+  }
+  let draftListen: string | null = null
+  if (data.drafts !== undefined) {
+    if (!isObj(data.drafts)) damaged('its draft is unreadable')
+    if (data.drafts.listen !== undefined && typeof data.drafts.listen !== 'string') damaged('its draft is not text')
+    if (typeof data.drafts.listen === 'string' && data.drafts.listen.trim()) draftListen = data.drafts.listen
+  }
+  let clips: ValidBackup['clips'] = []
+  if (data.clips !== undefined) {
+    if (!Array.isArray(data.clips)) damaged('its Library list is unreadable')
+    data.clips.forEach((c, i) => {
+      if (!isObj(c) || typeof c.id !== 'string' || !c.id || typeof c.title !== 'string' || !isNum(c.createdAt)) damaged(`Library item ${i + 1} is incomplete`)
+    })
+    clips = data.clips as ValidBackup['clips']
+  }
+  if (data.settings !== undefined && !isObj(data.settings)) damaged('its settings block is unreadable')
+  let deletedBooks: string[] = []
+  if (data.deletedBooks !== undefined) {
+    if (!Array.isArray(data.deletedBooks) || !data.deletedBooks.every((x) => typeof x === 'string')) damaged('its deletion record is unreadable')
+    deletedBooks = data.deletedBooks as string[]
+  }
+  return { books, pronounce, marks, draftListen, clips, settingsRaw: data.settings, deletedBooks }
+}
+
+/** The merge for a book that lives on both shelves (F7 cure).
+ *  THE MERGE RULE, stated once for the whole import: the backup
+ *  fills what this phone is missing and never silently rewinds
+ *  what this phone has. Progress is the one place "newer" can be
+ *  known for a book, so the further-along record supplies the
+ *  reading place, the progress and the text; a tie keeps the
+ *  phone's. Bookmarks are always the union of both lists (by
+ *  place, the later mark winning a tie of place), and a book
+ *  finished or starred on either side stays finished/starred —
+ *  the same lossless instinct marks.ts already merged by. */
+function mergeBookMeta(local: BookMeta, incoming: BookMeta): { meta: BookMeta; winner: 'local' | 'backup' } {
+  const winner = incoming.progress > local.progress ? 'backup' : 'local'
+  const meta: BookMeta = { ...(winner === 'backup' ? incoming : local) }
+  const byPlace = new Map<string, NonNullable<BookMeta['bookmarks']>[number]>()
+  for (const m of [...(local.bookmarks ?? []), ...(incoming.bookmarks ?? [])]) {
+    const k = `${m.ch}:${m.b}`
+    const prev = byPlace.get(k)
+    if (!prev || m.at >= prev.at) byPlace.set(k, m)
+  }
+  const bookmarks = [...byPlace.values()].sort((a, b) => a.at - b.at)
+  if (bookmarks.length) meta.bookmarks = bookmarks
+  else delete meta.bookmarks
+  if (local.done || incoming.done) meta.done = true
+  if (local.fav || incoming.fav) meta.fav = true
+  return { meta, winner }
+}
+
+export async function importBackup(file: File): Promise<ImportReport> {
+  let parsed: unknown
+  try { parsed = JSON.parse(await file.text()) } catch { throw new BackupImportError('That file is not a Logos backup — Logos could not read it.') }
+  // The whole file is proven HERE, before a single write (F6).
+  const data = validateBackup(parsed)
+  // The deletion record (M-27): this device's proven deletions, plus
+  // any the file itself carries. A book on that record that is NOT
+  // on the shelf now was deliberately deleted after its backup was
+  // taken — the import leaves it deleted. A book already on the
+  // shelf is alive, not deleted, and merges by the rule above.
+  await refreshBooks()
+  const shelf = new Map(books.get().list.map((m) => [m.id, m]))
+  const shelfIds = new Set(shelf.keys())
+  const gone = provenDeleted(shelfIds)
+  for (const id of data.deletedBooks) if (!shelfIds.has(id)) gone.add(id)
+
+  // ── Prepare: every fallible read and decode happens here, while
+  // nothing has been written yet. Each planned write carries the
+  // before-image the rollback would need.
+  type BookWrite = { meta: BookMeta; content: BookContent | null; before: { meta: BookMeta; content: BookContent | null } | null }
+  const bookWrites: BookWrite[] = []
+  let restored = 0
+  let keptNewer = 0
   for (const b of data.books) {
+    if (gone.has(b.meta.id)) continue
     const meta = { ...b.meta } as BookMeta & { coverB64?: string }
     if (meta.coverB64) {
-      try { meta.cover = await (await fetch(meta.coverB64)).blob() } catch { /* no cover */ }
+      try { meta.cover = await (await fetch(meta.coverB64)).blob() } catch { /* cover is decoration */ }
       delete meta.coverB64
     }
-    await putBook(meta as BookMeta, b.content as BookContent)
-    n++
+    const clean = meta as BookMeta
+    const local = shelf.get(b.meta.id)
+    if (!local) { bookWrites.push({ meta: clean, content: b.content, before: null }); restored++; continue }
+    const localContent = await getContent(local.id)
+    const { meta: merged, winner } = mergeBookMeta(local, clean)
+    if (winner === 'backup') {
+      bookWrites.push({ meta: merged, content: b.content, before: { meta: local, content: localContent } })
+      restored++
+    } else {
+      keptNewer++
+      // The phone's record stands. A write is owed only when the
+      // bookmark union (or a done/fav the phone lacked) changed the
+      // meta, or the phone's own text is missing and the backup's
+      // rescues it — the progress itself is never rewritten.
+      const grew = (merged.bookmarks?.length ?? 0) > (local.bookmarks?.length ?? 0) || merged.done !== local.done || merged.fav !== local.fav
+      if (grew || !localContent) bookWrites.push({ meta: merged, content: localContent ?? b.content, before: { meta: local, content: localContent } })
+    }
   }
-  if (data.pronounce?.length) {
-    const have = new Set(pronEntries().map((e) => e.from.toLowerCase()))
-    savePronEntries([...pronEntries(), ...data.pronounce.filter((e) => !have.has(e.from.toLowerCase()))])
+  // Pronunciations (F7): the phone's reading of a word wins over the
+  // backup's older one — but the keep is counted, and a word the
+  // phone does not have lands whole, exactly as the restore promises.
+  const prevPron = pronEntries()
+  const haveTo = new Map(prevPron.map((e) => [e.from.toLowerCase(), e.to]))
+  const pronAdd: PronEntry[] = []
+  let pronKept = 0
+  for (const e of data.pronounce) {
+    const key = e.from.toLowerCase()
+    const existing = haveTo.get(key)
+    if (existing === undefined) { pronAdd.push(e); haveTo.set(key, e.to) }
+    else if (existing !== e.to) pronKept++
   }
-  if (data.marks?.length) mergeMarks(data.marks)
-  if (data.drafts?.listen && !drafts.get().listen.trim()) drafts.set({ listen: data.drafts.listen })
+  // The Listen draft (F7): it lands when the phone has none — and
+  // lands DURABLY this time (saveLastText, the same persistence the
+  // Listen page itself uses; a bare drafts.set used to evaporate at
+  // the next launch). When the phone already holds a draft, its text
+  // stays — and the report says so instead of vetoing in silence.
+  const prevDraft = drafts.get().listen
+  const draftState: ImportReport['draft'] = data.draftListen === null || data.draftListen === prevDraft ? 'none' : prevDraft.trim() ? 'kept' : 'landed'
+  // Clips (H-31): rebuilt as full clip records, blobs decoded back
+  // from their data-URLs. Merging by id never clobbers local state:
+  // a clip that already lives here keeps its local record (title,
+  // progress, done…) exactly as it is — the backup may only fill in
+  // a blob the local copy is missing. New clips land whole.
+  type ClipWrite = { clip: Clip; before: Clip | null }
+  const clipWrites: ClipWrite[] = []
+  for (const raw of data.clips) {
+    const { blobB64, ...meta } = raw
+    let blob: Blob | undefined
+    if (blobB64) { try { blob = await (await fetch(blobB64)).blob() } catch { /* audio lost, text/meta still land */ } }
+    const existing = await getClip(raw.id)
+    if (existing) {
+      if (!existing.blob && blob) clipWrites.push({ clip: { ...existing, blob, size: blob.size }, before: existing })
+      continue
+    }
+    clipWrites.push({ clip: { ...(meta as ClipMeta), ...(blob ? { blob, size: blob.size } : {}) } as Clip, before: null })
+  }
+  // Settings (H-5): sanitised field by field by settingsPatch, and
+  // pushed through settings.set at apply time so the store, its
+  // subscribers and persistence all update together.
+  const patch = settingsPatch(data.settingsRaw)
+  const prevSettings = settings.get()
+
+  // ── Apply: staged, with rollback. If any write fails here, every
+  // write already made is undone from its before-image and the
+  // error says the library was put back — a half-restored library
+  // claiming success is the F6 disease, and it does not recur.
+  const report: ImportReport = { books: restored, keptNewer, pronAdded: pronAdd.length, pronKept, draft: draftState, marks: data.marks.length, clips: clipWrites.length }
+  const doneBooks: BookWrite[] = []
+  const doneClips: ClipWrite[] = []
+  let pronApplied = false
+  let draftApplied = false
+  let settingsApplied = false
+  try {
+    for (const w of bookWrites) { await putBook(w.meta, w.content); doneBooks.push(w) }
+    for (const w of clipWrites) { await restoreClips([w.clip]); doneClips.push(w) }
+    if (pronAdd.length) { savePronEntries([...prevPron, ...pronAdd]); pronApplied = true }
+    if (draftState === 'landed' && data.draftListen !== null) { drafts.set({ listen: data.draftListen }); saveLastText(data.draftListen); draftApplied = true }
+    if (Object.keys(patch).length) { settings.set(patch); settingsApplied = true }
+    // Marks merge last: mergeMarks cannot throw (its reads and
+    // writes are guarded inside marks.ts), so once it runs the
+    // restore is complete.
+    if (data.marks.length) mergeMarks(data.marks)
+  } catch (e) {
+    if (settingsApplied) { try { settings.set({ ...prevSettings }) } catch { /* rollback is best-effort */ } }
+    if (draftApplied) { try { drafts.set({ listen: prevDraft }); saveLastText(prevDraft) } catch { /* best-effort */ } }
+    if (pronApplied) { try { savePronEntries(prevPron) } catch { /* best-effort */ } }
+    for (const w of [...doneClips].reverse()) { try { if (w.before) await restoreClip(w.before); else await deleteClip(w.clip.id) } catch { /* best-effort */ } }
+    for (const w of [...doneBooks].reverse()) { try { if (w.before) await putBook(w.before.meta, w.before.content); else await deleteBook(w.meta.id, { force: true }) } catch { /* best-effort */ } }
+    try { await refreshBooks() } catch { /* best-effort */ }
+    throw new BackupImportError(`The restore stopped partway (${e instanceof Error ? e.message : 'a storage error'}) — your library was put back exactly as it was, and nothing was half-restored.`)
+  }
   await refreshBooks()
-  return n
+  // File the record forward (M-27): tombstones keep every proven
+  // deletion that is still deleted; `known` becomes the shelf as it
+  // now stands, so the next import can tell deleted from new.
+  const nowIds = new Set(books.get().list.map((m) => m.id))
+  writeIdList(TOMB_KEY, [...gone].filter((id) => !nowIds.has(id)))
+  writeIdList(KNOWN_KEY, [...nowIds])
+  return report
 }

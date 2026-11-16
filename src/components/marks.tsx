@@ -1,6 +1,6 @@
 // The marks shelf (Library → Saved): every "keep this moment" in one list —
 // book marks from the books' own lists and loose marks from pasted texts.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Bookmark, Trash2 } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { books, updateBook } from '../lib/books.ts'
@@ -18,6 +18,20 @@ export function MarksSection() {
   const bk = useStore(books)
   const [loose, setLoose] = useState<LooseMark[]>(() => loadMarks())
   const [, setTick] = useState(0)
+  // M-17 cure: loose marks live outside the books store (localStorage),
+  // so this mount-time cache used to be the page's whole truth — a
+  // backup restore (mergeMarks) or a mark made elsewhere changed the
+  // stored list and this section never saw it. The list now re-reads
+  // the store's truth whenever the books store changes (a restore
+  // refreshes it), and whenever the app comes back to the front, so no
+  // stale cache survives a restore.
+  useEffect(() => { setLoose(loadMarks()) }, [bk.list])
+  useEffect(() => {
+    const reread = () => setLoose(loadMarks())
+    window.addEventListener('focus', reread)
+    document.addEventListener('visibilitychange', reread)
+    return () => { window.removeEventListener('focus', reread); document.removeEventListener('visibilitychange', reread) }
+  }, [])
 
   const rows: Row[] = [
     ...bk.list.flatMap((b) => (b.bookmarks ?? []).map((m) => ({ kind: 'book' as const, at: m.at, bookId: b.id, bookTitle: b.title, ch: m.ch, b: m.b, sentence: m.text }))),

@@ -1,31 +1,58 @@
 import { AudioLines, Library, Mic2, Pause, Play, Settings2, Sparkles, Star, Check, Download, Loader2, ChevronDown } from 'lucide-react'
 import { navigate, useRoute, type Route } from '../lib/router.ts'
 import { useStore } from '../lib/store.ts'
-import { engine, ensureModel, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
+import { engine, ensureModel, synthesize, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
 import { listen, toggle, jumpBack, jumpFwd } from '../player/listen.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
-import { useEffect, useState } from 'react'
-import { VOICES, favoriteVoices, type Lang, type Voice } from '../lib/voices.ts'
+import { useEffect, useRef, useState } from 'react'
+import { VOICES, PREVIEW_TEXT, favoriteVoices, pickerActiveVoice, VoiceSearchGate, type Lang, type Voice } from '../lib/voices.ts'
 import { Avatar, FavStar, ProgressRing, Sheet, toast, voiceHue } from './ui.tsx'
 import { bubbleNativeState, bubbleSupported, openBubblePermission, setBubble, type BubbleNativeState } from '../lib/bubble.ts'
-import { formatBytes } from '../lib/audio.ts'
+import { formatBytes, encodeWav, trimSilence, applyGain, levelGain } from '../lib/audio.ts'
+import { speakable } from '../lib/text.ts'
 import { t } from '../lib/i18n.ts'
 import { clipPlayer, playClip, stopClipPlayer } from '../player/clip.ts'
 import { pause as pauseListen } from '../player/listen.ts'
-import previewList from '../lib/previews.json'
 
-const PREVIEWS = new Set<string>(previewList as string[])
+const pickerPreviews = new Map<string, Blob>()
 
-/** Small play button beside a voice's name in the picker: hear it before choosing. */
+/** Small play button beside a voice's name in the picker: hear it before choosing.
+ *  T7-04: like the Voices page, this renders through the real engine
+ *  path (speakable + this voice + the user's listening speed,
+ *  levelled) — never the prerecorded MP3, which played even for a
+ *  voice whose model could not render a single sentence. A voice
+ *  with no preview asset used to get no button at all; now every
+ *  voice is previewable, and a failed render says so. */
 function PreviewBtn({ v, tab }: { v: Voice; tab: number }) {
   const cp = useStore(clipPlayer)
-  if (!PREVIEWS.has(v.id)) return null
+  const [loading, setLoading] = useState(false)
   const key = `preview:${v.id}`
   const on = cp.key === key && cp.playing
   return (
     <button className={`pick-play ${on ? 'on' : ''}`} data-present="voice-picker-row:preview" data-voice-id={v.id} tabIndex={tab} aria-label={on ? t('Stop {name} sample', { name: v.name }) : t('Hear {name}', { name: v.name })}
-      onClick={(e) => { e.stopPropagation(); if (on) { stopClipPlayer(); return } if (listen.get().playing) pauseListen(); void playClip(key, `${import.meta.env.BASE_URL}previews/${v.id}.mp3`, { title: t('{name} — sample', { name: v.name }) }) }}>
-      {on ? <Pause size={11} fill="currentColor" /> : <Play size={11} fill="currentColor" style={{ marginLeft: 1 }} />}
+      onClick={async (e) => {
+        e.stopPropagation()
+        if (on) { stopClipPlayer(); return }
+        if (listen.get().playing) pauseListen()
+        const speed = settings.get().listenSpeed
+        const spoken = speakable(PREVIEW_TEXT[v.lang], v.lang)
+        const cacheKey = `${v.id}|${speed}|${spoken}`
+        let blob = pickerPreviews.get(cacheKey)
+        if (!blob) {
+          setLoading(true)
+          try {
+            const res = await synthesize(spoken, v.id, speed, { priority: 3000 })
+            const trimmed = trimSilence(res.samples, res.sampleRate)
+            blob = encodeWav(applyGain(trimmed, levelGain(trimmed)), res.sampleRate)
+            pickerPreviews.set(cacheKey, blob)
+          } catch (err) {
+            toast(t('Preview failed: {msg}', { msg: (err as Error).message }))
+            return
+          } finally { setLoading(false) }
+        }
+        void playClip(key, blob, { title: t('{name} — preview', { name: v.name }) })
+      }}>
+      {loading ? <Loader2 size={11} className="spin" /> : on ? <Pause size={11} fill="currentColor" /> : <Play size={11} fill="currentColor" style={{ marginLeft: 1 }} />}
     </button>
   )
 }
@@ -217,7 +244,7 @@ export function MiniPlayer() {
 type PickGroup = { key: string; title: string; sub: string; list: Voice[] }
 
 /** Picker sections: Favorites, Pocket, then one per accent. */
-function pickerGroups(favorites: string[], lang?: Lang | 'auto'): PickGroup[] {
+function pickerGroups(favorites: string[], lang?: Lang | 'auto', activeId?: string | null): PickGroup[] {
   const want = (v: Voice) => !lang || lang === 'auto' || v.lang === lang
   const ph = (l: Lang, a: string) => VOICES.filter((v) => v.engine === 'phonon' && v.lang === l && v.accent === a && want(v))
     .sort((x, y) => (x.gender === y.gender ? x.name.localeCompare(y.name) : x.gender === 'Female' ? -1 : 1))
@@ -229,17 +256,41 @@ function pickerGroups(favorites: string[], lang?: Lang | 'auto'): PickGroup[] {
     { key: 'en-US', title: 'English', sub: 'American', list: ph('en', 'US') },
     { key: 'en-UK', title: 'English', sub: 'British', list: ph('en', 'UK') },
   ]
-  return groups.filter((g) => g.list.length > 0)
+  const shown = groups.filter((g) => g.list.length > 0)
+  // T7-12: the active voice can fall out of every group when the
+  // language filter excludes its language (an override kept under a
+  // manual mode) — the picker then showed "nothing chosen" while
+  // that voice was live. It is seated first, in its own group, so
+  // its row and its check always exist.
+  const orphan = pickerActiveVoice(activeId, new Set(shown.flatMap((g) => g.list.map((v) => v.id))))
+  if (orphan) shown.unshift({ key: 'current', title: 'Current voice', sub: 'Now reading', list: [orphan] })
+  return shown
 }
 
 /** Voice picker sheet: collapsible sections, one open at a time. */
 export function VoicePicker({ open, onClose, value, onPick, lang }: { open: boolean; onClose: () => void; value: string | null; onPick: (id: string | null) => void; lang?: Lang | 'auto' }) {
   const st = useStore(settings)
-  const groups = pickerGroups(st.favorites, lang)
+  const groups = pickerGroups(st.favorites, lang, value)
+  const [query, setQuery] = useState('')
+  const [found, setFound] = useState<Voice[] | null>(null)
+  const gate = useRef(new VoiceSearchGate())
+  useEffect(() => {
+    if (!open) { gate.current.cancel(); setFound(null); setQuery(''); return }
+    if (!query.trim()) { setFound(null); return }
+    const g = gate.current
+    g.schedule(query, 150, (r) => setFound(r))
+    return () => g.cancel()
+  }, [open, query])
+  const shownGroups = found ? [{ key: 'search', title: 'Search', sub: '', list: found }] : groups
   // Oscar wants every section folded when the picker opens; "Selected · name" shows where the voice is.
   const initial = (): string | null => null
   const [openKey, setOpenKey] = useState<string | null>(initial)
   useEffect(() => { if (open) setOpenKey(initial()); else stopClipPlayer() }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Search results arrive folded like every section; open theirs, so
+  // what the search found — the active voice included (T7-12: search
+  // runs over the whole catalogue, no language filter) — is visible
+  // without a second tap hunt.
+  useEffect(() => { if (found) setOpenKey('search') }, [found])
   const toggleGroup = (key: string, el: HTMLElement) => {
     const next = openKey === key ? null : key
     setOpenKey(next)
@@ -247,6 +298,8 @@ export function VoicePicker({ open, onClose, value, onPick, lang }: { open: bool
   }
   return (
     <Sheet open={open} onClose={onClose} title={t('Choose a voice')} present="voice-picker">
+      <input data-present="voice-picker-search" value={query} onChange={(ev) => setQuery(ev.target.value)} placeholder={t('Search voices')} aria-label={t('Search voices')}
+        style={{ width: '100%', height: 40, borderRadius: 999, border: '1px solid var(--line)', background: 'var(--surface)', padding: '0 14px', outline: 'none', marginBottom: 10 }} />
       <button className={`pick ${value === null ? 'on' : ''}`} data-present="voice-picker-auto" onClick={() => { onPick(null); onClose() }}>
         <div className="avatar" style={{ background: 'linear-gradient(135deg, var(--accent), var(--violet))', width: 42, height: 42, borderRadius: 13, fontSize: 20 }}>A</div>
         <div className="grow">
@@ -256,7 +309,7 @@ export function VoicePicker({ open, onClose, value, onPick, lang }: { open: bool
         {value === null && <Check size={20} color="var(--accent)" />}
       </button>
       <div className="vgroups">
-        {groups.map((g) => {
+        {shownGroups.map((g) => {
           const isOpen = openKey === g.key
           const chosen = value ? g.list.find((v) => v.id === value) : undefined
           return (
@@ -279,7 +332,7 @@ export function VoicePicker({ open, onClose, value, onPick, lang }: { open: bool
                     <div key={v.id} className={`pick ${value === v.id ? 'on' : ''}`} data-present="voice-picker-row" data-voice-id={v.id} role="button" tabIndex={isOpen ? 0 : -1} onClick={pick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick() } }}>
                       <Avatar voice={v} />
                       <div className="grow">
-                        <div className="voice-name"><span className="vn">{v.name}</span><PreviewBtn v={v} tab={isOpen ? 0 : -1} />{(g.key === 'fav' || g.key === 'pocket') && <span className="badge">{v.accent}</span>}{g.key === 'fav' && v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
+                        <div className="voice-name"><span className="vn">{v.name}</span><PreviewBtn v={v} tab={isOpen ? 0 : -1} />{(g.key === 'fav' || g.key === 'pocket' || g.key === 'search' || g.key === 'current') && <span className="badge">{v.accent}</span>}{(g.key === 'fav' || g.key === 'search' || g.key === 'current') && v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
                         <div className="voice-tag">{t(v.tagline)}</div>
                       </div>
                       {value === v.id && <Check size={20} color="var(--accent)" />}

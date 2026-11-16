@@ -32,7 +32,7 @@ export type AnchorStrategy = 'MINT' | 'CLASS' | 'EXISTING' | 'CONTRACT' | 'STORE
 export type AnchorLocator =
   | { by: 'data-present' }
   | { by: 'class'; selector: string }
-  | { by: 'existing-attr'; attr: string }
+  | { by: 'existing-attr'; attr: string; tag?: string }
   | { by: 'command'; name: string }
   | { by: 'commands'; names: string[] }
   | { by: 'bridge'; name: string }
@@ -89,7 +89,7 @@ function r(
 
 const DP: AnchorLocator = { by: 'data-present' }
 const cls = (selector: string): AnchorLocator => ({ by: 'class', selector })
-const exa = (attr: string): AnchorLocator => ({ by: 'existing-attr', attr })
+const exa = (attr: string, tag?: string): AnchorLocator => (tag ? { by: 'existing-attr', attr, tag } : { by: 'existing-attr', attr })
 const cmd = (name: string): AnchorLocator => ({ by: 'command', name })
 const cmds = (...names: string[]): AnchorLocator => ({ by: 'commands', names })
 const brg = (name: string): AnchorLocator => ({ by: 'bridge', name })
@@ -395,7 +395,13 @@ const G_VOICES: AnchorRecord[] = [
   r('voice-card:{voiceId}:preview', 'web', 'MINT', ['D-12', 'D-13', 'D-14'], ['Q3'], DP, { file: VOICES_P, family: 'voiceId', companion: 'data-voice-id' }),
   r('voice-picker', 'web', 'MINT', ['D-16'], ['Q3', 'AD8'], DP, { file: CH, precondition: PC_PICKER }),
   r('voice-picker-auto', 'web', 'MINT', ['D-17'], ['Q3', 'AD5'], DP, { file: CH, precondition: PC_PICKER }),
-  r('voice-picker-group:{key}', 'web', 'EXISTING', ['D-18', 'D-19'], ['AD5'], exa('data-group'), { file: CH, family: 'key', probe: [pr(CH, 'data-group={')], precondition: PC_PICKER }),
+  // T6-9 cure: the bare [data-group] hook matches TWO real elements — the
+  // group's <section data-group> AND its head <button data-group …:head> —
+  // so the unqualified locator was ambiguous in the real app and resolved
+  // only on the fiction stage, whose picker rendered a single carrier.
+  // The locator is now tag-qualified to the section: the group itself is
+  // the one seat this anchor names (its head keeps its own :head anchor).
+  r('voice-picker-group:{key}', 'web', 'EXISTING', ['D-18', 'D-19'], ['AD5'], exa('data-group', 'section'), { file: CH, family: 'key', probe: [pr(CH, 'data-group={')], precondition: PC_PICKER }),
   r('voice-picker-group:{key}:head', 'web', 'MINT', ['D-20', 'D-21', 'D-22'], ['Q3', 'AD5'], DP, { file: CH, family: 'key', companion: 'data-group', precondition: PC_GROUP }),
   r('voice-picker-row:{voiceId}', 'web', 'MINT', ['D-23', 'D-26'], ['Q3'], DP, { file: CH, family: 'voiceId', companion: 'data-voice-id', precondition: PC_GROUP + '; when the picker is opened for one language, other-language voices are filtered out everywhere — rows for them do not exist in that opening' }),
   r('voice-picker-row:{voiceId}:preview', 'web', 'MINT', ['D-24'], ['Q3'], DP, { file: CH, family: 'voiceId', companion: 'data-voice-id', precondition: PC_GROUP + '; rendered only for voices with a baked preview (all 57 today — see the fence note in registry §6)' }),
@@ -551,7 +557,7 @@ const K_SHELL: AnchorRecord[] = [
   r('desk-fav-voices', 'web', 'MINT', ['F-25'], ['AD13'], DP, { file: DESK, precondition: PC_1100 + '; also hidden when viewport height ≤900px' }),
   r('desk-recent', 'web', 'MINT', ['F-25'], ['AD13'], DP, { file: DESK, precondition: PC_1100 }),
   r('desk-textmap-stats', 'web', 'MINT', ['F-27'], ['AD13'], DP, { file: DESK, precondition: PC_1500 }),
-  r('desk-textmap-paragraphs', 'web', 'MINT', ['F-27'], ['AD13'], DP, { file: DESK, precondition: PC_1500 }),
+  r('desk-textmap-paragraphs', 'web', 'MINT', ['F-27'], ['AD13'], DP, { file: DESK, precondition: 'retired at 1.4.167 — the real card now shows favourite books and carries no mint; no element carries this mint anywhere (the M-36 cure: the record survives so AD13’s beat resolves as a declared miss until the script is refreshed)' }),
 ]
 
 /* ------------------------------------------------------------------ */
@@ -632,6 +638,13 @@ export function anchorsServing(censusItem: string): AnchorRecord[] {
 
 export interface ElementLike {
   getAttribute(name: string): string | null
+  /** Optional visibility signals (real DOM elements carry them all).
+   *  A resolver probe element that carries none is taken at face value:
+   *  visibility can only ever REMOVE a match a signal proves hidden,
+   *  never invent one. */
+  hidden?: boolean
+  checkVisibility?: () => boolean
+  getBoundingClientRect?: () => { width: number; height: number }
 }
 
 export interface RootLike {
@@ -659,10 +672,75 @@ export function dataPresentValue(id: string): string {
   return id.replace(/\{[^}]*\}/g, '').replace(/::/g, ':').replace(/:$/, '')
 }
 
+/**
+ * True when a web anchor lives ONLY on the sealed fiction stage (its
+ * owning file is the stage itself, and its precondition says so): no
+ * element for it can ever exist in the real app, so a real-app landing
+ * (search «Go», a stay-here landing) must treat it as unlandable by
+ * design rather than polling for an element that cannot be there.
+ */
+export function isStageOnlyAnchor(rec: AnchorRecord): boolean {
+  return (rec.file?.includes('fiction stage') ?? false) || (rec.precondition?.includes('sealed fiction stage') ?? false)
+}
+
+/**
+ * The Settings card a record's precondition says to unfold first, or
+ * null. The runtime precondition strings are built by the `unfold()`
+ * helper above and read `unfold <header-id> first (tap the card
+ * header; …)` — the header id is the bare second word, unquoted.
+ */
+export function unfoldHeaderId(rec: AnchorRecord): string | null {
+  const match = rec.precondition?.match(/^unfold\s+(\S+)\s+first\b/)
+  return match ? match[1] : null
+}
+
 function exactlyOnce<T extends ElementLike>(rec: AnchorRecord, matches: ArrayLike<T>): Resolution<T> {
   if (matches.length === 1) return { ok: true, value: matches[0] }
   if (matches.length === 0) return miss(rec, 'missing')
   return miss(rec, 'ambiguous')
+}
+
+/**
+ * Visibility (the T6-10 cure): the resolver used to count DOM presence
+ * only, so an element CSS hides — the stage rail and the Listen desk
+ * below their breakpoints, a seat the viewport swaps out — "resolved"
+ * and the focus hole painted around a 0×0 rect on nothing. An element
+ * is visible unless a signal it carries proves it hidden: the `hidden`
+ * property, `checkVisibility()` answering false, or a collapsed
+ * (0×0) bounding rect — the shape `display: none` leaves behind.
+ * Elements carrying no signal at all (plain probe fakes) stay visible:
+ * the check removes only what is PROVEN hidden.
+ */
+export function isAnchorElementVisible(el: ElementLike): boolean {
+  if (el.hidden === true) return false
+  if (typeof el.checkVisibility === 'function') {
+    try {
+      if (!el.checkVisibility()) return false
+    } catch { /* a throwing probe proves nothing either way */ }
+  }
+  if (typeof el.getBoundingClientRect === 'function') {
+    try {
+      const rect = el.getBoundingClientRect()
+      if (rect && rect.width === 0 && rect.height === 0) return false
+    } catch { /* as above */ }
+  }
+  return true
+}
+
+/**
+ * Exactly-once over the VISIBLE matches: hidden seats are not matches
+ * at all (the registry's own "resolve the visible one" for multi-seat
+ * anchors — shell-status-pill, shell-brand-home, the nav's two seats),
+ * several visible matches are the ambiguity miss the law declares,
+ * and matches that ALL prove hidden are their own declared miss
+ * ('not-visible'), never a resolution onto nothing.
+ */
+function visibleOnce<T extends ElementLike>(rec: AnchorRecord, matches: ArrayLike<T>): Resolution<T> {
+  const all: T[] = []
+  for (let i = 0; i < matches.length; i++) all.push(matches[i])
+  const visible = all.filter((el) => isAnchorElementVisible(el))
+  if (visible.length === 0 && all.length > 0) return miss(rec, 'not-visible')
+  return exactlyOnce(rec, visible)
 }
 
 /**
@@ -678,14 +756,18 @@ export function resolveWeb(root: RootLike, rec: AnchorRecord, param?: string): R
   if (loc.by === 'data-present') {
     let selector = `[data-present="${esc(dataPresentValue(rec.id))}"]`
     if (param !== undefined && rec.companion) selector += `[${rec.companion}="${esc(param)}"]`
-    return exactlyOnce(rec, root.querySelectorAll(selector))
+    return visibleOnce(rec, root.querySelectorAll(selector))
   }
   if (loc.by === 'class') {
-    return exactlyOnce(rec, root.querySelectorAll(loc.selector))
+    return visibleOnce(rec, root.querySelectorAll(loc.selector))
   }
   if (loc.by === 'existing-attr') {
-    const selector = param !== undefined ? `[${loc.attr}="${esc(param)}"]` : `[${loc.attr}]`
-    return exactlyOnce(rec, root.querySelectorAll(selector))
+    // A tag-qualified record (voice-picker-group:{key} — the T6-9 cure)
+    // names ONE element kind carrying the attribute; unqualified records
+    // keep the bare attribute selector they have always used.
+    const tag = loc.tag ?? ''
+    const selector = param !== undefined ? `${tag}[${loc.attr}="${esc(param)}"]` : `${tag}[${loc.attr}]`
+    return visibleOnce(rec, root.querySelectorAll(selector))
   }
   return miss(rec, 'not-a-web-locator')
 }
@@ -756,6 +838,39 @@ export function resolveStore(rec: AnchorRecord, probes: StoreProbes): Resolution
   return value !== null && value !== undefined && value !== false
     ? { ok: true, value }
     : miss(rec, 'probe-false')
+}
+
+/* ------------------------------------------------------------------ */
+/* The stay-here landing (the T6-12 cure).                            */
+/*                                                                    */
+/* On a stay-here exit the host lands the learner on the REAL element */
+/* the final beat was standing on. The old landing queried            */
+/* `[data-present="<raw step anchor id>"]` — a selector that cannot   */
+/* match any concrete family id (the real value is the family name    */
+/* PLUS its companion attribute), any CLASS anchor (no data-present   */
+/* in the real app at all), any EXISTING anchor, and every contract / */
+/* store / stage-only anchor: 96 of the 310 script anchor ids could   */
+/* never land, silently, and plain multi-seat anchors took the first  */
+/* DOM seat regardless of visibility. The landing now resolves        */
+/* through the registry's own semantics — resolveWeb, exactly as the  */
+/* engine and search «Go» resolve — and every outcome is DECLARED:    */
+/* 'landed' carries the one visible element, and 'unlandable' names   */
+/* its reason (not a web anchor, stage-only by design, missing,       */
+/* ambiguous, not-visible) instead of scrolling nowhere in silence.   */
+/* ------------------------------------------------------------------ */
+
+export type StayHereLanding =
+  | { status: 'landed'; record: AnchorRecord; element: ElementLike }
+  | { status: 'unlandable'; anchorId: string; reason: string }
+
+export function resolveStayHereLanding(root: RootLike, anchorId: string): StayHereLanding {
+  const found = anchorRecordFor(anchorId)
+  if (!found) return { status: 'unlandable', anchorId, reason: 'not-in-registry' }
+  if (found.record.kind !== 'web') return { status: 'unlandable', anchorId, reason: 'not-a-web-anchor' }
+  if (isStageOnlyAnchor(found.record)) return { status: 'unlandable', anchorId, reason: 'stage-only' }
+  const res = resolveWeb(root, found.record, found.param)
+  if (!res.ok) return { status: 'unlandable', anchorId, reason: res.reason }
+  return { status: 'landed', record: found.record, element: res.value }
 }
 
 /* ------------------------------------------------------------------ */

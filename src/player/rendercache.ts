@@ -51,17 +51,32 @@ function tx<T>(mode: IDBTransactionMode, run: (st: IDBObjectStore) => IDBRequest
   }))
 }
 
-/** FNV-1a over voice + spoken text — small, stable, collision-shy enough
- *  for a cache key (a collision costs one wrong sentence, heard at once,
- *  and the entry is keyed by the full string's hash only — accepted). */
+/** A 64-bit key over voice + spoken text (cure T1-11). The old key
+ *  was a single 32-bit FNV-1a plus the string length, and collisions
+ *  were NOT theoretical: the hunt's birthday search found two real
+ *  chapter openings — "Chapter 48539 begins…" and "Chapter 165429
+ *  begins…", same length — keying identically (r5d6d94ef-81), so the
+ *  second was served the first one's audio, wrong chapter number
+ *  and all. A swapped negation or number inside a long book is
+ *  exactly the wrong sentence that is NOT "heard at once". The key
+ *  is now two independent 32-bit hashes (cyrb64) carried as 64
+ *  bits: a collision needs both to agree on the same length, which
+ *  the birthday bound puts beyond any library this cache will hold.
+ *  Changing the key orphans entries saved under the old one — they
+ *  simply miss, re-render once, and age out through the sweep; a
+ *  cache, never a vault. */
 export function renderKey(spoken: string, voice: string): string {
-  let h = 0x811c9dc5
   const s = voice + '\n' + spoken
+  let h1 = 0xdeadbeef
+  let h2 = 0x41c6ce57
   for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
+    const ch = s.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
   }
-  return 'r' + (h >>> 0).toString(16) + '-' + s.length
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return 'r' + (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0') + '-' + s.length
 }
 
 /** Decode one of the app's own WAV blobs (16-bit PCM mono, 44-byte
@@ -134,33 +149,81 @@ async function loadTotal(d: IDBDatabase): Promise<number> {
   })
 }
 
+/**
+ * The byte ledger, kept honest (cure T1-10). The old code trusted
+ * one module-level counter and it diverged from the store in both
+ * directions: an overwrite ADDED the new size without subtracting
+ * the replaced record's, dropPersistedRender deleted without
+ * touching the ledger at all (over-count — sweeps fired early and
+ * evicted honest entries, re-creating the 1.4.112 re-render
+ * complaint), and two overlapping sweeps could snapshot the same
+ * record, both delete it and BOTH subtract its size (under-count —
+ * the store grew past the cap while the ledger insisted it was at
+ * the floor). The cap and the floor were accounting fiction.
+ *
+ * Now every ledger-changing operation — put, drop, sweep — runs
+ * through ONE serialized chain, so no two ever interleave: a put
+ * subtracts the size of the record it replaces, a drop subtracts
+ * the size it removes, a sweep subtracts each victim exactly once
+ * and then re-anchors the ledger to the store it actually left
+ * behind (the sum of the survivors it just enumerated). The
+ * ledger is the store, or it is re-derived from the store at the
+ * next sweep.
+ */
+let ledgerChain: Promise<void> = Promise.resolve()
+function enqueueLedger(fn: () => Promise<void>): Promise<void> {
+  ledgerChain = ledgerChain.then(fn, fn)
+  return ledgerChain
+}
+
+/** The ledger's current word on the store's size (-1 = not counted yet). */
+export function renderCacheLedgerBytes(): number { return totalBytes }
+
+/** Settles when every queued put/drop/sweep has landed (probes, tests). */
+export function flushRenderCache(): Promise<void> { return ledgerChain }
+
 /** Save a fresh render. Fire-and-forget by design: playback never waits
  *  on the disk. Over budget, the oldest entries are swept. */
 export function putPersistedRender(key: string, blob: Blob): void {
-  void (async () => {
+  void enqueueLedger(async () => {
     const d = await db()
     if (!d) return
     if (totalBytes < 0) totalBytes = await loadTotal(d)
     if (totalBytes < 0) return
+    // What this put replaces, so the ledger counts the store, not
+    // the traffic: an overwritten sentence changes the total by
+    // the difference, never by the whole new size again.
+    const prev = await tx<Rec | undefined>('readonly', (st) => st.get(key) as IDBRequest<Rec | undefined>)
     const rec: Rec = { key, blob, at: Date.now(), size: blob.size }
     const ok = await tx('readwrite', (st) => st.put(rec))
     if (ok === null) return
-    totalBytes += blob.size
+    totalBytes += blob.size - (prev?.size ?? 0)
     if (totalBytes <= BUDGET) return
     // Sweep oldest-first down to the soft floor.
     const all = await tx<Rec[]>('readonly', (st) => st.getAll() as IDBRequest<Rec[]>)
     if (!all) return
     all.sort((a, b) => a.at - b.at)
+    const gone = new Set<string>()
     for (const r of all) {
       if (totalBytes <= SWEEP_TO) break
       await tx('readwrite', (st) => st.delete(r.key))
       totalBytes -= r.size
+      gone.add(r.key)
     }
-  })()
+    // Re-anchor: whatever the arithmetic believed, the ledger now
+    // says exactly what the sweep's own census says remains.
+    totalBytes = all.reduce((a, r) => a + (gone.has(r.key) ? 0 : r.size), 0)
+  })
 }
 
 /** Remove a saved render. A poisoned entry — digital silence saved on a
  *  bad-engine night (1.4.122) — must not be served forever. */
 export function dropPersistedRender(key: string): void {
-  void tx('readwrite', (st) => st.delete(key) as IDBRequest<undefined>)
+  void enqueueLedger(async () => {
+    const prev = totalBytes >= 0
+      ? await tx<Rec | undefined>('readonly', (st) => st.get(key) as IDBRequest<Rec | undefined>)
+      : undefined
+    await tx('readwrite', (st) => st.delete(key) as IDBRequest<undefined>)
+    if (prev) totalBytes -= prev.size
+  })
 }

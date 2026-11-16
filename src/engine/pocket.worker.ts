@@ -12,9 +12,33 @@ export type PocketRequest =
 export type PocketResponse =
   | { type: 'progress'; loaded: number; total: number; cached: boolean }
   | { type: 'ready'; voices: string[]; sampleRate: number; ms: number }
-  | { type: 'loadError'; message: string }
+  | { type: 'loadError'; message: string; name?: string }
   | { type: 'spoken'; id: number; samples: Float32Array; sampleRate: number; ms: number }
-  | { type: 'speakError'; id: number; message: string }
+  | { type: 'speakError'; id: number; message: string; name?: string }
+
+/**
+ * The true error, carried whole (M-22): the original message verbatim
+ * and its kind (the error's name) beside it. The old flattening —
+ * `err instanceof Error ? err.message : String(err)` — re-labelled
+ * everything it could not recognise: a DOMException or a plain
+ * {message, name} object thrown across the WASM boundary became
+ * "[object Object]" or lost its kind entirely, and the page then
+ * showed a generic line for a specific failure. An error with a
+ * readable message keeps it, whatever its class; only an error with
+ * no message at all falls back to a serialised shape, never to a
+ * placeholder that hides what happened.
+ */
+function errInfo(err: unknown): { message: string; name: string } {
+  if (err instanceof Error) return { message: err.message || err.name, name: err.name || 'Error' }
+  if (typeof err === 'object' && err !== null) {
+    const o = err as { message?: unknown; name?: unknown }
+    const name = typeof o.name === 'string' && o.name ? o.name : 'Error'
+    if (typeof o.message === 'string' && o.message) return { message: o.message, name }
+    try { const s = JSON.stringify(err); if (s && s !== '{}') return { message: s, name } } catch { /* fall through */ }
+  }
+  if (typeof err === 'string' && err) return { message: err, name: 'Error' }
+  return { message: String(err), name: 'Error' }
+}
 
 let pipeline: Pipeline | null = null
 let loading: Promise<void> | null = null
@@ -46,7 +70,7 @@ async function load(m: Extract<PocketRequest, { type: 'load' }>) {
   })()
   try { await loading } catch (err) {
     pipeline = null
-    post({ type: 'loadError', message: err instanceof Error ? err.message : String(err) })
+    post({ type: 'loadError', ...errInfo(err) })
   } finally { loading = null }
 }
 
@@ -70,6 +94,6 @@ async function speak(m: Extract<PocketRequest, { type: 'speak' }>) {
     if (!out.length) throw new Error('No audio produced')
     post({ type: 'spoken', id: m.id, samples: out, sampleRate: pipeline.sampleRate, ms: Math.round(performance.now() - t0) }, [out.buffer])
   } catch (err) {
-    post({ type: 'speakError', id: m.id, message: err instanceof Error ? err.message : String(err) })
+    post({ type: 'speakError', id: m.id, ...errInfo(err) })
   }
 }

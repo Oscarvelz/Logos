@@ -18,7 +18,10 @@
  *
  * Teardown is the port's other half: natural end, ✕, required miss and
  * «Stay here» all discard the scenario whole through the same path
- * (FENCE-DESIGN §7 clause 7).
+ * (FENCE-DESIGN §7 clause 7) — and, since the C-1 cure, that same
+ * teardown restores the real bubble switch to the value it held at
+ * presentation entry, so the one real touch a lesson is allowed can
+ * never leak past an exit.
  */
 import { CLIP_TEXT, SCENARIO_TEXTS, type Scenario } from '../scenario/index.ts'
 import type { AnchorResolution } from './resolve.ts'
@@ -31,6 +34,17 @@ export interface ScenarioPort {
   readonly scenario: Scenario
   /** Perform one step's act on the scenario. Called by the runner only. */
   perform: (flat: FlatStep, resolution: AnchorResolution) => void
+  /**
+   * Perform one step's act as ENTRY SEEDING (silent machinery, the
+   * runner's seedBefore only). Identical to perform for every data act
+   * EXCEPT the λ tap: a seeded λ tap is absorbed by the scenario's own
+   * internal state (stage.setLambdaSeeded) and never reaches the real
+   * bubble switch — resuming or jumping into a lesson must not flip
+   * the user's switch before any beat is shown (H-1). Optional: ports
+   * without it are still safe under the runner, which brackets seeding
+   * in the scenario's own seed-mode (stage.beginLambdaSeed).
+   */
+  performSeeded?: (flat: FlatStep, resolution: AnchorResolution) => void
   /** Discard the scenario whole. Idempotent. */
   teardown: (reason: ScenarioTeardownReason) => void
 }
@@ -49,21 +63,22 @@ export type ScenarioPerform = (flat: FlatStep, resolution: AnchorResolution, sce
 export function createScenarioPort(scenario: Scenario, hostPerform?: ScenarioPerform): ScenarioPort {
   let tornDown = false
 
-  return {
-    scenario,
+  /** One perform path, two λ disciplines: a PRESENTED λ tap genuinely
+   *  flips the real switch (that flip IS the demonstration), while a
+   *  SEEDED λ tap is absorbed by the scenario's internal state only. */
+  function performInternal(flat: FlatStep, resolution: AnchorResolution, seeded: boolean): void {
+    if (tornDown) return
+    hostPerform?.(flat, resolution, scenario)
+    const { step } = flat
+    const stage = scenario.stage
 
-    perform(flat, resolution) {
-      if (tornDown) return
-      hostPerform?.(flat, resolution, scenario)
-      const { step } = flat
-      const stage = scenario.stage
-
-      // The λ itself (Q2's one real touch goes through the sandbox's
-      // LambdaPort discipline inside setLambda — see scenario.ts).
-      if (step.anchorId === 'bubble-lambda' && step.act === 'tap') {
-        stage.setLambda(!stage.lambdaOn())
-        return
-      }
+    // The λ itself (Q2's one real touch goes through the sandbox's
+    // LambdaPort discipline inside setLambda — see scenario.ts).
+    if (step.anchorId === 'bubble-lambda' && step.act === 'tap') {
+      if (seeded) stage.setLambdaSeeded(!stage.lambdaOn())
+      else stage.setLambda(!stage.lambdaOn())
+      return
+    }
       // The lever: a copied text takes the stage and replaces what's playing.
       if (step.anchorId === 'bubble-clip' && (step.act === 'tap' || step.act === 'goto')) {
         stage.playClipboardText(CLIP_TEXT.text)
@@ -97,12 +112,26 @@ export function createScenarioPort(scenario: Scenario, hostPerform?: ScenarioPer
         stage.playText(textId)
         return
       }
-      // Every other step performs no data act on the scenario.
+    // Every other step performs no data act on the scenario.
+  }
+
+  return {
+    scenario,
+
+    perform(flat, resolution) {
+      performInternal(flat, resolution, false)
+    },
+
+    performSeeded(flat, resolution) {
+      performInternal(flat, resolution, true)
     },
 
     teardown() {
       if (tornDown) return
       tornDown = true
+      // scenario.teardown() also restores the real bubble switch to
+      // its entry value (the C-1 cure, scenario.ts): every exit the
+      // runner takes funnels through here.
       scenario.teardown()
     },
   }

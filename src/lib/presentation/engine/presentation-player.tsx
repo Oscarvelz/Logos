@@ -125,6 +125,7 @@ import {
   X,
 } from 'lucide-react'
 import type { Scenario } from '../scenario/index.ts'
+import type { ResumePoint } from '../catalogue.ts'
 import type { PresentationStorage } from '../presentation-state.ts'
 import { PRESENTATION_SPEEDS } from './clock.ts'
 import { VIEW_MARGIN, cardSeat, containedHole } from './geometry.ts'
@@ -151,6 +152,13 @@ export interface PresentationPlayerProps {
   children?: React.ReactNode
   /** Called once, when the presentation is over (any ending). */
   onExit?: (info: { reason: RunnerSnapshot['endReason']; stayHereAnchorId: string | null }) => void
+  /**
+   * The launch point the host was asked for (the H-26 cure): «My
+   * scenes» and search «Watch» name a place outside the module's own
+   * progress record, and the runner starts there. Absent = the
+   * runner's ordinary resume from the record.
+   */
+  resumeFrom?: ResumePoint
   initialMode?: PresentationMode
   /** UI language; absent = the document's language, else English. */
   lang?: PresentationLanguage
@@ -225,6 +233,18 @@ function elementOf(snapshot: RunnerSnapshot | null): AnchorElementLike | null {
   if (!resolution || resolution.status !== 'resolved') return null
   const target = resolution.target as AnchorElementLike | null
   if (!target || typeof target.getBoundingClientRect !== 'function') return null
+  // The hole never paints on nothing (the T6-10 cure, player half):
+  // the resolver already refuses CSS-hidden targets, and a target
+  // whose measured rect is collapsed (0×0 — the shape display:none
+  // leaves) is no focus either, whatever path resolved it. There is
+  // no hole, no ring and no card seat for a beat with nothing to
+  // point at; the runner's own record of the beat stands as it was.
+  try {
+    const rect = target.getBoundingClientRect()
+    if (rect && rect.width === 0 && rect.height === 0) return null
+  } catch {
+    return null
+  }
   return target
 }
 
@@ -268,7 +288,7 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
     })
     runnerRef.current = runner
     const unsubscribe = runner.subscribe(() => setSnapshot(runner.getSnapshot()))
-    runner.start()
+    runner.start({ resumeFrom: props.resumeFrom })
     return () => {
       unsubscribe()
       // Unmount is an exit like any other: the scenario dies with the

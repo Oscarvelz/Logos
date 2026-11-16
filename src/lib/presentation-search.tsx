@@ -9,6 +9,12 @@
  * that scene, its fiction seeded up to it by the runner's own
  * entry seeding), and «Go» takes you straight to the real function
  * itself (its page, its card unfolded, the element in view).
+ * «Go» resolves through the registry's own semantics — the one
+ * declared locator per anchor, exactly as the engine resolves —
+ * and a landing that cannot be made is said out loud, never a
+ * silent dead poll; a scene whose only anchors live on the sealed
+ * fiction stage has no «Go» at all, because no such element can
+ * exist in the real app, and «Watch» is its honest door.
  *
  * THE FIRST-RUN OFFER: offered once, never imposed. It stands as a
  * slim banner on the home surface until it is answered either way;
@@ -17,17 +23,32 @@
  */
 import { useMemo, useState } from 'react'
 import { MODULE_CATALOGUE, catalogueModule } from './presentation/catalogue.ts'
-import { anchorRecordFor } from './presentation/anchors.ts'
+import {
+  anchorRecordFor,
+  isStageOnlyAnchor,
+  resolveWeb,
+  unfoldHeaderId,
+  type RootLike,
+} from './presentation/anchors.ts'
 import { flattenSteps, pickText } from './presentation/engine/types.ts'
 import {
   defaultPresentationStorage,
   loadPresentationState,
   savePresentationState,
-  withModuleProgress,
+  withWatchLanding,
 } from './presentation/presentation-state.ts'
 import { launchPresentation } from './presentation-host.tsx'
 import { settings } from './settings.ts'
 import { t } from './i18n.ts'
+// Side effect: register every script into the catalogue HERE, on the
+// search surface itself (the M-35 cure). The scene index below is
+// derived from the registered scripts — module id, scene id, and the
+// scene's first-step identity are the ONE dialect the index and the
+// runner consume — and a search surface that silently depended on
+// some other module having registered first could name scenes over
+// an empty (or stale) catalogue, or name none at all. Importing the
+// registration makes the dialect structural, not incidental.
+import './presentation/scripts/index.ts'
 
 // ── The registry ──────────────────────────────────────────────────
 export interface SceneHit {
@@ -60,7 +81,12 @@ export function presentationSceneIndex(): SceneHit[] {
       for (const f of flat) {
         if (f.scene !== scene) continue
         const rec = anchorRecordFor(f.step.anchorId)
-        if (rec && rec.record.kind === 'web') { anchorId = f.step.anchorId; break }
+        // The «Go» landing must be landable IN THE REAL APP: a
+        // stage-only anchor (the sealed fiction stage's own seats)
+        // can never exist there, so it is passed over for the
+        // scene's next real anchor — and a scene with none offers
+        // no «Go» rather than a button that polls and dies (H-25).
+        if (rec && rec.record.kind === 'web' && !isStageOnlyAnchor(rec.record)) { anchorId = f.step.anchorId; break }
       }
       const words: string[] = [pickText(entry.title, 'en'), pickText(entry.title, 'es'), pickText(scene.chapter, 'en'), pickText(scene.chapter, 'es')]
       for (const f of flat) {
@@ -94,24 +120,25 @@ export function searchScenes(query: string): SceneHit[] {
 }
 
 // ── The two landings ──────────────────────────────────────────────
-/** Watch: open the module at the scene. The place is written into
- *  the presentation's own state file as an in-progress resume
- *  point — the runner's documented door — so entry seeding builds
- *  the fiction of the earlier scenes before the first beat. */
+/** Watch: open the module at the scene. The landing MERGES into
+ *  the presentation's own state file (withWatchLanding — a seen
+ *  module stays seen, the skip log survives, a further resume point
+ *  is never rewound; the H-27 cure) and the launch carries the
+ *  scene as its explicit resumeFrom (the H-26 cure), so entry
+ *  seeding builds the fiction of the earlier scenes before the
+ *  first beat and the runner starts exactly at the scene tapped. */
 export function watchScene(hit: SceneHit) {
   const entry = catalogueModule(hit.moduleId)
   if (!entry?.script) return
   const storage = defaultPresentationStorage()
   const state = loadPresentationState(storage)
-  savePresentationState(storage, withModuleProgress(state, hit.moduleId, {
-    state: 'in-progress',
-    step: hit.step,
-    scene: hit.sceneId,
-    stepId: hit.stepId,
-    verifiedAgainst: entry.script.verifiedAgainst ?? 'unknown',
-    skips: [],
-  }))
-  launchPresentation(hit.moduleId)
+  savePresentationState(storage, withWatchLanding(
+    state,
+    hit.moduleId,
+    { step: hit.step, scene: hit.sceneId, stepId: hit.stepId },
+    entry.script.verifiedAgainst ?? 'unknown',
+  ))
+  launchPresentation(hit.moduleId, { step: hit.step, scene: hit.sceneId, stepId: hit.stepId })
 }
 
 function routeForAnchor(anchorId: string): string {
@@ -125,37 +152,69 @@ function routeForAnchor(anchorId: string): string {
 
 /** Go: straight to the real function itself — its page, the card
  *  that owns it unfolded when the registry declares one, and the
- *  element scrolled into view. */
-export function goToAnchor(anchorId: string) {
+ *  element scrolled into view.
+ *
+ *  Resolution is the registry's own (the H-25 cure): the record's
+ *  ONE declared locator, through `resolveWeb` — a MINT anchor by
+ *  its `data-present` value PLUS its companion attribute, a CLASS
+ *  anchor by its class/role hook, an EXISTING anchor by its
+ *  pre-existing attribute — exactly as the engine resolves a beat.
+ *  A stage-only anchor (or a non-web one) is unlandable by design
+ *  and fails at once, out loud; an element that never stands is
+ *  reported through `onMiss` after the poll, never silently. The
+ *  declared unfold step is performed once, from the precondition's
+ *  real wording (`unfold <card> first …` — the T6-7 cure). Returns
+ *  false when the anchor is unlandable by design. */
+export function goToAnchor(anchorId: string, onMiss?: (anchorId: string, reason: string) => void): boolean {
   const found = anchorRecordFor(anchorId)
+  if (!found || found.record.kind !== 'web' || isStageOnlyAnchor(found.record)) {
+    // Unlandable BY DESIGN — the reason is declared by the registry,
+    // and since the T6-12 completion it reaches the learner (the
+    // rendering below words each reason honestly) instead of
+    // collapsing into the same generic miss as a lost element.
+    onMiss?.(anchorId, !found ? 'not-in-registry' : found.record.kind !== 'web' ? 'not-a-web-anchor' : 'stage-only')
+    return false
+  }
   const route = routeForAnchor(anchorId)
   if (location.hash !== `#${route}`) location.hash = route
-  const unfold = found?.record.precondition?.match(/unfold\('([^']+)'\)/)?.[1]
+  const root = document as unknown as RootLike
+  const unfoldHeader = unfoldHeaderId(found.record)
   let tries = 0
+  let unfolded = false
+  let lastReason = 'missing'
   const tick = () => {
     tries++
-    if (unfold) {
-      const card = document.querySelector(`[data-present="${unfold}"]`)
-      const head = card?.querySelector('button')
-      if (card && head && !document.querySelector(`[data-present="${cssEscape(anchorValue(anchorId))}"]`)) {
-        head.click()
-      }
-    }
-    const el = document.querySelector(`[data-present="${cssEscape(anchorValue(anchorId))}"]`)
-    if (el) {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const res = resolveWeb(root, found.record, found.param)
+    if (res.ok) {
+      const el = res.value as { scrollIntoView?: (options?: { block?: string; behavior?: string }) => void }
+      el.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
       return
     }
+    lastReason = res.reason
+    if (unfoldHeader && !unfolded) {
+      // The declared resolution step, performed once: tap the owning
+      // card's header so the interior element stands. (Once only —
+      // a second tap would fold the card shut again.)
+      unfolded = true
+      const header = anchorRecordFor(unfoldHeader)
+      if (header) {
+        const hres = resolveWeb(root, header.record, header.param)
+        if (hres.ok) {
+          const hel = hres.value as {
+            querySelector?: (selector: string) => { click?: () => void } | null
+            click?: () => void
+          }
+          const head = hel.querySelector?.('button')
+          if (head?.click) head.click()
+          else hel.click?.()
+        }
+      }
+    }
     if (tries < 14) setTimeout(tick, 180)
+    else onMiss?.(anchorId, lastReason)
   }
   setTimeout(tick, 220)
-}
-
-function anchorValue(anchorId: string): string {
-  return anchorId.split(':').filter((s) => !s.startsWith('{')).join(':')
-}
-function cssEscape(v: string): string {
-  return v.replace(/["\\]/g, '\\$&')
+  return true
 }
 
 // ── The search block (inside the opened Presentations index) ─────
@@ -164,6 +223,7 @@ function cssEscape(v: string): string {
 // outside it. The index gives it its seat via the searchSlot prop.
 export function PresentationSearch() {
   const [query, setQuery] = useState('')
+  const [goMiss, setGoMiss] = useState<{ id: string; reason: string } | null>(null)
   const hits = useMemo(() => searchScenes(query), [query])
   return (
     <div className="pres-search">
@@ -185,9 +245,25 @@ export function PresentationSearch() {
             <div className="muted small">{hit.moduleTitle}</div>
           </div>
           <button className="btn sm" onClick={() => watchScene(hit)}>{t('Watch')}</button>
-          {hit.anchorId && <button className="btn sm ghost" onClick={() => goToAnchor(hit.anchorId!)}>{t('Go')}</button>}
+          {hit.anchorId && (
+            <button
+              className="btn sm ghost"
+              onClick={() => { setGoMiss(null); goToAnchor(hit.anchorId!, (id, reason) => setGoMiss({ id, reason })) }}
+            >
+              {t('Go')}
+            </button>
+          )}
         </div>
       ))}
+      {goMiss && (
+        <p className="muted small" role="status" style={{ margin: '10px 4px 0' }}>
+          {goMiss.reason === 'stage-only'
+            ? t('That spot lives only on the practice stage — Watch the lesson to see it there.')
+            : goMiss.reason === 'not-a-web-anchor' || goMiss.reason === 'not-in-registry'
+              ? t("That isn't a spot in the real app — Watch the lesson to see it in action.")
+              : t("Couldn't find that spot in the real app.")}
+        </p>
+      )}
     </div>
   )
 }

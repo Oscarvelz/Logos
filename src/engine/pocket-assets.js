@@ -37,13 +37,32 @@ async function readLocal() { return null; }
 // and a third copy for the cache all alive at once (~530 MB for this model).
 async function store(key, bytes) {
     try {
-        await (await openCache())?.put(key, new Response(bytes, { headers: { "content-length": String(bytes.byteLength) } }));
+        const cache = await openCache();
+        // No cache at all (storage blocked / unavailable) is a failed
+        // save too, not a silent success (T4-11): the old optional-chain
+        // put resolved to undefined and this returned true over nothing.
+        if (!cache)
+            return false;
+        await cache.put(key, new Response(bytes, { headers: { "content-length": String(bytes.byteLength) } }));
         return true;
     }
     catch (e) {
         console.warn(`[logos] could not cache ${key}: ${e}`);
         return false;
     }
+}
+// A download that could not be saved is not a success (T4-11): both
+// engines used to claim "ready" / "cached" when a quota-full phone had
+// kept nothing, so the "works offline now" promise was flatly false and
+// the model silently re-downloaded (or failed offline) next time. The
+// save is part of what fetchAsset promises, so its failure fails the
+// fetch: the error travels the load's existing error channel (the
+// worker posts loadError; the page sets the error status and rejects
+// the ensure waiters) instead of a ready with nothing behind it. A
+// later load whose save succeeds certifies exactly as before.
+async function storeOrThrow(key, bytes) {
+    if (!(await store(key, bytes)))
+        throw new Error("Could not save the downloaded voice model on this device — storage may be full. Nothing was kept, so it is not marked as downloaded.");
 }
 /**
  * The cache key for an asset: its digest, when the manifest gives one.
@@ -56,6 +75,47 @@ async function store(key, bytes) {
  * file's name alone.
  */
 const keyFor = (url, version) => version ? `${url.slice(url.lastIndexOf("/") + 1)}?v=${version}` : url;
+// C-2 cure (T4-1): the digest in the key was only a label — nothing ever
+// hashed a downloaded byte, so corrupt, substituted or captive-portal
+// bytes were stored under the digest key and trusted forever. Now every
+// asset whose `version` is a SHA-256 (the manifest's model and encoder
+// entries — see pipeline.js, which passes manifest.*.sha256 as `version`)
+// is hashed with crypto.subtle.digest after download and compared to
+// that expected digest before it is stored or returned. The expected
+// digest source is the `version` argument itself, which is also the
+// digest carried in the asset's own cache key (`?v=<sha>`).
+// Assets with no SHA-256 version (renikud.onnx: no version; espeak:
+// "espeak-ng-1.0.2") carry no expected digest anywhere in the code, so
+// there is nothing honest to compare them against — they flow exactly
+// as before rather than gaining a fabricated check.
+// H-17 cure (T4-2, remainder): the digest check above covers only the
+// hashed assets (model/encoder). A download whose body ends short of
+// its promised content-length is truncated whatever it is — an early
+// clean close is indistinguishable from a finished file — so every
+// asset, hashed or not (renikud.onnx, the espeak files), is refused
+// when the delivered byte count disagrees with a known total, on the
+// streaming path and the no-body fallback alike. Nothing short is
+// stored, and nothing short is returned.
+function refuseIfShort(url, total, delivered) {
+    if (total > 0 && delivered !== total)
+        throw new Error(`Truncated download fetching ${url}: content-length promised ${total} bytes, the body delivered ${delivered}. Refusing to use or cache these bytes.`);
+}
+const SHA256_HEX = /^[0-9a-f]{64}$/i;
+export function expectedSha256(version) {
+    const v = typeof version === "string" ? version.trim().toLowerCase() : "";
+    return SHA256_HEX.test(v) ? v : null;
+}
+export async function sha256Hex(data) {
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function verifySha256(data, expected, url) {
+    if (!expected)
+        return;
+    const actual = await sha256Hex(data);
+    if (actual !== expected)
+        throw new Error(`SHA-256 mismatch fetching ${url}: expected ${expected}, got ${actual}. Refusing to use or cache these bytes.`);
+}
 /** Whether this exact asset is already cached, without fetching it. */
 export async function isCached(url, version) {
     return (await cacheGet(keyFor(url, version))) !== null;
@@ -75,6 +135,7 @@ export async function fetchAsset(url, onProgress, version) {
         return local;
     }
     const key = keyFor(url, version);
+    const expected = expectedSha256(version);
     const hit = await cacheGet(key);
     if (hit) {
         // Say it is a cache hit before reading the body, not after. Waiting until
@@ -82,17 +143,38 @@ export async function fetchAsset(url, onProgress, version) {
         // whole of it.
         onProgress?.({ loaded: 0, total: hit.size, cached: true });
         const bytes = await hit.bytes();
-        onProgress?.({ loaded: bytes.byteLength, total: bytes.byteLength, cached: true });
-        return bytes;
+        if (!expected) {
+            onProgress?.({ loaded: bytes.byteLength, total: bytes.byteLength, cached: true });
+            return bytes;
+        }
+        // Read-time verification: download-time verification alone would
+        // leave poison written before this cure (or corrupted in place)
+        // trusted forever, because a cache hit never re-downloads. A
+        // mismatch here evicts the entry and falls through to a fresh
+        // download below; that download is itself verified, so a bad
+        // network answer still fails honestly instead of re-poisoning.
+        try {
+            await verifySha256(bytes, expected, url);
+            onProgress?.({ loaded: bytes.byteLength, total: bytes.byteLength, cached: true });
+            return bytes;
+        }
+        catch {
+            try {
+                await (await openCache())?.delete(key);
+            }
+            catch { /* nothing */ }
+        }
     }
     const response = await fetch(url);
     if (!response.ok)
         throw new Error(`${response.status} fetching ${url}`);
-    const total = Number(response.headers.get("content-length") ?? 0);
+    const total = Number(response.headers.get("content-length") ?? 0) || 0;
     const body = response.body;
     if (!body) {
         const buf = await response.arrayBuffer();
-        await store(key, buf);
+        refuseIfShort(url, total, buf.byteLength);
+        await verifySha256(buf, expected, url);
+        await storeOrThrow(key, buf);
         return buf;
     }
     let buffer = new Uint8Array(total || 1 << 20);
@@ -113,7 +195,12 @@ export async function fetchAsset(url, onProgress, version) {
     }
     const out = loaded === buffer.length ? buffer : buffer.slice(0, loaded);
     buffer = null;
-    await store(key, out);
+    refuseIfShort(url, total, loaded);
+    // Verify the exact bytes about to be stored and returned, before
+    // either happens: on mismatch verifySha256 throws, nothing is
+    // stored, and the load fails honestly to its caller.
+    await verifySha256(out, expected, url);
+    await storeOrThrow(key, out);
     return out.buffer;
 }
 export async function fetchJson(url) {

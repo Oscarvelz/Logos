@@ -35,7 +35,9 @@ type DroidBubble = {
   bubbleClip?: () => string
   bubbleWantClip?: () => boolean
   bubbleSeek?: () => string
+  bubbleSeekCtx?: () => string
   bubblePendingCmd?: () => string
+  bubblePendingCtx?: () => string
   bubbleNative?: (text: string, title: string, idx: number) => void
   bubbleNativeStop?: () => void
   bubbleLock?: () => boolean
@@ -61,7 +63,29 @@ export function openBubblePermission() {
   try { droid()?.bubblePermission?.() } catch { /* old shell */ }
 }
 
-const clipKey = (t: string) => `${t.length}:${t.slice(0, 48)}:${t.slice(-48)}`
+// Clipboard dedupe fingerprint (cure F8-1/T2-1): the old key was
+// length + first 48 + last 48 chars, so two same-length texts sharing
+// head and tail but edited in the middle collided — a corrected re-copy
+// was judged "already seen" and never played, and its resume card was
+// lost with it. This key fingerprints the WHOLE text: length plus two
+// independent full-string hashes (cyrb53 under two seeds), so any
+// middle edit changes the key while identical texts keep the same one.
+// Persisted state: `logos.bubble.lastClip` may still hold an old-format
+// key after upgrade; it simply never matches a new key, so the standing
+// clip may be delivered at most once more — accepted, no migration.
+const clipHash = (t: string, seed: number) => {
+  let h1 = 0xdeadbeef ^ seed
+  let h2 = 0x41c6ce57 ^ seed
+  for (let i = 0; i < t.length; i++) {
+    const ch = t.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0')
+}
+export const clipKey = (t: string) => `${t.length}:${clipHash(t, 0)}:${clipHash(t, 1)}`
 const fmtRate = (r: number) => `${Math.round(r * 100) / 100}×`
 const fmtClock = (sec: number) => { const v = isFinite(sec) && sec > 0 ? sec : 0; return `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, '0')}` }
 let lastClip = (() => { try { return localStorage.getItem('logos.bubble.lastClip') ?? '' } catch { return '' } })()
@@ -74,7 +98,7 @@ function seenClip(t: string) {
 // behind; when the clip ENDS, what was interrupted resumes where it was — the
 // interruption heals itself. A second clip keeps the original card; anything
 // Oscar loads by hand cancels it.
-type ResumeCard = { text: string; idx: number; title: string }
+type ResumeCard = { text: string; idx: number; title: string; draftOnly?: boolean }
 let resumeCard: ResumeCard | null = (() => { try { return JSON.parse(localStorage.getItem('logos.bubble.resume') ?? 'null') as ResumeCard | null } catch { return null } })()
 let stageKey = ''
 function saveResume() {
@@ -94,25 +118,56 @@ export function playClipboardText(raw: string) {
     resumeCard = { text: s0.text, idx: s0.current, title: sessionTitle(s0.text) }
     saveResume()
   }
+  // F8-8 completion: a typed-but-never-played draft had no card — the
+  // Undo toast was its only way back, and a missed toast lost it for
+  // good. An evicted draft that is not the live session leaves the
+  // same persisted card, marked draftOnly: when the clip finishes, the
+  // draft is restored (loaded, not played — it was never playing).
+  // A card already standing is never overwritten (the standing rule).
+  if (!resumeCard && !s0.active) {
+    const prev = drafts.get().listen
+    if (prev.trim() && prev.trim() !== text) {
+      resumeCard = { text: prev, idx: 0, title: sessionTitle(prev), draftOnly: true }
+      saveResume()
+    }
+  }
   stageKey = clipKey(text)
   seenClip(text)
   const prevText = drafts.get().listen
+  // Cure F8-8: the Undo used to restore only the draft TEXT — the
+  // interrupted session and its place in it were gone, so "recovery"
+  // meant starting the old text over from the top. Snapshot the live
+  // session before the clip takes the stage; Undo puts back the draft
+  // AND that session, at its sentence, playing if it was playing. The
+  // return-to-book card is retired by an Undo: the interruption it
+  // was healing has been undone by hand.
+  const snap = s0.active ? { text: s0.text, idx: s0.current, playing: s0.playing } : null
   drafts.set({ listen: text })
   saveLastText(text)
   if (listen.get().active) endSession()
   loadText(text)
   dispatchEvent(new Event('logos-bubble-clip'))
   void play()
-  if (prevText.trim() && prevText.trim() !== text) {
+  if ((prevText.trim() && prevText.trim() !== text) || snap) {
     toast(t('Playing what you copied'), {
       label: t('Undo'),
       run: () => {
         drafts.set({ listen: prevText })
         saveLastText(prevText)
+        stageKey = ''; resumeCard = null; saveResume()
         if (listen.get().active) endSession()
-        loadText(prevText)
+        const back = snap && snap.text !== text ? snap.text : prevText
+        if (back.trim()) {
+          loadText(back)
+          if (snap && back === snap.text) {
+            if (snap.idx > 0) seek(snap.idx)
+            if (snap.playing) void play(snap.idx)
+          }
+        }
       },
-    }, 6000)
+    }, 10000) // F8-8: the recovery window is ten seconds now, and the
+    // persisted draft card stands behind it — a missed toast is no
+    // longer a permanent loss.
   } else {
     toast(t('Playing what you copied'), undefined, 3000)
   }
@@ -206,27 +261,60 @@ export function initBubble() {
       return true
     } catch { return false }
   }
+  // The session identity the shell stamps its stored presses with
+  // (T2-19): title + sentence total — the very pair this page pushes
+  // in bubbleNow, computed here from the same seats push() reads.
+  const pageCtx = (): string => {
+    const s = listen.get()
+    if (!s.active || !s.segments.length) return ''
+    return `${titleOf(true, s.text) || 'Logos'}|${s.segments.length}`
+  }
   const collectPending = () => {
     try {
       const cmd = d.bubblePendingCmd?.()
       if (!cmd) return
+      // The press's session stamp, read alongside the command (T2-19,
+      // the page half the shell's stamps always assumed): the press
+      // was stored against the session the panel was showing, and it
+      // may only be executed against THAT session. Empty when the
+      // press was stored with no session or against an older shell —
+      // then there is nothing to judge and the shell-side audit at
+      // the take stands alone, as it did before.
+      const stamp = d.bubblePendingCtx?.() ?? ''
+      const forThisSession = () => {
+        if (!stamp) return true
+        if (clipOwns()) return false // a stamped press names a reading; a clip stage is never its session
+        const here = pageCtx()
+        return !here || here === stamp
+      }
       // A stored PAUSE (1.4.89): against a dead page, silence is already
       // the truth. The one thing it must never do is summon playback —
       // the recovery used to 'fulfil' it by playing the session, and his
-      // pause became a play, visit after visit.
+      // pause became a play, visit after visit. (Pause stays exempt
+      // from the stamp check, as shell-side: its door can only silence.)
       if (cmd === 'pause') { if (listen.get().playing) pauseFromShell(); return }
-      if (cmd === 'play') { dispatchEvent(new Event('logosandroid-play')); return }
+      if (cmd === 'play') {
+        if (listen.get().active || clipOwns()) { if (forThisSession()) dispatchEvent(new Event('logosandroid-play')); return }
+        void recoverSession().then((ok) => {
+          if (ok) setTimeout(() => { if (forThisSession()) dispatchEvent(new Event('logosandroid-play')) }, 900)
+        })
+        return
+      }
       if (cmd === 'slower' || cmd === 'faster' || listen.get().active || clipOwns()) {
-        dispatchEvent(new Event(`logosandroid-${cmd}`))
+        if (forThisSession()) dispatchEvent(new Event(`logosandroid-${cmd}`))
         return
       }
       void recoverSession().then((ok) => {
         // prev/next re-fire at the recovered session; so do mark, save and
         // voice (1.4.109, audit E-2): they act on the session the recovery
         // just restored — the very one the panel was showing when the
-        // press was stored.
+        // press was stored. T2-19: that identity is now CHECKED at the
+        // moment of the re-fire, not assumed — the recovery ranks its
+        // candidates by recency and can restore a different book, clip
+        // or draft than the stamped one, and a verb fired into the
+        // wrong session is worse than a verb dropped.
         if (ok && (cmd === 'prev' || cmd === 'next' || cmd === 'mark' || cmd === 'save' || cmd === 'voice')) {
-          setTimeout(() => dispatchEvent(new Event(`logosandroid-${cmd}`)), 900)
+          setTimeout(() => { if (forThisSession()) dispatchEvent(new Event(`logosandroid-${cmd}`)) }, 900)
         }
       })
     } catch { /* ignore */ }
@@ -268,7 +356,19 @@ export function initBubble() {
   addEventListener('logosandroid-faster', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } stepRate(1) })
   // The panel's seek bar: the shell holds the fraction, the page pulls it.
   addEventListener('logosandroid-seek', () => {
-    try { const f = parseFloat(d.bubbleSeek?.() ?? ''); if (Number.isFinite(f)) { if (clipOwns()) { seekClip(f) } else { seekFraction(f) } } } catch { /* ignore */ }
+    try {
+      const f = parseFloat(d.bubbleSeek?.() ?? '')
+      if (!Number.isFinite(f)) return
+      // The seek's own stamp (T2-19): the fraction was chosen against
+      // the session the panel was showing; if the live session is a
+      // different one, the fraction belongs to a stranger and is
+      // dropped, never obeyed against whatever is showing now. (A
+      // clip-stage seek is stamped empty shell-side and takes the
+      // clip road as always.)
+      const sctx = d.bubbleSeekCtx?.() ?? ''
+      if (sctx && !clipOwns()) { const here = pageCtx(); if (here && here !== sctx) return }
+      if (clipOwns()) { seekClip(f) } else { seekFraction(f) }
+    } catch { /* ignore */ }
   })
   // The panel's bookmark key, and the bubble's long-press voice wheel.
   addEventListener('logosandroid-mark', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } void markAndToast() })
@@ -313,9 +413,19 @@ export function initBubble() {
         const r = resumeCard
         stageKey = ''; resumeCard = null; saveResume()
         loadText(r.text)
-        if (r.idx > 0) seek(r.idx)
-        void play(r.idx)
-        toast(t('Back to {title}', { title: r.title }), undefined, 3500)
+        if (r.draftOnly) {
+          // A draft card restores the draft itself — the text back in
+          // the box and in its persisted copy — and does NOT play it:
+          // it was typed, never played, and its owner never asked to
+          // hear it (F8-8 completion).
+          drafts.set({ listen: r.text })
+          saveLastText(r.text)
+          toast(t('Your earlier draft is back'), undefined, 3500)
+        } else {
+          if (r.idx > 0) seek(r.idx)
+          void play(r.idx)
+          toast(t('Back to {title}', { title: r.title }), undefined, 3500)
+        }
       }
     } else {
       stageKey = ''; resumeCard = null; saveResume()

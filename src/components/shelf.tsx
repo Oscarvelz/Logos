@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, BookPlus, Grid2x2, Grid3x3, Square, CircleCheck, MoreHorizontal, Pencil, Search, Star, Trash2, X, Pin, Clock } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
-import { books, refreshBooks, updateBook, deleteBook, putBook, type BookMeta } from '../lib/books.ts'
+import { books, refreshBooks, updateBook, deleteBook, putBook, bookMatchesQuery, type BookMeta } from '../lib/books.ts'
 import { importBook, BOOK_ACCEPT } from '../lib/book/import.ts'
 import { playBook } from '../lib/book/playbook.ts'
 import { keepAsk, askKeep } from '../lib/book/keepask.ts'
@@ -21,6 +21,18 @@ const FILTERS: { id: Filter; label: string; test: (b: BookMeta) => boolean }[] =
 
 export const openBook = (id: string) => { location.hash = `#/book/${encodeURIComponent(id)}` }
 
+/** M-9 cure: a shelf write that fails is said out loud. The toggles used
+    to fire `void updateBook(...)` with no catch and no feedback — an
+    IndexedDB/quota rejection, or a book that was no longer there
+    (updateBook returns null), simply meant the star / Keep / done tap
+    silently did not happen. */
+export async function guardedBookWrite(p: Promise<BookMeta | null>): Promise<void> {
+  try {
+    const landed = await p
+    if (!landed) toast(t('That book is no longer in your library.'), undefined, 5000)
+  } catch { toast(t('That change couldn’t be saved. Your library may be full or unavailable.'), undefined, 5000) }
+}
+
 /** Import one or more book files, one after another; a single imported book opens in Listen and starts reading aloud. */
 export async function importMany(list: File[]) {
   let last: BookMeta | null = null
@@ -28,11 +40,27 @@ export async function importMany(list: File[]) {
   for (const [i, f] of list.entries()) {
     try { last = await importBook(f, list.length > 1 ? `${i + 1} of ${list.length}` : undefined); addedList.push(last); if (list.length === 1 && !last.warn) toast(t('Added {title}', { title: last.title })) } catch (e) { toast((e as Error).message || t('Couldn’t read {name}', { name: f.name }), undefined, 6000) }
   }
-  const warn = addedList.find((b) => b.warn)?.warn
-  if (warn) toast(warn, undefined, 9000)
+  // M-4 cure: EVERY warning is told, with its book's title — the old code
+  // toasted only the FIRST warning in a batch, titleless, so with several
+  // shortened books the reader could not know which ones arrived damaged.
+  const warned = addedList.filter((b) => b.warn)
+  if (warned.length) toast(warned.map((b) => `${b.title}: ${b.warn}`).join('\n'), undefined, 9000)
   else if (list.length > 1 && addedList.length) toast(addedList.length === 1 ? t('Added 1 book') : t('Added {n} books', { n: addedList.length }))
-  if (last && list.length === 1) void playImported(last)
-  askKeep(addedList)
+  // M-4 cure: a warned book does NOT auto-play. The cut-off warning exists
+  // precisely so a shortened text is not played aloud as if it were whole
+  // (image.ts); the old code started playback unconditionally and let a
+  // transient toast race the audio. A warned single import opens in the
+  // reader instead, where the warning is on screen (BookPage) and the
+  // reader chooses.
+  if (last && list.length === 1) { if (last.warn) openBook(last.id); else void playImported(last) }
+  // M-5 cure: merge with a Keep question still on screen instead of
+  // replacing it wholesale — askKeep replaces the store, so a second
+  // batch used to silently destroy the first batch's question and its
+  // books could never be Kept from the sheet.
+  const prev = keepAsk.get().ask
+  const prevBooks = prev ? prev.ids.map((id, i) => ({ id, title: prev.titles[i] ?? '' })) : []
+  const seen = new Set(prevBooks.map((b) => b.id))
+  askKeep([...prevBooks, ...addedList.filter((b) => !seen.has(b.id))])
 }
 
 /** Take a freshly imported book straight to Listen and read it from the beginning, text following along. */
@@ -72,18 +100,23 @@ export function BookShelf({ onPick }: { onPick: () => void }) {
   const [menu, setMenu] = useState<BookMeta | null>(null)
   const [renaming, setRenaming] = useState<BookMeta | null>(null)
   useEffect(() => { void refreshBooks() }, [])
-  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, st.list.filter(f.test).length])) as Record<Filter, number>, [st.list])
+  // M-15 cure: counts and the listed books derive from ONE searched set
+  // through ONE predicate (bookMatchesQuery + the filter's test) — the
+  // counts used to be taken over the whole shelf while the list was
+  // taken over the search results, so a count could include books the
+  // list excluded (and a filter's number never matched its own grid).
+  const searched = useMemo(() => st.list.filter((b) => bookMatchesQuery(b, q)), [st.list, q])
+  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, searched.filter(f.test).length])) as Record<Filter, number>, [searched])
   const shown = useMemo(() => {
-    const n = q.trim().toLowerCase()
     const f = FILTERS.find((x) => x.id === filter)!
-    const list = st.list.filter((b) => f.test(b) && (!n || `${b.title} ${b.author}`.toLowerCase().includes(n)))
+    const list = searched.filter((b) => f.test(b))
     const by: Record<Sort, (a: BookMeta, b: BookMeta) => number> = {
       recent: (a, b) => (b.openedAt ?? b.addedAt) - (a.openedAt ?? a.addedAt), added: (a, b) => b.addedAt - a.addedAt,
       title: (a, b) => a.title.localeCompare(b.title), author: (a, b) => (a.author || '~').localeCompare(b.author || '~') || a.title.localeCompare(b.title),
       progress: (a, b) => b.progress - a.progress,
     }
     return list.sort(by[sort])
-  }, [st.list, q, sort, filter])
+  }, [searched, sort, filter])
   const reading = st.list.filter((b) => !b.done && b.progress > 0.002).sort((a, b) => (b.openedAt ?? 0) - (a.openedAt ?? 0))[0]
 
   return (
@@ -99,7 +132,14 @@ export function BookShelf({ onPick }: { onPick: () => void }) {
         </div>
       )}
 
-      {st.loaded && !st.list.length && !st.importing ? (
+      {st.loaded && st.loadError && !st.list.length && !st.importing ? (
+        <div className="card empty">
+          <div className="glyph">λ</div>
+          <h3>{t('Your books couldn’t be read')}</h3>
+          <p style={{ margin: '0 auto 18px', maxWidth: 340 }}>{t('Logos could not open the library stored on this device. Your books may still be there — try again, and do not import duplicates until the shelf loads.')}</p>
+          <button className="btn primary" onClick={() => void refreshBooks()}>{t('Try again')}</button>
+        </div>
+      ) : st.loaded && !st.list.length && !st.importing ? (
         <div className="card empty">
           <div className="glyph">λ</div>
           <h3>{t('Your bookshelf')}</h3>
@@ -177,13 +217,17 @@ function BookTile({ b, sort, onMore }: { b: BookMeta; sort: Sort; onMore: () => 
         <BookCover meta={b} />
         <span className="book-fmt">{b.format.toUpperCase()}</span>
         {b.fav && <span className="book-fav"><Star size={13} fill="currentColor" /></span>}
-        <span className={`book-temp ${b.temp ? 'is-temp' : ''}`} data-present="bk-tile-temp" role="button" aria-label={b.temp ? t('Keep {title}', { title: b.title }) : t('Keep {title} only once', { title: b.title })} title={b.temp ? t('Only once — removed when you move to another book') : t('Kept in your library')} onClick={(e) => { e.stopPropagation(); void updateBook(b.id, { temp: !b.temp }) }}>{b.temp ? <><Clock size={11} /> {t('Once')}</> : <><Pin size={11} /> {t('Keep')}</>}</span>
+        <span className={`book-temp ${b.temp ? 'is-temp' : ''}`} data-present="bk-tile-temp" role="button" aria-label={b.temp ? t('Keep {title}', { title: b.title }) : t('Keep {title} only once', { title: b.title })} title={b.temp ? t('Only once — removed when you move to another book') : t('Kept in your library')} onClick={(e) => { e.stopPropagation(); void guardedBookWrite(updateBook(b.id, (cur) => ({ temp: !cur.temp }))) }}>{b.temp ? <><Clock size={11} /> {t('Once')}</> : <><Pin size={11} /> {t('Keep')}</>}</span>
         <span className="book-prog"><i style={{ width: `${b.done ? 100 : pct}%` }} /></span>
       </button>
       <div className="book-tile-info">
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="book-tile-title">{b.title}</div>
           <div className="book-tile-sub">{b.done ? t('Finished') : pct > 0 ? `${pct}%` : t('New')}{sort === 'recent' ? ` · ${whenRead(b.openedAt ?? b.addedAt)}` : ''}{b.author ? ` · ${b.author}` : ''}</div>
+          {/* M-4 cure: the import warning lives on the tile, not only in a
+              9-second toast — a shortened book is visibly marked for as
+              long as it is on the shelf, with the full warning as its title. */}
+          {b.warn && <div className="book-tile-sub" data-present="bk-tile-warn" title={b.warn} style={{ color: 'var(--danger)' }}>⚠ {t('Arrived shortened — tap More for the warning')}</div>}
         </div>
         <button className="icon-btn book-more" data-present="bk-tile-more" onClick={onMore} aria-label={t('More for {title}', { title: b.title })}><MoreHorizontal size={18} /></button>
       </div>
@@ -206,7 +250,20 @@ export function KeepAskSheet() {
     return () => clearInterval(iv)
   }, [ask])
   if (!ask) return null
-  const keep = () => { for (const id of ask.ids) void updateBook(id, { temp: false }, false); void refreshBooks(); keepAsk.set({ ask: null }) }
+  // M-5 cure: Keep is awaited. The old keep() fired every write
+  // un-awaited and closed the sheet at once — if a sweep had deleted a
+  // book in the meantime, updateBook returned null in silence and the
+  // reader believed the books were Kept. Now the sheet closes only after
+  // the writes land, and any book that could not be Kept is named.
+  const keep = () => {
+    void (async () => {
+      const results = await Promise.all(ask.ids.map((id) => updateBook(id, { temp: false }, false).catch(() => null)))
+      await refreshBooks()
+      keepAsk.set({ ask: null })
+      const failed = ask.titles.filter((_, i) => !results[i])
+      if (failed.length) toast(t('Couldn’t keep {titles} — it is no longer in your library.', { titles: failed.join(', ') }), undefined, 6000)
+    })()
+  }
   const forNow = () => keepAsk.set({ ask: null })
   const one = ask.titles.length === 1
   return (
@@ -223,21 +280,27 @@ export function KeepAskSheet() {
 
 function BookMenu({ b, onClose, onRename }: { b: BookMeta | null; onClose: () => void; onRename: (b: BookMeta) => void }) {
   if (!b) return null
-  const run = (fn: () => void | Promise<unknown>) => () => { onClose(); void fn() }
+  // M-11 cure: every toggle below is a function of the FRESH record
+  // inside the write queue — the same store record the tile's star and
+  // badges render from — never of this menu's opening snapshot, so what
+  // a toggle does can never disagree with what the shelf shows.
+  const run = (fn: () => void | Promise<unknown>) => () => { onClose(); void Promise.resolve().then(fn).catch(() => toast(t('That change couldn’t be saved. Your library may be full or unavailable.'), undefined, 5000)) }
   const remove = async () => {
     const shown = b.title.length > 90 ? b.title.slice(0, 90) + '…' : b.title
     if (!await confirmDelete(t('Delete this book?'), t('“{title}” will be removed from your library.', { title: shown }))) return
-    const gone = await deleteBook(b.id)
+    const gone = await deleteBook(b.id, { force: true })
     if (gone) toast(t('Book deleted'), { label: t('Undo'), run: () => { void putBook(gone.meta, gone.content) } }, 6000)
   }
   return (
     <Sheet open onClose={onClose} title={b.title.length > 34 ? t('Book') : b.title}>
+      {/* M-4 cure: the full warning text, readable at any time from the menu. */}
+      {b.warn && <p className="keepask-body" data-present="bk-menu-warn" style={{ color: 'var(--danger)' }}>⚠ {b.warn}</p>}
       <div className="menu-list">
         <button data-present="bk-menu-open" onClick={run(() => openBook(b.id))}><BookOpen size={20} /> {b.progress > 0.002 ? t('Continue reading') : t('Start reading')}</button>
-        <button data-present="bk-menu-fav" onClick={run(() => updateBook(b.id, { fav: !b.fav }, false))}><Star size={20} /> {b.fav ? t('Remove from favorites') : t('Add to favorites')}</button>
-        <button data-present="bk-menu-temp" onClick={run(() => updateBook(b.id, { temp: !b.temp }, false))}>{b.temp ? <Pin size={20} /> : <Clock size={20} />} {b.temp ? t('Keep this book') : t('Only once')}</button>
-        <button data-present="bk-menu-done" onClick={run(() => updateBook(b.id, b.done ? { done: false } : { done: true, progress: 1 }, false))}><CircleCheck size={20} /> {b.done ? t('Mark as not finished') : t('Mark as finished')}</button>
-        {b.progress > 0 && <button data-present="bk-menu-startover" onClick={run(() => updateBook(b.id, { pos: { ch: 0, b: 0 }, progress: 0, done: false }, false))}><BookOpen size={20} /> {t('Start over')}</button>}
+        <button data-present="bk-menu-fav" onClick={run(() => guardedBookWrite(updateBook(b.id, (cur) => ({ fav: !cur.fav }), false)))}><Star size={20} /> {b.fav ? t('Remove from favorites') : t('Add to favorites')}</button>
+        <button data-present="bk-menu-temp" onClick={run(() => guardedBookWrite(updateBook(b.id, (cur) => ({ temp: !cur.temp }), false)))}>{b.temp ? <Pin size={20} /> : <Clock size={20} />} {b.temp ? t('Keep this book') : t('Only once')}</button>
+        <button data-present="bk-menu-done" onClick={run(() => guardedBookWrite(updateBook(b.id, (cur) => (cur.done ? { done: false } : { done: true, progress: 1 }), false)))}><CircleCheck size={20} /> {b.done ? t('Mark as not finished') : t('Mark as finished')}</button>
+        {b.progress > 0 && <button data-present="bk-menu-startover" onClick={run(() => guardedBookWrite(updateBook(b.id, { pos: { ch: 0, b: 0 }, progress: 0, done: false }, false)))}><BookOpen size={20} /> {t('Start over')}</button>}
         <button data-present="bk-menu-rename" onClick={() => onRename(b)}><Pencil size={20} /> {t('Rename')}</button>
         <button className="danger" data-present="bk-menu-delete" onClick={run(remove)}><Trash2 size={20} /> {t('Delete')}</button>
       </div>
@@ -250,7 +313,7 @@ function RenameBook({ b, onClose }: { b: BookMeta | null; onClose: () => void })
   const [a, setA] = useState('')
   useEffect(() => { if (b) { setT(b.title); setA(b.author) } }, [b])
   if (!b) return null
-  const save = () => { if (title.trim()) void updateBook(b.id, { title: title.trim(), author: a.trim() }, false); onClose() }
+  const save = () => { if (title.trim()) void guardedBookWrite(updateBook(b.id, { title: title.trim(), author: a.trim() }, false)); onClose() }
   return (
     <Sheet open onClose={onClose} title={t('Rename')}>
       <input className="text-input" data-present="bk-rename-title" value={title} onChange={(e) => setT(e.target.value)} placeholder={t('Title')} aria-label={t('Title')} autoFocus />

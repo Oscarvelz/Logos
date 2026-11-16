@@ -1,14 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
 import { ArrowDownToLine, ClipboardPaste, Library, Pause, Play, RotateCcw, Share2, Sparkles, Square, Wand2 } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { settings } from '../lib/settings.ts'
-import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
+import { detectLang, estimateSeconds, formatDuration, segmentText, wordCount } from '../lib/text.ts'
 import { voiceById, favoriteVoices, LANG_LABEL, type Lang } from '../lib/voices.ts'
-import { exportJob, queueExport, cancelExport, resetExport, titleFrom } from '../player/exporter.ts'
+import { exportJob, queueExport, cancelExport, resetExport, titleFrom, exportFileName } from '../player/exporter.ts'
 import { clipPlayer, playClip, seekClip } from '../player/clip.ts'
-import { downloadBlob, formatBytes, slugify } from '../lib/audio.ts'
+import { downloadBlob, formatBytes } from '../lib/audio.ts'
 import { engine, POCKET_SIZE_MB, PHONON_SIZE_MB } from '../engine/engine.ts'
 import { EngineNote, VoicePicker } from '../components/chrome.tsx'
 import { Avatar, Range, Seg, toast, useMediaQuery } from '../components/ui.tsx'
@@ -26,6 +26,34 @@ export function CreatePage() {
   const [title, setTitle] = useState('')
   const text = d.create
 
+  // M-40: the Create draft gets the same discipline as the Listen draft
+  // (which survives because settings.saveLastText persists it under its
+  // own key, debounced): the in-memory drafts store alone loses the
+  // Create text on an app restart / full reload, while Listen's comes
+  // back. Hydrate once from this page's own key, then persist every
+  // change debounced — never before hydration, so a first empty render
+  // cannot overwrite the saved draft.
+  const hydrated = useRef(false)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('logos.createText')
+      if (saved && !drafts.get().create) drafts.set({ create: saved })
+    } catch { /* storage blocked: the in-memory draft still works */ }
+    hydrated.current = true
+  }, [])
+  useEffect(() => {
+    if (!hydrated.current) return
+    const t = setTimeout(() => { try { localStorage.setItem('logos.createText', text) } catch { /* quota/blocked */ } }, 300)
+    return () => clearTimeout(t)
+  }, [text])
+
+  // M-45: ONE counting rule — the page's guard is the engine's own
+  // segmentText (the exact function runExport renders with): a text
+  // with no letter or digit ("!!! ???", emoji) yields zero segments
+  // here exactly as there, so it can no longer pass the page and then
+  // silently no-op in the render.
+  const speakable = useMemo(() => segmentText(text, st.langMode).length, [text, st.langMode])
+
   const detected = detectLang(text.slice(0, 4000))
   const lang: Lang = st.langMode === 'auto' ? detected.lang : st.langMode
   const v = voiceById(voice ?? st.defaultVoice[lang])
@@ -36,7 +64,7 @@ export function CreatePage() {
 
   const big = useMediaQuery('(min-width: 1500px)')
   const generate = () => {
-    if (!text.trim()) { toast(t('Add some text first')); return }
+    if (!speakable) { toast(t('Add some words first — punctuation alone has nothing to read')); return }
     if (queueExport(text, { voice, speed: st.exportSpeed, format: st.format, title, origin: 'create' }) === 'queued') toast(t('Queued — it starts after the audio being made now'), { label: t('Library'), run: () => navigate('library') })
   }
 
@@ -108,7 +136,7 @@ export function CreatePage() {
                 <input data-present="create-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder={text ? titleFrom(text) : t('Untitled')}
                   style={{ width: '100%', height: 48, borderRadius: 14, border: '1px solid var(--line)', background: 'var(--surface)', padding: '0 14px', outline: 'none' }} />
               </div>
-              <button className="btn primary block" data-present="create-generate" onClick={generate} disabled={!text.trim()} style={{ height: 56, fontSize: 16 }}><Sparkles size={18} /> {t('Generate audio')}</button>
+              <button className="btn primary block" data-present="create-generate" onClick={generate} disabled={!speakable} style={{ height: 56, fontSize: 16 }}><Sparkles size={18} /> {t('Generate audio')}</button>
               {e.status !== 'ready' && <p className="muted small" style={{ margin: 0, textAlign: 'center' }}>{t('First run downloads the neural voice (~{n} MB), then works offline.', { n: e.kind === 'phonon' ? PHONON_SIZE_MB : POCKET_SIZE_MB })}</p>}
               {job.status === 'error' && <div className="error-note" data-present="create-error">{job.error}</div>}
             </div>
@@ -141,7 +169,8 @@ function Result({ onAgain }: { onAgain: () => void }) {
   const key = `clip:${meta.id}`
   const playing = cp.key === key && cp.playing
   const progress = cp.key === key && cp.duration ? cp.time / cp.duration : 0
-  const filename = `${slugify(meta.title)}.${meta.format}`
+  // M-46: the exporter's session-unique, safe-alphabet name (see exporter.ts).
+  const filename = useMemo(() => exportFileName(meta.title, meta.format), [meta.id, meta.title, meta.format])
   const share = async () => {
     const file = new File([blob], filename, { type: blob.type })
     if (navigator.canShare?.({ files: [file] })) {

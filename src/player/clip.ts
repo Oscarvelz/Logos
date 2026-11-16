@@ -9,12 +9,32 @@ let onStopHooks: (() => void)[] = []
 const endHooks: ((key: string | null) => void)[] = []
 export function onClipEnded(fn: (key: string | null) => void) { endHooks.push(fn) }
 
+/**
+ * One owner for a clip's speed (cure M-2). A clip record may carry
+ * its own speed (`sp`, filed with the record when it was made);
+ * THAT speed — never whichever global happens to be current when
+ * somebody presses play or re-exports — governs the clip's playback
+ * here and its export in the exporter. The global listening speed
+ * applies only where no clip speed exists, which is the dictation
+ * road (live speech, no record yet), and that road does not pass
+ * through this player at all. A clip without `sp` plays at the
+ * neutral 1× its audio was rendered at, exactly as before.
+ */
+export function clipSpeed(sp: number | undefined | null, fallback = 1): number {
+  const v = typeof sp === 'number' && Number.isFinite(sp) && sp > 0 ? sp : fallback
+  return Math.min(2.5, Math.max(0.5, v))
+}
+
+/** The playback rate the loaded clip's record dictates. */
+let clipRate = 1
+export const currentClipRate = () => clipRate
+
 function el() {
   if (audio) return audio
   audio = new Audio()
   audio.addEventListener('timeupdate', () => clipPlayer.set({ time: audio!.currentTime, duration: isFinite(audio!.duration) ? audio!.duration : 0 }))
-  audio.addEventListener('loadedmetadata', () => clipPlayer.set({ duration: isFinite(audio!.duration) ? audio!.duration : 0 }))
-  audio.addEventListener('play', () => clipPlayer.set({ playing: true }))
+  audio.addEventListener('loadedmetadata', () => { audio!.playbackRate = clipRate; clipPlayer.set({ duration: isFinite(audio!.duration) ? audio!.duration : 0 }) })
+  audio.addEventListener('play', () => { audio!.playbackRate = clipRate; clipPlayer.set({ playing: true }) })
   audio.addEventListener('pause', () => clipPlayer.set({ playing: false }))
   audio.addEventListener('ended', () => { clipPlayer.set({ playing: false, time: 0 }); endHooks.forEach((f) => f(clipPlayer.get().key)) })
   return audio
@@ -26,9 +46,15 @@ export function stopClipPlayer() {
 }
 export function onClipPlay(fn: () => void) { onStopHooks.push(fn); return () => { onStopHooks = onStopHooks.filter((f) => f !== fn) } }
 
-export async function playClip(key: string, source: Blob | string, meta?: { title: string; artist?: string }, startAt = 0) {
+export async function playClip(key: string, source: Blob | string, meta?: { title: string; artist?: string; sp?: number }, startAt = 0) {
   const a = el()
   onStopHooks.forEach((f) => f())
+  // The clip record's own speed governs its playback (cure M-2):
+  // resolved here, at the one player every clip sounds through,
+  // and re-applied on the play/metadata events in el() because an
+  // element can shed its rate when its source changes.
+  clipRate = clipSpeed(meta?.sp)
+  a.playbackRate = clipRate
   if (clipPlayer.get().key === key && a.src) {
     if (a.paused) await a.play().catch(() => {})
     else a.pause()

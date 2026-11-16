@@ -37,7 +37,7 @@ import {
   type PresentationModule,
   type PresentationStateFile,
 } from './engine/types.ts'
-import { moduleProgress } from './presentation-state.ts'
+import { currentModuleId, moduleProgress } from './presentation-state.ts'
 
 export interface CatalogueModule {
   id: string
@@ -480,10 +480,25 @@ export function stateFor(entry: CatalogueModule, state: PresentationStateFile): 
  *   in-progress; completed (seen) it returns to its floor, and with no
  *   mark — or a mark naming an unknown module — there is no head and
  *   the index is exactly as it was.
+ * - THE M-37 AMENDMENT: "current" is computed ONCE, in the state layer
+ *   (`currentModuleId`) — a file with no usable mark but exactly one
+ *   in-progress record (the shape a search «Watch» landing writes)
+ *   heads that record's module, because the runner already resumes it
+ *   as current; several in-progress records with no mark still head
+ *   none, honestly ambiguous.
  */
 export function resumeHead(state: PresentationStateFile): CatalogueModule | null {
-  if (!state.lastUsed) return null
-  const entry = catalogueModule(state.lastUsed)
+  // The current module is the STATE LAYER's one computation
+  // (`currentModuleId`, presentation-state.ts — the M-37 cure): the
+  // index head and the runner's stay-here bookkeeping read the same
+  // truth, so the module the index lifts is the module a resume
+  // re-enters — including a Watch-shaped file whose in-progress record
+  // stands before its lastUsed mark exists. The stateFor gate below
+  // keeps the announced-state semantics (a builder-flagged stale
+  // script still reads needs-refresh, never a resume head).
+  const current = currentModuleId(state)
+  if (!current) return null
+  const entry = catalogueModule(current)
   if (!entry) return null
   return stateFor(entry, state).state === 'in-progress' ? entry : null
 }
