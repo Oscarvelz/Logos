@@ -40,6 +40,69 @@ class PlaybackService : Service() {
          *  activity can die undelivered, and a card that outlives its
          *  page is a lie that cannot be swiped away. */
         var instance: PlaybackService? = null
+
+        /** Rebuild the standing card from its own last publish
+         *  (T2-15): the jump seconds changed in Settings, so the
+         *  card's action names and numbered icons — baked at build
+         *  time from the prefs — are rebuilt NOW, not whenever some
+         *  unrelated state change happens to republish. No card
+         *  standing, nothing to rebuild; the next publish reads the
+         *  live prefs anyway. */
+        fun refreshCard(c: android.content.Context) {
+            val svc = instance ?: return
+            if (!cardUp) return
+            svc.republish()
+        }
+
+        /** The stage's owner, learned from the page's bubble pushes
+         *  (T2-20): the title of the Library recording that owns the
+         *  stage, or null while a reading owns it. The finished-
+         *  audio player never publishes to this service, so the
+         *  standing card used to keep the last READING's face — book
+         *  heading and SKIP buttons — over a recording, and its
+         *  "next" stepped the recording by 15 seconds under a track
+         *  skip's promise. The bubble push tells the two players
+         *  apart by shape (1.4.156): a recording's push is active
+         *  with no sentences (ct 0, ci −1) and saved true, its sub
+         *  a clock; a reading's push carries sentences (ct > 0). An
+         *  idle push (nothing active) changes nothing here — the
+         *  last owner's card stands until a player takes the stage.
+         *  A change of owner rebuilds the card in the new owner's
+         *  shape. */
+        @Volatile var clipStage: String? = null
+        @Volatile var clipStageSub: String = ""
+        fun noteBubblePush(json: String) {
+            val j = runCatching { org.json.JSONObject(json) }.getOrNull() ?: return
+            val next: String? = when {
+                j.optBoolean("active") && j.optInt("ct", 0) == 0 && j.optInt("ci", -1) == -1 && j.optBoolean("saved") ->
+                    j.optString("title").ifBlank { "Logos" }
+                j.optInt("ct", 0) > 0 -> null
+                else -> return
+            }
+            val sub = if (next != null) j.optString("sub") else ""
+            if (next == clipStage && sub == clipStageSub) return
+            clipStage = next
+            clipStageSub = sub
+            if (cardUp) instance?.republish()
+        }
+    }
+
+    /** The last publish this service built a card from, kept so the
+     *  card can be rebuilt in place (T2-15/T2-20) without waiting
+     *  for the page to publish again. */
+    private var lastBook = ""
+    private var lastArtist = "Logos"
+    private var lastText = ""
+    private var lastFinished = false
+
+    /** Rebuild the standing card from the last publish, in the
+     *  stage owner's current shape. The wake lock's state is the
+     *  publish's own business and is not touched here. */
+    fun republish() {
+        if (!cardUp || session == null) return
+        runCatching {
+            startForeground(1, build(lastPlaying, lastBook, lastArtist, lastText, lastFinished), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        }
     }
 
     /** Put the card away now (1.4.155): foreground ended, card gone.
@@ -97,7 +160,24 @@ class PlaybackService : Service() {
             // The toggle's truth is the driver's (1.4.116): while the
             // shell's own device voice holds the stage, the page's last
             // published state is a dead letter — ask the speaker.
-            "toggle", "next", "prev", "jumpback", "jumpfwd" -> { act(if (intent.action == "toggle") (if (if (NativeSpeaker.active) NativeSpeaker.playing else lastPlaying) "pause" else "play") else intent.action!!); return START_NOT_STICKY }
+            // And it is judged at TAP time (M-6): BubbleService's
+            // livePlaying() is that driver rule plus the commanded
+            // truth — a definite press either surface issued a breath
+            // ago, still unconfirmed by any publish, counts as the
+            // state it commanded, so the card and the panel can never
+            // judge the same moment from snapshots one state apart.
+            // Only when the page has never pushed in this process is
+            // there no snapshot to judge from: this service's own
+            // last publish (lastPlaying) is the truth of record then.
+            "toggle", "next", "prev", "jumpback", "jumpfwd" -> {
+                if (intent.action == "toggle") {
+                    val before = if (!NativeSpeaker.active && BubbleService.pageNeverPushed()) lastPlaying else BubbleService.livePlaying()
+                    val kind = if (before) "pause" else "play"
+                    BubbleService.noteCommanded(kind == "play")
+                    act(kind)
+                } else act(intent.action!!)
+                return START_NOT_STICKY
+            }
             "stop" -> { cardUp = false; stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf(); return START_NOT_STICKY }
         }
         val playing = intent?.getBooleanExtra("playing", false) ?: false
@@ -119,6 +199,7 @@ class PlaybackService : Service() {
         // A finished reading parks here as well (1.4.160): the card
         // stands saying Finished, and it is the headphone's door back.
         cardUp = true
+        lastBook = book; lastArtist = artist; lastText = text; lastFinished = finished
         startForeground(1, build(playing, book, artist, text, finished), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         if (playing) wake?.acquire(3 * 60 * 60 * 1000L) else wake?.let { if (it.isHeld) it.release() }
         return START_NOT_STICKY
@@ -230,9 +311,19 @@ class PlaybackService : Service() {
 
     private fun build(playing: Boolean, book: String, artist: String, text: String, finished: Boolean = false): Notification {
         val s = session!!
+        // A recording owns the stage (T2-20): the card wears the
+        // RECORDING's face — its title, its clock — and declares no
+        // SKIP, because there is no track to skip to; the session's
+        // jump actions stay, and they stay honest, since the page
+        // steps a recording by the same configured seconds it steps
+        // a reading (listen.ts's jump handlers). The reading's book
+        // returns as the heading the moment a reading retakes the
+        // stage (noteBubblePush rebuilds the card then).
+        val clip = clipStage
+        val effBook = if (clip != null) "" else book
         // The card heads with the book's title (the current sentence scrolling across it was the
         // 1.4.49 complaint); pasted text without a book falls back to the sentence itself.
-        val heading = book.ifBlank { text }
+        val heading = clip ?: book.ifBlank { text }
         val bmp = artBmp()
         s.setMetadata(MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, heading)
@@ -301,7 +392,7 @@ class PlaybackService : Service() {
         // truly. A frozen lie was the price he accepted knowingly:
         // the set is wide, and a value outside it shows no number
         // rather than a wrong one.
-        val cardActions = if (book.isNotBlank())
+        val cardActions = if (effBook.isNotBlank())
             PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
         else
             PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
@@ -346,7 +437,7 @@ class PlaybackService : Service() {
             .setLargeIcon(bmp)
             .setColor(Color.rgb(23, 19, 16))
             .setContentTitle(heading)
-            .setContentText(if (book.isNotBlank()) text else artist)
+            .setContentText(if (clip != null) clipStageSub else if (book.isNotBlank()) text else artist)
             .setContentIntent(open)
             .setDeleteIntent(pi("stop", 4))
             .setOngoing(playing)

@@ -58,23 +58,224 @@ class BubbleService : Service() {
     companion object {
         /** Set by MainActivity: an event name for the page ("toggle", "prev", "next", "clip", "lever", "bubbleoff"). */
         var poke: ((String) -> Unit)? = null
-        /** A transport press that found the page asleep; the page collects it as it wakes. */
-        @Volatile var pendingCmd: String? = null
-        @Volatile var pendingCmdAt: Long = 0
+        /** A stored press (T2-14): its verb, its moment, and its
+         *  context stamp (M-9) travel together as one entry. */
+        private data class PendingPress(val id: Long, val cmd: String, val at: Long, val ctx: String)
+        /** The stored presses, oldest first (T2-14). The single slot
+         *  this replaces silently overwrote an undelivered press with
+         *  any later store — a stored "next" erased without a trace
+         *  by a following "pause" — and its take (read → null →
+         *  expiry-check) was unsynchronized while its callers run on
+         *  the main thread and the WebView JavaBridge thread, so two
+         *  takers could both read the same press before either
+         *  cleared it: one press, delivered twice. Now every store
+         *  and every take is one synchronized step on [pendingLock],
+         *  and presses queue in the order he made them. A repeat of
+         *  the press at the queue's tail coalesces (a double-tap
+         *  stored twice would step twice — the old slot's one honest
+         *  behaviour, kept); the queue is capped so a pathological
+         *  burst cannot grow it without bound, and a press crowded
+         *  out at the cap leaves its receipt in pendingDropNote. */
+        private val pendingLock = Any()
+        /** Every stored press carries its own number (T2-10
+         *  completion): a drain or an escalation may only ever name
+         *  the press that was actually poked — never a newer press
+         *  that happens to share its verb. */
+        private var nextPressId = 0L
+        private val pendingQueue = ArrayDeque<PendingPress>()
+        private const val PENDING_CAP = 16
+        /** The oldest stored press's verb, read-only: the heads the
+         *  house's pause laws look at (deliver, NativeSpeaker). */
+        val pendingCmd: String? get() = synchronized(pendingLock) { pendingQueue.firstOrNull()?.cmd }
+        /** The stamp of the press most recently collected, for the page
+         *  to read alongside the command (Bridge.bubblePendingCtx). */
+        @Volatile var lastTakenCtx: String = ""
+        /** Why the last stored press was dropped at collection, if it
+         *  was: the receipt the Bridge writes to the Settings line. */
+        @Volatile var pendingDropNote: String? = null
 
-        /** Store a press for a sleeping page, stamped with its moment. */
-        fun storePendingCmd(cmd: String) { pendingCmd = cmd; pendingCmdAt = System.currentTimeMillis() }
+        /** Store a press for a sleeping page, stamped with its moment
+         *  AND its context (M-9): the session the press was made
+         *  against — title + sentence total of the state the panel
+         *  was showing — so that at collection time the stamp can be
+         *  checked against the context that is current THEN, not
+         *  merely trusted from queue time. */
+        fun storePendingCmd(cmd: String) {
+            synchronized(pendingLock) {
+                if (pendingQueue.lastOrNull()?.cmd == cmd) return
+                if (pendingQueue.size >= PENDING_CAP) {
+                    pendingQueue.removeFirst()
+                    pendingDropNote = "a stored press was crowded out"
+                }
+                pendingQueue.addLast(PendingPress(++nextPressId, cmd, System.currentTimeMillis(), currentContext()))
+            }
+        }
+
+        /** Whether any stored press is a pause (the 1.4.120 laws ask
+         *  this of the queue, as they asked it of the slot). */
+        fun hasPendingPause(): Boolean = synchronized(pendingLock) { pendingQueue.any { it.cmd == "pause" } }
+
+        /** Remove every stored pause (a fresh catch, or his own play
+         *  press, supersedes a stored stop — 1.4.120). Other stored
+         *  presses keep their order and their stamps. */
+        fun clearPendingPause() {
+            synchronized(pendingLock) { pendingQueue.removeAll { it.cmd == "pause" } }
+        }
+
+        /** The context a stored press belongs to: the identity of the
+         *  session in the latest pushed state ("" when that state
+         *  holds no session — a press stored then belongs to no
+         *  session and is governed by the age audit alone). */
+        fun currentContext(): String {
+            val j = runCatching { JSONObject(nowJson) }.getOrNull() ?: return ""
+            val ct = j.optInt("ct", 0)
+            if (ct <= 0) return ""
+            return j.optString("title") + "|" + ct
+        }
 
         /** Collect the stored press — within twenty seconds it means
          *  what it meant; older, it is a stranger's order and is
          *  dropped, never obeyed (1.4.153). Only "pause" was ever
          *  audited for staleness (1.4.89's law); the audit now covers
          *  every kind, because a stale "play" collected at some later
-         *  reload is an autoplay nobody ordered. */
+         *  reload is an autoplay nobody ordered.
+         *
+         *  The context audit (M-9) runs HERE, at execution time — this
+         *  take is the door both execution roads pass through (the
+         *  page's pull, and backstageServe's poke). If the page has a
+         *  living context and it is NOT the context the press was
+         *  stored against, the press is dropped, never released to be
+         *  executed against whatever the page happens to show now.
+         *  Two honest exceptions: "pause" is exempt (its page-side
+         *  door can only silence, and its lifecycle is already
+         *  governed by 1.4.120/1.4.125 — a fresh catch or a play
+         *  intent clears it), and an EMPTY current context releases
+         *  the press: a page that has pushed no session yet is the
+         *  recovery case the stored press exists for, and there the
+         *  stamp travels with the command (see lastTakenCtx) for the
+         *  page's own execution-time check. Every drop leaves its
+         *  reason in pendingDropNote, so the death is a receipt, not
+         *  a silence (T2-21). */
         fun takePendingCmd(): String? {
-            val cmd = pendingCmd ?: return null
-            pendingCmd = null
-            return if (System.currentTimeMillis() - pendingCmdAt <= 20_000) cmd else null
+            // Pop and audit in ONE synchronized step (T2-14): the
+            // head press is removed as it is judged, so no second
+            // taker — main thread or JavaBridge thread — can ever
+            // read the same press and deliver it twice.
+            synchronized(pendingLock) {
+                val press = pendingQueue.removeFirstOrNull() ?: return null
+                if (System.currentTimeMillis() - press.at > 20_000) {
+                    pendingDropNote = "a stored press went stale"
+                    return null
+                }
+                if (press.cmd != "pause" && press.ctx.isNotEmpty()) {
+                    val cur = currentContext()
+                    if (cur.isNotEmpty() && cur != press.ctx) {
+                        pendingDropNote = "a stored press's session had moved on"
+                        return null
+                    }
+                }
+                lastTakenCtx = press.ctx
+                return press.cmd
+            }
+        }
+
+        /** Look at the head press WITHOUT spending it (T2-10): the
+         *  expiry and context audits run exactly as in the take —
+         *  a press they condemn is dropped here, with its receipt —
+         *  but a press they pass stays stored. backstageServe pokes
+         *  the verb it peeks; only a poke the page proves it heard
+         *  (a state push landing inside the watch window) earns the
+         *  drain below. The old road took first and poked second:
+         *  the stored press was the only copy, and a poke fired into
+         *  a backstage window whose JS context had died in a reload
+         *  spent it on a channel that did not exist. */
+        fun peekPendingPress(): PendingPress? {
+            synchronized(pendingLock) {
+                while (true) {
+                    val press = pendingQueue.firstOrNull() ?: return null
+                    if (System.currentTimeMillis() - press.at > 20_000) {
+                        pendingQueue.removeFirst()
+                        pendingDropNote = "a stored press went stale"
+                        continue
+                    }
+                    if (press.cmd != "pause" && press.ctx.isNotEmpty()) {
+                        val cur = currentContext()
+                        if (cur.isNotEmpty() && cur != press.ctx) {
+                            pendingQueue.removeFirst()
+                            pendingDropNote = "a stored press's session had moved on"
+                            continue
+                        }
+                    }
+                    return press
+                }
+            }
+        }
+
+        fun peekPendingCmd(): String? = peekPendingPress()?.cmd
+
+        /** The head press's own number, or null when the queue is
+         *  empty — how a watcher names the press it poked without
+         *  spending it (T2-10 completion). */
+        fun pendingHeadId(): Long? = synchronized(pendingLock) { pendingQueue.firstOrNull()?.id }
+
+        /** Consume the head press after a VERIFIED poke (T2-10): the
+         *  page pushed state inside the watch window, so the poked
+         *  verb was heard and the stored copy must not be collected
+         *  a second time by a later pull. Only the very press that
+         *  was poked is drained — if the head has moved on (the page
+         *  collected it itself through the Bridge, or a newer press
+         *  leads now), this is a no-op. The drained press's stamp
+         *  still travels to lastTakenCtx, as a taken press's does. */
+        fun drainPokedCmd(id: Long) {
+            synchronized(pendingLock) {
+                val head = pendingQueue.firstOrNull() ?: return
+                if (head.id != id) return
+                pendingQueue.removeFirst()
+                lastTakenCtx = head.ctx
+            }
+        }
+
+        // ── The tap-time truth (M-6) ────────────────────────────────
+        // The panel's state is a SNAPSHOT: the page pushes it on its
+        // own cadence, and between the page's real transition and the
+        // push landing here, the snapshot is one state behind. A
+        // transport press judged against the snapshot in that window
+        // computes the inverse of his intent — the 1.4.89 inversion,
+        // alive on the live-poke road even after the stored road was
+        // cured. The transitions that make the snapshot lie are known:
+        // above all the house's OWN definite presses. So every
+        // definite play/pause the shell issues is remembered here as
+        // the commanded truth, and until a push CONFIRMS it (or it
+        // ages out past the toggle watchdog's last rung) a tap is
+        // judged against the commanded state — the state that is true
+        // when tapped, because his last press made it so.
+        @Volatile private var cmdPlaying: Boolean? = null
+        @Volatile private var cmdPlayingAt = 0L
+
+        /** Remember a definite play/pause the shell just issued. */
+        fun noteCommanded(playing: Boolean) {
+            cmdPlaying = playing; cmdPlayingAt = System.currentTimeMillis()
+        }
+
+        /** Forget the commanded truth: a fresh catch voids it (the
+         *  session it described is gone), and a push that agrees with
+         *  it confirms it — either way the snapshot rules again. */
+        fun clearCommanded() { cmdPlaying = null }
+        fun confirmPush() {
+            val c = cmdPlaying ?: return
+            val j = runCatching { JSONObject(nowJson) }.getOrNull() ?: return
+            if (j.optBoolean("playing") == c) cmdPlaying = null
+        }
+
+        /** Whether sound is flowing, judged at THIS moment: the
+         *  device voice answers for itself while it drives; else a
+         *  still-unconfirmed commanded state outranks the snapshot;
+         *  else the snapshot — the page's latest word — stands. */
+        fun livePlaying(): Boolean {
+            if (NativeSpeaker.active) return NativeSpeaker.playing
+            val c = cmdPlaying
+            if (c != null && System.currentTimeMillis() - cmdPlayingAt <= 3_000) return c
+            return runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(false)
         }
         @Volatile private var wakeLock: PowerManager.WakeLock? = null
 
@@ -127,8 +328,53 @@ class BubbleService : Service() {
         fun setLocked(c: Context, on: Boolean) { prefs(c).edit().putBoolean("lock", on).apply() }
 
         /** A clipboard text waiting for the page to pull it through the bridge. */
+        /** When the waiting catch was stored (T2-13): the setter
+         *  stamps every non-null store, so the Bridge can enforce
+         *  the same twenty-second expiry law on this channel that
+         *  pendingCmd has always had — a catch that survives its
+         *  delivery watch no longer sits here indefinitely, waiting
+         *  to ambush the next unrelated opening of Logos hours
+         *  later and evict whatever is then on the stage. */
+        @Volatile var clipTextAt = 0L
         var clipText: String? = null
+            set(value) {
+                field = value
+                if (value != null) clipTextAt = System.currentTimeMillis()
+            }
         var clipManual = false
+        /** The dedupe key of the catch currently waiting, and of the
+         *  last catch the page CONFIRMED it pulled (T2-7). The key
+         *  used to be committed in deliver(), before any
+         *  confirmation: a delivery whose pull ultimately failed was
+         *  deduped forever — re-copying the identical text was
+         *  swallowed as a repeat of a delivery nobody ever heard —
+         *  while the in-memory key died with the process, so a text
+         *  copied once and already heard delivered AGAIN after a
+         *  restart. Now the key waits here, uncommitted, until the
+         *  page pulls the text through Bridge.bubbleClip (the one
+         *  road that proves delivery); only then is it committed —
+         *  to memory AND to prefs, so the dedupe survives the
+         *  process reaper and an already-heard text stays heard. */
+        @Volatile private var pendingKey: String? = null
+        fun confirmClipPulled(c: Context) {
+            val k = pendingKey ?: return
+            pendingKey = null
+            lastKey = k
+            // commit(), not apply(): the whole point is surviving a
+            // process death that may come a breath after the pull.
+            prefs(c).edit().putString("lastClipKey", k).commit()
+        }
+        /** The committed dedupe key, from memory or — after a
+         *  restart — from prefs (T2-7). */
+        fun committedClipKey(c: Context): String? =
+            lastKey ?: prefs(c).getString("lastClipKey", null)?.also { lastKey = it }
+        /** A waiting catch died unconfirmed (its twenty seconds ran
+         *  out at the Bridge): its uncommitted key dies with it, so
+         *  the text can be copied and delivered fresh (T2-7/T2-13). */
+        fun expireClip() {
+            clipText = null
+            pendingKey = null
+        }
         /** Latest player state pushed by the page (JSON: playing, active, title, sub). */
         var nowJson = ""
             set(value) {
@@ -144,25 +390,148 @@ class BubbleService : Service() {
         fun s(en: String, es: String): String = if (uiLang == "es") es else en
         /** When the page last pushed state — the watchdog's pulse. */
         @Volatile var nowAt = 0L
+
+        /** True until the page pushes its first state in this process.
+         *  The honest never-pushed test (T2-5): nowJson is a non-null
+         *  String initialised "", so comparing it to null can never
+         *  fire — a first load still in flight was judged a corpse by
+         *  that dead guard. nowAt starts at 0L and is stamped on every
+         *  push (MainActivity's bubbleNow bridge), so 0L means exactly
+         *  "never pushed". Once the page HAS pushed, this is false and
+         *  every corpse check downstream runs unchanged. */
+        fun pageNeverPushed(): Boolean = nowAt == 0L
         var onNow: (() -> Unit)? = null
         /** Set by the service: a fresh catch arms its delivery watch. */
         var onDelivery: (() -> Unit)? = null
         /** The last rung of the delivery ladder: the activity reloads its
          *  page when this is standing as it comes forward. */
+        /** When the reload was asked for (T2-13): the setter stamps
+         *  every raising, and the activity honours the flag only
+         *  inside the same twenty-second law as every other stored
+         *  order — a reload asked for and never consumed used to
+         *  wait indefinitely and fire at some much later arrival,
+         *  reloading a healthy page nobody had asked to reload. */
+        @Volatile var wantReloadAt = 0L
         var wantReload = false
+            set(value) {
+                field = value
+                if (value) wantReloadAt = System.currentTimeMillis()
+            }
         var running = false
         /** Set when Paste & play could not read from the bubble: the page reads it itself as Logos opens. */
         var wantClip = false
         var deliveries = 0
         @Volatile var lastDeliveryAt = 0L
         /** A seek chosen on the panel's bar, pulled once by the page. */
+        /** When the seek was chosen, and against which session
+         *  (T2-13 + T2-19): the setter stamps every real store, so
+         *  the Bridge can drop a seek that outlives the twenty-
+         *  second law — a fraction set while the page could not
+         *  hear it used to survive until some later session pulled
+         *  it and jumped mid-book — and can refuse a seek whose
+         *  session has moved on, exactly as a stored press is
+         *  refused. The stamp travels with a taken seek in
+         *  lastTakenSeekCtx (Bridge.bubbleSeekCtx), for the page's
+         *  own check against a session its recovery restored. */
+        @Volatile var seekFracAt = 0L
+        @Volatile var seekCtx: String = ""
+        @Volatile var lastTakenSeekCtx: String = ""
         @Volatile var seekFrac = -1.0
+            set(value) {
+                field = value
+                if (value >= 0) { seekFracAt = System.currentTimeMillis(); seekCtx = currentContext() }
+            }
         /** Set by the service: wave the bubble (leaving-Logos trigger). */
         var inviteHook: (() -> Unit)? = null
-        private var lastKey = 0
+        private var lastKey: String? = null
+
+        /** The clipboard dedupe key (T2-2): a strong digest of the
+         *  FULL text, with its length. The old key — length * 31 +
+         *  the 32-bit String.hashCode() — collides by construction:
+         *  "Aa…" and "BB…" (likewise "FB…"/"Ea…") share length and
+         *  hash, so the second, different copy was swallowed as a
+         *  repeat before any receipt was written. SHA-256 over the
+         *  text's UTF-8 bytes makes the key a fingerprint of the
+         *  whole text: different texts yield different keys,
+         *  identical text yields the same key, deterministically. */
+        private fun clipKey(text: String): String {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(text.toByteArray(Charsets.UTF_8))
+            val hex = digest.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            return "${text.length}:$hex"
+        }
+
         private var pendingManual = false
+        /** The one blink in flight (T2-18): pendingManual used to be
+         *  a single shared flag that every readClip overwrote before
+         *  launching its ClipActivity blink, and deliverFromClip
+         *  delivered with whatever the flag held when A blink
+         *  returned — so an automatic read landing between a manual
+         *  Paste-now and its blink downgraded the manual delivery
+         *  (the stage lock and the dedupe could swallow the one read
+         *  promised a guaranteed floor), and the reverse upgraded an
+         *  automatic read past the lock he set. ClipActivity carries
+         *  no token identifying which ask it answers, so the shell
+         *  now allows exactly ONE blink in flight: a read that would
+         *  blink while one is outstanding JOINS it instead of
+         *  overwriting its flag — a manual join may only UPGRADE the
+         *  outstanding ask (the blink reads the same clipboard for
+         *  both), never downgrade it — and deliverFromClip consumes
+         *  the flag as it clears the flight. A flight older than
+         *  five seconds is a blink that died without delivering;
+         *  the next read may launch a fresh one. */
+        @Volatile private var blinkInFlight = false
+        @Volatile private var blinkAt = 0L
         private var lastTrampoline = 0L
         private var trySource = "panel"
+
+        /** The panel lever's authority (T2-17): a lever flip made on
+         *  the panel writes the native pref and pokes the page — and
+         *  if that poke is lost (the dead or zombie page the native
+         *  mirror exists for), the page's next init used to push its
+         *  own stale setting DOWN over the pref, silently reverting
+         *  his flip. Now a panel flip stands as the native truth
+         *  until the page proves it heard: it either pulls the value
+         *  itself (Bridge.bubbleAuto — the lever listener's road,
+         *  which clears this mark) or pushes a value that AGREES.
+         *  A page push that disagrees while the mark stands is
+         *  refused, and the page is poked "lever" again so it pulls
+         *  the truth. A push with no mark standing — the Settings
+         *  switch's own road — is accepted as always.
+         *  (T2-17 completion: the mark originally stood only while
+         *  FRESH — 60 seconds — so a flip whose poke was lost to a
+         *  page dead or asleep longer than a minute was still
+         *  silently reverted by that page's next init push. The mark
+         *  now stands until it is CONSUMED — by the page's own pull
+         *  or by an agreeing push — however long the page was gone;
+         *  leverNativeAt keeps the moment for the record, no longer
+         *  as a gate.) */
+        @Volatile private var leverNativePending = false
+        @Volatile private var leverNativeAt = 0L
+        fun notePanelLever() {
+            leverNativePending = true
+            leverNativeAt = System.currentTimeMillis()
+        }
+        /** The page pushes its lever value down (Bridge.bubblePrefs):
+         *  returns true when the push was accepted. */
+        fun pageLeverPush(c: Context, auto: Boolean): Boolean {
+            if (leverNativePending) {
+                val native = lever(c)
+                if (auto != native) {
+                    runCatching { poke?.invoke("lever") }
+                    return false
+                }
+                leverNativePending = false
+            }
+            prefs(c).edit().putBoolean("auto", auto).apply()
+            return true
+        }
+        /** The page pulls the lever value (Bridge.bubbleAuto): the
+         *  pull itself is the acknowledgement — the mark clears. */
+        fun pageLeverPull(c: Context): Boolean {
+            leverNativePending = false
+            return lever(c)
+        }
 
         /** A line for the Settings card, so a failed read is evidence, not a mystery. */
         fun noteTry(c: Context, what: String) {
@@ -191,7 +560,20 @@ class BubbleService : Service() {
          *  them; the panel's jump keys and the shade's icons read
          *  them from here, so every surface leaps the same distance. */
         fun setJump(c: Context, jb: Int, jf: Int) {
-            prefs(c).edit().putInt("jump_b", jb.coerceIn(1, 600)).putInt("jump_f", jf.coerceIn(1, 600)).apply()
+            val b = jb.coerceIn(1, 600); val f = jf.coerceIn(1, 600)
+            val p = prefs(c)
+            if (p.getInt("jump_b", 15) == b && p.getInt("jump_f", 30) == f) return
+            p.edit().putInt("jump_b", b).putInt("jump_f", f).apply()
+            // The deed changes the moment these prefs move — the
+            // page jumps by its live settings and NativeSpeaker.jump
+            // reads these prefs live — but the media card used to
+            // keep naming and picturing the OLD seconds until some
+            // unrelated state change happened to republish it,
+            // because its build ran only on a publish and the page's
+            // publish dedupe key excludes the jump seconds (T2-15).
+            // A changed value now rebuilds the standing card from
+            // its own last publish, so name, icon and deed agree.
+            PlaybackService.refreshCard(c)
         }
 
         /** The theme family (1.4.165): 'dark' | 'light' | 'tron' |
@@ -231,6 +613,7 @@ class BubbleService : Service() {
          *  stored pause again: the newest word is his. */
         fun notePagePaused() {
             nativeGen++ // his stop also ends the delivery chain (1.4.125)
+            noteCommanded(false) // the tap-time truth (M-6): silence was commanded
             storePendingCmd("pause")
             runCatching { poke?.invoke("pause") }
         }
@@ -274,17 +657,56 @@ class BubbleService : Service() {
             if (cmd == "pause") nativeGen++ // a stored stop ends the chain too (1.4.125)
             if (NativeSpeaker.active) { NativeSpeaker.handle(cmd); return }
             storePendingCmd(cmd)
-            if (backstageServe()) return
+            if (backstageServe(c)) return
             runCatching { c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(c, 0, 0).toBundle()) }
         }
 
         /** The page lives backstage (1.4.111): it is awake, so a wake is a
          *  direct poke — no ghost visit, no black flash, Oscar stays put. */
-        fun backstageServe(): Boolean {
+        /** Served backstage, with the poke VERIFIED (T2-10): the
+         *  stored press is only PEEKED at, never taken, before the
+         *  poke — a backstage window survives a page reload while
+         *  its JS context does not, so Backstage.active alone is no
+         *  proof the page can receive. After the poke, the same
+         *  1.2-second liveness watch the toggle's escalation uses:
+         *  a state push landing inside the window proves the page
+         *  heard, and only then is the stored press drained (so a
+         *  later Bridge pull cannot deliver it a second time). On
+         *  silence the press was never spent — it stays stored,
+         *  and the wake escalates to a ghost visit, whose arriving
+         *  page collects the press through the Bridge as it wakes.
+         *  The clip poke needs no such guard: clipText is not spent
+         *  by poking, only by the page's pull. */
+        fun backstageServe(c: Context? = null): Boolean {
             val p = poke ?: return false
             if (!Backstage.active) return false
-            val cmd = takePendingCmd()
-            if (cmd != null) p(cmd)
+            val press = peekPendingPress()
+            if (press != null) {
+                val pokedAt = nowAt
+                val beforePush = nowJson
+                p(press.cmd)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    // The drain is earned by THIS press's own evidence
+                    // (T2-10 completion): a push landed, its content
+                    // MOVED from the poke-time snapshot, and it speaks
+                    // for the press's own session — the context stamp
+                    // still matches. A bare nowAt advance used to pass,
+                    // so a reloading page's routine init push could
+                    // satisfy the watch for a poke that died with the
+                    // old JS context, and the stored press — the only
+                    // copy — was drained unheard. The drain also names
+                    // the press by its number, never its verb: a newer
+                    // same-verb press at the head is not the press that
+                    // was poked and is never eaten for it.
+                    val heard = nowAt > pokedAt && nowJson != beforePush &&
+                        (press.ctx.isEmpty() || currentContext() == press.ctx)
+                    if (heard) {
+                        drainPokedCmd(press.id)
+                    } else if (pendingHeadId() == press.id && c != null) {
+                        runCatching { c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(c, 0, 0).toBundle()) }
+                    }
+                }, 1200)
+            }
             else if (clipText != null) p("clip")
             return true
         }
@@ -293,11 +715,25 @@ class BubbleService : Service() {
             if (text.isEmpty()) return
             // A fresh catch is meant to be heard: it supersedes a stored
             // stop (1.4.120), which would otherwise pause the new text.
-            if (pendingCmd == "pause") pendingCmd = null
+            if (hasPendingPause()) clearPendingPause()
+            // …and it voids the commanded truth (M-6): the session the
+            // last definite press described is being replaced, so no
+            // tap may be judged against its ghost.
+            clearCommanded()
             if (!manual && isLocked(c)) { noteTry(c, s("the lock held a copy back", "el candado retuvo una copia")); return }
-            val key = text.length * 31 + text.hashCode()
-            if (!manual && key == lastKey) return
-            lastKey = key
+            val key = clipKey(text)
+            // The dedupe judges against the COMMITTED key — the last
+            // catch the page confirmed it pulled, in this process or
+            // a previous one (T2-7) — and against the key of the
+            // catch still waiting for its pull, so a repeat copy
+            // arriving while the first is in flight is still a
+            // repeat. This catch's own key is NOT committed here:
+            // it waits in pendingKey until Bridge.bubbleClip proves
+            // the page took the text (confirmClipPulled). A delivery
+            // whose pull fails therefore dedupes nothing — copying
+            // the text again is a new delivery, as it should be.
+            if (!manual && (key == committedClipKey(c) || key == pendingKey)) return
+            pendingKey = key
             deliveries++
             lastDeliveryAt = System.currentTimeMillis()
             noteTry(c, s("read ${text.length} chars via $trySource", "leídos ${text.length} caracteres vía ${if (trySource == "the blink") "el parpadeo" else "el panel"}"))
@@ -317,13 +753,21 @@ class BubbleService : Service() {
 
         /** ClipActivity read the clipboard under its brief focus: hand it over. */
         fun deliverFromClip(c: Context, text: String) {
+            // Consume the flight and its flag together (T2-18): the
+            // manual/auto character of THIS blink was settled when
+            // it was launched (or upgraded by a manual join) and is
+            // read exactly once, here — no later read can reach back
+            // and change what this delivery is.
+            blinkInFlight = false
+            val manual = pendingManual
+            pendingManual = false
             if (text.isEmpty()) {
                 noteTry(c, s("the blink found the clipboard empty", "el parpadeo vio el portapapeles vacío"))
-                if (pendingManual) Toast.makeText(c, s("Clipboard is empty", "El portapapeles está vacío"), Toast.LENGTH_SHORT).show()
+                if (manual) Toast.makeText(c, s("Clipboard is empty", "El portapapeles está vacío"), Toast.LENGTH_SHORT).show()
                 return
             }
             trySource = "the blink"
-            deliver(c, text, pendingManual)
+            deliver(c, text, manual)
         }
     }
 
@@ -356,6 +800,19 @@ class BubbleService : Service() {
     private var scrubTarget = -1
     private var lastCi = -1
     private var lastCt = 0
+    // The panel's own session belief (M-8): the identity of the session
+    // whose sentence coordinates it has accepted (title + total), the
+    // sentence window that came with them, and the session most
+    // recently replaced — a straggler push from that one, arriving
+    // just after the panel moved on, is recognised and its index
+    // refused. These are session truth, not view state: they survive
+    // the panel closing and reopening, like lastCi/lastCt do.
+    private var sessKey = ""
+    private var sessTp = ""
+    private var sessTc = ""
+    private var sessTn = ""
+    private var prevSessKey = ""
+    private var prevSessAt = 0L
     private var playingNow = false
     private var lastInvite = 0L
     private var lastDeliverySeen = 0
@@ -365,6 +822,16 @@ class BubbleService : Service() {
     private var titleV: TextView? = null
     private var subV: TextView? = null
     private var toggleB: ImageButton? = null
+    // What the panel already shows (M-7): refreshPanel diffs every
+    // incoming state against these and touches only the views whose
+    // value actually changed — a same-state push mutates nothing.
+    // They describe VIEWS, so they die with them in collapsePanel.
+    private var shownTitle: String? = null
+    private var shownSub: String? = null
+    private var shownPlaying: Boolean? = null
+    private var shownSeek = -1
+    private var shownBarsKey: String? = null
+    private var shownLock: Boolean? = null
     private var ctlSlow: View? = null
     private var ctlPrev: View? = null
     private var ctlNext: View? = null
@@ -573,6 +1040,10 @@ class BubbleService : Service() {
         val text = nativeText ?: return
         noteTry(this, s("the device voice took over", "la voz del dispositivo tomó el relevo"))
         yieldFlow = 0
+        // The catch is being heard — in the device voice, but
+        // heard: its dedupe key commits as if the page had pulled
+        // it, so a restart cannot deliver it a second time (T2-7).
+        confirmClipPulled(this)
         NativeSpeaker.takeOver(this, text, titleFromText(text))
         handler.postDelayed({ nativeYield(my) }, 6_000)
     }
@@ -629,6 +1100,7 @@ class BubbleService : Service() {
         if (!same) { progVisitAt = now; return }
         noteTry(this, s("the device voice took over", "la voz del dispositivo tomó el relevo"))
         yieldFlow = 0
+        confirmClipPulled(this) // heard in the device voice: the catch's key commits (T2-7)
         NativeSpeaker.takeOver(this, text, titleFromText(text))
         handler.postDelayed({ nativeYield(nativeGen) }, 6_000)
     }
@@ -709,14 +1181,74 @@ class BubbleService : Service() {
     /** A panel transport key: hand it to the page — or, when Android has
      *  retired the activity behind the service (the keys go silent), remember
      *  the press and bring Logos forward so the page collects it as it wakes. */
+    // The poke watch's generation (T2-11): every live poke bumps
+    // it, so a watch armed by an earlier press stands down when a
+    // newer press has taken over the page's attention.
+    private var pokeWatchSeq = 0
+
     private fun pokeOrWake(cmd: String, force: Boolean = false) {
         if (cmd == "pause") nativeGen++ // a definite stop ends the delivery chain (1.4.125)
+        // A definite play/pause through this door is the tap-time
+        // truth until the page's push confirms it (M-6).
+        if (cmd == "play") noteCommanded(true) else if (cmd == "pause") noteCommanded(false)
         if (NativeSpeaker.active) { NativeSpeaker.handle(cmd); return }
         val p = poke
-        if (p != null && !force) { p(cmd); return }
+        if (p != null && !force) {
+            p(cmd)
+            // Every key gets the toggle's liveness discipline
+            // (T2-11): a non-null poke used to be treated as proof
+            // of life for every key except the toggle, but poke is
+            // nulled only when the activity dies with the bubble
+            // off — a HUNG renderer (activity alive, pushes stopped,
+            // evaluateJavascript speaking into nothing) leaves it
+            // non-null forever, and prev, next, the jumps, slower,
+            // faster, mark, save and voice were all fired into the
+            // corpse with no store, no wake, no receipt. Now the
+            // poke is watched: if the page pushes no new state
+            // within the same 1.2-second window the toggle's first
+            // rung uses, the press is treated as never delivered —
+            // it is STORED (never fired twice into the corpse) and
+            // the page is woken to collect it, exactly as the
+            // toggle's escalation already fell back to store + wake.
+            val myWatch = ++pokeWatchSeq
+            val pokedAt = nowAt
+            handler.postDelayed({
+                if (myWatch != pokeWatchSeq) return@postDelayed // a newer press owns the watch now
+                if (NativeSpeaker.active) return@postDelayed
+                if (nowAt > pokedAt) return@postDelayed // the page pushed: it heard
+                storePendingCmd(cmd)
+                noteTry(this, s("panel key visited Logos", "la tecla del panel visitó Logos"))
+                ghostWake()
+            }, 1200)
+            return
+        }
         storePendingCmd(cmd)
         noteTry(this, s("panel key visited Logos", "la tecla del panel visitó Logos"))
         ghostWake()
+    }
+
+    private var seekWatchSeq = 0
+
+    /** The seek door (T2-11 completion): the seek bar and the sentence
+     *  scrub used to fire a bare poke — no watch, no wake — so against
+     *  a hung renderer the fraction sat in seekFrac until the pull-time
+     *  expiry discarded it, unheard. The fraction is already the stored
+     *  copy (stamped with its session, expiring at its pull door —
+     *  T2-13/T2-19); what the seek lacked is the keys' liveness
+     *  discipline: poke, watch for a push, and on silence wake the
+     *  page so it comes and pulls the fraction itself. */
+    private fun pokeSeekOrWake() {
+        if (poke == null) { ghostWake(); return }
+        poke?.invoke("seek")
+        val myWatch = ++seekWatchSeq
+        val pokedAt = nowAt
+        handler.postDelayed({
+            if (myWatch != seekWatchSeq) return@postDelayed // a newer seek owns the watch now
+            if (NativeSpeaker.active) return@postDelayed
+            if (nowAt > pokedAt) return@postDelayed // the page pushed: it heard
+            noteTry(this, s("panel seek visited Logos", "la búsqueda del panel visitó Logos"))
+            ghostWake()
+        }, 1200)
     }
 
     /** Bring Logos forward WITHOUT taking Oscar anywhere (1.4.88): the
@@ -724,7 +1256,7 @@ class BubbleService : Service() {
      *  until the page breathes again, then leaves on its own. The bubble
      *  is a shortcut; a rescue that lands him inside the app is no rescue. */
     private fun ghostWake(force: Boolean = false) {
-        if (!force && backstageServe()) { noteTry(this, s("served backstage, no visit", "atendido tras bastidores, sin visita")); return }
+        if (!force && backstageServe(this)) { noteTry(this, s("served backstage, no visit", "atendido tras bastidores, sin visita")); return }
         runCatching { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle()) }
     }
 
@@ -880,10 +1412,28 @@ class BubbleService : Service() {
         super.onCreate()
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("bubble", "Floating bubble", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
-        onNow = { refreshPanel() }
+        onNow = {
+            refreshPanel()
+            // The shade card follows the stage's owner too (T2-20):
+            // every page push tells PlaybackService whether a
+            // recording or a reading holds the stage, so its card
+            // can stop wearing a book's face over a recording.
+            PlaybackService.noteBubblePush(nowJson)
+        }
         lookHook = { applyLook() }
         onDelivery = { armDeliveryWatch(); armNativeFallback() }
-        NativeSpeaker.listener = { refreshPanel() }
+        NativeSpeaker.listener = {
+            refreshPanel()
+            // The page half of H-12 (WR-1): every native transition
+            // also pokes the page, bare — no payload, house style,
+            // exactly as notePagePaused() pokes "pause". The page
+            // pulls the position through bubbleNativePos() (the
+            // poke+pull pattern of bubbleSeek / bubblePendingCmd).
+            // refreshPanel runs first, unchanged; the poke is
+            // wrapped so a dead page door can never break the panel
+            // or the speaker's own notify chain.
+            runCatching { poke?.invoke("nativepos") }
+        }
         inviteHook = { invite(3) }
     }
 
@@ -1594,22 +2144,62 @@ class BubbleService : Service() {
             // computes "play": the pause key could not pause. Ever. Oscar
             // met exactly that: tapping pause while the device voice read
             // re-issued play, and the reading would not stop.
-            val before = if (NativeSpeaker.active) NativeSpeaker.playing
-                else runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(false)
+            // And the truth is judged at TAP time (M-6): livePlaying()
+            // is the 1.4.116 driver rule plus the commanded truth — a
+            // press he made a breath ago, still unconfirmed by any
+            // push, counts as the state it commanded, so a quick
+            // second tap means the opposite of the first instead of
+            // repeating it off a snapshot that is one state behind.
+            val before = livePlaying()
             val intent = if (before) "pause" else "play"
+            val intended = intent == "play"
+            // The watchdog's evidence (T2-12): the press is judged
+            // not by the playing bit alone but by whether the page
+            // SHOWED anything at all in answer. The old test compared
+            // only the bit before/after 1 200 ms — and a play that
+            // legitimately started AND finished inside the window (a
+            // very short copied text, an errored start) reads
+            // after == before, so it was judged a zombie and the
+            // watchdog force-stored the play and ghost-woke the
+            // page: a replay nobody ordered. M-6's commanded truth
+            // does not cover this — it judges TAPS, and a corpse
+            // leaves it standing too — so the rungs below look for a
+            // TRANSITION: a push landing at all (nowAt advancing),
+            // whose content differs from the press-time snapshot
+            // (position, sentence, busy/err/active bits, subtitle).
+            // A session that ran and finished moves that evidence; a
+            // corpse moves none of it.
+            val beforeAt = nowAt
+            val beforePush = nowJson
+            fun pageAnswered(): Boolean {
+                if (nowAt <= beforeAt) return false // no push landed: silence
+                if (runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(before) == intended) return true
+                return nowJson != beforePush // it pushed SOMETHING different: it heard, and acted
+            }
             pokeOrWake(intent)
             handler.postDelayed({ refreshPanel() }, 350)
             handler.postDelayed({
-                val after = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(before)
-                if (!NativeSpeaker.active && after == before) pokeOrWake(intent, force = true)
+                if (!NativeSpeaker.active && !pageAnswered()) pokeOrWake(intent, force = true)
             }, 1200)
             // The last rung: even the wake changed nothing — the page itself
             // is a corpse. Reload it in place; the fresh page collects the
             // stored INTENT (a pause stays a pause — silence needs no
             // resurrection), and any waiting catch is recovered on its own.
+            // The rung itself is cured too (T2-12): it used to be a
+            // safe-call on poke — a no-op in exactly the case it
+            // exists for, when poke is null because the activity is
+            // gone. Now the null case takes the road that needs no
+            // poke: the intent is stored (pokeOrWake force, above,
+            // already stored it; storing again coalesces at the
+            // queue's tail), wantReload is raised, and a ghost visit
+            // brings a NEW activity whose arrival honours the flag
+            // and reloads its fresh page — which then collects the
+            // stored intent through the Bridge.
             handler.postDelayed({
-                val after2 = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(before)
-                if (!NativeSpeaker.active && after2 == before) poke?.invoke("reload")
+                if (!NativeSpeaker.active && !pageAnswered()) {
+                    if (poke != null) poke?.invoke("reload")
+                    else { wantReload = true; ghostWake(force = true) }
+                }
             }, 2600)
         }
         controls.addView(slowB); controls.addView(prevB); controls.addView(toggleB); controls.addView(nextB); controls.addView(fastB)
@@ -1636,7 +2226,7 @@ class BubbleService : Service() {
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, pr: Int, fromUser: Boolean) {}
                 override fun onStartTrackingTouch(sb: SeekBar?) { seekHeld = true }
-                override fun onStopTrackingTouch(sb: SeekBar?) { seekHeld = false; seekFrac = (sb?.progress ?: 0) / 1000.0; if (NativeSpeaker.active) NativeSpeaker.seekTo(seekFrac) else poke?.invoke("seek") }
+                override fun onStopTrackingTouch(sb: SeekBar?) { seekHeld = false; seekFrac = (sb?.progress ?: 0) / 1000.0; if (NativeSpeaker.active) NativeSpeaker.seekTo(seekFrac) else pokeSeekOrWake() }
             })
         }
         seekBar = seekW
@@ -1665,6 +2255,12 @@ class BubbleService : Service() {
             trackTintList = goldStates
             setOnCheckedChangeListener { _, on ->
                 prefs(this@BubbleService).edit().putBoolean("auto", on).apply()
+                // The flip stands as the native truth until the page
+                // proves it heard (T2-17): if this poke is lost, the
+                // page's next init push of its stale setting is
+                // refused at the Bridge instead of silently
+                // reverting the switch he just flipped.
+                notePanelLever()
                 poke?.invoke("lever")
                 if (on) readClip(false)
             }
@@ -2180,6 +2776,10 @@ class BubbleService : Service() {
         hideNameTag()
         val v = panel
         panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; gripV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null; scrubTarget = -1; scrubMode = 0
+        // The shown-* diff memory describes these views (M-7): the
+        // next panel is born blank, so its first refresh must paint
+        // everything — the memory dies with the views it described.
+        shownTitle = null; shownSub = null; shownPlaying = null; shownSeek = -1; shownBarsKey = null; shownLock = null
         if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
         if (!now && deliveries != lastDeliverySeen) {
             lastDeliverySeen = deliveries
@@ -2245,7 +2845,7 @@ class BubbleService : Service() {
         seekHeld = false
         if (t >= 0 && ct > 0 && t != scrubFrom) {
             seekFrac = t.toDouble() / ct
-            if (NativeSpeaker.active) NativeSpeaker.seekTo(seekFrac) else poke?.invoke("seek")
+            if (NativeSpeaker.active) NativeSpeaker.seekTo(seekFrac) else pokeSeekOrWake()
         }
         handler.postDelayed({ refreshPanel() }, 60)
     }
@@ -2278,6 +2878,11 @@ class BubbleService : Service() {
         var wordOff = -1
         if (isTablet() && tp.isNotEmpty()) { val st = sb.length; sb.append(tp).append(" "); sb.setSpan(ForegroundColorSpan(muted), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
         val words = tc.split(' ')
+        // The word index is validated against the sentence the panel
+        // itself is showing (M-8): a pushed wi that cannot belong to
+        // this tc — counted by another segmentation, or arrived with
+        // a foreign push — paints no amber rather than a wrong word.
+        val wiE = if (wi >= words.size) -1 else wi
         var first = true
         for ((i, w) in words.withIndex()) {
             if (!first) sb.append(" ")
@@ -2285,8 +2890,8 @@ class BubbleService : Service() {
             val st = sb.length
             sb.append(w)
             when {
-                wi < 0 || i < wi -> sb.setSpan(ForegroundColorSpan(ink), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                i == wi -> {
+                wiE < 0 || i < wiE -> sb.setSpan(ForegroundColorSpan(ink), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                i == wiE -> {
                     sb.setSpan(ForegroundColorSpan(onGold), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     sb.setSpan(android.text.style.BackgroundColorSpan(goldC), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     wordOff = st
@@ -2332,50 +2937,120 @@ class BubbleService : Service() {
         }
     }
 
+    /** Honour a push's sentence coordinates only if they can belong
+     *  to the panel's own session (M-8). The old adoption was absolute:
+     *  any push's (ci, ct) became the scrub's arithmetic, so a stale or
+     *  foreign push — the previous text's index, delivered late by a
+     *  dying page or an in-flight bridge call — silently re-based the
+     *  scrub onto a text the panel was no longer showing, and the seek
+     *  it committed landed in the live session at a fraction computed
+     *  from another text's counts. Now the index is validated before
+     *  it is obeyed:
+     *  · bounds — an index outside its own total cannot belong;
+     *  · identity — a push claiming a different session (title or
+     *  total changed) is a session change and is accepted as one,
+     *  EXCEPT a push from the session just replaced, arriving within
+     *  seconds of the change: that is a straggler, and its index is
+     *  refused (the rest of the push — its playing bit, its title —
+     *  still lands; only the coordinates are disbelieved);
+     *  · same session, same index, different sentence — the push's
+     *  index and its own text disagree with the sentence the panel
+     *  holds at that index: foreign, refused;
+     *  · a scrub in flight owns the counts until it commits — a push
+     *  landing mid-gesture never re-bases the gesture's arithmetic.
+     *  A refused index leaves the panel's last accepted coordinates
+     *  standing: ignored, never obeyed. */
+    private fun acceptIndex(j: JSONObject?) {
+        if (j == null) return
+        if (scrubMode == 1 || scrubTarget >= 0) return
+        val ct = j.optInt("ct", 0)
+        val ci = j.optInt("ci", -1)
+        if (ct <= 0 || ci < 0 || ci >= ct) return
+        val key = j.optString("title") + "|" + ct
+        val tc = j.optString("tc")
+        if (key == sessKey) {
+            if (ci == lastCi && sessTc.isNotEmpty() && tc.isNotEmpty() && tc != sessTc) return
+            lastCi = ci
+            sessTp = j.optString("tp"); sessTc = tc; sessTn = j.optString("tn")
+            return
+        }
+        if (key == prevSessKey && System.currentTimeMillis() - prevSessAt < 10_000) return
+        prevSessKey = sessKey; prevSessAt = System.currentTimeMillis()
+        sessKey = key
+        lastCt = ct; lastCi = ci
+        sessTp = j.optString("tp"); sessTc = tc; sessTn = j.optString("tn")
+    }
+
     private fun refreshPanel() {
         val rawJ = runCatching { JSONObject(nowJson) }.getOrNull()
         progressWatch(rawJ)
         val native = NativeSpeaker.active
         val j = if (native) NativeSpeaker.panelJson() else rawJ
         // The scrub counts in sentences: remember where the reading stands,
-        // in the driver's own numbers (page push or device voice alike).
-        val jCt = j?.optInt("ct", 0) ?: 0
-        if (jCt > 0) { lastCt = jCt; lastCi = j?.optInt("ci", -1) ?: -1 }
+        // in the driver's own numbers (page push or device voice alike) —
+        // validated against the panel's own session first (M-8).
+        acceptIndex(j)
         val playing = j?.optBoolean("playing") ?: false
         handler.post {
-            titleV?.text = j?.optString("title")?.ifBlank { "Logos" } ?: "Logos"
+            // Update in place, and only what changed (M-7): pushes
+            // arrive several times a second while the voice sounds,
+            // and the old refresh re-set every view on every one —
+            // the toggle's image reloaded (its pressed answer reset
+            // under his finger), the title and status re-laid-out,
+            // the seek thumb re-seated — a full panel pass per
+            // sentence and per word, most of it writing the values
+            // already on screen. Now each display value is computed
+            // and compared with what the panel already shows; only a
+            // difference touches a view, and a push that changes
+            // nothing mutates nothing. (updateWords has always kept
+            // its own diff — lastWordsKey/lastWi — and keeps it.)
+            val title = j?.optString("title")?.ifBlank { "Logos" } ?: "Logos"
+            // (A value is only remembered as shown when a living view
+            // actually received it — refreshes also run with the
+            // panel closed, and a newborn panel must paint in full.)
+            if (title != shownTitle) titleV?.let { it.text = title; shownTitle = title }
             if (!native && workingNow(j)) armStallWatch() else disarmStallWatch()
-            subV?.text = if (native) j?.optString("sub")
+            var sub = if (native) j?.optString("sub")
                 else if (workingNow(j) && System.currentTimeMillis() - nowAt > 20_000) s("Waiting for Logos…", "Esperando a Logos…")
                 else if (j?.optBoolean("busy") == true) s("Processing…", "Procesando…")
                 else j?.optString("sub")?.ifBlank { s("Ready", "Listo") } ?: s("Ready", "Listo")
-            if (scrubTarget >= 0 && lastCt > 0) subV?.text = s("Sentence", "Oración") + " ${scrubTarget + 1} " + s("of", "de") + " $lastCt"
-            lockBtn?.text = if (isLocked(this@BubbleService)) "🔒" else "🔓"
-            if (playing) {
-                toggleB?.setImageResource(android.R.drawable.ic_media_pause)
-                toggleB?.setPadding(0, 0, 0, 0)
-            } else {
-                toggleB?.setImageResource(android.R.drawable.ic_media_play)
-                // The play triangle leans left inside its disc
-                // (1.4.179, Oscar: «biased towards the left, not
-                // totally centered»). Measured on his own
-                // screenshot: the disc sits dead center of the
-                // panel — it is the glyph whose mass hangs left of
-                // the disc's middle, as a right-pointing triangle's
-                // does. The image is nudged right inside the disc
-                // (paddingStart 6dp shifts it 3dp); the pause bars
-                // are symmetric and take no nudge.
-                toggleB?.setPadding(dp(6), 0, 0, 0)
+            if (scrubTarget >= 0 && lastCt > 0) sub = s("Sentence", "Oración") + " ${scrubTarget + 1} " + s("of", "de") + " $lastCt"
+            if (sub != shownSub) subV?.let { it.text = sub; shownSub = sub }
+            val locked = isLocked(this@BubbleService)
+            if (locked != shownLock) lockBtn?.let { it.text = if (locked) "🔒" else "🔓"; shownLock = locked }
+            if (playing != shownPlaying && toggleB != null) {
+                shownPlaying = playing
+                if (playing) {
+                    toggleB?.setImageResource(android.R.drawable.ic_media_pause)
+                    toggleB?.setPadding(0, 0, 0, 0)
+                } else {
+                    toggleB?.setImageResource(android.R.drawable.ic_media_play)
+                    // The play triangle leans left inside its disc
+                    // (1.4.179, Oscar: «biased towards the left, not
+                    // totally centered»). Measured on his own
+                    // screenshot: the disc sits dead center of the
+                    // panel — it is the glyph whose mass hangs left of
+                    // the disc's middle, as a right-pointing triangle's
+                    // does. The image is nudged right inside the disc
+                    // (paddingStart 6dp shifts it 3dp); the pause bars
+                    // are symmetric and take no nudge.
+                    toggleB?.setPadding(dp(6), 0, 0, 0)
+                }
             }
             playingNow = playing
-            seekBar?.let { if (!seekHeld) it.progress = ((j?.optDouble("frac", 0.0) ?: 0.0) * 1000).toInt() }
+            val prog = ((j?.optDouble("frac", 0.0) ?: 0.0) * 1000).toInt()
+            if (!seekHeld && prog != shownSeek) seekBar?.let { it.progress = prog; shownSeek = prog }
             spectrum?.let { sp ->
                 val arr = j?.optJSONArray("bars")
-                if (arr == null) sp.rest()
-                else {
-                    val t = FloatArray(arr.length())
-                    for (i in 0 until arr.length()) t[i] = (arr.optDouble(i, 0.0) / 100.0).toFloat()
-                    sp.setTargets(t)
+                val barsKey = arr?.toString() ?: "∅"
+                if (barsKey != shownBarsKey) {
+                    shownBarsKey = barsKey
+                    if (arr == null) sp.rest()
+                    else {
+                        val t = FloatArray(arr.length())
+                        for (i in 0 until arr.length()) t[i] = (arr.optDouble(i, 0.0) / 100.0).toFloat()
+                        sp.setTargets(t)
+                    }
                 }
             }
             wordsOn = j?.optBoolean("words", true) ?: true
@@ -2388,10 +3063,27 @@ class BubbleService : Service() {
                         duration = 1100; repeatMode = ValueAnimator.REVERSE; repeatCount = ValueAnimator.INFINITE; start()
                     }
                 }
-            } else if (h != null) {
+            } else if (h != null && haloAnim != null) {
                 haloAnim?.cancel(); haloAnim = null; h.visibility = View.INVISIBLE
             }
         }
+    }
+
+    /** The guaranteed floor of a hand ask (1.4.162): if neither the
+     *  panel nor the blink could read within a second, open Logos —
+     *  the page, in front and focused, reads the clipboard itself
+     *  (wantClip tells it this was asked by hand). Armed per manual
+     *  ask, including one that joins a blink already in flight
+     *  (T2-18). */
+    private fun armManualFloor() {
+        val before = deliveries
+        handler.postDelayed({
+            if (deliveries == before) {
+                wantClip = true
+                noteTry(this, s("opened Logos to read it", "abrió Logos para leerlo"))
+                runCatching { startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }
+        }, 1000)
     }
 
     private fun readClip(manual: Boolean, allowBlink: Boolean = true) {
@@ -2405,21 +3097,22 @@ class BubbleService : Service() {
         if (!allowBlink) return // focus retries read directly only — never a blink loop
         val now = System.currentTimeMillis()
         if (!manual && now - lastTrampoline < 2500) { noteTry(this, s("the panel saw the clipboard empty", "el panel vio el portapapeles vacío")); return }
-        lastTrampoline = now
-        pendingManual = manual
-        if (manual) {
-            // The guaranteed floor: if neither the panel nor the blink could read
-            // within a second, open Logos — the page, in front and focused, reads
-            // the clipboard itself (wantClip tells it this was asked by hand).
-            val before = deliveries
-            handler.postDelayed({
-                if (deliveries == before) {
-                    wantClip = true
-                    noteTry(this, s("opened Logos to read it", "abrió Logos para leerlo"))
-                    runCatching { startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                }
-            }, 1000)
+        // One blink in flight (T2-18): a read that arrives while a
+        // blink is outstanding does not launch a second one and
+        // does not overwrite the outstanding ask's character. A
+        // manual ask JOINS the flight and upgrades it — the blink
+        // reads the same clipboard for both asks, and his hand ask
+        // must keep its guaranteed floor; an automatic ask joins
+        // silently and can never downgrade a manual flight.
+        if (blinkInFlight && now - blinkAt < 5_000) {
+            if (manual) { pendingManual = true; armManualFloor() }
+            return
         }
+        lastTrampoline = now
+        blinkInFlight = true
+        blinkAt = now
+        pendingManual = manual
+        if (manual) armManualFloor()
         // Android 14's sanctioned route for a background start: a pending intent
         // that explicitly allows it. ClipActivity blinks, reads under its brief
         // focus, and is gone.
@@ -2435,6 +3128,7 @@ class BubbleService : Service() {
             }
             pi.send()
         }.onFailure {
+            blinkInFlight = false // no blink is coming; the next read may launch one (T2-18)
             if (manual) Toast.makeText(this, s("Couldn't read the clipboard here", "No se pudo leer el portapapeles aquí"), Toast.LENGTH_SHORT).show()
         }
     }

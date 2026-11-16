@@ -57,7 +57,12 @@ class MainActivity : Activity() {
     /** When the latest ghost intent arrived (1.4.153): an intent that
      *  lands mid-transition can pass through onNewIntent without its
      *  dressing; onResume re-dresses from this stamp while it is fresh.
-     *  Cleared wherever a visit ends or becomes a stay. */
+     *  Cleared wherever a visit ends or becomes a stay. The stamp is
+     *  set ONLY where a visit is actually entered, and every human
+     *  arrival clears it whether or not a visit is on (T2-6): an
+     *  unconditional stamp used to outlive a ghost intent that never
+     *  dressed anything, and his own arrival within two seconds was
+     *  re-dressed as a ghost and sent to the back. */
     private var ghostIntentAt = 0L
     // The bubble visit (1.4.150, Oscar): the panel's headphones key sends
     // him to the listening area itself, and the visit stays a visit —
@@ -252,20 +257,35 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intentDriven = true
-        if (intent.getBooleanExtra("logos.ghost", false)) { ghostIntentAt = System.currentTimeMillis(); if (!resumed && !ghost) enterGhost() }
+        if (intent.getBooleanExtra("logos.ghost", false)) {
+            // Stamp ONLY where a visit is actually entered (T2-6): a
+            // ghost intent that finds the activity already resumed —
+            // Oscar himself looking at Logos — needs no dressing (the
+            // page is already in front of him, breathing), and a stamp
+            // left behind by it could dress his NEXT arrival. Already
+            // a visit: dressed, no new stamp needed.
+            if (!resumed && !ghost) { ghostIntentAt = System.currentTimeMillis(); enterGhost() }
+        }
         // Only a HUMAN arrival converts a visit into a stay (1.4.120):
         // his icon, his share, his notification and gate all carry a
         // real action; a bare system redelivery does not get to strip
         // the ghost clothes and park Logos in his face uninvited.
-        else if (ghost && (intent.action == Intent.ACTION_MAIN || intent.action == Intent.ACTION_VIEW ||
+        // A human arrival ALSO clears any ghost stamp, visit or no
+        // visit (T2-6): the stamp must never survive the man himself —
+        // clearing used to hide inside exitGhost(), which only ran
+        // when a visit was already on.
+        else if (intent.action == Intent.ACTION_MAIN || intent.action == Intent.ACTION_VIEW ||
             intent.action == Intent.ACTION_SEND || intent.action == Intent.ACTION_SEND_MULTIPLE ||
-            intent.action == "logos.INSTALL")) exitGhost()
+            intent.action == "logos.INSTALL") {
+            ghostIntentAt = 0
+            if (ghost) exitGhost()
+        }
         // The bubble's headphones key (1.4.150): land on the listening
         // area, as a visit. Any other plain arrival is a stay, and a
         // stay dissolves a visit that never got its Back.
         if (intent.getBooleanExtra("logos.listen", false)) goListen()
         else if (intent.action == Intent.ACTION_MAIN) bubbleVisit = false
-        if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
+        if (consumeWantReload()) web.reload()
         if (intent.action == "logos.INSTALL") { installResult(intent); return }
         shareUrl(intent)?.let { web.loadUrl(it) }
     }
@@ -274,18 +294,24 @@ class MainActivity : Activity() {
         super.onResume()
         bringWebHome()
         resumed = true
+        // The stay-conversion runs FIRST (T2-6): back without any
+        // intent behind it — he opened the task himself (Recents, a
+        // notification) — a visit still wearing its ghost clothes
+        // simply becomes his stay. It used to run after the re-dress
+        // below, where it could never rescue a human arrival: his
+        // onNewIntent had set intentDriven, and the dress had already
+        // been put on.
+        if (ghost && !intentDriven) exitGhost()
         // A ghost intent that arrived mid-transition can miss its
         // dressing in onNewIntent (the black pull-back, 1.4.153): if
         // one landed within the last two seconds and this resume is
-        // that arrival completing, dress now — before any logic below
-        // decides the visit is a stay. A human opening the task
-        // himself carries no fresh ghost stamp, so his stay is never
-        // dressed by mistake.
-        if (!ghost && ghostIntentAt > 0 && System.currentTimeMillis() - ghostIntentAt < 2000) enterGhost()
-        // Back without any intent behind it — he opened the task himself
-        // (Recents, a notification): a visit still wearing its ghost
-        // clothes simply becomes his stay.
-        if (ghost && !intentDriven) exitGhost()
+        // that arrival completing, dress now. Two fences keep a human
+        // arrival out of this door (T2-6): the resume must be one an
+        // intent actually drove — a no-intent resume is his own hand
+        // and is never dressed from a stamp — and a human arrival
+        // clears the stamp in onNewIntent whether or not a visit is
+        // on, so a stamp that reaches this line is a ghost's, never his.
+        if (!ghost && intentDriven && ghostIntentAt > 0 && System.currentTimeMillis() - ghostIntentAt < 2000) enterGhost()
         intentDriven = false
         // Still a visit after that decision (1.4.117): re-nail the ghost
         // clothes, so a visit can never be caught visible halfway.
@@ -293,8 +319,22 @@ class MainActivity : Activity() {
             web.alpha = 0f; root.setBackgroundColor(Color.TRANSPARENT); window.decorView.setBackgroundColor(Color.TRANSPARENT)
             window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
         }
-        if (BubbleService.wantReload) { BubbleService.wantReload = false; web.reload() }
+        if (consumeWantReload()) web.reload()
         if (!ghost) arrivalCheck()
+    }
+
+    /** Take the standing reload request, if any (T2-13): the flag
+     *  is consumed either way, but it is honoured only inside the
+     *  twenty-second law every stored order lives under — a flag
+     *  raised and never consumed used to wait indefinitely and
+     *  reload a healthy page at some much later arrival. A stale
+     *  flag dies here, with its receipt on the Settings line. */
+    private fun consumeWantReload(): Boolean {
+        if (!BubbleService.wantReload) return false
+        val fresh = System.currentTimeMillis() - BubbleService.wantReloadAt <= 20_000
+        BubbleService.wantReload = false
+        if (!fresh) BubbleService.noteTry(this, BubbleService.s("a stored reload went stale", "una recarga guardada caducó"))
+        return fresh
     }
 
     private var arrivalSeq = 0
@@ -308,7 +348,7 @@ class MainActivity : Activity() {
      *  when the page has never pushed state in this process (a first load
      *  still in flight is not a corpse). */
     private fun arrivalCheck() {
-        if (BubbleService.nowJson == null) return
+        if (BubbleService.pageNeverPushed()) return
         val seq = ++arrivalSeq
         var answered = false
         runCatching { web.evaluateJavascript("1") { answered = true } }
@@ -342,7 +382,7 @@ class MainActivity : Activity() {
      *  retire on the fresh page's pushes. A page that never pushed in
      *  this process may still be loading: not a corpse, left alone. */
     private fun ghostCheck(seq: Int) {
-        if (BubbleService.nowJson == null) return
+        if (BubbleService.pageNeverPushed()) return
         var answered = false
         runCatching { web.evaluateJavascript("1") { answered = true } }
         ghostHandler.postDelayed({
@@ -403,7 +443,8 @@ class MainActivity : Activity() {
      *  nothing coming after a fair wait — means the errand is done. */
     private fun ghostPulse() {
         if (!ghost || ghostLeaving) return
-        val raw = BubbleService.nowJson ?: return
+        if (BubbleService.pageNeverPushed()) return
+        val raw = BubbleService.nowJson
         val j = runCatching { JSONObject(raw) }.getOrNull() ?: return
         val playing = j.optBoolean("playing")
         val busy = j.optBoolean("busy")
@@ -537,8 +578,35 @@ class MainActivity : Activity() {
         /** A transport press that arrived while the page was asleep, pulled once as it wakes. */
         /** The pending command, collected once — and only while it is
          *  still the press he just made (1.4.153: takePendingCmd drops
-         *  a stored order older than twenty seconds). */
-        @JavascriptInterface fun bubblePendingCmd(): String = BubbleService.takePendingCmd() ?: ""
+         *  a stored order older than twenty seconds; M-9: it also
+         *  drops one whose session context has moved on — the stamp
+         *  is checked at this execution door, not only at queue time).
+         *  A drop leaves its receipt on the Settings line, never a
+         *  silence (T2-21). */
+        @JavascriptInterface fun bubblePendingCmd(): String {
+            val cmd = BubbleService.takePendingCmd() ?: ""
+            BubbleService.pendingDropNote?.let { note ->
+                BubbleService.pendingDropNote = null
+                BubbleService.noteTry(this@MainActivity, note)
+            }
+            return cmd
+        }
+
+        /** The context stamp of the command most recently collected
+         *  (M-9): the session identity (title + sentence total) the
+         *  press was stored against, read-and-cleared. The page
+         *  compares it against the session it is about to execute on
+         *  — above all a session its recovery just restored — and
+         *  drops the command when they differ, rather than firing it
+         *  into whatever context the page shows by then. Empty when
+         *  the press was stored with no session context. Older pages
+         *  never call this; newer pages degrade to the shell-side
+         *  check alone when it answers empty. */
+        @JavascriptInterface fun bubblePendingCtx(): String {
+            val ctx = BubbleService.lastTakenCtx
+            BubbleService.lastTakenCtx = ""
+            return ctx
+        }
 
         /** The panel's seek bar: the chosen fraction, pulled once by the page. */
         /** The page hands its session to the shell's device voice
@@ -555,10 +623,58 @@ class MainActivity : Activity() {
             BubbleService.stopNativeFromPage()
         }
 
+        /** The native voice's live position, pulled by the page on
+         *  the shell's "nativepos" poke (H-12 / WR-1 — poke+pull,
+         *  the same shape as bubbleSeek / bubblePendingCmd):
+         *  {"idx":Int,"total":Int,"playing":Boolean,"active":Boolean,
+         *  "done":Boolean}, where total is the shell's own sentence
+         *  count so the page can map foreign segmentations
+         *  proportionally, and done is true only for a reading that
+         *  ran past its last sentence. Empty string when no native
+         *  session has ever run. Older pages never call this; newer
+         *  pages degrade silently on shells that answer nothing. */
+        @JavascriptInterface fun bubbleNativePos(): String = NativeSpeaker.snapshotJson()
+
+        /** The panel's seek, pulled once — and only while it is
+         *  still the seek he just made (T2-13/T2-19): a fraction
+         *  older than twenty seconds, or stamped against a session
+         *  that has since moved on, is dropped here, never obeyed
+         *  against whatever session the page shows now. A drop
+         *  leaves its receipt on the Settings line. A taken seek's
+         *  stamp travels in bubbleSeekCtx below. */
         @JavascriptInterface fun bubbleSeek(): String {
             val f = BubbleService.seekFrac
             BubbleService.seekFrac = -1.0
-            return if (f >= 0) f.toString() else ""
+            if (f < 0) return ""
+            if (System.currentTimeMillis() - BubbleService.seekFracAt > 20_000) {
+                BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored seek went stale", "una búsqueda guardada caducó"))
+                return ""
+            }
+            val ctx = BubbleService.seekCtx
+            if (ctx.isNotEmpty()) {
+                val cur = BubbleService.currentContext()
+                if (cur.isNotEmpty() && cur != ctx) {
+                    BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored seek's session had moved on", "la sesión de una búsqueda guardada había cambiado"))
+                    return ""
+                }
+            }
+            BubbleService.lastTakenSeekCtx = ctx
+            BubbleService.seekCtx = ""
+            return f.toString()
+        }
+
+        /** The context stamp of the seek most recently collected
+         *  (T2-19): the session identity (title + sentence total)
+         *  the seek was chosen against, read-and-cleared — the
+         *  seek twin of bubblePendingCtx. The page compares it
+         *  against the session it is about to seek in — above all
+         *  a session its recovery just restored — and drops the
+         *  seek when they differ. Empty when the seek was chosen
+         *  with no session on the panel. */
+        @JavascriptInterface fun bubbleSeekCtx(): String {
+            val ctx = BubbleService.lastTakenSeekCtx
+            BubbleService.lastTakenSeekCtx = ""
+            return ctx
         }
 
         @JavascriptInterface fun bubble(on: Boolean) {
@@ -577,10 +693,18 @@ class MainActivity : Activity() {
         }
 
         /** The lever, kept natively too: the bubble must know it even with the page asleep. */
+        /** The page pushes its lever value down — through the
+         *  panel's authority first (T2-17): a panel flip the page
+         *  never heard stands as the native truth, and a stale
+         *  init push that disagrees with it is refused (and the
+         *  page is poked "lever" so it pulls the truth) instead of
+         *  silently reverting his switch. */
         @JavascriptInterface fun bubblePrefs(auto: Boolean) {
-            BubbleService.prefs(this@MainActivity).edit().putBoolean("auto", auto).apply()
+            BubbleService.pageLeverPush(this@MainActivity, auto)
         }
-        @JavascriptInterface fun bubbleAuto(): Boolean = BubbleService.lever(this@MainActivity)
+        /** The page pulls the lever value: the pull acknowledges a
+         *  standing panel flip (T2-17). */
+        @JavascriptInterface fun bubbleAuto(): Boolean = BubbleService.pageLeverPull(this@MainActivity)
 
         /** The floating window's look (1.4.157): opacities, idle fade, size — from Settings, via the page. */
         @JavascriptInterface fun bubbleLook(json: String) {
@@ -596,16 +720,34 @@ class MainActivity : Activity() {
         @JavascriptInterface fun bubbleNow(json: String) {
             BubbleService.nowJson = json
             BubbleService.nowAt = System.currentTimeMillis()
+            // A push that agrees with the last commanded state
+            // confirms it (M-6): the snapshot rules taps again.
+            BubbleService.confirmPush()
             BubbleService.syncWakeLock(this@MainActivity)
             BubbleService.onNow?.invoke()
             ghostPulse()
         }
 
         /** The clipboard text the bubble caught, pulled once by the page. */
+        /** The pull is the delivery's confirmation (T2-7) and its
+         *  expiry gate (T2-13): a catch older than twenty seconds
+         *  is dropped here — with its uncommitted dedupe key, and a
+         *  receipt on the Settings line — instead of ambushing this
+         *  opening hours after it was copied. A catch pulled inside
+         *  its law commits its dedupe key (confirmClipPulled), so
+         *  the same text is never delivered twice, even across a
+         *  process restart; a catch never pulled commits nothing,
+         *  so copying it again delivers it fresh. */
         @JavascriptInterface fun bubbleClip(): String {
             val t = BubbleService.clipText ?: return ""
+            if (System.currentTimeMillis() - BubbleService.clipTextAt > 20_000) {
+                BubbleService.expireClip()
+                BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored catch went stale", "una captura guardada caducó"))
+                return ""
+            }
             val m = BubbleService.clipManual
             BubbleService.clipText = null
+            BubbleService.confirmClipPulled(this@MainActivity)
             return JSONObject().put("t", t).put("m", m).toString()
         }
     }
