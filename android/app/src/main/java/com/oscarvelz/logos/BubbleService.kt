@@ -1483,7 +1483,12 @@ class BubbleService : Service() {
                         color = ink; style = android.graphics.Paint.Style.STROKE
                         strokeWidth = dp(2).toFloat(); strokeCap = android.graphics.Paint.Cap.ROUND
                     }
-                    val cx = width / 2f; val cy = height / 2f; val r = dp(10).toFloat()
+                    val cx = width / 2f; val cy = height / 2f
+                    // The arrow itself a breath smaller (1.4.180,
+                    // Oscar: «just a little bit, perhaps 8% or
+                    // 10%»): the arc's radius and the head scale by
+                    // 0.9; the disc and the number keep their size.
+                    val r = dp(9).toFloat()
                     val sec = prefs(this@BubbleService).getInt(if (dir < 0) "jump_b" else "jump_f", if (dir < 0) 15 else 30)
                     // The glyph as Oscar's reference draws it
                     // (1.4.173, correcting 172 at his verdict — «las
@@ -1509,7 +1514,7 @@ class BubbleService : Service() {
                     // triangle — one closed shape.
                     val txv = Math.cos(tang).toFloat(); val tyv = Math.sin(tang).toFloat()
                     val dens = resources.displayMetrics.density
-                    val tipX = hx + txv * 4.6f * dens; val tipY = hy + tyv * 4.6f * dens
+                    val tipX = hx + txv * 4.1f * dens; val tipY = hy + tyv * 4.1f * dens
                     // The base is CENTERED on the arc's end (1.4.174,
                     // Oscar: «la cabeza está demasiado arriba… el
                     // círculo no se centra en el centro de la base»):
@@ -1518,7 +1523,7 @@ class BubbleService : Service() {
                     // riding above it.
                     val bcx = hx; val bcy = hy
                     val pxv = -tyv; val pyv = txv
-                    val hw = 4.2f * dens
+                    val hw = 3.8f * dens
                     val head = android.graphics.Path()
                     head.moveTo(tipX, tipY)
                     head.lineTo(bcx + pxv * hw, bcy + pyv * hw)
