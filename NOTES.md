@@ -1,3 +1,7 @@
+## 1.4.181 — The panel's numbers a little smaller (shell + web stamp)
+
+Oscar: «Now make the numbers in the round arrows for the floating player be smaller too, but a little bit. Just that.» The seconds inside the panel's jump keys: 11 → 10 dp, the baseline lift shrinking in step (4 → 3.6) so the number stays centered in the ring. Just that — nothing else moves. Presentation review: no teaching surface touched.
+
 ## 1.4.180 — The panel's arrow breathes in, ten percent (shell + web stamp)
 
 Oscar, on 179's panel: «Now it's much better. Reduce the size of the arrow a little bit too from the bubble player, just a little bit. Perhaps 8% or 10%.» The panel jump keys' drawn arrow scales by 0.9 — arc radius dp(10) → dp(9), head tip 4.6 → 4.1, half-base 4.2 → 3.8 (in jumpBtn's onDraw). The disc (42dp, from 179) and the seconds number (dp(11)) keep their sizes; nothing else moves. Presentation review: no teaching surface touched.

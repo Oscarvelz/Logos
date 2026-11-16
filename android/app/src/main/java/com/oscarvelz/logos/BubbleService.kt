@@ -1532,9 +1532,13 @@ class BubbleService : Service() {
                     val pf = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = ink; style = android.graphics.Paint.Style.FILL }
                     cv.drawPath(head, pf)
                     p.style = android.graphics.Paint.Style.FILL
-                    p.textSize = dp(11).toFloat(); p.textAlign = android.graphics.Paint.Align.CENTER
+                    // The number a little smaller too (1.4.181,
+                    // Oscar, following the arrow's own reduction in
+                    // 180): 11 → 10 dp, its baseline lift shrinking
+                    // in step so it stays centered in the ring.
+                    p.textSize = 10f * dens; p.textAlign = android.graphics.Paint.Align.CENTER
                     p.typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-                    cv.drawText(sec.toString(), cx, cy + dp(4).toFloat(), p)
+                    cv.drawText(sec.toString(), cx, cy + 3.6f * dens, p)
                 }
                 override fun drawableStateChanged() { super.drawableStateChanged(); invalidate() }
             }
