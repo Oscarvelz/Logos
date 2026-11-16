@@ -1,3 +1,7 @@
+## 1.4.182 — The panel's numbers, one more step down (shell + web stamp)
+
+Oscar, with a crop of 181's transport row: «Again, make the numbers smaller.» One more step of the same size: the panel jump numbers go 10 → 9 dp, baseline lift 3.6 → 3.2 in step. Just that. Presentation review: no teaching surface touched.
+
 ## 1.4.181 — The panel's numbers a little smaller (shell + web stamp)
 
 Oscar: «Now make the numbers in the round arrows for the floating player be smaller too, but a little bit. Just that.» The seconds inside the panel's jump keys: 11 → 10 dp, the baseline lift shrinking in step (4 → 3.6) so the number stays centered in the ring. Just that — nothing else moves. Presentation review: no teaching surface touched.
