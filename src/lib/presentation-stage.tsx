@@ -20,7 +20,7 @@
  * from the scenario session whenever an act lands (stageNav.bump).
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Bookmark, Check, ClipboardPaste, Eraser, Moon, Pause, Play, Save, Search, SkipBack, SkipForward, Star, X } from 'lucide-react'
+import { Bookmark, Check, ChevronRight, ClipboardPaste, Eraser, Moon, Pause, Play, Save, Search, SkipBack, SkipForward, Star, X } from 'lucide-react'
 import { useStore } from './store.ts'
 import { VOICES, ACCENT_LABEL, ENGINE_LABEL, type Voice } from './voices.ts'
 import { isJustUrl } from './webtext.ts'
@@ -46,7 +46,20 @@ export function LogosScenarioStage({ scenario }: { scenario: Scenario }) {
         <span className="pstage-brand" data-present="shell-brand-home">λ&nbsp; Logos</span>
         <span className="pstage-grow" />
         <span className="pstage-statuspill" data-present="shell-status-pill">{session?.playing ? 'Playing' : 'Ready'}</span>
-        <button type="button" className={lambdaOn ? 'pstage-lambda on' : 'pstage-lambda'} data-present="bubble-lambda" aria-label="Float the bubble">
+        {/* The learner's OWN λ tap (the T6-11 cure): in Interactive mode
+            the runner's userAct() only advances — performed acts belong
+            to the port (Automatic / «Show me», where the presented λ
+            demonstration flips the real switch, Wave 1) or to the stage
+            control's own hand, as every other stage button already did
+            (stars, nav, doors). This button had no hand at all, so the
+            learner's tap flipped nothing and the next beat announced a
+            gold dot that was never lit. Its tap now does exactly what
+            the port's presented tap does — scenario.stage.setLambda,
+            through the sandbox's LambdaPort discipline to the real
+            switch — and the stage repaints with the dot the following
+            beat describes. */}
+        <button type="button" className={lambdaOn ? 'pstage-lambda on' : 'pstage-lambda'} data-present="bubble-lambda" aria-label="Float the bubble"
+          onClick={() => { scenario.stage.setLambda(!lambdaOn); stageBump() }}>
           λ{lambdaOn ? <i className="pstage-dot" /> : null}
         </button>
       </div>
@@ -155,16 +168,22 @@ function VoicePicker({ scenario }: { scenario: Scenario }) {
     <div className="pstage-sheet pstage-overlay pstage-picker" data-present="voice-picker">
       <div className="pstage-sheet-h">Choose a voice</div>
       <button type="button" className="pstage-sheet-btn" data-present="voice-picker-auto">Auto — the best voice for the text</button>
+      {/* The group DOM mirrors the real picker (the T6-9 cure): a
+          <section data-group> wrapping its head, the head itself also
+          carrying data-group beside its own :head mint — exactly the
+          two carriers chrome.tsx renders. The bare group anchor's
+          tag-qualified locator names the section, so stage and real
+          app resolve it the same way, to the same seat. */}
       {fav.size > 0 && (
-        <div>
+        <section data-group="fav">
           <div className="pstage-group-h" data-present="voice-picker-group:head" data-group="fav">Favourites</div>
           {VOICES.filter((v) => fav.has(v.id)).map((v) => (
             <PickerRow key={v.id} v={v} fav={fav} />
           ))}
-        </div>
+        </section>
       )}
       {PICKER_GROUPS.map((g) => (
-        <div key={g.key}>
+        <section key={g.key} data-group={g.key}>
           <div className="pstage-group-h" data-present="voice-picker-group:head" data-group={g.key}>{g.label}</div>
           {VOICES.filter(g.pick).map((v) => (
             <PickerRow key={v.id} v={v} fav={fav} />
@@ -172,7 +191,7 @@ function VoicePicker({ scenario }: { scenario: Scenario }) {
           {FICTION_CAST.filter(g.pick).map((v) => (
             <PickerRow key={v.id} v={v} fav={fav} />
           ))}
-        </div>
+        </section>
       ))}
     </div>
   )
@@ -355,9 +374,17 @@ function StageListen({ scenario }: { scenario: Scenario }) {
           <span className="pstage-meta">This text</span>
           <div className="pstage-note">{words} words · {sentences.length} sentences</div>
         </div>
-        <div className="pstage-card" data-present="desk-textmap-paragraphs">
-          <span className="pstage-meta">Paragraphs</span>
-          {sentences.slice(0, 4).map((s, i) => <div key={i} className="pstage-note">{s.slice(0, 42)}…</div>)}
+        {/* The real desk's second text-map card (the M-36 cure): since
+            1.4.167 it shows favourite books and carries NO mint — the
+            stage used to dress a fake «Paragraphs» card carrying the
+            retired desk-textmap-paragraphs mint, a fake presence the
+            AD13 beat then "tapped". The card now wears the real shape
+            and no mint, so the beat resolves as the declared miss it
+            honestly is (see the registry record and the lane flag). */}
+        <div className="pstage-card">
+          <span className="pstage-meta">Favorite books</span>
+          {books.map((b) => <div key={b.id} className="pstage-note">{b.title} · {Math.round(b.progress * 100)}%</div>)}
+          {books.length === 0 && <div className="pstage-note">Books you import land here.</div>}
         </div>
       </div>
     </div>
@@ -887,105 +914,214 @@ function StageCreate({ scenario }: { scenario: Scenario }) {
 }
 
 // ── Settings ──────────────────────────────────────────────────────
+// ── Settings ──────────────────────────────────────────────────────
+// THE CURRENT SHAPE (the M-33 cure): since 1.4.171 the real Settings
+// page wears the house clusters — sunken trays grouping the cards by
+// territory — with the general Settings search at the very top (born
+// 1.4.177). The stage used to dress the pre-1.4.171 flat page: cards
+// in the old order, no trays, no search — a fiction teaching a
+// Settings that no longer exists. The stage now wears the real shape:
+// the same search (same index words, copied from SettingsPage's own
+// SETTING_INDEX; a hit scrolls to the standing card — the stage's
+// cards stand open, their interiors always present, so nothing needs
+// unfolding and every interior anchor still resolves exactly once),
+// the same five trays in the real order with the real names and
+// lines, the same card titles and subs, About loose at the foot.
+// Every card keeps its mint and its interior anchors exactly as
+// before — the dressing changed; the resolution did not.
+const STAGE_SETTING_INDEX: { anchor: string; title: string; sub: string; keys: string }[] = [
+  { anchor: 'set-neural', title: 'Neural voice', sub: 'The reading voice — it lives on this device, downloads once, then works offline.', keys: 'voice engine download model storage protect protected cleanup delete offline voz neuronal descargar motor almacenamiento proteger' },
+  { anchor: 'set-pron', title: 'Pronunciation', sub: 'Words said your way — names, places, terms of art.', keys: 'pronounce names words say dictionary say it your way pronunciación nombres palabras diccionario' },
+  { anchor: 'set-playback', title: 'Playback', sub: 'How listening feels, sentence by sentence.', keys: 'speed pause highlight jump seconds reader text size word timing reproducción velocidad pausa saltos lector texto' },
+  { anchor: 'set-bubble', title: 'Floating player', sub: 'A small λ that floats over your other apps.', keys: 'bubble floating overlay size transparency opacity alpha panel clipboard dim idle burbuja flotante reproductor tamaño transparencia opacidad portapapeles' },
+  { anchor: 'set-card-appearance', title: 'Appearance', sub: 'The light of the room.', keys: 'theme dark light system legacy mode tron cyberpunk apariencia tema oscuro claro' },
+  { anchor: 'set-card-language', title: 'Language', sub: 'The app’s own words — everything on screen.', keys: 'english español spanish idioma lenguaje inglés' },
+  { anchor: 'set-presentations', title: 'Presentations', sub: 'Learn the whole app, guided, at your pace', keys: 'lessons tour guided learn presentaciones lecciones aprender guía' },
+  { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy clips library copia respaldo exportar importar archivo biblioteca' },
+  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.185 · private, on-device text-to-speech', keys: 'version about acerca versión' },
+]
+
 function StageSettings({ scenario }: { scenario: Scenario }) {
   const st = scenario.getSettings()
   const pron = scenario.pronounce.list()
+  const [query, setQuery] = useState('')
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const hits = useMemo(() => {
+    const terms = norm(query).split(/\s+/).filter((x) => x.length >= 2)
+    if (!terms.length) return []
+    return STAGE_SETTING_INDEX.filter((e) => {
+      const hay = norm(`${e.title} ${e.sub} ${e.keys}`)
+      return terms.every((term) => hay.includes(term))
+    })
+  }, [query])
+  const land = (anchor: string) => {
+    setQuery('')
+    document.querySelector(`[data-present="${anchor}"]`)?.scrollIntoView({ block: 'start' })
+  }
   return (
     <div>
       <div className="pstage-eyebrow" data-present="set-page-head">● SETTINGS</div>
       <h2 className="pstage-title">Settings</h2>
 
-      <div className="pstage-card" data-present="set-neural">
-        <strong>Neural voice</strong>
-        <p className="pstage-note" data-present="set-neural-status">Ready — the voice lives on this device.</p>
-        <div className="pstage-scrub" data-present="set-neural-meter"><div className="pstage-scrub-fill" style={{ width: '100%' }} /></div>
-        <div className="pstage-chips">
-          <button type="button" className="pstage-chip" data-present="set-neural-download">Download</button>
-          <button type="button" className="pstage-chip" data-present="set-neural-delete">Delete the voice</button>
-        </div>
-        <div className="pstage-row"><span data-present="set-auto-download">Download on Wi-Fi only</span><span className="pstage-grow" /><span>On</span></div>
-        <div className="pstage-row"><span data-present="set-device-bridge">This device</span><span className="pstage-grow" /><span>Connected</span></div>
-        <div className="pstage-row"><span data-present="set-storage-row">Storage</span><span className="pstage-grow" /><span>412 MB</span></div>
-        <p className="pstage-note" data-present="set-storage-note">Books and audio live here, on the device.</p>
-        <p className="pstage-note" data-present="set-storage-protect">Protected copies stay until you remove them.</p>
-      </div>
-
-      <div className="pstage-card" data-present="set-playback">
-        <strong>Playback</strong>
-        <div className="pstage-row"><span data-present="set-speed">Listening speed</span><span className="pstage-grow" /><span>{st.listenSpeed}×</span></div>
-        <div className="pstage-row"><span data-present="set-sentence-pause">Pause between sentences</span><span className="pstage-grow" /><span>0.4 s</span></div>
-        <div className="pstage-row"><span data-present="set-highlight">Highlight the sentence</span><span className="pstage-grow" /><span>On</span></div>
-        <div className="pstage-row"><span data-present="set-reader-size">Reader size</span><span className="pstage-grow" />
-          <button type="button" className="pstage-iconbtn" data-present="set-reader-size-minus">−</button>
-          <button type="button" className="pstage-iconbtn" data-present="set-reader-size-reset">A</button>
-          <button type="button" className="pstage-iconbtn" data-present="set-reader-size-plus">+</button>
-        </div>
-        <div className="pstage-row"><span data-present="set-word-timing">Word timing</span><span className="pstage-grow" />
-          <button type="button" className="pstage-iconbtn" data-present="set-word-timing-minus">−</button>
-          <button type="button" className="pstage-iconbtn" data-present="set-word-timing-reset">0</button>
-          <button type="button" className="pstage-iconbtn" data-present="set-word-timing-plus">+</button>
-        </div>
-      </div>
-
-      <div className="pstage-card" data-present="set-pron">
-        <strong>Pronunciation</strong>
-        <div className="pstage-row"><span data-present="set-pron-scope">Applies to</span><span className="pstage-grow" /><span>Every voice</span></div>
-        <div className="pstage-searchrow">
-          <input data-present="set-pron-from" placeholder="Word in the book" />
-          <input data-present="set-pron-to" placeholder="Say it this way" />
-          <button type="button" className="pstage-chip accent" data-present="set-pron-add">Add</button>
-        </div>
-        {pron.map((p, i) => (
-          <div key={i} className="pstage-row" data-present="set-pron-entry">
-            <span>{p.from} → {p.to}</span><span className="pstage-grow" />
-            <button type="button" className="pstage-iconbtn" data-present="set-pron-remove" aria-label="Remove"><X size={14} /></button>
-          </div>
+      <div className="set-search">
+        <div className="field-label"><span>Search settings</span></div>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Try “voice”, “bubble”, “backup”…"
+          aria-label="Search settings"
+          style={{ width: '100%', height: 48, borderRadius: 14, border: '1px solid var(--line)', background: 'var(--surface)', padding: '0 14px', outline: 'none' }}
+        />
+        {query.trim().length >= 2 && hits.length === 0 && (
+          <p className="pstage-note" style={{ margin: '10px 4px 0' }}>Nothing in Settings matches that yet.</p>
+        )}
+        {hits.map((e) => (
+          <button key={e.anchor} type="button" className="set-search-hit" onClick={() => land(e.anchor)}>
+            <span className="pstage-grow" style={{ minWidth: 0 }}>
+              <span style={{ fontWeight: 650, display: 'block' }}>{e.title}</span>
+              <span className="pstage-note" style={{ display: 'block' }}>{e.sub}</span>
+            </span>
+            <ChevronRight size={17} />
+          </button>
         ))}
       </div>
 
-      <div className="pstage-card" data-present="set-presentations">
-        <strong>Presentations</strong>
-        <p className="pstage-note">Learn the whole app, guided, at your pace.</p>
-      </div>
+      <div className="set-cluster">
+        <div className="set-cluster-h">
+          <div className="set-cluster-name">The voice</div>
+          <div className="set-cluster-line">The voice that reads to you, and how it says your words.</div>
+        </div>
 
-      <div className="pstage-card" data-present="set-card-appearance">
-        <strong>Appearance</strong>
-        <p className="pstage-note">The light of the room.</p>
-        <div className="pstage-row"><span data-present="set-theme">Theme</span><span className="pstage-grow" /><span>Legacy</span></div>
-      </div>
+        <div className="pstage-card" data-present="set-neural">
+          <strong>Neural voice</strong>
+          <p className="pstage-note">The reading voice — it lives on this device, downloads once, then works offline.</p>
+          <p className="pstage-note" data-present="set-neural-status">Ready — the voice lives on this device.</p>
+          <div className="pstage-scrub" data-present="set-neural-meter"><div className="pstage-scrub-fill" style={{ width: '100%' }} /></div>
+          <div className="pstage-chips">
+            <button type="button" className="pstage-chip" data-present="set-neural-download">Download</button>
+            <button type="button" className="pstage-chip" data-present="set-neural-delete">Delete the voice</button>
+          </div>
+          <div className="pstage-row"><span data-present="set-auto-download">Download on Wi-Fi only</span><span className="pstage-grow" /><span>On</span></div>
+          <div className="pstage-row"><span data-present="set-device-bridge">This device</span><span className="pstage-grow" /><span>Connected</span></div>
+          <div className="pstage-row"><span data-present="set-storage-row">Storage</span><span className="pstage-grow" /><span>412 MB</span></div>
+          <p className="pstage-note" data-present="set-storage-note">Books and audio live here, on the device.</p>
+          <p className="pstage-note" data-present="set-storage-protect">Protected copies stay until you remove them.</p>
+        </div>
 
-      <div className="pstage-card" data-present="set-card-language">
-        <strong>Language</strong>
-        <div className="pstage-row" data-present="set-ui-lang" data-lang={st.uiLang}>
-          <button type="button" className="pstage-chip">English</button>
-          <button type="button" className="pstage-chip">Español</button>
+        <div className="pstage-card" data-present="set-pron">
+          <strong>Pronunciation</strong>
+          <p className="pstage-note">Words said your way — names, places, terms of art.</p>
+          <div className="pstage-row"><span data-present="set-pron-scope">Applies to</span><span className="pstage-grow" /><span>Every voice</span></div>
+          <div className="pstage-searchrow">
+            <input data-present="set-pron-from" placeholder="Word in the book" />
+            <input data-present="set-pron-to" placeholder="Say it this way" />
+            <button type="button" className="pstage-chip accent" data-present="set-pron-add">Add</button>
+          </div>
+          {pron.map((p, i) => (
+            <div key={i} className="pstage-row" data-present="set-pron-entry">
+              <span>{p.from} → {p.to}</span><span className="pstage-grow" />
+              <button type="button" className="pstage-iconbtn" data-present="set-pron-remove" aria-label="Remove"><X size={14} /></button>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="pstage-card" data-present="set-bubble">
-        <strong>Floating player</strong>
-        <p className="pstage-note" data-present="set-bubble-desc">A small λ that floats over your other apps.</p>
-        <div className="pstage-row">
-          <span data-present="set-bubble-switch">Bubble</span><span className="pstage-grow" />
-          <span className={st.bubbleOn ? 'pstage-pill on' : 'pstage-pill'}>{st.bubbleOn ? 'On' : 'Off'}</span>
+      <div className="set-cluster">
+        <div className="set-cluster-h">
+          <div className="set-cluster-name">Listening</div>
+          <div className="set-cluster-line">How listening feels — here, and floating over your other apps.</div>
         </div>
-        <div className="pstage-row"><span data-present="set-bubble-auto">Play what I copy</span><span className="pstage-grow" /><span>{st.bubbleAuto ? 'On' : 'Off'}</span></div>
-        <div className="pstage-row"><span data-present="set-bubble-text">Show the words</span><span className="pstage-grow" /><span>{st.bubbleText ? 'On' : 'Off'}</span></div>
-        <p className="pstage-note" data-present="set-bubble-last">Last clipboard try: the harbour text</p>
-        <p className="pstage-note" data-present="set-bubble-journal">Stage moves: panel opened · played</p>
+
+        <div className="pstage-card" data-present="set-playback">
+          <strong>Playback</strong>
+          <p className="pstage-note">How listening feels, sentence by sentence.</p>
+          <div className="pstage-row"><span data-present="set-speed">Listening speed</span><span className="pstage-grow" /><span>{st.listenSpeed}×</span></div>
+          <div className="pstage-row"><span data-present="set-sentence-pause">Pause between sentences</span><span className="pstage-grow" /><span>0.4 s</span></div>
+          <div className="pstage-row"><span data-present="set-highlight">Highlight the sentence</span><span className="pstage-grow" /><span>On</span></div>
+          <div className="pstage-row"><span data-present="set-reader-size">Reader size</span><span className="pstage-grow" />
+            <button type="button" className="pstage-iconbtn" data-present="set-reader-size-minus">−</button>
+            <button type="button" className="pstage-iconbtn" data-present="set-reader-size-reset">A</button>
+            <button type="button" className="pstage-iconbtn" data-present="set-reader-size-plus">+</button>
+          </div>
+          <div className="pstage-row"><span data-present="set-word-timing">Word timing</span><span className="pstage-grow" />
+            <button type="button" className="pstage-iconbtn" data-present="set-word-timing-minus">−</button>
+            <button type="button" className="pstage-iconbtn" data-present="set-word-timing-reset">0</button>
+            <button type="button" className="pstage-iconbtn" data-present="set-word-timing-plus">+</button>
+          </div>
+        </div>
+
+        <div className="pstage-card" data-present="set-bubble">
+          <strong>Floating player</strong>
+          <p className="pstage-note" data-present="set-bubble-desc">A small λ that floats over your other apps.</p>
+          <div className="pstage-row">
+            <span data-present="set-bubble-switch">Bubble</span><span className="pstage-grow" />
+            <span className={st.bubbleOn ? 'pstage-pill on' : 'pstage-pill'}>{st.bubbleOn ? 'On' : 'Off'}</span>
+          </div>
+          <div className="pstage-row"><span data-present="set-bubble-auto">Play what I copy</span><span className="pstage-grow" /><span>{st.bubbleAuto ? 'On' : 'Off'}</span></div>
+          <div className="pstage-row"><span data-present="set-bubble-text">Show the words</span><span className="pstage-grow" /><span>{st.bubbleText ? 'On' : 'Off'}</span></div>
+          <p className="pstage-note" data-present="set-bubble-last">Last clipboard try: the harbour text</p>
+          <p className="pstage-note" data-present="set-bubble-journal">Stage moves: panel opened · played</p>
+        </div>
       </div>
 
-      <div className="pstage-card" data-present="set-backup">
-        <strong>Backup</strong>
-        <div className="pstage-chips">
-          <button type="button" className="pstage-chip" data-present="set-backup-export">Export</button>
-          <button type="button" className="pstage-chip" data-present="set-backup-import">Import</button>
+      <div className="set-cluster">
+        <div className="set-cluster-h">
+          <div className="set-cluster-name">The screen</div>
+          <div className="set-cluster-line">How Logos looks, and the language it speaks.</div>
+        </div>
+
+        <div className="pstage-card" data-present="set-card-appearance">
+          <strong>Appearance</strong>
+          <p className="pstage-note">The light of the room.</p>
+          <div className="pstage-row"><span>Legacy</span><span className="pstage-grow" /><span className="pstage-note">Charcoal and gold — the original.</span></div>
+          <div className="pstage-row"><span>Tron</span><span className="pstage-grow" /><span className="pstage-note">Light lines on the deep black of the Grid.</span></div>
+          <div className="pstage-row"><span>Cyberpunk</span><span className="pstage-grow" /><span className="pstage-note">Signal yellow print on warm black.</span></div>
+          <div className="pstage-row"><span data-present="set-theme">Legacy mode</span><span className="pstage-grow" /><span>Dark</span></div>
+        </div>
+
+        <div className="pstage-card" data-present="set-card-language">
+          <strong>Language</strong>
+          <p className="pstage-note">The app’s own words — everything on screen.</p>
+          <div className="pstage-row" data-present="set-ui-lang" data-lang={st.uiLang}>
+            <button type="button" className="pstage-chip">English</button>
+            <button type="button" className="pstage-chip">Español</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="set-cluster">
+        <div className="set-cluster-h">
+          <div className="set-cluster-name">Learn</div>
+          <div className="set-cluster-line">Guided lessons that walk the whole app with you.</div>
+        </div>
+
+        <div className="pstage-card" data-present="set-presentations">
+          <strong>Presentations</strong>
+          <p className="pstage-note">Learn the whole app, guided, at your pace</p>
+        </div>
+      </div>
+
+      <div className="set-cluster">
+        <div className="set-cluster-h">
+          <div className="set-cluster-name">Your data</div>
+          <div className="set-cluster-line">Your whole library in one file — out, and back in.</div>
+        </div>
+
+        <div className="pstage-card" data-present="set-backup">
+          <strong>Backup</strong>
+          <p className="pstage-note">Your books, marks, dictionary and settings in one file</p>
+          <div className="pstage-chips">
+            <button type="button" className="pstage-chip" data-present="set-backup-export">Export</button>
+            <button type="button" className="pstage-chip" data-present="set-backup-import">Import</button>
+          </div>
+          <p className="pstage-note">Your Library clips are inside too — the saved texts and the audio alike.</p>
         </div>
       </div>
 
       <div className="pstage-card" data-present="set-about">
         <strong>About Logos</strong>
-        <p className="pstage-note" data-present="set-version">Version 1.4.182</p>
+        <p className="pstage-note">Version 1.4.185 · private, on-device text-to-speech</p>
+        <p className="pstage-note" data-present="set-version">Version 1.4.185</p>
       </div>
     </div>
   )

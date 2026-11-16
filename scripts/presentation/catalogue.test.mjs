@@ -240,10 +240,19 @@ describe('the resume head (the FIRST-CARD law)', () => {
     assert.equal(resumeHead(remark)?.id, 'AD4')
   })
 
-  test('no head without a live mark: absent, unknown, unseen or needs-refresh', () => {
+  test('the head is the marked module, else the sole in-progress one: absent, unknown, unseen or needs-refresh', () => {
+    // Cured law (Wave 3, M-37): a Watch landing writes an in-progress record
+    // with no lastUsed mark; the index head and the runner must agree on it.
+    // A sole in-progress record heads with no mark or an unusable mark;
+    // several in-progress records with no usable mark head nothing.
     const base = { speed: 1, myScenes: [], modules: { Q2: partway(9) } }
-    assert.equal(resumeHead(normalizePresentationState(base)), null, 'no mark, no head — even with a module part-way')
-    assert.equal(resumeHead(normalizePresentationState({ ...base, lastUsed: 'ZZ' })), null, 'an unknown id heads nothing')
+    assert.equal(resumeHead(normalizePresentationState(base))?.id, 'Q2', 'no mark: the sole in-progress module heads')
+    assert.equal(resumeHead(normalizePresentationState({ ...base, lastUsed: 'ZZ' }))?.id, 'Q2', 'an unusable mark falls back to the sole in-progress module')
+    assert.equal(
+      resumeHead(normalizePresentationState({ speed: 1, myScenes: [], modules: { Q1: partway(5), Q2: partway(9) } })),
+      null,
+      'several in-progress records and no mark: no head — the law will not guess',
+    )
     assert.equal(
       resumeHead(normalizePresentationState({ speed: 1, myScenes: [], lastUsed: 'Q2', modules: {} })),
       null,

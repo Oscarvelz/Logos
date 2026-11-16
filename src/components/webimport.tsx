@@ -9,10 +9,10 @@ import { detectLang, estimateSeconds, formatDuration } from '../lib/text.ts'
 import { describeText } from '../lib/describe.ts'
 import { saveForLater } from '../lib/library.ts'
 import { queueExport } from '../player/exporter.ts'
-import { settings } from '../lib/settings.ts'
+import { saveLastText, settings } from '../lib/settings.ts'
 import { drafts } from '../lib/drafts.ts'
 import { navigate } from '../lib/router.ts'
-import { loadText, play as listenPlay } from '../player/listen.ts'
+import { endSession, listen, loadText, play as listenPlay } from '../player/listen.ts'
 import { t } from '../lib/i18n.ts'
 
 type Phase = 'input' | 'loading' | 'ready' | 'error'
@@ -65,8 +65,28 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
 
   const listenNow = () => {
     if (!res) return
+    // Cure F8-7: this used to overwrite the standing Listen draft
+    // unconditionally and silently — a typed/pasted unsaved draft was
+    // simply gone. The clipboard road (playClipboardText) has always
+    // offered an Undo for the same deed; Listen now offers it too,
+    // restoring the draft and the editor, and cancelling the deferred
+    // play if the Undo lands first.
+    const prevText = drafts.get().listen
+    let cancelled = false
     drafts.set({ listen: res.text }); loadText(res.text); onClose(); navigate('listen')
-    setTimeout(() => void listenPlay(), 350)
+    setTimeout(() => { if (!cancelled) void listenPlay() }, 350)
+    if (prevText.trim() && prevText.trim() !== res.text) {
+      toast(t('Opened in Listen'), {
+        label: t('Undo'),
+        run: () => {
+          cancelled = true
+          drafts.set({ listen: prevText })
+          saveLastText(prevText)
+          if (listen.get().active) endSession()
+          loadText(prevText)
+        },
+      }, 6000)
+    }
   }
   const later = async () => {
     if (!res) return

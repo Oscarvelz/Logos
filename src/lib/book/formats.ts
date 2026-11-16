@@ -25,7 +25,8 @@ export async function parseDocx(buf: ArrayBuffer): Promise<RawBook> {
 type Mammoth = { convertToHtml: (input: { arrayBuffer: ArrayBuffer }, opts?: object) => Promise<{ value: string }> }
 
 export async function parseFb2(text: string): Promise<RawBook> {
-  const doc = parseMarkup(text, 'application/xml')
+  let markupWarn: string | undefined
+  const doc = parseMarkup(text, 'application/xml', (w) => { markupWarn = w })
   const q = (root: Document | Element, name: string) => Array.from(root.getElementsByTagName('*')).filter((e) => e.localName === name)
   const ti = q(doc, 'title-info')[0]
   const title = ti && q(ti, 'book-title')[0]?.textContent?.trim()
@@ -65,14 +66,15 @@ export async function parseFb2(text: string): Promise<RawBook> {
     for (const [id, i] of r.ids) ids.set(id, blocks.length + i)
     blocks.push(...r.blocks)
   }
-  return fromFlat(blocks, ids, { title, author, lang, cover })
+  return fromFlat(blocks, ids, { title, author, lang, cover, warn: markupWarn })
 }
 
 export function parseHtml(text: string): RawBook {
-  const doc = parseMarkup(text, 'text/html')
+  let markupWarn: string | undefined
+  const doc = parseMarkup(text, 'text/html', (w) => { markupWarn = w })
   const { blocks, ids } = toBlocks(doc.body, { link: (a) => hashLink(a.getAttribute('href')) })
   const meta = (n: string) => doc.querySelector(`meta[name="${n}"]`)?.getAttribute('content') ?? undefined
-  return fromFlat(blocks, ids, { title: doc.title || undefined, author: meta('author'), lang: doc.documentElement.lang || undefined })
+  return fromFlat(blocks, ids, { title: doc.title || undefined, author: meta('author'), lang: doc.documentElement.lang || undefined, warn: markupWarn })
 }
 
 // Lines that open a chapter in plain text: "Capítulo IV", "Chapter 12: …", "Segunda parte", "Prólogo", "I.".
@@ -193,11 +195,56 @@ export function rtfToText(rtf: string): string {
   return out.replace(/\n/g, '\n\n')
 }
 
-export function decodeText(buf: ArrayBuffer): string {
+export type DecodedText = { text: string; warn?: string }
+
+/** Mojibake score: UTF-8 bytes misread as windows-1252 leave "Ã©"-style
+    pairs. Used to tell a real legacy file (whose windows-1252 reading is
+    clean) from a real UTF-8 file with a damaged byte or two (whose
+    windows-1252 reading is full of these pairs). */
+const mojibake = (s: string) => (s.match(/Ã[\u0080-\u00ff]|Â[\u0080-\u00bf]/g) ?? []).length
+
+/** Decode a book file's bytes, honestly (M-2 cure). The old decoder was
+    encoding-blind: it sniffed only a BOM, ignored the encoding an FB2
+    declares in its XML prolog or an HTML file in its meta charset, and
+    gated its windows-1252 fallback on a threshold a short legacy file
+    could not reach — so BOM-less UTF-16 and short legacy files were
+    shelved as silent garbage (the UTF-16 case even passed the word-count
+    gate: every isolated letter counted as a "word"). Now, in order:
+    BOM → the file's own declared encoding → a BOM-less UTF-16 shape
+    (NUL bytes massed on one parity) → UTF-8, with a legacy fallback that
+    fires on ANY replacement damage when the legacy reading is cleaner
+    than the UTF-8 one. Whenever the encoding was GUESSED rather than
+    declared, the result carries a warning for the book's meta — a guess
+    is never silent. */
+export function decodeTextDetailed(buf: ArrayBuffer): DecodedText {
   const bytes = new Uint8Array(buf)
-  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes)
-  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes)
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return { text: new TextDecoder('utf-16le').decode(bytes) }
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return { text: new TextDecoder('utf-16be').decode(bytes) }
+  // The file's own declaration: an XML prolog (FB2) or a meta charset
+  // (HTML), both readable as plain ASCII in the first bytes.
+  const head = new TextDecoder('windows-1252').decode(bytes.subarray(0, 1024))
+  const declared = /<\?xml[^>]*?encoding\s*=\s*["']([\w.:-]+)["']/i.exec(head)?.[1]
+    ?? /<meta[^>]*?charset\s*=\s*["']?([\w.:-]+)/i.exec(head)?.[1]
+  if (declared && !/^utf-?8$/i.test(declared)) {
+    try { return { text: new TextDecoder(declared).decode(bytes) } } catch { /* unknown label: fall through to the guesses */ }
+  }
+  // BOM-less UTF-16: NUL bytes massed on one byte parity.
+  const sample = bytes.subarray(0, Math.min(bytes.length, 8192))
+  let zeroAtOdd = 0, zeroAtEven = 0
+  for (let i = 0; i + 1 < sample.length; i += 2) { if (sample[i] === 0) zeroAtEven++; if (sample[i + 1] === 0) zeroAtOdd++ }
+  const pairs = Math.max(1, Math.floor(sample.length / 2))
+  if ((zeroAtOdd > pairs * 0.2 && zeroAtEven < pairs * 0.02) || (zeroAtEven > pairs * 0.2 && zeroAtOdd < pairs * 0.02)) {
+    const enc = zeroAtOdd > zeroAtEven ? 'utf-16le' : 'utf-16be'
+    return { text: new TextDecoder(enc).decode(bytes), warn: `This file's text encoding (${enc.toUpperCase()} without a marker) was guessed by Logos. If the words look wrong, save the file as UTF-8 and import it again.` }
+  }
   const utf8 = new TextDecoder('utf-8').decode(bytes)
   const bad = (utf8.match(/\ufffd/g) ?? []).length
-  return bad > utf8.length * 0.001 + 2 ? new TextDecoder('windows-1252').decode(bytes) : utf8
+  if (!bad) return { text: utf8 }
+  const legacy = new TextDecoder('windows-1252').decode(bytes)
+  if (mojibake(legacy) < bad) return { text: legacy, warn: 'This file was written in an older text encoding, which Logos guessed. If some words look wrong, save the file as UTF-8 and import it again.' }
+  return { text: utf8, warn: 'A few characters in this file could not be read and are shown as �. The rest of the book is intact.' }
+}
+
+export function decodeText(buf: ArrayBuffer): string {
+  return decodeTextDetailed(buf).text
 }

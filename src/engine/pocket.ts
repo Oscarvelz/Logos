@@ -22,6 +22,18 @@ type Job = {
 }
 
 const workers = new Map<PocketLang, Worker>()
+// Single-flight spawn (M-19): a spawn registers its worker here (and in
+// `workers`) BEFORE any subscriber-firing call inside spawn — eviction,
+// beforeSpawn — can re-enter pocketEnsure for the same language. A
+// second ensure that arrives during a spawn finds the pending worker
+// and joins its waiter list instead of constructing a second worker
+// that overwrites the map entry and leaks the first, both loading
+// 177 MB with only one reachable. `loadPostedFor` makes the 'load'
+// message itself single-flight per worker, so a re-entrant ensure that
+// beat the outer one to spawn() cannot make the outer one post a
+// second load for the same worker.
+const spawning = new Map<PocketLang, Worker>()
+const loadPostedFor = new Map<PocketLang, Worker>()
 const waiters = new Map<PocketLang, { resolve: () => void; reject: (e: Error) => void }[]>()
 const queue: Job[] = []
 let inFlight: Job | null = null
@@ -36,6 +48,32 @@ const JOB_TIMEOUT_MS = 45_000
 const LOAD_TIMEOUT_MS = 120_000
 const clearFlightTimer = () => { if (inFlightTimer) { clearTimeout(inFlightTimer); inFlightTimer = null } }
 let nextId = 1
+
+// The load watchdog (T4-7): pump()'s timeout check only ticks when a
+// synthesis job is queued, so an ensure-only load — the Settings
+// "Download now", the App-start auto-warm — that wedged without ever
+// posting progress hung forever, button disabled, no toast, no way
+// back short of reload. This interval is a real time source behind
+// every outstanding load: it runs while any load is outstanding and
+// stops when none is, and a load it finds stale dies exactly the way
+// pump()'s witnessed timeout dies — worker dropped, waiters and
+// queued jobs failed with the same honest message.
+let loadWatchdog: ReturnType<typeof setInterval> | null = null
+function armLoadWatchdog() {
+  if (loadWatchdog) return
+  loadWatchdog = setInterval(() => {
+    for (const [lang, since] of [...loadSince]) {
+      if (pocket.get().langs[lang].status !== 'loading') { loadSince.delete(lang); continue }
+      if (Date.now() - since <= LOAD_TIMEOUT_MS) continue
+      const msg = 'The voice model stopped loading.'
+      loadSince.delete(lang)
+      dropWorker(lang, new Error(msg))
+      flushWaiters(lang, new Error(msg))
+      failQueued(lang, msg)
+    }
+    if (loadSince.size === 0 && loadWatchdog) { clearInterval(loadWatchdog); loadWatchdog = null }
+  }, 1000)
+}
 
 function setLang(lang: PocketLang, patch: Partial<LangState>) {
   pocket.set((s) => ({ langs: { ...s.langs, [lang]: { ...s.langs[lang], ...patch } } }))
@@ -55,34 +93,98 @@ function threads() {
   return Math.max(1, Math.min(4, (navigator.hardwareConcurrency ?? 2) - 2))
 }
 
-function dropWorker(lang: PocketLang) {
+function dropWorker(lang: PocketLang, failWith?: Error) {
+  // Settle this language's load waiters as the worker dies (T4-8):
+  // eviction (spawn, below) and the cross-engine release both land here
+  // mid-load, and a pocketEnsure promise left unsettled hangs its
+  // caller — the Settings download, the App-start auto-warm — forever.
+  // The rejection takes the same shape the worker error handler and
+  // the load timeout use: an Error saying the load stopped. When no
+  // load is outstanding the waiter list is empty, so releasing a ready
+  // worker stays silent, exactly as before.
+  flushWaiters(lang, new Error('The voice model stopped loading.'))
+  loadSince.delete(lang)
+  loadPostedFor.delete(lang)
   workers.get(lang)?.terminate()
   workers.delete(lang)
   setLang(lang, { status: 'idle' })
-  if (inFlight?.lang === lang) { clearFlightTimer(); queue.unshift(inFlight); inFlight = null }
+  // Queued and in-flight synth jobs on the dropped worker (M-25): the
+  // in-flight job is rescued exactly once — requeued at the head, its
+  // dispatch timer cleared, inFlight nulled, so no late 'spoken' from
+  // the dead worker can also settle it (onMessage only ever settles
+  // the job currently in flight) and no second drop can requeue it
+  // again. Then pump() runs the rescue: the head job re-ensures its
+  // language and is dispatched to the respawned worker, instead of
+  // sitting in the queue until some unrelated synth or message happens
+  // to call pump — the stranding this cure closes. Callers that are
+  // killing the load on purpose (watchdog, pump's own timeout, reset)
+  // pass failWith: the in-flight job is failed honestly with that
+  // error, never requeued, and no rescue pump runs — the caller
+  // settles the queued jobs itself, in its own order.
+  if (inFlight?.lang === lang) {
+    clearFlightTimer()
+    const job = inFlight
+    inFlight = null
+    if (failWith) job.reject(failWith)
+    else queue.unshift(job)
+  }
+  // Deferred to a microtask, deliberately: dropWorker is called from
+  // inside spawn()'s eviction loop, and a synchronous pump here could
+  // chain pump → ensure → spawn → dropWorker recursively across the
+  // two languages. The rescue still runs before any user-visible
+  // stall — it is queued ahead of the next task, not behind it.
+  if (!failWith) queueMicrotask(() => pump())
 }
 
 function spawn(lang: PocketLang): Worker {
   const existing = workers.get(lang)
   if (existing) return existing
-  while (workers.size >= maxWorkers()) {
-    const other = [...workers.keys()].find((l) => l !== lang && inFlight?.lang !== l) ?? [...workers.keys()][0]
-    dropWorker(other)
-  }
-  beforeSpawn()
+  // A spawn already in flight for this language (M-19): join it, never
+  // build a second worker over the top of it.
+  const pending = spawning.get(lang)
+  if (pending) return pending
   const w = new Worker(new URL('./pocket.worker.ts', import.meta.url), { type: 'module' })
+  // Register BEFORE eviction and beforeSpawn: both fire store
+  // subscribers, and a subscriber that ensures this same language
+  // re-enters spawn() — it must find this worker, not build another.
+  spawning.set(lang, w)
   workers.set(lang, w)
   w.addEventListener('message', (e: MessageEvent<PocketResponse>) => onMessage(lang, e.data))
   w.addEventListener('error', (e) => {
     e.preventDefault?.()
-    const msg = e.message || 'The PocketTTS engine crashed.'
+    // The true error first (M-22): an ErrorEvent often carries the
+    // real error on .error while .message is empty — the generic
+    // crash line is only for when neither says anything.
+    const src = (e as ErrorEvent).error as { message?: unknown; name?: unknown } | undefined
+    const msg = (typeof src?.message === 'string' && src.message) || e.message || 'The PocketTTS engine crashed.'
+    const name = typeof src?.name === 'string' && src.name ? src.name : undefined
     workers.delete(lang)
+    loadPostedFor.delete(lang)
     setLang(lang, { status: 'error', error: msg })
-    flushWaiters(lang, new Error(msg))
-    if (inFlight?.lang === lang) { clearFlightTimer(); inFlight.reject(new Error(msg)); inFlight = null }
+    flushWaiters(lang, reviveError(msg, name))
+    if (inFlight?.lang === lang) { clearFlightTimer(); inFlight.reject(reviveError(msg, name)); inFlight = null }
     pump()
   })
+  try {
+    while (workers.size > maxWorkers()) {
+      const other = [...workers.keys()].find((l) => l !== lang && inFlight?.lang !== l) ?? [...workers.keys()].find((l) => l !== lang)
+      if (!other) break
+      dropWorker(other)
+    }
+    beforeSpawn()
+  } finally { spawning.delete(lang) }
   return w
+}
+
+/** Rebuild the error the worker actually threw (M-22): the message
+ *  verbatim, and the kind — the error's name — carried back onto the
+ *  page-side error, so a RangeError from the worker is not re-labelled
+ *  a plain Error and an abort stays an AbortError. */
+function reviveError(message: string, name?: string): Error {
+  if (name === 'AbortError' || message === 'Aborted') return new DOMException(message || 'Aborted', 'AbortError')
+  const e = new Error(message)
+  if (name && name !== 'Error') e.name = name
+  return e
 }
 
 function flushWaiters(lang: PocketLang, err?: Error) {
@@ -99,7 +201,12 @@ function onMessage(lang: PocketLang, m: PocketResponse) {
       break
     case 'ready':
       loadSince.delete(lang)
-      setLang(lang, { status: 'ready', error: null, loadMs: m.ms, loaded: pocket.get().langs[lang].total, fromCache: true })
+      // fromCache keeps the value the progress reports actually gave
+      // (T4-11): hard-coding true here claimed a cache provenance the
+      // load may not have — a fresh download is not "from the phone".
+      // (A download whose cache save failed never reaches this case
+      // at all now: pocket-assets refuses it as a load error.)
+      setLang(lang, { status: 'ready', error: null, loadMs: m.ms, loaded: pocket.get().langs[lang].total })
       pocket.set({ active: lang })
       keepStorage()
       flushWaiters(lang)
@@ -109,8 +216,13 @@ function onMessage(lang: PocketLang, m: PocketResponse) {
       loadSince.delete(lang)
       workers.get(lang)?.terminate()
       workers.delete(lang)
+      loadPostedFor.delete(lang)
       setLang(lang, { status: 'error', error: m.message })
-      flushWaiters(lang, new Error(m.message))
+      flushWaiters(lang, reviveError(m.message, m.name))
+      // A job in flight on this worker dies with it (M-25): fail it
+      // honestly now, with the load's own error, instead of leaving it
+      // to the 45 s dispatch timer on a worker that no longer exists.
+      if (inFlight?.lang === lang) { clearFlightTimer(); const j = inFlight; inFlight = null; j.reject(reviveError(m.message, m.name)) }
       failQueued(lang, m.message)
       break
     case 'spoken':
@@ -123,7 +235,7 @@ function onMessage(lang: PocketLang, m: PocketResponse) {
         const dur = m.samples.length / m.sampleRate
         if (dur > 0.5) pocket.set({ lastRtf: m.ms / 1000 / dur })
         job.resolve({ samples: m.samples, sampleRate: m.sampleRate, ms: m.ms })
-      } else job.reject(m.message === 'Aborted' ? new DOMException('Aborted', 'AbortError') : new Error(m.message))
+      } else job.reject(reviveError(m.message, m.name))
       pump()
       break
     }
@@ -142,11 +254,19 @@ export function pocketEnsure(lang: PocketLang): Promise<void> {
     list.push({ resolve, reject })
     waiters.set(lang, list)
   })
-  if (pocket.get().langs[lang].status !== 'loading' || !workers.has(lang)) {
+  // Single-flight (M-19): an ensure that arrives while a spawn for this
+  // language is in flight joins the same pending worker — it adds its
+  // waiter above and does not spawn or post a second load.
+  if (!spawning.has(lang) && (pocket.get().langs[lang].status !== 'loading' || !workers.has(lang))) {
     setLang(lang, { status: 'loading', loaded: 0, total: 0, error: null })
     loadSince.set(lang, Date.now())
+    armLoadWatchdog()
     pocket.set({ active: lang })
-    spawn(lang).postMessage({ type: 'load', language: POCKET_LANGUAGE[lang], threads: threads() } satisfies PocketRequest)
+    const w = spawn(lang)
+    if (loadPostedFor.get(lang) !== w) {
+      loadPostedFor.set(lang, w)
+      w.postMessage({ type: 'load', language: POCKET_LANGUAGE[lang], threads: threads() } satisfies PocketRequest)
+    }
   }
   return p
 }
@@ -180,7 +300,7 @@ function pump() {
       if (since && Date.now() - since > LOAD_TIMEOUT_MS) {
         const msg = 'The voice model stopped loading.'
         loadSince.delete(job.lang)
-        dropWorker(job.lang)
+        dropWorker(job.lang, new Error(msg))
         flushWaiters(job.lang, new Error(msg))
         failQueued(job.lang, msg)
       }
@@ -227,7 +347,11 @@ export function onPocketBeforeLoad(fn: () => void) { beforeSpawn = fn }
 
 export function pocketReset() {
   pocketClear()
-  for (const l of [...workers.keys()]) dropWorker(l)
+  // Reset is a deliberate kill (M-25): the in-flight job is failed
+  // honestly with the same AbortError pocketClear gives queued jobs,
+  // never requeued into a queue this function is about to empty —
+  // requeue-then-empty was a strand: the job's promise never settled.
+  for (const l of [...workers.keys()]) dropWorker(l, new DOMException('Aborted', 'AbortError'))
   inFlight = null
   queue.length = 0
   pocket.set({ langs: { en: blank(), es: blank() }, active: null })
@@ -235,7 +359,59 @@ export function pocketReset() {
 
 export async function pocketDelete() {
   pocketReset()
+  // Delete resets every piece of bookkeeping (M-24): the digest
+  // registry goes with the bucket, so no later probe can match a key
+  // against an identity whose model was deliberately removed.
+  clearPocketDigests()
   try { await caches.delete(CACHE) } catch { /* ignore */ }
+}
+
+// The digest registry (M-18): the cache key grammar is
+// '<file>?v=<sha>' — the file name is the same 'model.onnx' for every
+// language, so the digest in the key is the ONLY language identity a
+// cached entry carries. The primary probe learns each language's
+// digest from its manifest and records it here; the offline fallback
+// may then match keys against the digest recorded for the language
+// being probed — and only that language. With no recorded digest for
+// the language, the fallback certifies nothing: a bare model-sized
+// blob in the bucket cannot say which language it speaks.
+const DIGEST_KEY = 'logos.pocketDigests'
+type PocketDigest = { file: string; sha: string; bytes?: number }
+function readPocketDigests(): Partial<Record<PocketLang, PocketDigest>> {
+  try {
+    const v = localStorage.getItem(DIGEST_KEY)
+    const o = v ? JSON.parse(v) as Partial<Record<PocketLang, PocketDigest>> : {}
+    return o && typeof o === 'object' ? o : {}
+  } catch { return {} }
+}
+function recordPocketDigest(lang: PocketLang, d: PocketDigest) {
+  try {
+    const all = readPocketDigests()
+    if (all[lang]?.sha === d.sha && all[lang]?.file === d.file) return
+    all[lang] = d
+    localStorage.setItem(DIGEST_KEY, JSON.stringify(all))
+  } catch { /* blocked — the fallback simply stays honest */ }
+}
+function clearPocketDigests() { try { localStorage.removeItem(DIGEST_KEY) } catch { /* blocked */ } }
+/** The digest the probes currently know for a language, if any —
+ *  keep.ts binds its stamps to this identity (M-21). */
+export function pocketModelDigest(lang: PocketLang): string | null {
+  return readPocketDigests()[lang]?.sha ?? null
+}
+
+/** Measure one cache entry against its manifest identity: the stored
+ *  header must agree with the body (the 1.4.147 rule), and the body
+ *  must be exactly the declared size — or, when no size is declared,
+ *  plainly model-sized. Shared by the primary probe and the offline
+ *  fallback so both certify by the same standard. */
+async function entryMatchesModel(cache: Cache, key: { url: string }, expectedBytes?: number): Promise<boolean> {
+  const res = await cache.match(key as Request)
+  if (!res) return false
+  const actual = (await res.blob()).size
+  const declared = Number(res.headers.get('content-length') ?? 0)
+  if (declared > 0 && declared !== actual) return false
+  if (typeof expectedBytes === 'number' && expectedBytes > 0) return actual === expectedBytes
+  return actual > 100_000_000
 }
 
 /** Whether a language's model is already on this phone. */
@@ -252,17 +428,41 @@ export async function pocketCached(lang: PocketLang = 'en'): Promise<boolean> {
     // model is 176,992,315 B + a 39 MB encoder + assets — exactly
     // the bytes Settings counts in this bucket).
     try {
-      const m = await (await fetch(`https://huggingface.co/thewh1teagle/pocket-tts-onnx/resolve/main/${lang}/manifest.json`)).json() as { model?: { file?: string; sha256?: string } }
+      const m = await (await fetch(`https://huggingface.co/thewh1teagle/pocket-tts-onnx/resolve/main/${lang}/manifest.json`)).json() as { model?: { file?: string; sha256?: string; bytes?: number } }
       const file = m.model?.file
       const sha = m.model?.sha256
-      if (file && sha) return keys.some((k) => k.url.includes(`${file}?v=${sha}`))
-    } catch { /* offline — fall through to the shape probe */ }
-    for (const k of keys) {
-      if (!k.url.includes('model.onnx')) continue
-      const res = await cache.match(k)
-      const len = Number(res?.headers.get('content-length') ?? 0) || (res ? (await res.blob()).size : 0)
-      if (len > 100_000_000) return true
-    }
+      if (file && sha) {
+        // Learn this language's digest identity (M-18) before judging:
+        // the offline fallback below is only as honest as this record.
+        recordPocketDigest(lang, { file, sha, bytes: typeof m.model?.bytes === 'number' ? m.model.bytes : undefined })
+        // Key existence alone never certifies (T4-3): a 1-byte stub or
+        // an HTML error page filed under the digest key is not a model.
+        // The manifest declares the model's true size (`bytes` —
+        // 176,992,315 for the English model), so open the entry filed
+        // under the key and measure its actual body against it; the
+        // entry's own stored header must agree with its body too (the
+        // 1.4.147 rule). Only a body of exactly the declared size —
+        // or, if a manifest ever omits `bytes`, a plainly model-sized
+        // body — reports "downloaded".
+        const hitKey = keys.find((k) => k.url.includes(`${file}?v=${sha}`))
+        if (!hitKey) return false
+        return await entryMatchesModel(cache, hitKey, m.model?.bytes)
+      }
+    } catch { /* offline — fall through to the language-bound fallback */ }
+    // Offline fallback (M-18, was T4-10): the old shape loop iterated
+    // EVERY key and certified this language from any model-sized
+    // 'model.onnx' entry — the English model certified Spanish, in
+    // exactly the offline condition this probe exists for. The key
+    // grammar carries the language's identity in its digest
+    // ('model.onnx?v=<sha>'), so the fallback now matches only the
+    // key carrying the digest recorded for THIS language, measured
+    // by the same standard as the primary probe. No recorded digest
+    // for this language → nothing is certified.
+    const known = readPocketDigests()[lang]
+    if (!known) return false
+    const hitKey = keys.find((k) => k.url.includes(`${known.file}?v=${known.sha}`))
+    if (!hitKey) return false
+    return await entryMatchesModel(cache, hitKey, known.bytes)
   } catch { /* ignore */ }
   return false
 }

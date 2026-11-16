@@ -5,6 +5,8 @@
  *    swaps its shell for the player;
  *  - the LambdaPort: the scenario's ONE door out of the sandbox — it
  *    flips Oscar's own bubble switch and nothing else (Fence 0 E-λ);
+ *    since the C-1 cure the host also captures that switch's value at
+ *    launch and restores it on every exit (see lambdaRestoreRef);
  *  - the resolving stage: the host resolver shows the fiction stage's
  *    surface for the anchor about to be resolved (flushSync, so the
  *    element exists when the resolver looks), because a lesson walks
@@ -16,13 +18,15 @@
  *    place, the real element carrying the same anchor is brought
  *    into view.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { createStore, useStore } from './store.ts'
-import { settings } from './settings.ts'
+import { settings, ORIGINAL_FAVORITES } from './settings.ts'
 import { setBubble } from './bubble.ts'
 import { catalogueModule, type ResumePoint } from './presentation/catalogue.ts'
-import { anchorRecordFor, type StoreProbes } from './presentation/anchors.ts'
+import { anchorRecordFor, resolveStayHereLanding, unfoldHeaderId, type RootLike, type StoreProbes } from './presentation/anchors.ts'
+import { toast } from '../components/ui.tsx'
+import { t } from './i18n.ts'
 import { VOICES } from './voices.ts'
 import { BOOK_ACCEPT } from './book/import.ts'
 import { parseImage } from './book/image.ts'
@@ -122,7 +126,7 @@ export function stageSheet(sheet: StageSheet) {
 
 /** Voice-catalogue state shared by the Voices surface and the voice
  *  picker: a star placed in one room is the same star in the other. */
-export const stageVoices = createStore<{ favs: string[]; defaultId: string; pickedId: string | null }>({ favs: ['pk_alba'], defaultId: 'pk_alba', pickedId: null })
+export const stageVoices = createStore<{ favs: string[]; defaultId: string; pickedId: string | null }>({ favs: [...ORIGINAL_FAVORITES], defaultId: 'pk_alba', pickedId: null })
 export function stageSetPickedVoice(voiceId: string | null) {
   stageVoices.set({ ...stageVoices.get(), pickedId: voiceId })
   stageBump()
@@ -202,6 +206,24 @@ function choreograph(anchorId: string, act: string) {
   if (anchorId === 'shell-brand-home') { stageGo('listen'); return }
   // The desk's book opens the book, as the real desk card does.
   if (anchorId === 'desk-book') { stageGo('book'); return }
+  // The desk's favourite chips are doors too (the M-38 cure): a
+  // performed tap on the favourites card takes the first favourite's
+  // voice over — the Listen chip renames — exactly as a real tap on
+  // that chip sets the override in the real desk. Before this wiring
+  // the performed tap did nothing at all, in either mode, while the
+  // caption announced the takeover.
+  if (anchorId === 'desk-fav-voices') {
+    const favs = stageVoices.get().favs
+    if (favs[0]) stageSetPickedVoice(favs[0])
+    return
+  }
+  // The Voices page's star and Make-default buttons (the M-38 cure):
+  // their effects lived only in the stage buttons' own onClick, so a
+  // PERFORMED tap (Automatic, «Show me») changed nothing while the
+  // captions announced "joins your favorites immediately" / "becomes
+  // the default voice". A performed tap now does what the button does.
+  if (/^voice-card:[^:]+:star$/.test(anchorId)) { stageToggleFav(anchorId.split(':')[1]); return }
+  if (/^voice-card:[^:]+:make-default$/.test(anchorId)) { stageSetDefaultVoice(anchorId.split(':')[1]); return }
   if (anchorId === 'listen-voice-chip') stageSheet('voice')
   // Picking a voice renames the chip but does NOT close the picker:
   // the lesson's consequence beats still point at the row just
@@ -325,28 +347,22 @@ function fictionContractEnv(scenario: Scenario) {
  *  ever hands back elements of the surface the stage is standing on —
  *  plus the chrome that lives outside every surface. Exactly-once
  *  semantics therefore hold per surface, synchronously, even while
- *  React's own re-render of the switch is still queued. */
-/** Family scoping (ANCHOR-REGISTRY §4.7): a parameterized family's
- *  sub-anchors resolve inside ONE card of the family — the first
- *  standing — when a beat names no member. The resolver's root is
- *  the documented scoping seam («a subtree the caller scoped — e.g.
- *  one card of a family»); this is that scope, applied only when
- *  the matches genuinely span several cards. */
-const FAMILY_SCOPES: { root: string; members: readonly string[] }[] = [
-  { root: 'lib-clip-card', members: ['lib-clip-card', 'lib-clip-meta', 'lib-clip-fav', 'lib-clip-more', 'lib-clip-play', 'lib-clip-make-audio', 'lib-clip-selbox'] },
-  { root: 'bk-tile', members: ['bk-tile', 'bk-tile-more', 'bk-tile-temp'] },
-  { root: 'set-pron-entry', members: ['set-pron-entry', 'set-pron-remove'] },
-  { root: 'book-toc-row', members: ['book-toc-row'] },
-  { root: 'book-marks-row', members: ['book-marks-row'] },
-  // A voice lives in the picker twice when it is a favourite (its
-  // Favourites row and its engine-group row); the family is one
-  // voice, and the first standing row — Favourites, the picker's
-  // first section — is its canonical seat.
-  { root: 'voice-picker-row', members: ['voice-picker-row'] },
-  { root: 'voice-picker-row:preview', members: ['voice-picker-row:preview'] },
-  { root: 'voice-picker-row:star', members: ['voice-picker-row:star'] },
-]
-
+ *  React's own re-render of the switch is still queued.
+ *
+ *  NO FAMILY NARROWING (the T6-8 cure): this root used to scope a
+ *  parameterized family's matches down to the FIRST standing card and
+ *  hand them back as a clean resolution — silently converting the
+ *  ambiguity the registry law declares a miss (>1 match) into a
+ *  first-match, so a lesson pointed at an instance its script never
+ *  named (the first of two pronunciation entries, of three chapter
+ *  rows, of a favourited voice's two picker rows). The root now hands
+ *  back every standing match and the resolver's exactly-once law
+ *  decides, honestly: one visible match resolves, several are the
+ *  declared 'ambiguous' miss, and a beat that means ONE member must
+ *  name it (its companion attribute does the naming, as it always
+ *  could). Beats that relied on the silent first-match are lane
+ *  flags for the script lane, listed in the Wave 3 mop-up report —
+ *  they are not re-pointed here in silence. */
 function stageRoot(): { querySelectorAll: (selector: string) => Element[] } {
   return {
     querySelectorAll: (selector: string) => {
@@ -368,16 +384,6 @@ function stageRoot(): { querySelectorAll: (selector: string) => Element[] } {
         const inRail = (el: Element) => !!el.closest('[data-present="shell-rail"]')
         const picked = out.filter((el) => inRail(el) === wide)
         if (picked.length > 0) out = picked
-      }
-      const dp = /\[data-present="([^"]+)"\]/.exec(selector)?.[1]
-      if (dp) {
-        const scope = FAMILY_SCOPES.find((s) => s.members.includes(dp))
-        if (scope && out.length > 1) {
-          const rootOf = (el: Element): Element => el.getAttribute('data-present') === scope.root ? el : (el.closest(`[data-present="${scope.root}"]`) ?? el)
-          const first = rootOf(out[0])
-          const narrowed = out.filter((el) => rootOf(el) === first)
-          if (narrowed.length >= 1 && narrowed.length < out.length) out = narrowed
-        }
       }
       return out
     },
@@ -452,6 +458,13 @@ function stageResolver(scenario: Scenario): AnchorResolver {
 export function PresentationHost() {
   const { current } = useStore(presentationLaunch)
   const [built, setBuilt] = useState<{ nonce: number; scenario: Scenario } | null>(null)
+  /** The λ restore for the CURRENT launch (the C-1 cure's host safety
+   *  net): the closure captured by the launch effect below, called on
+   *  onExit and from the effect's cleanup, so an exit that somehow
+   *  bypasses the runner's teardown still cannot leak a flipped
+   *  bubble switch. Idempotent — it only sets the switch when it
+   *  stands away from the entry value. */
+  const lambdaRestoreRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (!current) { setBuilt(null); return }
@@ -461,7 +474,27 @@ export function PresentationHost() {
     stageBookTemp.set({ temp: null })
     stageActiveClip.set({ id: null })
     lastRenderedClipId = null
-    stageVoices.set({ favs: ['pk_alba'], defaultId: 'pk_alba', pickedId: null })
+    // The stage's voice world starts at the app's own factory state
+    // (the M-38 cure): the original favourites — Zoey, Noa, Marcos and
+    // the rest of settings.ts's ORIGINAL_FAVORITES — arrive starred,
+    // as Q3's own narration says they do ("Zoey came starred from the
+    // factory"); a lone pk_alba made the star scene's world false
+    // before its first beat.
+    stageVoices.set({ favs: [...ORIGINAL_FAVORITES], defaultId: 'pk_alba', pickedId: null })
+    // THE λ ENTRY CAPTURE (the C-1 cure): the real bubble setting is
+    // read HERE, at presentation launch, before the scenario exists
+    // and before any beat can flip it. The scenario captures the same
+    // value at its own creation and its teardown restores it on every
+    // runner exit; this host-side restore is the second net — onExit
+    // and this effect's cleanup both call it, and it is a no-op when
+    // the switch already stands at the entry value.
+    const entryBubbleOn = settings.get().bubbleOn
+    const restoreBubble = () => {
+      try {
+        if (settings.get().bubbleOn !== entryBubbleOn) setBubble(entryBubbleOn)
+      } catch { /* a restore must never break an exit */ }
+    }
+    lambdaRestoreRef.current = restoreBubble
     const scenario = createScenario({ lambdaPort })
     // Entry staging: some lessons open mid-story by design — Q4 and
     // AD3 begin at a live reader, AD7 on a shelf that already holds
@@ -488,8 +521,16 @@ export function PresentationHost() {
       } catch { /* staging is best-effort; the fences report misses */ }
       if (live) setBuilt({ nonce: current.nonce, scenario })
     })()
-    return () => { live = false }
-    return () => { /* the player's own teardown discards the scenario */ }
+    return () => {
+      live = false
+      // The launch ends here — by close, by a new launch, or by the
+      // host itself unmounting (the path where the player's own
+      // unmount-abort may never run). The player's teardown normally
+      // restores the λ first; this is the net under it, and it is a
+      // no-op when the switch already stands at the entry value.
+      restoreBubble()
+      if (lambdaRestoreRef.current === restoreBubble) lambdaRestoreRef.current = null
+    }
   }, [current])
 
   if (!current || !built || built.nonce !== current.nonce) return null
@@ -551,20 +592,86 @@ export function PresentationHost() {
     <PresentationPlayer
       key={current.nonce}
       script={entry.script}
+      resumeFrom={current.resumeFrom}
       scenario={built.scenario}
       scenarioPort={port}
       ScenarioView={LogosScenarioStage}
       resolver={stageResolver(built.scenario)}
       lang={settings.get().uiLang}
       onExit={(info) => {
+        // The λ restore, first (the C-1 cure): completion, abort and
+        // stay-here all land here, and the runner's teardown has
+        // normally restored the switch already — this call is the
+        // host's own guarantee, a no-op when it has.
+        lambdaRestoreRef.current?.()
         closePresentation()
         // The index card listens for this: progress, the resume
         // head and «My scenes» refresh the moment a lesson closes.
         dispatchEvent(new Event(PRESENTATIONS_OPEN_EVENT))
         if (info.reason === 'stay-here' && info.stayHereAnchorId) {
+          // THE STAY-HERE LANDING (the T6-12 cure): the raw anchor id
+          // is NOT a data-present value — a concrete family id's real
+          // element carries the family name PLUS its companion
+          // attribute, a CLASS anchor carries no data-present at all,
+          // an EXISTING anchor lives on its own attribute, and
+          // contract / store / stage-only anchors have no real element
+          // to land on. The landing therefore resolves through the
+          // registry's own semantics (resolveStayHereLanding —
+          // resolveWeb, visibility-aware, exactly-once: a multi-seat
+          // anchor lands on its VISIBLE seat, never the first in DOM
+          // order), performs the record's declared unfold step once
+          // when the element stands inside a folded Settings card
+          // (the same declared step search «Go» performs), and polls
+          // briefly for the real shell to stand. An anchor that
+          // cannot land is DECLARED unlandable by the helper's reason
+          // — no element exists for it in the real app, or none
+          // stands visibly right now — and no fake scroll is made;
+          // the learner's place stays recorded in the state file
+          // either way, exactly as the stay-here window promised.
+          const anchorId = info.stayHereAnchorId
           requestAnimationFrame(() => requestAnimationFrame(() => {
-            document.querySelector(`[data-present="${info.stayHereAnchorId}"]`)
-              ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+            const root = document as unknown as RootLike
+            let unfolded = false
+            let tries = 0
+            const attempt = () => {
+              tries++
+              const landing = resolveStayHereLanding(root, anchorId)
+              if (landing.status === 'landed') {
+                ;(landing.element as { scrollIntoView?: (options?: { block?: string; behavior?: string }) => void })
+                  .scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+                return
+              }
+              if (!unfolded) {
+                unfolded = true
+                const found = anchorRecordFor(anchorId)
+                const headerId = found ? unfoldHeaderId(found.record) : null
+                if (headerId) {
+                  const header = resolveStayHereLanding(root, headerId)
+                  if (header.status === 'landed') {
+                    const hel = header.element as {
+                      querySelector?: (selector: string) => { click?: () => void } | null
+                      click?: () => void
+                    }
+                    const head = hel.querySelector?.('button')
+                    if (head?.click) head.click()
+                    else hel.click?.()
+                  }
+                }
+              }
+              // T6-12 completion: the learner hears WHY nothing
+              // landed. A by-design reason (stage-only, not a web
+              // anchor, not in the registry) could never land, and a
+              // standing failure (missing, ambiguous, not visible)
+              // has now had its poll — either way the declared reason
+              // is spoken, in the words its class earns. Before this,
+              // attempt() simply stopped after 8 tries and the
+              // learner heard nothing at all.
+              if (tries < 8) setTimeout(attempt, 180)
+              else if (landing.reason === 'stage-only' || landing.reason === 'not-a-web-anchor' || landing.reason === 'not-in-registry')
+                toast(t("That spot is part of the lesson stage, so there's nothing to land on here — your place is saved."))
+              else toast(t("Couldn't find that spot just now — your place is saved in Presentations."))
+            }
+            attempt()
           }))
         }
       }}

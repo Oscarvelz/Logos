@@ -147,6 +147,34 @@ export function moduleProgress(state: PresentationStateFile, moduleId: string): 
   return state.modules[moduleId] ?? null
 }
 
+/**
+ * THE current module — the one computation every surface reads (the
+ * M-37 cure). The stay-here bookkeeping (the runner: a module standing
+ * in-progress IS the lesson the learner is inside, and Resume re-enters
+ * it) and the index's first-card head disagreed because they computed
+ * "where you are" differently: the index gated on the file's `lastUsed`
+ * mark alone, so a state file whose in-progress record stands WITHOUT
+ * the mark — exactly the shape a search «Watch» landing writes first
+ * (`withWatchLanding` writes the record; the mark is the runner's, set
+ * when the launch actually starts) — read as "no current module" on
+ * the index while the runner resumed that very module as current.
+ *
+ * The one truth, from the state layer:
+ * - the marked module, while its record stands in-progress, is current
+ *   (the first-card law's ordinary case);
+ * - with no usable mark, a file holding EXACTLY ONE in-progress record
+ *   has that module as its current — the record is unambiguous, and
+ *   the runner already treats it so;
+ * - otherwise (no in-progress record, or several and no mark to choose
+ *   between them) there is honestly no current module: null.
+ */
+export function currentModuleId(state: PresentationStateFile): string | null {
+  const marked = state.lastUsed
+  if (marked && state.modules[marked]?.state === 'in-progress') return marked
+  const inProgress = Object.keys(state.modules).filter((id) => state.modules[id].state === 'in-progress')
+  return inProgress.length === 1 ? inProgress[0] : null
+}
+
 /** Return a new state with one module's progress replaced. */
 export function withModuleProgress(
   state: PresentationStateFile,
@@ -154,6 +182,52 @@ export function withModuleProgress(
   progress: ModuleProgress,
 ): PresentationStateFile {
   return { ...state, modules: { ...state.modules, [moduleId]: progress } }
+}
+
+/**
+ * The search «Watch» landing, as a MERGE — never a clobber (the H-27
+ * cure). Watching one scene must never destroy state the learner
+ * earned elsewhere in the module:
+ * - a module never started gets the fresh in-progress record at the
+ *   watched scene (the only case that writes a whole new record);
+ * - an existing record keeps its state — a `seen` module stays seen,
+ *   a `needs-refresh` flag is not cleared by watching — and keeps its
+ *   whole skip log (§7 clause 4's diagnostic record);
+ * - the resume point moves to the watched scene ONLY when that loses
+ *   nothing: a record already further along keeps its further point
+ *   (never rewound), and a completed module's point is moot (its
+ *   state, not its point, is what the index announces). The launch
+ *   itself carries the watched scene as its explicit resumeFrom, so
+ *   «Watch» still lands exactly on the scene tapped.
+ */
+export function withWatchLanding(
+  state: PresentationStateFile,
+  moduleId: string,
+  point: { step: number; scene: string; stepId?: string },
+  verifiedAgainst: string,
+): PresentationStateFile {
+  const existing = state.modules[moduleId]
+  if (!existing) {
+    return withModuleProgress(state, moduleId, {
+      state: 'in-progress',
+      step: point.step,
+      scene: point.scene,
+      stepId: point.stepId,
+      verifiedAgainst,
+      skips: [],
+    })
+  }
+  const further =
+    existing.state !== 'seen' && typeof existing.step === 'number' && existing.step > point.step
+  const merged: ModuleProgress = {
+    state: existing.state === 'unseen' ? 'in-progress' : existing.state,
+    step: further ? existing.step : point.step,
+    scene: further ? existing.scene : point.scene,
+    stepId: further ? existing.stepId : point.stepId,
+    verifiedAgainst: existing.verifiedAgainst || verifiedAgainst,
+    skips: existing.skips,
+  }
+  return withModuleProgress(state, moduleId, merged)
 }
 
 /** Return a new state with the remembered speed replaced (validated). */

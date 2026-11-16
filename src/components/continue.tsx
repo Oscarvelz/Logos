@@ -7,6 +7,7 @@ import { useStore } from '../lib/store.ts'
 import { books, type BookMeta } from '../lib/books.ts'
 import { library, getClipBlob, type ClipMeta } from '../lib/library.ts'
 import { playBook } from '../lib/book/playbook.ts'
+import { nowReadingFor } from '../lib/book/nowreading.ts'
 import { playClip } from '../player/clip.ts'
 import { listen, loadText, play, seek } from '../player/listen.ts'
 import { drafts } from '../lib/drafts.ts'
@@ -31,8 +32,19 @@ export function ContinueRow({ onResume }: { onResume?: () => void }) {
 
   const entries = useMemo<Entry[]>(() => {
     const out: Entry[] = []
+    // The book on stage is never offered back to itself (cure
+    // T1-9): opening a book stamps openedAt, so the newest
+    // unfinished book WAS the one in Listen — and the card offered
+    // it at its stale BookPage-era pos/progress (no Listen-side
+    // code writes those during a session), so a tap reloaded the
+    // text and rewound the reading, discarding the live playhead.
+    // The text leg below has always carried this same-session
+    // guard; the book leg now carries it too, judged by the same
+    // witness BookPage itself uses (nowReadingFor on the live
+    // text). The next newest unfinished book takes the seat.
+    const liveBookId = s.active ? nowReadingFor(s.text)?.id ?? null : null
     const book = [...bk.list]
-      .filter((b) => !b.done && b.progress > 0.01 && b.progress < 0.985 && (b.openedAt ?? 0) > 0)
+      .filter((b) => !b.done && b.progress > 0.01 && b.progress < 0.985 && (b.openedAt ?? 0) > 0 && b.id !== liveBookId)
       .sort((a, b) => (b.openedAt ?? 0) - (a.openedAt ?? 0))[0]
     if (book) {
       const meta: BookMeta = book
@@ -62,7 +74,12 @@ export function ContinueRow({ onResume }: { onResume?: () => void }) {
             return
           }
           void getClipBlob(c.id).then((blob) => {
-            if (blob) void playClip(`clip:${c.id}`, blob, { title: c.title, artist: c.voice }, c.pos ?? 0)
+            // The clip's own stored speed governs its playback (cure
+            // M-2) — not the global speed of the moment. `sp` is
+            // filed on the record by the exporter (see the written
+            // request for library.ts/exporter.ts); until a record
+            // carries one, playClip falls back to neutral, as before.
+            if (blob) void playClip(`clip:${c.id}`, blob, { title: c.title, artist: c.voice, sp: (c as ClipMeta & { sp?: number }).sp }, c.pos ?? 0)
           })
         },
       })

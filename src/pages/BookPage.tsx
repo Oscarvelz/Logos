@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, AudioLines, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, CornerUpLeft, ListTree, Loader2, Pause, Play, Search, Type, X } from 'lucide-react'
-import { getBook, getContent, updateBook, progressAt, posAtProgress, sweepTempBooks, type BookMeta, type Block, type Chapter, type Pos } from '../lib/books.ts'
+import { books, getBook, getContent, updateBook, progressAt, posAtProgress, progressPatch, clampPos, sweepTempBooks, setReaderFloor, clearReaderFloor, type BookMeta, type Block, type Chapter, type Pos } from '../lib/books.ts'
 import { drafts } from '../lib/drafts.ts'
 import { loadText, play, listen, toggle } from '../player/listen.ts'
 import { useStore } from '../lib/store.ts'
@@ -43,32 +43,69 @@ export function BookPage() {
   const textRef = useRef<HTMLDivElement>(null)
   const posRef = useRef(pos)
   posRef.current = pos
+  // M-16 cure: the position writer is gated on the restore. This is set
+  // false synchronously when a load starts (with the reader-floor claim,
+  // before any await) and true only once the saved place has been put
+  // into posRef — so no save (the throttled timer, pagehide, the unmount
+  // cleanup, a chapter tracker nudge) can land the initial {0,0} place
+  // over the saved one while a slow restore is still in flight.
+  const restoredRef = useRef(false)
+  // M-11 cure: the bookmark star renders from the books store — the same
+  // store updateBook writes — never from this page's load-time snapshot
+  // alone, so the star and the toggle can never disagree about whether
+  // a place is marked (a mark made or removed through Listen or the
+  // Library's marks shelf shows here the moment its write lands).
+  const bkStore = useStore(books)
 
   useEffect(() => { const on = () => setId(bookIdFromHash()); addEventListener('hashchange', on); return () => removeEventListener('hashchange', on) }, [])
   useEffect(() => {
     let live = true
+    // Claim the reader floor synchronously, before any await: from this
+    // line on, no temp sweep — this effect's own, the app-start one, or a
+    // concurrent one — can delete the book being opened (H-1).
+    setReaderFloor(id)
+    restoredRef.current = false // M-16: the writer closes until this load's restore lands
     setMeta(null); setChapters(null); setMissing(false)
     void (async () => {
       const [m, c] = await Promise.all([getBook(id), getContent(id)])
       if (!live) return
       if (!m || !c) { setMissing(true); return }
       setMeta(m); setChapters(c.chapters)
-      const start = { ch: Math.min(m.pos.ch, c.chapters.length - 1), b: m.pos.b }
+      // M-8 cure: clamp the block index as well as the chapter — a stale
+      // pos.b pointed past the end of its chapter (see clampPos).
+      const start = clampPos(c.chapters, m.pos)
       setCh(start.ch); setPos(start); setGoal({ b: start.b, n: Date.now() })
-      void updateBook(id, { openedAt: Date.now() }, false)
-      void sweepTempBooks()
+      // M-16: the restore has been applied — posRef holds the saved place
+      // from this line (not just after the next render), and the writer
+      // may open. Any save fired before this line was refused by the gate.
+      posRef.current = start
+      restoredRef.current = true
+      // Await the openedAt write through the per-book write queue BEFORE
+      // sweeping, so the sweep's snapshot of the in-memory list already
+      // carries this book's fresh openedAt (it is also the most recently
+      // opened) — and pass the id as an explicit protection on top of the
+      // reader floor, so the keep-set holds this book deterministically,
+      // not by winning a race. A failed openedAt write must not strand
+      // the reader: the explicit protection still covers the sweep.
+      await updateBook(id, { openedAt: Date.now() }, false).catch(() => null)
+      if (!live) return
+      await sweepTempBooks(id)
     })()
-    return () => { live = false }
+    return () => { live = false; clearReaderFloor(id) }
   }, [id])
   useEffect(() => { localStorage.setItem('logos.bookType', JSON.stringify(type)) }, [type])
   useEffect(() => { document.documentElement.dataset.book = '1'; return () => { delete document.documentElement.dataset.book } }, [])
 
   // Save the reading place (throttled, and when leaving).
   const save = useCallback(() => {
+    if (!restoredRef.current) return // M-16: never write a place before the restore has been applied
     if (!meta || !chapters) return
     const p = posRef.current
-    const progress = progressAt(meta, chapters, p)
-    void updateBook(meta.id, (cur) => ({ pos: p, progress: cur.done ? 1 : progress, done: cur.done || progress > 0.985 }), false)
+    // M-7 cure: progress and done are derived from the FRESH record and
+    // the live place together (progressPatch) — a finished book being
+    // re-read from the start un-finishes and its stored progress stops
+    // claiming 100% while pos walks backwards.
+    void updateBook(meta.id, (cur) => ({ pos: p, ...progressPatch(cur, progressAt(cur, chapters, p)) }), false)
   }, [meta, chapters])
   useEffect(() => { const t = setTimeout(save, 1200); return () => clearTimeout(t) }, [pos, save])
   useEffect(() => { addEventListener('pagehide', save); return () => { removeEventListener('pagehide', save); save() } }, [save])
@@ -110,13 +147,16 @@ export function BookPage() {
 
   const jump = useCallback((to: Pos, opts: { push?: boolean; mark?: Mark } = {}) => {
     if (!chapters) return
-    const c = Math.max(0, Math.min(chapters.length - 1, to.ch))
+    // M-8 cure: every landing place is clamped into the real book —
+    // links, bookmarks, TOC entries and restored places alike.
+    const landed = clampPos(chapters, to)
+    const c = landed.ch
     if (opts.push) setBack((s) => [...s.slice(-30), posRef.current])
     setSel(null)
     setMark(opts.mark ?? null)
     setCh(c)
-    setPos({ ch: c, b: to.b })
-    setGoal({ b: to.b, n: Date.now() })
+    setPos(landed)
+    setGoal({ b: landed.b, n: Date.now() })
   }, [chapters])
 
   const goBack = () => { const last = back[back.length - 1]; if (!last) return; setBack((s) => s.slice(0, -1)); jump(last) }
@@ -145,7 +185,7 @@ export function BookPage() {
     }
     const text = parts.join('\n\n')
     setNowReading(meta.id, meta.title, parts, where)
-    void sweepTempBooks()
+    void sweepTempBooks(meta.id)
     drafts.set({ listen: text })
     loadText(text)
     void play()
@@ -179,7 +219,11 @@ export function BookPage() {
 
   const chapter = chapters[ch]
   const progress = progressAt(meta, chapters, pos)
-  const marked = new Set((meta.bookmarks ?? []).filter((x) => x.ch === ch).map((x) => x.b))
+  // M-11: the star's truth is the store record the toggle writes (the
+  // load-time snapshot in `meta` is only the fallback before the store
+  // has this book). Identity is the same (ch, b) the toggle acts on.
+  const liveBookmarks = bkStore.list.find((b) => b.id === meta.id)?.bookmarks ?? meta.bookmarks
+  const marked = new Set((liveBookmarks ?? []).filter((x) => x.ch === ch).map((x) => x.b))
   const st = { '--bk-size': `${type.size}px`, '--bk-lh': type.spacing === 'airy' ? 1.72 : 1.5 } as React.CSSProperties
 
   return (
@@ -213,6 +257,9 @@ export function BookPage() {
       )}
 
       <article className="bk-text" ref={textRef} key={ch}>
+        {/* M-4 cure: the import warning is on the book's own first screen,
+            not only in the import toast that raced it. */}
+        {meta.warn && ch === 0 && <div className="card" data-present="book-warn" style={{ padding: '10px 14px', marginBottom: 14, color: 'var(--danger)' }}>⚠ {meta.warn}</div>}
         <div className="bk-eyebrow" data-present="book-eyebrow">{ch === 0 && meta.author ? meta.author : t('Chapter {a} of {b}', { a: ch + 1, b: chapters.length })}</div>
         {chapter.blocks.map((b, i) => (
           <BlockView key={i} b={b} i={i} sel={sel === i} marked={marked.has(i)} mark={mark?.b === i ? mark : null} onLink={onLink}

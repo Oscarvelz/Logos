@@ -6,7 +6,7 @@ import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings, READER_SCALES, stepReaderScale } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
-import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, RATE_STEPS, setSleepTimer, refreshVoices, relangSession, voiceFor, endSession, sentenceProgress, seekFraction, wordClock, seekWord } from '../player/listen.ts'
+import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, RATE_STEPS, setSleepTimer, refreshVoices, relangSession, voiceFor, endSession, sentenceProgress, seekFraction, wordClock, seekWord, ScrubHold, markGate } from '../player/listen.ts'
 import { markAndToast, textKey } from '../lib/marks.ts'
 import { loadSessionResume } from '../lib/resume.ts'
 import { ContinueRow } from '../components/continue.tsx'
@@ -43,6 +43,19 @@ export function ListenPage() {
   const [sleepOpen, setSleepOpen] = useState(false)
   const [keepOpen, setKeepOpen] = useState(false)
   const [webUrl, setWebUrl] = useState<string | null>(null)
+  // Save-once for the mark door (cure M-5): the gate is keyed by the
+  // mark's target (this text, this sentence), so a double-tap files
+  // one mark and a slow save disables THIS target's button until it
+  // settles — while a mark on another sentence stays live.
+  const [, setMarkTick] = useState(0)
+  const markTarget = `${textKey(s.text)}:${s.current}`
+  const markBusy = markGate.busy(markTarget)
+  const doMark = () => {
+    const st = listen.get()
+    const target = `${textKey(st.text)}:${st.current}`
+    void markGate.run(target, () => markAndToast()).finally(() => setMarkTick((n) => n + 1))
+    setMarkTick((n) => n + 1)
+  }
   const text = d.listen
 
   useEffect(() => {
@@ -232,7 +245,7 @@ export function ListenPage() {
               <span className="pb-icon" key={s.buffering ? 'b' : s.playing ? 'p' : 'l'}>{s.buffering ? <Loader2 size={32} className="spin" /> : s.playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" style={{ marginLeft: 4 }} />}</span>
             </button>
             <JumpKey dir="fwd" size={25} disabled={!reading} present="listen-next" />
-            <button className="icon-btn" data-present="listen-mark" onClick={() => void markAndToast()} disabled={!reading} aria-label={t('Mark this moment')} title={t('Mark this moment')}><Bookmark size={20} /></button>
+            <button className="icon-btn" data-present="listen-mark" onClick={doMark} disabled={!reading || markBusy} aria-label={t('Mark this moment')} title={t('Mark this moment')}><Bookmark size={20} /></button>
           </div>
 
           {s.mode === 'device' && s.playing && (
@@ -291,6 +304,11 @@ export function ListenPage() {
 function ProgressLine() {
   const s = useStore(listen)
   const [, force] = useState(0)
+  // The scrub hold (cure M-4): while the listener drags, the hold —
+  // not the store — decides what the thumb shows, so the playhead's
+  // own updates can't snap the thumb back mid-drag; on release the
+  // hold hands out the seek fraction exactly once.
+  const hold = useRef(new ScrubHold())
   const [drag, setDrag] = useState<number | null>(null)
   const bar = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -302,7 +320,7 @@ function ProgressLine() {
   const done = s.active ? (s.current + sentenceProgress()) / n : 0
   let ahead = s.current
   while (ahead < s.rendered.length && s.rendered[ahead]) ahead++
-  const shown = drag ?? done
+  const shown = hold.current.display(done)
   const fracAt = (x: number) => {
     const r = bar.current!.getBoundingClientRect()
     return Math.max(0, Math.min(1, (x - r.left) / r.width))
@@ -314,10 +332,10 @@ function ProgressLine() {
       className={`scrubber ${drag !== null ? 'dragging' : ''} ${s.active ? '' : 'off'}`}
       role="slider" aria-label={t('Position')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(shown * 100)}
       tabIndex={s.active ? 0 : -1}
-      onPointerDown={(e) => { if (!s.active) return; e.currentTarget.setPointerCapture(e.pointerId); setDrag(fracAt(e.clientX)) }}
-      onPointerMove={(e) => { if (drag !== null) setDrag(fracAt(e.clientX)) }}
-      onPointerUp={(e) => { if (drag === null) return; const f = fracAt(e.clientX); setDrag(null); seekFraction(f) }}
-      onPointerCancel={() => setDrag(null)}
+      onPointerDown={(e) => { if (!s.active) return; e.currentTarget.setPointerCapture(e.pointerId); setDrag(hold.current.begin(fracAt(e.clientX))) }}
+      onPointerMove={(e) => { if (hold.current.active) setDrag(hold.current.move(fracAt(e.clientX))) }}
+      onPointerUp={(e) => { const f = hold.current.end(fracAt(e.clientX)); setDrag(null); if (f !== null) seekFraction(f) }}
+      onPointerCancel={() => { hold.current.cancel(); setDrag(null) }}
       onKeyDown={(e) => {
         if (!s.active) return
         if (e.key === 'ArrowRight') seekFraction(Math.min(1, done + 1 / n))

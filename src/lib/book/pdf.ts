@@ -243,8 +243,19 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
 
   endOcr()
   const all = pages.flat()
-  const chars = all.reduce((n, l) => n + l.text.length, 0)
-  if (chars < Math.max(200, N * 40)) throw new Error('This PDF is scanned pictures of pages, and no text could be read from them.')
+  // Cure M-3: the old gate refused any PDF whose text came to less
+  // than max(200, N × 40) characters as "scanned pictures of pages" —
+  // a one-page poem, a certificate, a title page plus a short note
+  // that the text layer (or OCR) read PERFECTLY was turned away, and
+  // the message lied about why: text was read; there just wasn't
+  // much of it. A short book is a book — a one-word .txt imports
+  // without argument. The only honest refusal is NOTHING readable
+  // at all: no letter on any page after the text layer and the OCR
+  // rescue have both had their turn. Even then the message states
+  // the fact and names pictures as a possibility, never as the
+  // diagnosis. (Import's own zero-words gate in import.ts stands
+  // behind this as a second net.)
+  if (!all.some((l) => /\p{L}/u.test(l.text))) throw new Error('No readable text was found in this PDF. If its pages are pictures of pages, Logos could not read them.')
 
   // Running heads and feet: the same words at the top or bottom of many pages, even when
   // OCR garbles them a little ("24 I HOW THE MIND WORKS", "The M i d i Eye 231"). Page numbers: read, then dropped.

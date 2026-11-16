@@ -4,8 +4,8 @@
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
 import { segmentText, pauseAfter, speakable } from '../lib/text.ts'
-import { voiceById, type Lang } from '../lib/voices.ts'
-import { concat, createMp3Encoder, encodeWav, silence, trimSilence, applyGain, levelGain } from '../lib/audio.ts'
+import { voiceById, exportVoiceId, type Lang } from '../lib/voices.ts'
+import { concat, createMp3Encoder, encodeWav, silence, trimSilence, applyGain, levelGain, slugify } from '../lib/audio.ts'
 import { synthesize } from '../engine/engine.ts'
 import { saveClip, updateClip, getClip, type ClipMeta } from '../lib/library.ts'
 import { t } from '../lib/i18n.ts'
@@ -33,6 +33,21 @@ export function titleFrom(text: string): string {
   return first.length > 64 ? `${first.slice(0, 61).replace(/\s+\S*$/, '')}…` : first || 'Untitled'
 }
 
+/** File name for one export (M-46): slugify already restricts the title
+ *  to a filesystem/share-sheet-safe alphabet ([a-z0-9-], diacritics
+ *  folded, capped length, 'logos' when nothing survives); this adds the
+ *  session half — a name is never handed out twice in one app session,
+ *  so two exports of the same title download as name.mp3 and
+ *  name-2.mp3 instead of silently overwriting each other. */
+const usedExportNames = new Set<string>()
+export function exportFileName(title: string, format: string): string {
+  const base = slugify(title)
+  let name = `${base}.${format}`
+  for (let n = 2; usedExportNames.has(name); n++) name = `${base}-${n}.${format}`
+  usedExportNames.add(name)
+  return name
+}
+
 type ExportOpts = { voice: string | null; speed: number; format: 'mp3' | 'wav'; title?: string; summary?: string; origin?: 'create' | 'listen'; id?: string; url?: string; site?: string }
 const queue: { text: string; opts: ExportOpts }[] = []
 
@@ -54,13 +69,21 @@ export function isQueued(id: string) { return queue.some((q) => q.opts.id === id
 export async function runExport(text: string, opts: ExportOpts) {
   if (exportJob.get().status === 'running') return
   const st = settings.get()
+  // M-41: re-rendering an existing clip renders at THE CLIP's speed —
+  // the clip record's `sp` is the owner (the Playback office's contract);
+  // the caller's speed (today: the live Listen speed from LibraryPage)
+  // is only the fallback for clips that carry no `sp`, and the global
+  // speeds govern only fresh, non-clip renders.
+  const existingEarly = opts.id ? await getClip(opts.id) : null
+  const clipSp = (existingEarly as (ClipMeta & { sp?: unknown }) | null)?.sp
+  const speed = typeof clipSp === 'number' && Number.isFinite(clipSp) && clipSp > 0 ? clipSp : opts.speed
   const segments = segmentText(text, st.langMode)
   if (!segments.length) { next(); return }
-  const pick = (lang: Lang) => {
-    const v = voiceById(opts.voice ?? undefined)
-    if (v && (v.lang === lang || st.langMode !== 'auto')) return v.id
-    return st.defaultVoice[lang]
-  }
+  // T7-11: the resolution itself lives in voices.ts (exportVoiceId) —
+  // an explicit pick renders every segment; only Auto (null) picks
+  // per language. The old inline rule silently overrode an explicit
+  // pick per segment in Auto language mode.
+  const pick = (lang: Lang) => exportVoiceId(opts.voice, lang, st)
   ctrl = new AbortController()
   const signal = ctrl.signal
   exportJob.set({ status: 'running', done: 0, total: segments.length, startedAt: Date.now(), audioSec: 0, result: null, error: null, origin: opts.origin ?? 'create', title: opts.title?.trim() || titleFrom(text), itemId: opts.id ?? null })
@@ -77,7 +100,7 @@ export async function runExport(text: string, opts: ExportOpts) {
       // A sentence that was only a code or a machine file name becomes a breath,
       // not a spelling bee (same rule as live listening).
       const p = spoken
-        ? synthesize(spoken, pick(segments[i].lang), opts.speed, { priority: 0, signal })
+        ? synthesize(spoken, pick(segments[i].lang), speed, { priority: 0, signal })
         : Promise.resolve({ samples: silence(300, SR), sampleRate: SR })
       p.catch(() => {})
       return p
@@ -89,7 +112,7 @@ export async function runExport(text: string, opts: ExportOpts) {
       const trimmed = trimSilence(res.samples, res.sampleRate)
       // Level each sentence toward a common loudness, like live listening.
       const body = applyGain(trimmed, levelGain(trimmed))
-      const gap = silence(pauseAfter(segments[i], st.sentencePauseMs) / opts.speed, res.sampleRate)
+      const gap = silence(pauseAfter(segments[i], st.sentencePauseMs) / speed, res.sampleRate)
       const lead = i === 0 ? silence(150, res.sampleRate) : null
       const chunk = concat(lead ? [lead, body, gap] : [body, gap])
       samples += chunk.length
@@ -99,7 +122,7 @@ export async function runExport(text: string, opts: ExportOpts) {
     }
     const blob = mp3 ? mp3.finish() : encodeWav(concat(pcm), SR)
     const first = voiceById(pick(segments[0].lang))
-    const existing = opts.id ? await getClip(opts.id) : null
+    const existing = existingEarly
     const meta = existing
       ? await saveClip({ ...existing, voice: first?.id ?? '', duration: samples / SR, format: opts.format, blob, kind: 'audio', rendering: false, pos: 0 })
       : await saveClip({

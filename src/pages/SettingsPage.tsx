@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { exportBackup, importBackup } from '../lib/backup.ts'
+import { exportBackup, importBackup, BackupImportError } from '../lib/backup.ts'
 import { Check, ChevronDown, ChevronRight, Cpu, Download, HardDrive, Languages, Loader2, Mic, Palette, PictureInPicture2, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { t } from '../lib/i18n.ts'
 import { useStore } from '../lib/store.ts'
@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.182'
+const VERSION = '1.4.185'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -40,8 +40,25 @@ function BackupCard() {
   const onFile = async (f: File | undefined) => {
     if (!f) return
     setBusy('in')
-    try { const n = await importBackup(f); toast(n === 1 ? t('Restored · 1 book back on the shelf') : t('Restored · {n} books back on the shelf', { n })) }
-    catch { toast(t('That file is not a Logos backup')) }
+    try {
+      const r = await importBackup(f)
+      const msg = r.books === 1 ? t('Restored · 1 book back on the shelf') : t('Restored · {n} books back on the shelf', { n: r.books })
+      // The merge rule, reported where it fired (F7): a book, a
+      // pronunciation or a draft this phone kept over the backup's
+      // older state is named in the toast, never silently kept.
+      const notes: string[] = []
+      if (r.keptNewer === 1) notes.push(t('1 book was already further along on this phone — its place was kept'))
+      else if (r.keptNewer > 1) notes.push(t('{k} books were already further along on this phone — their places were kept', { k: r.keptNewer }))
+      if (r.pronKept === 1) notes.push(t('1 pronunciation kept this phone’s newer reading'))
+      else if (r.pronKept > 1) notes.push(t('{k} pronunciations kept this phone’s newer readings', { k: r.pronKept }))
+      if (r.draft === 'kept') notes.push(t('The Listen text on this phone was kept — the backup’s draft did not replace it'))
+      toast(notes.length ? `${msg} · ${notes.join(' · ')}` : msg)
+    }
+    // A BackupImportError carries its true reason (a damaged book, a
+    // newer-version file, a restore that stopped and rolled back) —
+    // it is shown as written; only an unexpected failure falls back
+    // to the generic line (F6).
+    catch (e) { toast(e instanceof BackupImportError ? e.message : t('That file is not a Logos backup')) }
     setBusy('')
     if (file.current) file.current.value = ''
   }
@@ -52,7 +69,7 @@ function BackupCard() {
         <button className="btn ghost" data-present="set-backup-import" onClick={() => file.current?.click()} disabled={!!busy}>{busy === 'in' ? <Loader2 size={15} className="spin" /> : <Plus size={15} />} {t('Import backup')}</button>
         <input ref={file} type="file" accept=".json,application/json" hidden onChange={(e) => void onFile(e.target.files?.[0])} />
       </div>
-      <p className="muted small" style={{ margin: '8px 0 0' }}>{t('Audio clips are not inside — they can always be made again from the books. Settings themselves stay as they are on this phone.')}</p>
+      <p className="muted small" style={{ margin: '8px 0 0' }}>{t('Your Library clips are inside too — the saved texts and the audio alike. Importing fills in what this phone is missing — it never rewinds a book you have read further here.')}</p>
     </SetCard>
   )
 }
@@ -107,15 +124,24 @@ function SetCluster({ name, line, children }: { name: string; line: string; chil
 // searches. A result here names its card; tapping it opens that
 // card where it lives and scrolls it into view. The search opens
 // the result's home; it never paints a copy of the setting here.
+// Honesty rule for this index (M-30 cure, 2026-11-15): every entry's
+// title and sub are the target card's OWN title and sub, copied
+// verbatim, and every anchor is a data-present id that exists on
+// this page — an entry that names a section differently than the
+// section names itself, or lands nowhere, is a lie the search tells
+// at the top of the page. `keys` names the ROWS inside the card, so
+// a search for a control ("transparency", "storage", "reader") finds
+// the card that holds it; those three words provably found nothing
+// before this cure, against controls sitting one fold away.
 const SETTING_INDEX: { anchor: string; title: string; sub: string; keys: string }[] = [
-  { anchor: 'set-neural', title: 'Neural voice', sub: 'The reading voice — it lives on this device, downloads once, then works offline.', keys: 'voice engine download model voz neuronal descargar motor' },
-  { anchor: 'set-pron', title: 'Pronunciation', sub: 'Words said your way — names, places, terms of art.', keys: 'pronounce names words say pronunciación nombres palabras' },
-  { anchor: 'set-playback', title: 'Playback', sub: 'How listening feels, sentence by sentence.', keys: 'speed pause highlight jump seconds reproducción velocidad pausa saltos' },
-  { anchor: 'set-bubble', title: 'Floating player', sub: 'A small λ that floats over your other apps.', keys: 'bubble floating overlay size burbuja flotante reproductor tamaño' },
-  { anchor: 'set-card-appearance', title: 'Appearance', sub: 'The light of the room.', keys: 'theme dark light tron cyberpunk apariencia tema oscuro claro' },
+  { anchor: 'set-neural', title: 'Neural voice', sub: 'The reading voice — it lives on this device, downloads once, then works offline.', keys: 'voice engine download model storage protect protected cleanup delete offline voz neuronal descargar motor almacenamiento proteger' },
+  { anchor: 'set-pron', title: 'Pronunciation', sub: 'Words said your way — names, places, terms of art.', keys: 'pronounce names words say dictionary say it your way pronunciación nombres palabras diccionario' },
+  { anchor: 'set-playback', title: 'Playback', sub: 'How listening feels, sentence by sentence.', keys: 'speed pause highlight jump seconds reader text size word timing reproducción velocidad pausa saltos lector texto' },
+  { anchor: 'set-bubble', title: 'Floating player', sub: 'A small λ that floats over your other apps.', keys: 'bubble floating overlay size transparency opacity alpha panel clipboard dim idle burbuja flotante reproductor tamaño transparencia opacidad portapapeles' },
+  { anchor: 'set-card-appearance', title: 'Appearance', sub: 'The light of the room.', keys: 'theme dark light system legacy mode tron cyberpunk apariencia tema oscuro claro' },
   { anchor: 'set-card-language', title: 'Language', sub: 'The app’s own words — everything on screen.', keys: 'english español spanish idioma lenguaje inglés' },
   { anchor: 'set-presentations', title: 'Presentations', sub: 'Learn the whole app, guided, at your pace', keys: 'lessons tour guided learn presentaciones lecciones aprender guía' },
-  { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy copia respaldo exportar importar archivo' },
+  { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy clips library copia respaldo exportar importar archivo biblioteca' },
   { anchor: 'set-about', title: 'About Logos', sub: 'Version {v} · private, on-device text-to-speech', keys: 'version about acerca versión' },
 ]
 

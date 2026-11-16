@@ -11,12 +11,15 @@ import { timeStretch } from '../lib/audio.ts'
 import { t } from '../lib/i18n.ts'
 import { pocket, pocketEnsure, pocketSynth, pocketPromote, pocketClear, pocketDelete, pocketCached, pocketCacheBytes, pocketRelease, onPocketBeforeLoad, POCKET_SIZE_MB, type PocketLang } from './pocket.ts'
 import { phonon, phononEnsure, phononSynth, phononPromote, phononClear, phononDelete, phononCached, phononCacheBytes, phononRelease, phononLoaded, onPhononBeforeLoad, PHONON_SIZE_MB } from './phonon.ts'
+import { clearKeepStamps } from './keep.ts'
 
 export type ModelStatus = 'idle' | 'loading' | 'ready' | 'error'
 export type SynthResult = { samples: Float32Array; sampleRate: number; ms: number }
 
 export type EngineState = {
   status: ModelStatus
+  /** a routing substitution to tell the listener about (M-20), or null */
+  note: string | null
   /** 0..1 download progress (bytes) */
   progress: number
   loaded: number
@@ -49,7 +52,20 @@ const ls = {
   del: (k: string) => { try { localStorage.removeItem(k) } catch { /* blocked */ } },
 }
 
-let cachedFlag = false
+// Cached state is per engine (T4-6): one shared boolean probed once
+// at startup for the startup engine used to answer for whichever
+// engine was active later, so switching voices imported the other
+// engine's download state in both directions — "Downloaded" over a
+// Pocket model never fetched, "Not downloaded" over one sitting in
+// the cache. Each kind now keeps its own probe result (null = never
+// probed), and isModelCached probes and stores both.
+const cachedFlags: Record<EngineKind, boolean | null> = { phonon: null, pocket: null }
+/** The M-20 routing substitution note, read by computeFrom below —
+ *  declared here, above the engine store's creation, because that
+ *  creation calls compute() immediately. */
+let routeNote: string | null = null
+let lastSubstitution = ''
+const cachedOf = (kind: EngineKind): boolean => cachedFlags[kind] ?? false
 const wantedLang = (): PocketLang => (settings.get().langMode === 'es' ? 'es' : 'en')
 /** The engine of the voice Listen will use. */
 let lastKind: EngineKind | null = null
@@ -87,14 +103,24 @@ function computeFrom(p: { langs: Record<PocketLang, { status: string; loaded: nu
   const status: ModelStatus = l.status === 'loading' ? 'loading' : l.status === 'ready' || anyReady ? 'ready' : l.status === 'error' ? 'error' : 'idle'
   return {
     status,
+    note: routeNote,
     progress: l.total ? l.loaded / l.total : 0,
     loaded: l.loaded,
     total: l.total,
     error: friendlyError(l.error),
-    cached: cachedFlag || anyReady,
+    // Cached means saved, not loaded (T4-11): this used to be
+    // `cachedOf(kind) || anyReady`, so a model merely resident in
+    // memory claimed "Downloaded / works offline" even when its
+    // cache write had failed and nothing was kept. The flag now
+    // answers alone, and it is earned: a load only reaches 'ready'
+    // with its save verified (pocket-assets refuses a failed store;
+    // phonon.ts verifies the bucket before filing its instance),
+    // and the ready transition below re-probes the real caches, so
+    // a verified save certifies here without anyReady's say-so.
+    cached: cachedOf(kind),
     lastRtf: p.lastRtf,
     loadMs: l.loadMs,
-    phase: l.status === 'loading' ? (l.fromCache || (cachedFlag && !l.total) ? 'warm' : 'download') : null,
+    phase: l.status === 'loading' ? (l.fromCache || (cachedOf(kind) && !l.total) ? 'warm' : 'download') : null,
     lang,
     kind,
     threads: p.threads ?? null,
@@ -102,9 +128,33 @@ function computeFrom(p: { langs: Record<PocketLang, { status: string; loaded: nu
 }
 
 export const engine = createStore<EngineState>(compute())
-pocket.subscribe(() => engine.set(compute()))
-phonon.subscribe(() => engine.set(compute()))
-settings.subscribe(() => { lastKind = null; engine.set(compute()) })
+// A ready transition earns a fresh cache probe (T4-11): with
+// anyReady gone from the cached flag, this re-probe is how a load
+// whose save was verified at its own seam certifies as cached —
+// the probe, not the readiness, is what says "saved". One probe
+// per ready spell per engine; a release back to not-ready re-arms it.
+const readyProbeSeen: Record<EngineKind, boolean> = { phonon: false, pocket: false }
+function reprobeOnReady(kind: EngineKind, p: { langs: Record<PocketLang, { status: string }> }) {
+  const anyReadyNow = (['en', 'es'] as PocketLang[]).some((x) => p.langs[x].status === 'ready')
+  if (!anyReadyNow) { readyProbeSeen[kind] = false; return }
+  if (readyProbeSeen[kind]) return
+  readyProbeSeen[kind] = true
+  if (cachedFlags[kind] !== true) void isModelCached()
+}
+pocket.subscribe(() => { engine.set(compute()); reprobeOnReady('pocket', pocket.get()) })
+phonon.subscribe(() => { engine.set(compute()); reprobeOnReady('phonon', phonon.get()) })
+settings.subscribe(() => {
+  lastKind = null
+  // A settings change (a new voice pick above all) retires any routing
+  // substitution note: it described the previous pick, not this one.
+  routeNote = null
+  lastSubstitution = ''
+  engine.set(compute())
+  // A voice switch can land on an engine whose cached state was never
+  // probed; probe it (both engines are probed and stored per kind)
+  // rather than letting the other engine's answer stand in.
+  if (cachedFlags[activeKind()] === null) void isModelCached()
+})
 
 // Crash guard: if the app closed while loading last time, don't auto-load on
 // start (play still loads it on demand), so a bad load can't become a loop.
@@ -131,31 +181,152 @@ export function ensureModel(): Promise<void> {
   return pocketEnsure(pocket.get().active ?? wantedLang())
 }
 
-export function synthesize(text: string, voice: string, speed: number, opts: { priority?: number; signal?: AbortSignal } = {}): Promise<SynthResult> {
+// ── Synthesis routing truth (M-20) ─────────────────────────────────
+// The voice picker offers the whole catalogue, downloaded or not, and
+// this router used to honour any pick: on a fresh install, a first
+// Play on a voice whose engine model was never downloaded queued
+// sentence after sentence against a model that was not there, and
+// each sentence failed on its own. Routing now checks the truth it
+// owns — is this engine's model for this language loaded, or verifiably
+// downloaded (the cured per-engine probes) — and a pick that fails
+// the check is re-routed to the loaded/downloaded default voice for
+// that language, with the substitution surfaced on the engine store's
+// note (the status channel every engine surface reads). When NO
+// engine for the language is usable, the original pick stands: the
+// queue's own ensure performs the one shared first download, exactly
+// as the Settings download does, instead of a fabricated success.
+/** The factory default voice of each engine, per language — the same
+ *  ids settings.ts ships and migrates to. */
+const FACTORY_DEFAULT: Record<EngineKind, Record<PocketLang, string>> = {
+  phonon: { en: 'ph_NbpkqMVS3CJeq2j8', es: 'ph_b6FvJAiokjdqIti4' },
+  pocket: { en: 'pk_alba', es: 'pk_lola' },
+}
+/** Positive probe verdicts, per engine+language, memoised for the
+ *  session. Negative verdicts are never memoised — a download can
+ *  land at any time. A memoised positive is not immortal, though
+ *  (T4-14): the periodic re-probe in isModelCached below retires a
+ *  memo the moment its engine's real probe stops passing, so a
+ *  mid-session eviction un-certifies routing as well as the flag.
+ *  deleteModel clears the memo with everything else (M-24). */
+const downloadedMemo = new Set<string>()
+const memoKey = (kind: EngineKind, lang: PocketLang) => `${kind}.${lang}`
+function engineReady(kind: EngineKind, lang: PocketLang): boolean {
+  return (kind === 'phonon' ? phonon.get() : pocket.get()).langs[lang].status === 'ready'
+}
+async function engineUsable(kind: EngineKind, lang: PocketLang): Promise<boolean> {
+  if (engineReady(kind, lang)) { downloadedMemo.add(memoKey(kind, lang)); return true }
+  if (downloadedMemo.has(memoKey(kind, lang))) return true
+  if (cachedFlags[kind] === true && kind === 'phonon') { downloadedMemo.add(memoKey(kind, lang)); return true }
+  // Pocket's flag is probed for one language only (isModelCached), so
+  // Pocket is always asked per language through its own cured probe;
+  // Phonon reaches here only when its per-engine flag is not already
+  // a positive answer.
+  const ok = kind === 'phonon' ? await phononCached() : await pocketCached(lang)
+  if (kind === 'phonon') cachedFlags.phonon = ok
+  if (ok) downloadedMemo.add(memoKey(kind, lang))
+  return ok
+}
+async function routeVoice(voice: string, lang: PocketLang): Promise<string> {
   const v = voiceById(voice)
-  const lang: PocketLang = v?.lang === 'es' ? 'es' : 'en'
-  const kind = kindOf(voice)
-  if (opts.priority && opts.priority >= 1000 && kind !== lastKind) { lastKind = kind; engine.set(compute()) }
-  const job = kind === 'phonon' ? phononSynth(text, lang, voice, opts) : pocketSynth(text, lang, voice.replace(/^pk_/, ''), opts)
-  return job.then((r) =>
-    speed && Math.abs(speed - 1) > 0.01 ? { ...r, samples: timeStretch(r.samples, r.sampleRate, speed) } : r)
+  if (!v) return voice
+  if (await engineUsable(v.engine, lang)) {
+    if (routeNote) { routeNote = null; engine.set(compute()) }
+    return voice
+  }
+  const candidates = [settings.get().defaultVoice[lang], FACTORY_DEFAULT.phonon[lang], FACTORY_DEFAULT.pocket[lang]]
+  for (const c of candidates) {
+    const cv = voiceById(c)
+    if (!cv || cv.id === voice || cv.lang !== lang) continue
+    if (await engineUsable(cv.engine, lang)) {
+      const sub = `${voice}→${c}`
+      if (lastSubstitution !== sub) {
+        lastSubstitution = sub
+        routeNote = t('That voice is not downloaded yet, so the downloaded voice is reading instead.')
+        engine.set(compute())
+      }
+      return c
+    }
+  }
+  return voice
+}
+
+export function synthesize(text: string, voice: string, speed: number, opts: { priority?: number; signal?: AbortSignal } = {}): Promise<SynthResult> {
+  return (async () => {
+    const picked = voiceById(voice)
+    const lang: PocketLang = picked?.lang === 'es' ? 'es' : 'en'
+    const routed = await routeVoice(voice, lang)
+    const kind = kindOf(routed)
+    if (opts.priority && opts.priority >= 1000 && kind !== lastKind) {
+      lastKind = kind
+      engine.set(compute())
+      if (cachedFlags[kind] === null) void isModelCached()
+    }
+    const job = kind === 'phonon' ? phononSynth(text, lang, routed, opts) : pocketSynth(text, lang, routed.replace(/^pk_/, ''), opts)
+    const r = await job
+    return speed && Math.abs(speed - 1) > 0.01 ? { ...r, samples: timeStretch(r.samples, r.sampleRate, speed) } : r
+  })()
 }
 
 export function promote(signal: AbortSignal, priority: number) { pocketPromote(signal, priority); phononPromote(signal, priority) }
 export function clearQueue(maxPriority?: number) { pocketClear(maxPriority); phononClear(maxPriority) }
 
+// Mid-session eviction watch (T4-14): the cached flags used to be
+// probed exactly once, at App start, so a model bucket evicted under
+// storage pressure while the app sat open kept displaying
+// "Downloaded" until the next launch — or until an offline play
+// attempt failed. The first probe (App start calls isModelCached)
+// arms this re-check for the rest of the session: every 60 s both
+// engines are re-probed through the same cured probes, each flag is
+// re-filed under its own kind, and a probe that now fails also
+// retires that engine's memoised routing verdicts (phonon for both
+// languages — one shared model; pocket for the probed language).
+// keep.ts runs the matching watch over its stamps and posts the
+// "phone cleared the saved voice" note from the same discovery.
+const CACHED_RECHECK_MS = 60_000
+let cachedRecheck: ReturnType<typeof setInterval> | null = null
+function armCachedRecheck() {
+  if (cachedRecheck) return
+  cachedRecheck = setInterval(() => { void isModelCached() }, CACHED_RECHECK_MS)
+}
+
 export async function isModelCached(): Promise<boolean> {
-  const k = activeKind()
-  cachedFlag = k === 'phonon' ? await phononCached() : await pocketCached(wantedLang())
+  armCachedRecheck()
+  // Probe BOTH engines and store each answer under its own kind, so
+  // the flag that answers for an engine is always that engine's own —
+  // whichever engine is active when the question is asked later.
+  const [ph, pk] = await Promise.all([phononCached(), pocketCached(wantedLang())])
+  cachedFlags.phonon = ph
+  cachedFlags.pocket = pk
+  if (!ph) { downloadedMemo.delete(memoKey('phonon', 'en')); downloadedMemo.delete(memoKey('phonon', 'es')) }
+  if (!pk) downloadedMemo.delete(memoKey('pocket', wantedLang()))
   engine.set(compute())
-  return cachedFlag
+  return cachedOf(activeKind())
 }
 
 /** Remove the downloaded voice models from this device. */
 export async function deleteModel() {
+  // Delete is the one writer that resets ALL the bookkeeping (M-24):
+  // the per-engine cached flags, the routing probe memo and note, the
+  // Pocket digest registry (inside pocketDelete), the engine stores
+  // (inside pocket/phononDelete) — and the keep.ts stamps and note.
+  // The stamps were the surviving lie: deleteModel used to leave
+  // 'logos.kept' untouched, so the next start's checkStamps found a
+  // stamp with no cache behind it and reported an eviction — "The
+  // phone cleared the saved voice" — for the user's own deliberate
+  // deletion. The resets below run unconditionally, in intent
+  // atomically: each engine delete already swallows its own cache
+  // failures, and the bookkeeping resets do not depend on them, so
+  // after deleteModel() every flag, stamp and memo is in exactly the
+  // state the cured probes will find — nothing downloaded, nothing
+  // kept, nothing substituted.
   await pocketDelete()
   await phononDelete()
-  cachedFlag = false
+  clearKeepStamps()
+  downloadedMemo.clear()
+  routeNote = null
+  lastSubstitution = ''
+  cachedFlags.phonon = false
+  cachedFlags.pocket = false
   engine.set(compute())
 }
 

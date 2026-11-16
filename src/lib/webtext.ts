@@ -12,12 +12,58 @@ const STOP_SECTIONS = /^(references|notes|footnotes|citations|sources|bibliograp
 const JUNK = /(cookie|subscribe|newsletter|sign (up|in)|log ?in|advertis|sponsored|all rights reserved|follow us|share (this|on)|click here|read more|skip to|privacy policy|terms of (use|service)|download (the|our) app|suscr[ií]b|bolet[ií]n|inicia sesi[oó]n|publicidad|todos los derechos|s[ií]guenos|leer m[aá]s|comparte|haz clic)/i
 
 export function normalizeUrl(raw: string): string | null {
-  const s = raw.trim().match(/https?:\/\/[^\s<>"'`]+|(?:www\.)[^\s<>"'`]+|^[a-z0-9-]+(\.[a-z0-9-]+)+(\/[^\s]*)?$/i)?.[0]
+  // Cure F8-6: sentence punctuation copied along with a bare domain
+  // ("…see example.com.") used to make the anchored bare-domain form
+  // fail outright, while the https:// form accepted and stripped it —
+  // the link was read aloud as prose instead of offering "Read page".
+  // Strip the same trailing punctuation up front, for every form; the
+  // selective loop below still guards balanced parentheses.
+  const cleaned = raw.trim().replace(/[.,;]+$/, '')
+  const s = cleaned.match(/https?:\/\/[^\s<>"'`]+|(?:www\.)[^\s<>"'`]+|^[a-z0-9-]+(\.[a-z0-9-]+)+(\/[^\s]*)?$/i)?.[0]
   if (!s) return null
   try {
     const u = new URL(/^https?:/i.test(s) ? s : `https://${s}`)
-    return u.hostname.includes('.') ? u.toString().replace(/[).,;]+$/, '') : null
+    if (!u.hostname.includes('.')) return null
+    // Strip sentence punctuation copied along with the link (".", ",", ";"),
+    // and a trailing ")" only when it is unbalanced — balanced parens belong
+    // to the address itself (e.g. Wikipedia's Apple_(fruit)).
+    let out = u.toString()
+    for (;;) {
+      const last = out[out.length - 1]
+      if (last === '.' || last === ',' || last === ';') { out = out.slice(0, -1); continue }
+      if (last === ')' && (out.match(/\)/g)?.length ?? 0) > (out.match(/\(/g)?.length ?? 0)) { out = out.slice(0, -1); continue }
+      break
+    }
+    return out
   } catch { return null }
+}
+
+const JUNK_FAMILIES = [/cookie/i, /privacy|terms of/i, /subscribe|newsletter|sign (up|in)|log ?in|suscr[ií]b|bolet[ií]n|inicia sesi[oó]n/i, /advertis|sponsored|publicidad/i, /all rights reserved|todos los derechos/i, /follow us|share (this|on)|click here|download (the|our) app|s[ií]guenos|haz clic/i]
+/** Boilerplate-shaped: junk terms from at least two different families. */
+const junkHeavy = (t: string) => JUNK_FAMILIES.filter((re) => re.test(t)).length >= 2
+
+/**
+ * A page's own title, with only the site-name suffix removed (cure
+ * F8-10). The old stripper blindly cut any trailing dash-phrase of
+ * 2–40 chars, so "The End - Part Two" lost its real ending. Now: a
+ * pipe suffix ("Article | Site Name") is the site's, and a dash
+ * suffix is removed only when it actually names the site the page
+ * came from — anything else is the title's own words and stays.
+ */
+function cleanTitle(raw: string, u?: URL): string {
+  const title = (raw ?? '').trim()
+  if (!title) return ''
+  const pipe = title.lastIndexOf(' | ')
+  if (pipe > 0) return title.slice(0, pipe).trim()
+  if (u) {
+    const m = title.match(/^(.*?)\s[–—-]\s([^\s–—-][^–—-]{1,40})$/)
+    if (m) {
+      const host = u.hostname.replace(/^(www|m|mobile|amp)\./, '').split('.')[0].toLowerCase()
+      const tail = m[2].toLowerCase().replace(/[^a-z0-9]+/g, '')
+      if (host && tail && (tail === host || tail.startsWith(host) || host.startsWith(tail))) return m[1].trim()
+    }
+  }
+  return title
 }
 
 /** True when the whole input is just a link (so paste can offer to bring the page). */
@@ -60,6 +106,13 @@ function finish(blocks: { text: string; heading?: boolean }[], title: string): s
       if (!b.heading && words <= 3 && !/^[A-ZÁÉÍÓÚÑ]/.test(t)) continue
     }
     if (t.length < 160 && JUNK.test(t)) continue
+    // Cure F8-12: the junk test used to stop at 160 chars, so a long
+    // GDPR/consent paragraph — exactly the boilerplate that runs long —
+    // was never tested and imported as article body. Long blocks are
+    // now dropped too, but only when they are boilerplate-shaped: at
+    // least two distinct junk families (a real paragraph that merely
+    // mentions subscribing or cookies once is kept, untouched).
+    if (t.length >= 160 && junkHeavy(t)) continue
     if (/^(image|photo|foto|imagen|credit|cr[eé]dito|source|fuente)s?\b.{0,80}$/i.test(t)) continue
     if (/(hide|toggle|show) caption$/i.test(t)) continue
     if (t.length < 160 && /(Getty Images|AP Photo|Reuters|AFP|Shutterstock|iStock|EFE|Europa Press|Alamy|\bvia (Getty|AP)\b)/.test(t)) continue
@@ -69,7 +122,12 @@ function finish(blocks: { text: string; heading?: boolean }[], title: string): s
     if (/^\d+\s*(min(ute)?s?|minutos?)\s*(read|de lectura)?$/i.test(t)) continue
     if (/^[\W\d_]+$/.test(t)) continue
     const key = t.toLowerCase()
-    if (seen.has(key) && t.length < 200) continue
+    // Cure F8-11: this dedupe used to delete every repeated body block
+    // under 200 chars — the refrains of a poem or song, a repeated
+    // pull-line — silently, so the listening text no longer matched
+    // the page. Repetition in body text is content, not boilerplate:
+    // only repeated HEADINGS (menu/section crumbs) are deduped now.
+    if (b.heading && seen.has(key)) continue
     seen.add(key)
     out.push(b.heading && !/[.!?:]$/.test(t) ? t : t)
   }
@@ -130,7 +188,7 @@ async function viaJina(u: URL, signal: AbortSignal): Promise<WebText | null> {
   const j = await r.json()
   const d = j?.data
   if (!d?.content) return null
-  const title = (d.title ?? '').replace(/\s*[|–—-]\s*[^|–—-]{2,40}$/, '').trim()
+  const title = cleanTitle(d.title ?? '', u)
   return pack(fromMarkdown(d.content, title), title, u, 'Jina Reader')
 }
 
@@ -152,7 +210,7 @@ async function viaRelay(u: URL, relay: (x: string) => string, signal: AbortSigna
   const art = new Readability(doc, { charThreshold: 400 }).parse()
   if (!art?.content) return null
   const holder = new DOMParser().parseFromString(art.content, 'text/html').body
-  const title = (art.title ?? doc.title ?? '').replace(/\s*[|–—-]\s*[^|–—-]{2,40}$/, '').trim()
+  const title = cleanTitle(art.title ?? doc.title ?? '', u)
   return pack(fromHtmlDoc(holder, title), title, u, 'Readability')
 }
 

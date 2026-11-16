@@ -19,6 +19,29 @@ export type Segment = {
 const ABBREV = new Set([
   'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st', 'vs', 'etc', 'e.g', 'i.e', 'inc', 'ltd', 'co', 'no', 'vol', 'fig', 'approx', 'dept', 'est', 'mt', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
   'sra', 'srta', 'uu', 'ee', 'hh', 'aa', 'oo', 'mm', 'vv', 'dra', 'ud', 'uds', 'pág', 'pag', 'núm', 'num', 'av', 'avda', 'lic', 'ing', 'arq', 'cap', 'art', 'aprox', 'p.ej', 'ej', 'tel',
+  // Cure F8-3: common honorifics that were missing — "Gen. Grant" split
+  // "Gen." off as its own spoken sentence (also Sen./Rev./Gov./…).
+  'gen', 'sen', 'rep', 'gov', 'col', 'sgt', 'capt', 'lt', 'rev', 'hon',
+  // Cure F8-4: dotted initialisms — "U.S." before a capital split mid-name
+  // ("The U.S. / Senate voted…") because lastWord "u.s" matched nothing.
+  'u.s', 'u.s.a', 'd.c', 'ee.uu', 'ph.d',
+])
+
+// Titles and name-prefixes: these NEVER end a sentence — a name always
+// follows — so their period is never a boundary (cure F8-3's class).
+const TITLES = new Set([
+  'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'gen', 'sen', 'rep', 'gov', 'col', 'sgt', 'capt', 'lt', 'rev', 'hon', 'st', 'vs', 'mt',
+  'sra', 'srta', 'dra', 'lic', 'ing', 'arq', 'cap',
+])
+
+// Words that, capitalised, open a fresh sentence after a dotted
+// initialism ("…in the U.S. It was…") — cure F8-5's other half: an
+// abbreviation's guard must not be unconditional, or a true sentence
+// end before a capital ("…apples, etc. She went home.") merges two
+// sentences into one segment with no pause.
+const SENTENCE_STARTERS = new Set([
+  'he', 'she', 'it', 'they', 'we', 'the', 'this', 'that', 'there', 'then', 'but', 'and', 'however', 'when', 'after', 'before', 'in', 'on', 'at', 'as', 'if', 'so', 'now', 'here',
+  'él', 'ella', 'ello', 'esto', 'eso', 'pero', 'entonces', 'luego', 'cuando', 'después', 'sin',
 ])
 
 // Segments follow the text's own shape: one sentence each. A sentence is only
@@ -46,7 +69,7 @@ export function segmentText(source: string, langMode: Lang | 'auto' = 'auto'): S
     if (!para.trim()) continue
     const pd = detectLang(para)
     const paraLang: Lang = langMode !== 'auto' ? langMode : pd.confidence >= 0.25 ? pd.lang : docLang
-    const sentences = splitSentences(para)
+    const sentences = splitParaSentences(para)
     sentences.forEach((s, i) => {
       const pieces = capLength(para, s, RAMP[out.length] ?? SOFT_MAX)
       pieces.forEach((piece, k) => {
@@ -72,6 +95,47 @@ export function segmentText(source: string, langMode: Lang | 'auto' = 'auto'): S
 
 type Span = { start: number; end: number }
 
+/**
+ * Sentence spans for one paragraph, line-aware (cure F8-9). Unpunctuated
+ * newline-separated lines — pasted lists, addresses, poem lines — used to
+ * collapse into a single "sentence" that was then chopped mid-phrase by
+ * the length cap. The rule is the book splitter's own (formats.ts
+ * parseText), so intake and book import judge the same text the same
+ * way: hard-wrapped prose (most long lines ending near one width) joins
+ * its lines and splits by punctuation exactly as before; otherwise each
+ * line stands as its own unit — except a line flowing into a lowercase
+ * continuation, which is wrapped prose whatever the widths say.
+ */
+function splitParaSentences(para: string): Span[] {
+  if (!para.includes('\n')) return splitSentences(para)
+  const lines = para.split('\n')
+  const long = lines.filter((l) => l.trim().length > 40)
+  const widths = long.map((l) => l.trimEnd().length).sort((a, b) => a - b)
+  const wrapAt = widths[Math.floor(widths.length * 0.8)] ?? 0
+  const wrapped = long.length >= 6 && wrapAt < 110 && long.filter((l) => l.trimEnd().length >= wrapAt - 12).length > long.length * 0.5
+  if (wrapped) return splitSentences(para)
+  const spans: Span[] = []
+  let chunkStart = 0
+  let chunk = lines[0]
+  const flush = () => {
+    for (const s of splitSentences(chunk)) spans.push({ start: chunkStart + s.start, end: chunkStart + s.end })
+  }
+  let off = lines[0].length + 1
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^[a-zà-ÿ]/u.test(line.trim())) {
+      chunk += `\n${line}` // a lowercase continuation is the same sentence, wrapped
+    } else {
+      flush()
+      chunkStart = off
+      chunk = line
+    }
+    off += line.length + 1
+  }
+  flush()
+  return spans
+}
+
 function splitSentences(p: string): Span[] {
   const spans: Span[] = []
   let start = 0
@@ -82,7 +146,25 @@ function splitSentences(p: string): Span[] {
     const before = p.slice(start, m.index)
     const lastWord = (before.match(/([\p{L}.]+)$/u)?.[1] ?? '').toLowerCase()
     // Skip abbreviations, single initials ("J. R. R."), and decimals.
-    if (m[1] === '.' && (ABBREV.has(lastWord) || /^\p{L}$/u.test(lastWord))) continue
+    if (m[1] === '.' && /^\p{L}$/u.test(lastWord)) continue
+    if (m[1] === '.' && ABBREV.has(lastWord)) {
+      // Cure F8-5: the guard is no longer unconditional. Titles never end
+      // a sentence, so they always skip. Every other abbreviation —
+      // dotted initialism ("U.S.") or plain ("etc.", months, "fig.") —
+      // skips unless a capitalised SENTENCE-STARTER follows ("U.S. It…"
+      // and "etc. She…" are two sentences; "U.S. Senate" is one). The
+      // plain abbreviations first got a weaker gate (skip only before a
+      // non-capital), which split before ANY capital — including the
+      // capitals that CONTINUE a sentence: a figure label ("See Fig. A
+      // for details"), a roman numeral ("Vol. II"), a name ("Jan.
+      // Jones", "approx. Noon Hall"). Those are the old unconditional
+      // guard's own cases, so both classes now share the one gate: a
+      // capital alone never ends the sentence after an abbreviation;
+      // a capital that opens sentences does.
+      if (TITLES.has(lastWord)) continue
+      const nextTok = p.slice(m.index + m[0].length).match(/^[\p{L}]+/u)?.[0] ?? ''
+      if (!(/^\p{Lu}/u.test(nextTok) && SENTENCE_STARTERS.has(nextTok.toLowerCase()))) continue
+    }
     if (m[1] === '.' && /\d$/.test(before) && /^\d/.test(p.slice(m.index + 1))) continue
     // A bare list number ("2.") belongs to the sentence that follows it.
     if (/^\s*\(?[\dIVXivx]{1,3}[.)]?$/.test(p.slice(start, endPunct))) continue

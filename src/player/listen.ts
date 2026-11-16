@@ -3,7 +3,7 @@
 // Media Session controls, and a device-voice bridge while the neural voice downloads.
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
-import { segmentText, speakable, estimateSeconds, pauseAfter, type Segment } from '../lib/text.ts'
+import { segmentText, speakable, estimateSeconds, pauseAfter, detectLang, type Segment } from '../lib/text.ts'
 import { voiceById, type Lang } from '../lib/voices.ts'
 import { encodeWav, envelope, silence, trimSilence, concat, applyGain, levelGain } from '../lib/audio.ts'
 import { engine, ensureModel, synthesize, promote } from '../engine/engine.ts'
@@ -59,6 +59,8 @@ function buildTrack(i: number): Track {
 }
 function dropTrack() {
   if (track) { URL.revokeObjectURL(track.url); track = null }
+  playheadGate.reset()
+  wordClockState.reset()
 }
 const onTrack = () => Boolean(track && audio && audio.src === track.url)
 /** Seconds into the current sentence. */
@@ -68,22 +70,65 @@ function localTime(): number {
   const k = s.current - track.start
   return k >= 0 && k < track.offs.length ? Math.max(0, audio.currentTime - track.offs[k]) : 0
 }
-/** Follow the playback time: update the current sentence when it changes. */
-function syncCurrent() {
-  if (!onTrack() || !audio || audio.paused || audio.seeking) return
-  const t = audio.currentTime
-  const offs = track!.offs
+/** The sentence the audio clock is actually inside, per the track's offsets. */
+export function sentenceAt(offs: number[], t: number): number {
   let k = 0
   while (k + 1 < offs.length - 1 && offs[k + 1] <= t + 0.01) k++
-  const idx = track!.start + k
+  return k
+}
+
+/**
+ * The playhead gate (cure H-13/T1-3). The old law — at most +1 sentence
+ * per timeupdate event — bounded the playhead by EVENT COUNT, but
+ * timeupdate is throttleable (≈4 Hz in front, ≈1 Hz or stalled with the
+ * screen off, the normal audiobook posture): short sentences at speed
+ * cross boundaries faster than one per tick, the lag grew without bound,
+ * and advance() at the track's end replayed sentences already heard.
+ *
+ * The new law bounds the playhead by the AUDIO CLOCK, not by events:
+ * a sample may move the playhead to whatever sentence the clock truly
+ * names — several at once after a throttled stretch — but only when the
+ * clock's own movement since the last trusted sample is plausible for
+ * the wall time elapsed at the current rate (plus a jitter allowance).
+ * The anti-teleport intent survives intact (Oscar's video, 2026-11-08:
+ * the counter sprinted 4 → 12 on a glitch): a single event whose clock
+ * leaps hours in a quarter second is distrusted and dropped, and the
+ * trusted baseline does not move with it — the next honest sample is
+ * measured against the last honest one, so a transient glitch can
+ * never drag the playhead, and a persistent one is never accumulated
+ * into acceptance (the wall stamp refreshes on rejection, so the
+ * budget is always per-interval, never a growing allowance).
+ */
+export class PlayheadGate {
+  private base: { url: string; t: number; wall: number } | null = null
+  reset() { this.base = null }
+  /** The sentence the playhead may move to, or null to distrust this sample. */
+  check(url: string, t: number, wall: number, rate: number, clockIdx: number, current: number): number | null {
+    const b = this.base
+    if (!b || b.url !== url) { this.base = { url, t, wall }; return clockIdx }
+    if (clockIdx === current) { this.base = { url, t, wall }; return clockIdx }
+    const dtWall = Math.max(0, (wall - b.wall) / 1000)
+    const budget = dtWall * Math.max(0.25, rate) + 0.35
+    if (Math.abs(t - b.t) <= budget) { this.base = { url, t, wall }; return clockIdx }
+    this.base = { url: b.url, t: b.t, wall }
+    return null
+  }
+}
+const playheadGate = new PlayheadGate()
+
+/** Follow the playback time: update the current sentence when it changes.
+ *  `force` is for the track's 'ended' moment, when the element already
+ *  reads paused but the clock's final word is the truth advance() needs. */
+function syncCurrent(force = false) {
+  if (!onTrack() || !audio || audio.seeking) return
+  if (audio.paused && !force) return
+  const t = audio.currentTime
+  const idx = track!.start + sentenceAt(track!.offs, t)
   const s = listen.get()
-  if (idx !== s.current && s.mode === 'neural') {
-    // Time following the audio may only STEP to the next sentence, never
-    // leap: the playhead crosses boundaries one at a time. (Oscar's video,
-    // 2026-11-08: the panel's counter sprinted 4 → 12 while the app stood
-    // at 4 — somewhere the position teleported. A leap is now impossible
-    // on this road whatever clock or offset glitch asks for it.)
-    listen.set({ current: idx > s.current ? Math.min(idx, s.current + 1) : idx })
+  if (s.mode !== 'neural') return
+  const next = playheadGate.check(track!.url, t, performance.now(), audio.playbackRate || 1, idx, s.current)
+  if (next !== null && next !== s.current) {
+    listen.set({ current: next })
     updateMediaSession()
   }
 }
@@ -106,11 +151,19 @@ export type ListenState = {
   sleepLeft: number | null
   /** the duration chosen for the sleep timer, so its sheet can mark it */
   sleepMins: number | null
+  /** Where inside the current sentence a PAUSED seek landed (cure
+   *  T1-7): a scrub while paused used to throw this fraction away
+   *  when the target sentence wasn't rendered yet — no field held
+   *  it, and every play door restarted the sentence. A paused
+   *  seekTo records it here; play()/resume() hand it to playIndex
+   *  as the start fraction, and playIndex clears it as it consumes
+   *  it. Always 0 on the device road (whole sentences only). */
+  seekFrac: number
 }
 
 export const listen = createStore<ListenState>({
   active: false, text: '', segments: [], voices: [], current: 0, playing: false,
-  buffering: false, mode: null, rendered: [], error: null, finished: false, cushion: null, sleepLeft: null, sleepMins: null,
+  buffering: false, mode: null, rendered: [], error: null, finished: false, cushion: null, sleepLeft: null, sleepMins: null, seekFrac: 0,
 })
 
 const LISTEN_PRIORITY = 1000
@@ -181,9 +234,13 @@ function el(): HTMLAudioElement {
     const s = listen.get()
     if (s.mode !== 'neural' || !s.playing) return
     // No catch-up teleport here: this handler used to snap the position to
-    // the track's last sentence in one step — the same leap the clamp in
-    // syncCurrent now forbids. advance() steps from where the playhead
-    // honestly is.
+    // the track's last sentence in one step. But advance() must not trust
+    // a playhead that throttled timeupdate left behind, either (H-13):
+    // take the clock's final word first — the gate still vets it — and
+    // only then step. advance() re-reads the store, so it steps from the
+    // sentence the clock says just finished, never from a lagged one,
+    // and the stretch already heard is never replayed.
+    syncCurrent(true)
     advance()
   })
   audio.addEventListener('pause', () => {
@@ -213,6 +270,27 @@ export function voiceFor(lang: Lang): string {
   return s.defaultVoice[lang]
 }
 
+/**
+ * The language THIS sentence is decided in (cure M-3). Segmentation
+ * stamps a language on every segment, but its per-sentence override
+ * only fires for sentences longer than 24 characters — a short
+ * sentence in the other language inside a long paragraph (a quoted
+ * "Gracias por todo." in an English chapter) kept the paragraph's
+ * language and was read in the wrong voice for the whole session,
+ * because the voice was settled once, from the stamp, at load.
+ * The decision is therefore re-made here, at the render seam, from
+ * the sentence itself: in auto mode a sentence whose own words
+ * clearly detect as the other language (the detector's own ≥0.6
+ * confidence, the same bar segmentation uses) is rendered in that
+ * language's voice; anything less clear keeps the segment's stamp.
+ * A fixed language mode is never second-guessed.
+ */
+export function sentenceLang(seg: Segment, langMode: Lang | 'auto'): Lang {
+  if (langMode !== 'auto') return seg.lang
+  const d = detectLang(seg.text)
+  return d.confidence >= 0.6 ? d.lang : seg.lang
+}
+
 function resetCache() {
   pending.forEach((p) => p.ctrl.abort())
   pending = new Map()
@@ -229,8 +307,8 @@ export function loadText(text: string) {
   session++
   const segments = segmentText(text, settings.get().langMode)
   listen.set({
-    active: segments.length > 0, text, segments, voices: segments.map((s) => voiceFor(s.lang)),
-    current: 0, playing: false, buffering: false, mode: null, rendered: segments.map(() => false), error: null, finished: false, cushion: null,
+    active: segments.length > 0, text, segments, voices: segments.map((seg) => voiceFor(sentenceLang(seg, settings.get().langMode))),
+    current: 0, playing: false, buffering: false, mode: null, rendered: segments.map(() => false), error: null, finished: false, cushion: null, seekFrac: 0,
   })
 }
 
@@ -261,7 +339,7 @@ export function prepareText(text: string) {
 export function refreshVoices() {
   const s = listen.get()
   if (!s.active) return
-  const voices = s.segments.map((seg) => voiceFor(seg.lang))
+  const voices = s.segments.map((seg) => voiceFor(sentenceLang(seg, settings.get().langMode)))
   if (!voices.some((v, i) => v !== s.voices[i])) return
   resetCache()
   session++
@@ -311,7 +389,14 @@ function render(i: number, priority: number): Promise<Rendered> {
   if (p) { promote(p.ctrl.signal, priority); return p.promise }
   const s = listen.get()
   const seg = s.segments[i]
-  const voice = s.voices[i]
+  // The voice is decided per sentence at render time (cure M-3): the
+  // sentence's own language, resolved now — never the voice the
+  // session happened to start with. When the resolution moves a
+  // sentence, the store's witness list moves with it, so the voice
+  // chip and the media card name the voice actually rendering.
+  const lang = sentenceLang(seg, settings.get().langMode)
+  const voice = voiceFor(lang)
+  if (voice !== s.voices[i]) listen.set((st) => { const voices = st.voices.slice(); voices[i] = voice; return { voices } })
   const ctrl = new AbortController()
   const mySession = session
   const promise = (async () => {
@@ -319,7 +404,7 @@ function render(i: number, priority: number): Promise<Rendered> {
     // not spelled; machine file names dropped) and run through the reader's
     // pronunciation dictionary. A sentence that was only a code becomes a breath
     // of silence instead of a spelling bee.
-    const spoken = speakable(seg.text, seg.lang)
+    const spoken = speakable(seg.text, lang)
     // The saved processing (1.4.112): a sentence rendered before — in a
     // past session, another day, another book — plays from disk and is
     // never rendered twice. The key is the spoken string + the voice,
@@ -399,6 +484,13 @@ export async function play(from?: number) {
   // The page taking the stage silences the shell's voice (1.4.128):
   // two drivers, one stage — a press on Play here is also a stop
   // there, whichever road the shell's voice took the stage by.
+  // It retakes the stage at the CURRENT sentence (H-12): while the
+  // native progress channel (applyNativePos) is live, the store's
+  // current has followed the device voice, so a page-side Play no
+  // longer discards everything the native voice read past the
+  // handoff — it resumes from where the reading actually is. On a
+  // shell without the channel, current is the last page-known
+  // position, which is all the page can honestly claim.
   stopShellVoice()
   stopClipPlayer()
   let idx = from ?? (s.finished ? 0 : s.current)
@@ -411,7 +503,12 @@ export async function play(from?: number) {
       return
     }
   }
-  await playIndex(idx)
+  // A paused scrub's landing survives into this start (cure T1-7):
+  // starting at the sentence the listener scrubbed into starts at
+  // the fraction they scrubbed to, through EVERY play door — this
+  // one is the door they all share (the panel's play, the bubble's
+  // logosandroid-play), not only resume()'s fast path.
+  await playIndex(idx, idx === s.current ? (s.seekFrac ?? 0) : 0)
 }
 
 async function playIndex(i: number, startFrac = 0, startWord?: { w: number; words: string[] }) {
@@ -423,7 +520,10 @@ async function playIndex(i: number, startFrac = 0, startWord?: { w: number; word
   if (stalled) keepAlive()
   else quietPause()
   dropTrack()
-  listen.set({ current: i, playing: true, mode: 'neural', finished: false, error: null, buffering: stalled })
+  // The start fraction (a live seek's, or a paused scrub's recorded
+  // seekFrac handed in by play()) is consumed by this start — clear
+  // the record so a later plain start never replays it (cure T1-7).
+  listen.set({ current: i, playing: true, mode: 'neural', finished: false, error: null, buffering: stalled, seekFrac: 0 })
   updateMediaSession()
   if (!neuralUsable()) ensureModel().catch((e) => { if (my === token) listen.set({ playing: false, buffering: false, error: (e as Error).message }) })
   // Whole-book sessions: bound the rendered cache — drop sentences far behind
@@ -567,20 +667,91 @@ function finish() {
 
 // ── Device-voice bridge (speechSynthesis) ──
 
+/** True while this page has a session living in the shell's device
+ *  voice (cure H-12/T1-2). Set only by handToShell; cleared when the
+ *  page ends the shell's voice (stopShellVoice), when the shell
+ *  reports the native session over (applyNativePos), or when a new
+ *  session replaces this one. It is the guard that keeps a late or
+ *  foreign native-progress report from writing into a session it
+ *  does not belong to. */
+let shellHanded = false
+
 /** Hand the session to the shell's real device voice (1.4.122): the
  *  page stops, the shell's Android TTS takes the text from sentence i,
  *  switching language sentence by sentence. False where there is no
- *  shell (a real browser), whose own speech bridge is honest. */
-function handToShell(i: number): boolean {
+ *  shell (a real browser), whose own speech bridge is honest.
+ *
+ *  The store tells the truth about the handoff (H-12): sound IS
+ *  playing — in the shell — so `playing` is true, exactly as the
+ *  browser device road below already sets it. The old `playing:false`
+ *  froze every page-side witness for the whole native session: the
+ *  panel showed paused at the handoff sentence, the media publisher
+ *  sent on=false, the resume record froze, and the ListenPage fold
+ *  stayed open over sounding audio. What the page still cannot know
+ *  on its own is how far the native voice has read — that arrives
+ *  through applyNativePos below. */
+export function handToShell(i: number): boolean {
   const d = (window as unknown as { LogosAndroid?: { bubbleNative?: (t: string, ti: string, ix: number) => void } }).LogosAndroid
   if (typeof d?.bubbleNative !== 'function') return false
   const s = listen.get()
   ++token
   quietPause()
-  listen.set({ current: i, playing: false, mode: 'device', finished: false, buffering: false, error: null })
+  shellHanded = true
+  listen.set({ current: i, playing: true, mode: 'device', finished: false, buffering: false, error: null })
   updateMediaSession()
   d.bubbleNative(s.text, '', i)
   return true
+}
+
+/**
+ * A progress report from the shell's device voice (H-12, page-side
+ * half). Investigation found NO shell→page progress channel: the
+ * native speaker advances its own index in the shell, and its only
+ * listener refreshes the shell's own panel — the page was never told.
+ * The channel designed for it follows the house's own pattern (the
+ * seek bar, the pending command): the shell pokes a bare
+ * `logosandroid-nativepos` event on every sentence advance and on
+ * play/pause/finish transitions, and the page PULLS the position
+ * through a new bridge getter, `bubbleNativePos()` — see the written
+ * request for the shell-side half (NativeSpeaker.kt/BubbleService.kt/
+ * MainActivity.kt). Until a shell carrying the getter answers, this
+ * is a no-op and the store keeps the last page-known position.
+ *
+ * The shell splits sentences with its own splitter, so its index is
+ * mapped proportionally onto the page's segments when the totals
+ * differ — an honest approximation, never a silent pretence that the
+ * two segmentations are one. `done` marks a reading that reached the
+ * end (the store finishes); a native session that simply stopped
+ * reports active:false without done, and the store goes quiet.
+ */
+export function applyNativePos(pos: { idx?: number; total?: number; playing?: boolean; active?: boolean; done?: boolean }): void {
+  if (!shellHanded) return
+  const s = listen.get()
+  if (!s.active || s.mode !== 'device') return
+  if (!pos.active) {
+    shellHanded = false
+    if (pos.done) {
+      // The native voice read to the end: land on its final reported
+      // sentence (mapped like any other report) before finishing, so
+      // the resume record and the counter close on the truth.
+      const n = s.segments.length
+      let idx = typeof pos.idx === 'number' && Number.isFinite(pos.idx) ? pos.idx : s.current
+      if (pos.total && pos.total > 0 && pos.total !== n) idx = Math.floor((idx * n) / pos.total)
+      idx = n ? Math.max(0, Math.min(n - 1, idx)) : idx
+      listen.set({ current: idx, playing: false, finished: true, buffering: false })
+    } else if (s.playing) listen.set({ playing: false })
+    updateMediaSession()
+    return
+  }
+  const n = s.segments.length
+  if (!n) return
+  let idx = typeof pos.idx === 'number' && Number.isFinite(pos.idx) ? pos.idx : s.current
+  if (pos.total && pos.total > 0 && pos.total !== n) idx = Math.floor((idx * n) / pos.total)
+  idx = Math.max(0, Math.min(n - 1, idx))
+  const patch: Partial<ListenState> = {}
+  if (idx !== s.current) patch.current = idx
+  if (typeof pos.playing === 'boolean' && pos.playing !== s.playing) patch.playing = pos.playing
+  if (Object.keys(patch).length) { listen.set(patch); updateMediaSession() }
 }
 
 async function playDevice(i: number) {
@@ -598,7 +769,7 @@ async function playDevice(i: number) {
   updateMediaSession()
   if (neuralUsable()) prefetch(i + 1)
   const seg = s.segments[i]
-  const ok = await speakDevice(seg.text, seg.lang, settings.get().listenSpeed)
+  const ok = await speakDevice(seg.text, sentenceLang(seg, settings.get().langMode), settings.get().listenSpeed)
   if (my !== token || !listen.get().playing) return
   if (!ok) {
     // No usable device voice: wait for the neural voice instead.
@@ -649,6 +820,10 @@ function pauseImpl(fromShell: boolean) {
 /** Tell the shell its voice's session is over (1.4.124). Older shells
  *  simply do not have the door; the call fades away harmlessly. */
 function stopShellVoice() {
+  // The handed session is over on this side too (H-12): a native
+  // progress report arriving after this stop belongs to a dead
+  // session and must not write into whatever replaced it.
+  shellHanded = false
   const d = (window as unknown as { LogosAndroid?: { bubbleNativeStop?: () => void } }).LogosAndroid
   try { d?.bubbleNativeStop?.() } catch { /* a stale shell ignores it */ }
 }
@@ -658,7 +833,9 @@ export function resume() {
   if (s.playing) return
   if (s.mode === 'neural' && audio?.src && !s.finished && onTrack() && s.current >= track!.start && s.current < track!.end && !audio.ended) {
     stopClipPlayer()
-    listen.set({ playing: true })
+    // The element already stands where a rendered paused seek put
+    // it (seekTo set its time), so the recorded fraction is spent.
+    listen.set({ playing: true, seekFrac: 0 })
     audio.playbackRate = settings.get().listenSpeed
     audio.play().catch(() => listen.set({ playing: false }))
     return
@@ -674,7 +851,24 @@ export function toggle() {
 export function seek(i: number) {
   const s = listen.get()
   if (!s.active) return
-  void play(Math.max(0, Math.min(s.segments.length - 1, i)))
+  const idx = Math.max(0, Math.min(s.segments.length - 1, i))
+  if (!s.playing) {
+    // Stepping while paused moves and STAYS paused (cure T1-8):
+    // seekTo's paused branch has stated this law all along, but the
+    // sentence-stepping doors never honoured it — a headphone or
+    // panel "next" pressed on a paused session to cue the next
+    // sentence started sound the user never asked for. Callers that
+    // want sound say so themselves (every seek caller in the tree
+    // pairs its seek with its own play(), which now starts from
+    // exactly the spot this move records).
+    seekTo(idx, 0)
+    return
+  }
+  // A playing device-voice session steps on its own road (cure
+  // T1-6): play() would re-decide the road and could hijack the
+  // session into neural mid-book.
+  if (s.mode === 'device') { void playDevice(idx); return }
+  void play(idx)
 }
 
 /** Where word `w` begins inside a rendered sentence, a hair early so its first sound isn't clipped. */
@@ -692,7 +886,7 @@ export function seekWord(i: number, w: number, words: string[]) {
   const s = listen.get()
   if (!s.active) return
   i = Math.max(0, Math.min(s.segments.length - 1, i))
-  if (w <= 0) { seek(i); return }
+  if (w <= 0) { void play(i); return }   // tap-a-word is a play-from-here door: it keeps its promise to sound
   const r = cache.get(i)
   if (r && s.playing && s.mode === 'neural' && audio && onTrack() && i >= track!.start && i < track!.end) {
     audio.currentTime = track!.offs[i - track!.start] + wordStart(r, w, words)
@@ -701,7 +895,7 @@ export function seekWord(i: number, w: number, words: string[]) {
     updatePosition()
     return
   }
-  if (!neuralUsable() && !r) { seek(i); return }   // device-voice bridge reads whole sentences
+  if (!neuralUsable() && !r) { void play(i); return }   // device-voice bridge reads whole sentences
   stopClipPlayer()
   void playIndex(i, 0, { w, words })
 }
@@ -723,20 +917,46 @@ export function seekFraction(f: number) {
 export function seekTo(idx: number, frac: number) {
   const s = listen.get()
   if (!s.active || !s.segments.length) return
+  // Bounds live here, at the door itself (the hunt's unproven #2 was
+  // a direct seekTo(5) on a 4-sentence session landing out of range;
+  // every in-app caller clamped for it — the door now does).
+  idx = Math.max(0, Math.min(s.segments.length - 1, Math.floor(idx)))
+  frac = Math.max(0, Math.min(1, frac))
+  if (s.mode === 'device') {
+    // The device road (cure T1-6): a seek or jump in a device-voice
+    // session stays on that road. The old code fell through to
+    // playIndex, which cancels the device voice and restarts in
+    // neural — on a phone whose engine is unready (the very reason
+    // the session is on the device voice) the jump key killed a
+    // working reading and landed on an error. The device voice
+    // reads whole sentences, so the fraction is honestly dropped:
+    // the landing is the sentence's own beginning.
+    if (s.playing) { void playDevice(idx); return }
+    token++
+    listen.set({ current: idx, finished: false, seekFrac: 0, buffering: false })
+    updateMediaSession()
+    return
+  }
   const r = cache.get(idx)
   if (s.mode === 'neural' && audio && r && onTrack() && idx >= track!.start && idx < track!.end) {
     // Already in the playing track: just move the playhead.
     audio.currentTime = track!.offs[idx - track!.start] + frac * r.duration
     if (idx !== s.current) { listen.set({ current: idx }); updateMediaSession() }
     if (s.finished) listen.set({ finished: false })
+    if (s.seekFrac) listen.set({ seekFrac: 0 })
     updatePosition()
     return
   }
   if (s.playing) { void playIndex(idx, frac); return }
-  // Paused: move there and stay paused (resume continues from the new spot).
+  // Paused: move there and stay paused (resume continues from the new
+  // spot) — and RECORD the fraction (cure T1-7). It used to survive
+  // only as the <audio> element's currentTime in the rendered case,
+  // and not at all when the sentence wasn't rendered yet; now the
+  // store holds it, and play() — every play door, the bubble's
+  // included — starts from it.
   token++
   cancelDevice()
-  listen.set({ current: idx, finished: false, mode: r ? 'neural' : s.mode, buffering: false })
+  listen.set({ current: idx, finished: false, mode: r ? 'neural' : s.mode, buffering: false, seekFrac: frac })
   if (r) {
     const a = el()
     quietPause()
@@ -768,7 +988,14 @@ export function jumpBy(deltaSec: number) {
   }
   let idx = s.current
   let off = s.mode === 'neural' && onTrack() && cache.get(idx) ? localTime() : 0
-  let rem = Math.abs(deltaSec) * (settings.get().listenSpeed || 1)
+  // The named seconds are BOOK seconds at every speed (cure T1-5):
+  // Settings names them, 1.4.176/179 settled the promise, and
+  // recordings already step exactly the named seconds. The walk
+  // below spends `rem` against the buffer's own timeline (durations
+  // and localTime are both book time), so the old speed factor
+  // silently redefined the key — 30 s skipped 15 s of book at 0.5×
+  // and 60 s at 2×. No factor: the deed matches the name.
+  let rem = Math.abs(deltaSec)
   if (deltaSec > 0) {
     for (;;) {
       const d = dur(idx)
@@ -791,6 +1018,63 @@ export function jumpBy(deltaSec: number) {
 /** The configured leaps, clamped to the sane field Oscar set: 1..600 s. */
 export const jumpBack = () => jumpBy(-Math.min(600, Math.max(1, settings.get().jumpBackSec || 15)))
 export const jumpFwd = () => jumpBy(Math.min(600, Math.max(1, settings.get().jumpFwdSec || 30)))
+
+/**
+ * The scrub hold (cure M-4). While the listener drags the progress
+ * bar, the store keeps reporting the playing position — and the
+ * thumb used to be re-rendered from that live position between the
+ * drag's own updates, so it snapped back toward the playhead
+ * mid-drag and the listener fought the bar. The hold is the one
+ * authority for what the thumb shows: once a drag begins, store-
+ * driven position updates are displayed NOWHERE — `display` returns
+ * the held fraction until the drag ends — and on release the seek
+ * fraction is handed out exactly once, so the seek lands a single
+ * time and a stray second release (pointerup after pointercancel)
+ * seeks nothing.
+ */
+export class ScrubHold {
+  private value: number | null = null
+  get active(): boolean { return this.value !== null }
+  get current(): number | null { return this.value }
+  begin(f: number): number { this.value = Math.max(0, Math.min(1, f)); return this.value }
+  move(f: number): number | null { if (this.value !== null) this.value = Math.max(0, Math.min(1, f)); return this.value }
+  /** What the thumb shows: the held fraction while dragging, else the store's position. */
+  display(done: number): number { return this.value ?? done }
+  /** Release: the fraction to seek to, handed out once; null when no drag is live. */
+  end(f?: number): number | null {
+    if (this.value === null) return null
+    const v = f !== undefined ? Math.max(0, Math.min(1, f)) : this.value
+    this.value = null
+    return v
+  }
+  cancel(): void { this.value = null }
+}
+
+/**
+ * Save-once discipline, keyed per target (cure M-5). The mark door
+ * saved on every tap with no in-flight guard: a double-tap filed
+ * the same moment twice, and a slow save left the button live for
+ * more. A gate run refuses to start while a run for the SAME key
+ * is still in flight — and only that key: a different mark target
+ * (another sentence, another book) is never blocked by a save that
+ * isn't its own. The key frees when the save settles, success or
+ * failure alike, so a failed save can be retried at once.
+ */
+export class InFlightGate {
+  private inFlight = new Set<string>()
+  busy(key: string): boolean { return this.inFlight.has(key) }
+  /** Run `fn` unless a run for `key` is already in flight. */
+  async run<T>(key: string, fn: () => Promise<T>): Promise<{ ran: boolean; value?: T }> {
+    if (this.inFlight.has(key)) return { ran: false }
+    this.inFlight.add(key)
+    try { return { ran: true, value: await fn() } }
+    finally { this.inFlight.delete(key) }
+  }
+}
+
+/** The one gate every mark door shares (the Listen transport today;
+ *  the bubble's mark key is asked to route through it too). */
+export const markGate = new InFlightGate()
 
 export function next() {
   const s = listen.get()
@@ -826,7 +1110,7 @@ export function endSession() {
   setSleepTimer(null)
   resetCache()
   session++
-  listen.set({ active: false, segments: [], voices: [], rendered: [], current: 0, finished: false, error: null })
+  listen.set({ active: false, segments: [], voices: [], rendered: [], current: 0, finished: false, error: null, seekFrac: 0 })
   if ('mediaSession' in navigator) navigator.mediaSession.metadata = null
 }
 
@@ -881,7 +1165,7 @@ export function levels(count: number, out: Float32Array): boolean {
   if (!r || !onTrack()) return false
   // Phones update audio.currentTime only a few times a second, which made the
   // bars step and lag; run a smooth clock between those updates instead.
-  const f = (smoothTime(audio) - (track!.offs[s.current - track!.start] ?? 0)) * 60
+  const f = (smoothTime(audio, s.current) - (track!.offs[s.current - track!.start] ?? 0)) * 60
   const base = Math.floor(f)
   const frac = f - base
   const env = r.env
@@ -894,22 +1178,48 @@ export function levels(count: number, out: Float32Array): boolean {
   return true
 }
 
-let clockSrc = ''
-let clockRaw = -1
-let clockAt = 0
-let clockShown = 0
-function smoothTime(a: HTMLAudioElement): number {
-  const now = performance.now()
-  const raw = a.currentTime
-  if (a.src !== clockSrc || raw < clockRaw - 0.05 || Math.abs(raw - clockShown) > 0.4) {
-    clockSrc = a.src; clockRaw = raw; clockAt = now; clockShown = raw
-    return raw
+/**
+ * The word clock (cure M-1). Phones update audio.currentTime only a
+ * few times a second, so between updates the clock predicts — but
+ * the prediction state used to be keyed only by the track's src:
+ * the lead it had accumulated by the end of one sentence (up to a
+ * quarter second of prediction, plus whatever a stall or a late
+ * render had folded in) was carried INTO the next sentence, whose
+ * word marks then ran ahead of the voice for the rest of the track,
+ * the error compounding at every boundary. The clock is now re-based
+ * at every sentence transition: the first sample inside a sentence
+ * anchors it at the element's own reported time — the sentence's
+ * true start on the audio clock — and prediction only ever fills
+ * the gaps WITHIN that sentence. Drift cannot cross a boundary, so
+ * it cannot accumulate across a track.
+ */
+export class WordClock {
+  private src = ''
+  private idx = -1
+  private raw = -1
+  private at = 0
+  private shown = 0
+  reset() { this.src = ''; this.idx = -1; this.raw = -1; this.at = 0; this.shown = 0 }
+  /** Smoothed track time for sentence `idx`, re-based at its true start. */
+  time(src: string, raw: number, paused: boolean, rate: number, idx: number, now: number): number {
+    if (src !== this.src || idx !== this.idx || raw < this.raw - 0.05 || Math.abs(raw - this.shown) > 0.4) {
+      // Re-base: a new track, a new sentence, a seek, or a clock that
+      // no longer agrees with the prediction — the element's own
+      // reported time is the only anchor, never the carried lead.
+      this.src = src; this.idx = idx; this.raw = raw; this.at = now; this.shown = raw
+      return raw
+    }
+    if (raw !== this.raw) { this.raw = raw; this.at = now }
+    const predicted = paused ? raw : raw + ((now - this.at) / 1000) * Math.max(0.25, rate || 1)
+    // never run more than a quarter second ahead of what the element reported
+    this.shown = Math.max(this.shown, Math.min(predicted, raw + 0.25))
+    return this.shown
   }
-  if (raw !== clockRaw) { clockRaw = raw; clockAt = now }
-  const predicted = a.paused ? raw : raw + ((now - clockAt) / 1000) * (a.playbackRate || 1)
-  // never run more than a quarter second ahead of what the element reported
-  clockShown = Math.max(clockShown, Math.min(predicted, raw + 0.25))
-  return clockShown
+}
+const wordClockState = new WordClock()
+
+function smoothTime(a: HTMLAudioElement, idx: number): number {
+  return wordClockState.time(a.src, a.currentTime, a.paused, a.playbackRate || 1, idx, performance.now())
 }
 
 /** For the word highlight: the current sentence's loudness envelope and a smooth time into it. */
@@ -919,11 +1229,16 @@ export function wordClock(): { env: Float32Array; t: number; idx: number } | nul
   const r = cache.get(s.current)
   if (!r) return null
   const off = track!.offs[s.current - track!.start] ?? 0
-  return { env: r.env, t: Math.max(0, smoothTime(audio) - off), idx: s.current }
+  return { env: r.env, t: Math.max(0, smoothTime(audio, s.current) - off), idx: s.current }
 }
 
 export function sentenceProgress(): number {
   const s = listen.get()
+  // A paused scrub's recorded landing is the position while paused
+  // (cure T1-7): the progress bar and the panel must show where the
+  // listener actually put the playhead, not the sentence's start,
+  // until sound resumes and the audio clock takes over again.
+  if (!s.playing && (s.seekFrac ?? 0) > 0) return Math.min(1, s.seekFrac)
   if (s.mode !== 'neural' || !audio) return 0
   const r = cache.get(s.current)
   return r && onTrack() ? Math.min(1, localTime() / r.duration) : 0
@@ -935,6 +1250,11 @@ function updateMediaSession() {
   if (!('mediaSession' in navigator)) return
   const s = listen.get()
   if (!s.active) return
+  // While a recording owns the stage, the browser card is the
+  // clip's (cure T1-12): clip.ts writes its metadata, and the
+  // reading must not overwrite it with its own claim.
+  const cp = clipPlayer.get()
+  if (cp.key && !cp.key.startsWith('preview:') && cp.playing) return
   const ms = navigator.mediaSession
   const v = voiceById(s.voices[s.current])
   const base = import.meta.env.BASE_URL
@@ -951,7 +1271,10 @@ function updateMediaSession() {
     album: `Sentence ${s.current + 1} of ${s.segments.length}`,
     artwork: [art('media-artwork-512.png', '512x512'), art('media-artwork.png', '1024x1024')],
   })
-  ms.playbackState = s.playing ? 'playing' : 'paused'
+  // Sound only, as at the shell publisher below (cure T1-4): a
+  // buffering/cushioning session is a promise, not sound, and must
+  // not wear 'playing' on the browser's card either.
+  ms.playbackState = s.playing && !s.buffering && !s.cushion ? 'playing' : 'paused'
 }
 
 function updatePosition() {
@@ -1000,21 +1323,65 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
 // Android app: keep the phone's media notification (and the app awake while reading) in step with playback,
 // and take play/pause/next/previous from that notification.
 {
-  type Droid = { playing(on: boolean, title: string, text: string): void; media?: (on: boolean, book: string, artist: string, text: string) => void; mediaF?: (on: boolean, book: string, artist: string, text: string) => void }
+  type Droid = { playing(on: boolean, title: string, text: string): void; media?: (on: boolean, book: string, artist: string, text: string) => void; mediaF?: (on: boolean, book: string, artist: string, text: string) => void; bubbleNativePos?: () => string }
   const droid = (window as unknown as { LogosAndroid?: Droid }).LogosAndroid
   if (droid?.playing) {
     let last = ''
     let started = false
-    listen.subscribe(() => {
+    const publish = (force = false) => {
       const s = listen.get()
       // Sound only (1.4.173): a buffering session is not playing,
       // and the shell's media session wakes for sound, never for a
       // promise — a pause taken during Preparing used to leave the
       // session awake and targetable (the dictation autoplay).
-      const on = s.active && s.playing
+      // That law is now the CODE, not only its comment (cure T1-4):
+      // playIndex claims playing:true before rendering, and
+      // buildCushion may then hold for up to 25 s with only the
+      // inaudible keep-alive sounding — the old expression published
+      // PLAYING through the whole cushion. Buffering and cushion
+      // subtract: the card wakes when the first word sounds, and a
+      // seek into unrendered audio honestly reads as not-playing
+      // until it does.
+      const on = s.active && s.playing && !s.buffering && !s.cushion
+      // While a recording owns the stage, the card tells the
+      // CLIP's truth (cure T1-12): this publisher is the card's
+      // only writer, and it used to keep describing the reading —
+      // a paused mid-book sentence, or the parked Finished card —
+      // for the whole duration of every clip. The clip's state is
+      // published from here (the single writer stays single), and
+      // when the clip stops, the reading's own truth resumes below.
+      // Whether recordings should FOLLOW the card beyond this —
+      // live title/position as they play — is Oscar's standing
+      // open question (2026-11-14); this cures the falsehood, it
+      // does not build that feature.
+      const cp = clipPlayer.get()
+      const clipOn = Boolean(cp.key && !cp.key.startsWith('preview:') && cp.playing)
+      if (clipOn) started = true
       // The notification appears with the first play, not when text is merely loaded.
       if (on) started = true
-      if (!started) return
+      if (!started && !force) return
+      if (clipOn) {
+        const ckey = `clip|${cp.key}|${cp.title}`
+        if (ckey === last) return
+        last = ckey
+        try {
+          if (droid.media) droid.media(true, '', cp.artist || 'Logos', cp.title || '')
+          else droid.playing(true, cp.artist || 'Logos', cp.title || '')
+        } catch { /* old shell */ }
+        return
+      }
+      // The `started` gate keeps its purpose — no publish noise before
+      // the session machinery is up — with ONE exception (cure
+      // H-11/T1-1): the single forced publish at page load below.
+      // After a crash / watchdog reload / process restart during
+      // playback, the fresh page's truth IS "nothing is playing",
+      // and saying so once is what retires the dead page's stale,
+      // unswipeable "playing" card in the shell. Without it the gate
+      // kept this page silent until the next successful play, and
+      // the 1.4.155 chain stayed open. The gate still swallows every
+      // later pre-play change (loadText, prepareText, endSession)
+      // exactly as before.
+      if (!started && !force) return
       if (!s.active) started = false
       // A closed session is over (1.4.155): publish the blank truth
       // and the shell puts the card away. A FINISHED reading is a
@@ -1041,6 +1408,32 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
         else if (droid.media) droid.media(on, ended ? '' : (book?.title ?? ''), `Logos · ${v?.name ?? 'Voice'}`, sentence)
         else droid.playing(on, `Logos · ${v?.name ?? 'Voice'}`, sentence)
       } catch { /* old shell */ }
+    }
+    listen.subscribe(() => publish())
+    // The clip's stage changes are publishes too (cure T1-12): a
+    // clip starting, pausing or ending must move the card off (and
+    // back onto) the reading's claim without waiting for the
+    // reading's store to change.
+    clipPlayer.subscribe(() => publish())
+    // The fresh page's first word to the shell (H-11): publish the
+    // current truth once, on load — for a fresh page that truth is
+    // inactive, and the shell retires whatever card a dead page left
+    // standing. If this page later starts a reading, its own
+    // publishes raise the card again through the normal gate.
+    publish(true)
+    // The device voice's progress, pulled on the shell's poke (H-12):
+    // the shell advances its native speaker sentence by sentence and
+    // pokes `logosandroid-nativepos`; the page pulls the position
+    // through bubbleNativePos (the house's pull pattern — the same
+    // shape as bubbleSeek / bubblePendingCmd). Shells without the
+    // getter answer nothing and the store keeps its last page-known
+    // position; applyNativePos itself refuses reports that do not
+    // belong to a live handed session.
+    addEventListener('logosandroid-nativepos', () => {
+      try {
+        const raw = droid.bubbleNativePos?.()
+        if (raw) applyNativePos(JSON.parse(raw) as { idx?: number; total?: number; playing?: boolean; active?: boolean; done?: boolean })
+      } catch { /* an old or confused shell: the position stays page-known */ }
     })
     // The shell's keys serve whichever player holds the stage
     // (1.4.156): while a finished-audio clip owns it — sounding now,

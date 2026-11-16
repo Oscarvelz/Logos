@@ -97,9 +97,17 @@ export function toBlocks(root: Node, o: WalkOpts): { blocks: Block[]; ids: Map<s
   return { blocks: b.blocks, ids: b.ids }
 }
 
-export function parseMarkup(text: string, type: DOMParserSupportedType): Document {
+export function parseMarkup(text: string, type: DOMParserSupportedType, report?: (warn: string) => void): Document {
   const doc = new DOMParser().parseFromString(text, type)
-  if (type !== 'text/html' && doc.getElementsByTagName('parsererror').length) return new DOMParser().parseFromString(text, 'text/html')
+  if (type !== 'text/html' && doc.getElementsByTagName('parsererror').length) {
+    // WR-1 cure: this fallback used to be silent — a malformed XML/XHTML
+    // document was quietly re-read as HTML, which can drop or mangle
+    // content with no trace anywhere. The fallback still happens (lenient
+    // XHTML chapters in real EPUBs depend on it), but a caller that passes
+    // a reporter hears about it and can put the warning on the book.
+    report?.('Part of this file was not well-formed, so Logos read it more loosely. If anything looks missing or out of order, that is why.')
+    return new DOMParser().parseFromString(text, 'text/html')
+  }
   return doc
 }
 

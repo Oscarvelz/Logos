@@ -1,15 +1,15 @@
-import { useState } from 'react'
-import { Check, Loader2, Pause, Play } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Loader2, Pause, Play, Search } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
-import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, type Voice } from '../lib/voices.ts'
+import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, favoriteIds, favoriteVoices, resolvedVoiceId, VoiceSearchGate, type Voice } from '../lib/voices.ts'
 import { clipPlayer, playClip } from '../player/clip.ts'
 import { engine, synthesize } from '../engine/engine.ts'
-import { encodeWav, trimSilence } from '../lib/audio.ts'
+import { encodeWav, trimSilence, applyGain, levelGain } from '../lib/audio.ts'
+import { speakable } from '../lib/text.ts'
 import { refreshVoices } from '../player/listen.ts'
 import { FavStar, Avatar, toast } from '../components/ui.tsx'
 import { t } from '../lib/i18n.ts'
-import previews from '../lib/previews.json'
 
 type Filter = 'all' | 'fav' | 'en' | 'es' | 'pocket'
 const FILTERS: { value: Filter; label: string }[] = [
@@ -20,15 +20,29 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: 'pocket', label: 'Pocket' },
 ]
 
-const HAS_PREVIEW = new Set<string>(previews as string[])
 const livePreviews = new Map<string, Blob>()
 
 export function VoicesPage() {
   const st = useStore(settings)
   const [filter, setFilter] = useState<Filter>('all')
-  const rank = (id: string) => { const i = st.favorites.indexOf(id); return i < 0 ? Infinity : i }
-  const list = VOICES
-    .filter((v) => filter === 'all' || (filter === 'fav' ? st.favorites.includes(v.id) : filter === 'pocket' ? v.engine === 'pocket' : v.lang === filter))
+  // M-47: search runs through the shared gate — debounced, and a stale
+  // earlier result can never land over a newer query.
+  const [query, setQuery] = useState('')
+  const [found, setFound] = useState<Voice[] | null>(null)
+  const gate = useRef(new VoiceSearchGate())
+  useEffect(() => {
+    if (!query.trim()) { setFound(null); return }
+    const g = gate.current
+    g.schedule(query, 150, (r) => setFound(r))
+    return () => g.cancel()
+  }, [query])
+  // M-44: the favorites list and every star read the ONE post-gate truth
+  // (favoriteVoices/favoriteIds), never the raw stored ids.
+  const favOrder = favoriteVoices(st.favorites)
+  const favSet = favoriteIds(st.favorites)
+  const rank = (id: string) => { const i = favOrder.findIndex((v) => v.id === id); return i < 0 ? Infinity : i }
+  const list = (found ?? VOICES)
+    .filter((v) => filter === 'all' || (filter === 'fav' ? favSet.has(v.id) : filter === 'pocket' ? v.engine === 'pocket' : v.lang === filter))
     .map((v, i) => ({ v, i }))
     .sort((a, b) => rank(a.v.id) - rank(b.v.id) || a.i - b.i)
     .map((x) => x.v)
@@ -39,6 +53,13 @@ export function VoicesPage() {
           <h1 className="page-title">{t('Voices')}</h1>
           <p className="page-sub">{t('{n} natural voices that run right on your phone. Star your favorites, set a default per language.', { n: VOICES.length })}</p>
         </div>
+      </div>
+      <div className="filter-row" style={{ alignItems: 'center' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Search size={16} aria-hidden />
+          <input data-present="voices-search" value={query} onChange={(ev) => setQuery(ev.target.value)} placeholder={t('Search voices')} aria-label={t('Search voices')}
+            style={{ height: 36, borderRadius: 999, border: '1px solid var(--line)', background: 'var(--surface)', padding: '0 12px', outline: 'none' }} />
+        </span>
       </div>
       <div className="filter-row" role="tablist">
         {FILTERS.map((f) => (
@@ -56,23 +77,49 @@ export function VoicesPage() {
 function VoiceCard({ voice: v }: { voice: Voice }) {
   const st = useStore(settings)
   const cp = useStore(clipPlayer)
+  const e = useStore(engine)
   const [loading, setLoading] = useState(false)
   const key = `preview:${v.id}`
   const playing = cp.key === key && cp.playing
-  const isDefault = st.defaultVoice[v.lang] === v.id
-  const fav = st.favorites.includes(v.id)
+  // M-43: the flag reads the resolved default (default + override, the
+  // engine's own resolution in voices.ts) — never the raw map alone.
+  const isDefault = resolvedVoiceId(st, v.lang) === v.id
+  // M-44: the star reads the same post-gate favorites truth as the list.
+  const fav = favoriteIds(st.favorites).has(v.id)
+  // M-49: "on this device" is claimed only from the engine store's
+  // cached flag WHEN that flag describes THIS voice's engine — since
+  // the Wave 2 cure the flag is per-engine (cachedOf(kind) in
+  // engine.ts), so a claim for the other engine would be a stale-shape
+  // read. No claim is made for a voice whose engine isn't the one the
+  // store is currently reporting.
+  const onDevice = e.kind === v.engine && e.cached
 
   const preview = async () => {
     if (cp.key === key) { void playClip(key, ''); return }
-    if (HAS_PREVIEW.has(v.id)) { void playClip(key, `${import.meta.env.BASE_URL}previews/${v.id}.mp3`, { title: t('{name} — preview', { name: v.name }) }); return }
-    let blob = livePreviews.get(v.id)
+    // T7-04: a preview must prove what it claims. The prerecorded MP3
+    // that used to stand here played perfectly with the model deleted,
+    // the engine in error, or the voice's file unfetchable — and it
+    // was made at fixed speed with fixed text, so it could say nothing
+    // about the user's speed or pronunciation dictionary. The preview
+    // now renders through the real engine path, exactly as a reading
+    // does: the preview line run through speakable() (the dictionary
+    // applies), synthesized by this voice at the user's listening
+    // speed, levelled like a real render. If the model is not on the
+    // device, synthesis takes the same download-or-fail road a first
+    // Play takes — it never plays a recording that masks a failure.
+    // The cache key carries speed and spoken text, so a speed or
+    // dictionary change re-renders instead of replaying a stale take.
+    const spoken = speakable(PREVIEW_TEXT[v.lang], v.lang)
+    const cacheKey = `${v.id}|${st.listenSpeed}|${spoken}`
+    let blob = livePreviews.get(cacheKey)
     if (!blob) {
       setLoading(true)
       try {
         if (engine.get().status !== 'ready') toast(t('Loading the neural voice for previews…'))
-        const res = await synthesize(PREVIEW_TEXT[v.lang], v.id, 1, { priority: 3000 })
-        blob = encodeWav(trimSilence(res.samples, res.sampleRate), res.sampleRate)
-        livePreviews.set(v.id, blob)
+        const res = await synthesize(spoken, v.id, st.listenSpeed, { priority: 3000 })
+        const trimmed = trimSilence(res.samples, res.sampleRate)
+        blob = encodeWav(applyGain(trimmed, levelGain(trimmed)), res.sampleRate)
+        livePreviews.set(cacheKey, blob)
       } catch (err) {
         toast(t('Preview failed: {msg}', { msg: (err as Error).message }))
         return
@@ -86,7 +133,7 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
       {isDefault && <span className="default-flag">{t('Default · {l}', { l: v.lang === 'en' ? t('English') : 'Español' })}</span>}
       <Avatar voice={v} playing={playing} />
       <div className="grow" style={{ minWidth: 0 }}>
-        <div className="voice-name">{v.name} <span className="badge" title={t(ACCENT_LABEL[v.accent])}>{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}</div>
+        <div className="voice-name">{v.name} <span className="badge" title={t(ACCENT_LABEL[v.accent])}>{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}{onDevice && <span className="badge">{t('On this device')}</span>}</div>
         <div className="voice-tag">{t(v.tagline)}</div>
         {!isDefault && (
           <button className="btn sm ghost" data-present="voice-card:make-default" data-voice-id={v.id} style={{ height: 32, padding: '0 8px', marginLeft: -8, marginTop: 2, fontSize: 13, color: 'var(--text-2)' }}

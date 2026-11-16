@@ -51,6 +51,24 @@
  *   Q2's Undo has its replace to undo, AD1's save has its playing text.
  *   Backward movement (‹, a chapters jump back) never re-seeds: what
  *   was built stays built, exactly as ‹ has always ruled.
+ *   THE SEED-GAP LAW (the M-34 cure): seeding is honest about what it
+ *   could NOT build. A step whose anchor misses at seed time (or whose
+ *   declared precondition fails, or whose act throws) leaves a GAP —
+ *   the fiction that step would have built does not exist, and landing
+ *   the learner past it would present a beat on a stage that was never
+ *   built. So a launch, resume or forward jump whose target lies past
+ *   the first gap lands AT the gap step instead — the nearest seedable
+ *   point — where the step is presented live and its own act (or its
+ *   own fail-safe) builds the fiction in the open from there. The
+ *   adjustment is written into the bookkeeping, never faked: the gap
+ *   step enters the skip log with reason "seed-gap", and the recorded
+ *   place is the place the learner actually landed.
+ *   THE ONE EXCEPTION INSIDE SEEDING (the H-1 cure): a seeded λ tap is
+ *   NOT a performed act — seeding brackets the pass in the scenario's
+ *   seed-mode and uses the port's seeded path, so the tap is absorbed
+ *   by the scenario's own internal state only and the user's REAL
+ *   bubble switch never moves before a beat is shown. A PRESENTED λ
+ *   tap still flips the real switch: that flip is the demonstration.
  * - «Stay here» (the stay-here window law, Oscar, Brizna lane 2026-11-14):
  *   a mid-module tap does NOT dissolve the stage. `requestStayHere()`
  *   opens the card's window and HOLDS THE CLOCK (clock.beginHold — in
@@ -81,6 +99,9 @@
  * shell: performed acts go to the ScenarioPort (scenario-port.ts) and
  * nowhere else, and every exit — natural end, ✕, required miss, «Stay
  * here» — discards the scenario whole through the port's teardown. The
+ * scenario's teardown also restores the ONE real thing a presented λ
+ * tap may flip — the user's bubble switch — to the value captured at
+ * scenario creation (the C-1 cure), so no exit path can leak it. The
  * only payloads the runner emits are the presentation state file and the
  * skip log inside it; both are leak-scanned before every write, and they
  * carry module/scene/step/anchor ids only (the payload-isolation test in
@@ -197,7 +218,17 @@ export interface RunnerSnapshot {
 export interface PresentationRunner {
   getSnapshot: () => RunnerSnapshot
   subscribe: (listener: () => void) => () => void
-  start: (options?: { resume?: boolean }) => void
+  /**
+   * Begin a run. Without a launch point, a part-way module resumes at
+   * its recorded place (the progress record is the only memory). A
+   * launch carrying `resumeFrom` — the index's «My scenes» rows and
+   * search «Watch», whose point lives OUTSIDE the progress record —
+   * starts at that exact step instead (the H-26 cure): entry seeding
+   * builds the fiction before it, λ-safe as everywhere, and the run
+   * counts as started there, so a part-way launch can never pass as a
+   * clean full play.
+   */
+  start: (options?: { resume?: boolean; resumeFrom?: { step: number; scene?: string; stepId?: string } }) => void
   pause: () => void
   resume: () => void
   /**
@@ -310,6 +341,15 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
   let cancelPerform: (() => void) | null = null
   let performedKey: string | null = null
   let startedAt = 0
+  /**
+   * The steps this run has actually PRESENTED (the H-28 cure): a step
+   * enters the set when it takes the stage resolved in `enterCurrent`,
+   * or when the machinery passes it as an optional miss during a lived
+   * walk. Entry seeding and chapters jumps never add to it — seeded
+   * steps were built, not presented — so a run that reaches the end
+   * over un-presented steps cannot earn a clean full play.
+   */
+  let presentedSteps = new Set<number>()
   let hadRequiredMiss = false
   let userPaused = false
   let scenarioLive = false
@@ -497,36 +537,100 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
    * skip log, no return-stack entries: seeding is not living the steps,
    * it is building the stage they built. A throwing port or hook never
    * breaks an entry.
+   *
+   * Returns the global index of the FIRST step in the seeded range
+   * whose act could not be performed — the seed gap — or -1 when the
+   * whole range was built. Callers land the learner at the gap rather
+   * than past it (the seed-gap law in this file's header).
    */
-  function seedBefore(target: number): void {
+  function seedBefore(target: number): number {
     if (!port || !scenarioLive) {
       builtThrough = Math.max(builtThrough, target)
-      return
+      return -1
     }
-    while (builtThrough < target) {
-      const flatStep = flat[builtThrough]
-      builtThrough += 1
-      if (!flatStep) break
-      const record = anchorById(flatStep.step.anchorId)
-      let preconditionFailed = false
-      if (record?.precondition && options.performPrecondition) {
+    let gap = -1
+    const noteGap = (flatStep: FlatStep) => {
+      if (gap === -1) gap = flatStep.globalIndex
+    }
+    // THE λ SEED RULE (H-1 cure): seeding is silent machinery, so a
+    // seeded λ tap must NEVER reach the user's real bubble switch. The
+    // whole seeding pass is bracketed in the scenario's seed-mode —
+    // while it stands, any setLambda absorbs into the scenario's own
+    // internal state only, whichever perform path a port takes — and
+    // each step is performed through the port's seeded path when it
+    // offers one. Every other data act seeds exactly as before: the
+    // fiction is built, the real switch is not.
+    const seedScenario = port.scenario
+    let seedModeOn = false
+    try {
+      seedScenario?.stage.beginLambdaSeed()
+      seedModeOn = true
+    } catch {
+      seedModeOn = false
+    }
+    try {
+      while (builtThrough < target) {
+        const flatStep = flat[builtThrough]
+        builtThrough += 1
+        if (!flatStep) break
+        const record = anchorById(flatStep.step.anchorId)
+        let preconditionFailed = false
+        if (record?.precondition && options.performPrecondition) {
+          try {
+            preconditionFailed = options.performPrecondition(record, flatStep) === false
+          } catch {
+            preconditionFailed = true
+          }
+        }
+        if (preconditionFailed) {
+          noteGap(flatStep)
+          continue
+        }
+        const res = resolveStep(flatStep.step)
+        if (res.status !== 'resolved') {
+          noteGap(flatStep)
+          continue
+        }
         try {
-          preconditionFailed = options.performPrecondition(record, flatStep) === false
+          if (typeof port.performSeeded === 'function') port.performSeeded(flatStep, res)
+          else port.perform(flatStep, res)
         } catch {
-          preconditionFailed = true
+          // Machinery never breaks an entry: a failed seed act leaves the
+          // fiction as the live acts built it, and the target beat's own
+          // resolution decides what the learner sees. The step is a seed
+          // gap all the same: its act was not performed.
+          noteGap(flatStep)
         }
       }
-      if (preconditionFailed) continue
-      const res = resolveStep(flatStep.step)
-      if (res.status !== 'resolved') continue
-      try {
-        port.perform(flatStep, res)
-      } catch {
-        // Machinery never breaks an entry: a failed seed act leaves the
-        // fiction as the live acts built it, and the target beat's own
-        // resolution decides what the learner sees.
+    } finally {
+      if (seedModeOn) {
+        try {
+          seedScenario?.stage.endLambdaSeed()
+        } catch {
+          // Seed-mode is scenario-local; a failure to leave it cannot
+          // break the entry either — teardown clears it regardless.
+        }
       }
     }
+    return gap
+  }
+
+  /**
+   * The seed-gap landing (the M-34 cure): when seeding could not build
+   * every step before the requested target, the learner lands at the
+   * first unbuilt step instead — the nearest seedable point — and the
+   * adjustment is written into the bookkeeping (the skip log carries
+   * the gap step with reason "seed-gap"; the recorded place will be
+   * the landed place, via markPlace). Returns the landing index.
+   */
+  function seedGapLanding(target: number): number {
+    const gap = seedBefore(target)
+    if (gap >= 0 && gap < target) {
+      const gapStep = flat[gap]
+      if (gapStep) recordSkip(gapStep, 'seed-gap')
+      return gap
+    }
+    return target
   }
 
   function enterCurrent(): void {
@@ -563,7 +667,10 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
         // Skip + log; the scene continues at the next step. The skipped step
         // counts as passed for place purposes: resume lands after it. It
         // also counts as passed for the built frontier: its act can never
-        // be performed, so seeding never owes it either.
+        // be performed, so seeding never owes it either. And it counts as
+        // walked for the presented set: the machinery passed it DURING a
+        // lived walk, in order — unlike a seeded step, which no walk met.
+        presentedSteps.add(step.globalIndex)
         builtThrough = Math.max(builtThrough, step.globalIndex + 1)
         pointer = step.globalIndex + 1
         persistProgress()
@@ -591,6 +698,8 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       return
     }
 
+    // The step takes the stage: this run has PRESENTED it (H-28).
+    presentedSteps.add(step.globalIndex)
     markPlace(step)
     if (mode === 'automatic') {
       status = userPaused ? 'paused' : 'playing'
@@ -633,11 +742,30 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     resolution = null
     // A clean FULL play clears a needs-refresh flag; a resumed tail does not
     // (FENCE-DESIGN §7 clause 5: "a clean full play clears the state").
-    const cleanFullPlay = startedAt === 0 && !hadRequiredMiss
-    progress = {
-      state: cleanFullPlay || progress.state !== 'needs-refresh' ? 'seen' : 'needs-refresh',
-      verifiedAgainst: script.verifiedAgainst ?? appVersion,
-      skips: progress.skips,
+    // FULL means PRESENTED (the H-28 cure): every step of the module
+    // either took the stage in this run or was machinery-passed as an
+    // optional miss during the walk. A run that reached the end over
+    // steps it never presented — a chapters jump to the last beat and
+    // one tap — did not walk the module: it completes as in-progress,
+    // resumable at the end beat, never as seen.
+    const presentedEveryStep = flat.every((f) => presentedSteps.has(f.globalIndex))
+    const cleanFullPlay = startedAt === 0 && !hadRequiredMiss && presentedEveryStep
+    if (!cleanFullPlay && startedAt === 0 && !hadRequiredMiss && !presentedEveryStep && flat.length > 0) {
+      const last = flat[flat.length - 1]
+      progress = {
+        state: 'in-progress',
+        step: last.globalIndex,
+        scene: last.scene.id,
+        stepId: last.step.id,
+        verifiedAgainst: script.verifiedAgainst ?? appVersion,
+        skips: progress.skips,
+      }
+    } else {
+      progress = {
+        state: cleanFullPlay || progress.state !== 'needs-refresh' ? 'seen' : 'needs-refresh',
+        verifiedAgainst: script.verifiedAgainst ?? appVersion,
+        skips: progress.skips,
+      }
     }
     // The last-used mark clears when the module completes (Brizna's
     // pattern): a finished module returns to its floor in the index.
@@ -666,6 +794,7 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
         progress = { ...progress, state: 'needs-refresh' }
       }
       hadRequiredMiss = false
+      presentedSteps = new Set()
       endReason = undefined
       notice = undefined
       userPaused = false
@@ -682,16 +811,37 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       builtThrough = 0
       scenarioLive = port !== null
       let startAt = 0
-      if (resume && (progress.state === 'in-progress' || progress.state === 'needs-refresh')) {
+      // A launch point (the H-26 cure) outranks the progress record:
+      // it names a place the record may never have held («My scenes»,
+      // search «Watch»). The stepId is the exact identity and wins;
+      // the recorded step, then the scene's first step, are its
+      // fallbacks. An unresolvable point falls through to the ordinary
+      // resume below rather than landing nowhere.
+      let launchAt = -1
+      const launchPoint = startOptions.resumeFrom
+      if (launchPoint) {
+        if (launchPoint.stepId) launchAt = flat.findIndex((f) => f.step.id === launchPoint.stepId)
+        if (launchAt < 0 && typeof launchPoint.step === 'number' && launchPoint.step >= 0 && launchPoint.step < flat.length) {
+          launchAt = Math.floor(launchPoint.step)
+        }
+        if (launchAt < 0 && launchPoint.scene) launchAt = flat.findIndex((f) => f.scene.id === launchPoint.scene)
+      }
+      if (launchAt >= 0) {
+        startAt = launchAt
+      } else if (resume && (progress.state === 'in-progress' || progress.state === 'needs-refresh')) {
         if (typeof progress.step === 'number' && progress.step >= 0 && progress.step < flat.length) {
           startAt = progress.step
         }
       }
-      startedAt = startAt
       // ENTRY SEEDING: the recorded place's fiction is built BEFORE the
       // first presented beat — the earlier scenes' scenario acts replay
       // silently, in order, so the beat lands on the stage it teaches.
-      seedBefore(startAt)
+      // THE SEED-GAP LANDING (the M-34 cure): if any earlier act could
+      // not be built, the run lands at that first unbuilt step instead
+      // of the recorded place — never mid-beat on an unbuilt stage —
+      // and the skip log says so (see seedGapLanding).
+      startAt = seedGapLanding(startAt)
+      startedAt = startAt
       pointer = startAt
       enterCurrent()
     },
@@ -761,12 +911,14 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       if (stayWindowOpen || closeWindowOpen) return
       if (status !== 'playing' && status !== 'paused' && status !== 'interactive-wait') return
       if (flat.length === 0) return
-      const target = Math.min(Math.max(0, Math.floor(globalIndex)), flat.length - 1)
+      let target = Math.min(Math.max(0, Math.floor(globalIndex)), flat.length - 1)
       // ENTRY SEEDING: a jump forward lands beyond the built frontier —
       // the passed-over scenes' scenario acts replay silently first, so
       // the landing beat's fiction exists. A jump back seeds nothing:
       // what was built stays built (the frontier only moves forward).
-      seedBefore(target)
+      // THE SEED-GAP LANDING (the M-34 cure) governs jumps too: a jump
+      // past a step seeding could not build lands at that step instead.
+      target = seedGapLanding(target)
       // A jump is a leaving: the place jumped FROM is a lived position,
       // and ‹ from the landing returns there — not to the flat neighbour.
       if (current && target !== current.globalIndex) pushReturn(current.globalIndex)

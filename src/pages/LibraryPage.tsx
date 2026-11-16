@@ -83,18 +83,33 @@ export function LibraryPage() {
   useEffect(() => { if (job.status === 'done' || job.status === 'idle') void refreshLibrary() }, [job.status])
 
   const total = lib.clips.reduce((n, c) => n + c.size, 0)
-  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, lib.clips.filter(f.test).length])) as Record<Filter, number>, [lib.clips])
-  const shown = useMemo(() => {
+  // M-15 cure (clips half): counts and the listed clips derive from ONE
+  // searched set through ONE predicate — the counts used to be taken
+  // over the whole library while the list was taken over the search
+  // results, so a filter's number could include clips its own list
+  // excluded.
+  const searched = useMemo(() => {
     const q = query.trim().toLowerCase()
+    return lib.clips.filter((c) => !q || (c.title + ' ' + (c.summary ?? '') + ' ' + c.text).toLowerCase().includes(q))
+  }, [lib.clips, query])
+  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, searched.filter(f.test).length])) as Record<Filter, number>, [searched])
+  const shown = useMemo(() => {
     const f = FILTERS.find((x) => x.id === filter)!
-    const list = lib.clips.filter((c) => f.test(c) && (!q || (c.title + ' ' + (c.summary ?? '') + ' ' + c.text).toLowerCase().includes(q)))
+    const list = searched.filter((c) => f.test(c))
     const by: Record<Sort, (a: ClipMeta, b: ClipMeta) => number> = {
       new: (a, b) => b.createdAt - a.createdAt, old: (a, b) => a.createdAt - b.createdAt,
       long: (a, b) => b.duration - a.duration, short: (a, b) => a.duration - b.duration, az: (a, b) => a.title.localeCompare(b.title),
     }
     return list.sort(by[sort])
-  }, [lib.clips, filter, sort, query])
+  }, [searched, filter, sort])
 
+  // M-17 cure: the menu / rename sheets are handed the LIVE store record
+  // for the id they were opened on, never the snapshot captured at tap
+  // time — after a backup restore (or any store change) no stale clip
+  // survives on this page; a clip the store no longer holds closes its
+  // sheet instead of acting on a ghost.
+  const liveMenu = menu ? lib.clips.find((c) => c.id === menu.id) ?? null : null
+  const liveRenaming = renaming ? lib.clips.find((c) => c.id === renaming.id) ?? null : null
   const toggleSel = (id: string) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const endSelect = () => { setSelecting(false); setSel(new Set()) }
   const bulk = async (patch: Partial<ClipMeta>) => { for (const id of sel) await updateClip(id, patch, false); await refreshLibrary(); endSelect() }
@@ -143,7 +158,14 @@ export function LibraryPage() {
         </>
       )}
 
-      {lib.loaded && lib.clips.length === 0 ? (
+      {lib.loaded && lib.loadError && lib.clips.length === 0 ? (
+        <div className="card empty" data-present="lib-saved-error">
+          <div className="glyph">λ</div>
+          <h3>{t('Your saved items couldn’t be read')}</h3>
+          <p style={{ margin: '0 auto 18px', maxWidth: 330 }}>{t('Logos could not open the library stored on this device. Your saved audio and texts may still be there — try again before adding duplicates.')}</p>
+          <button className="btn primary" onClick={() => void refreshLibrary()}>{t('Try again')}</button>
+        </div>
+      ) : lib.loaded && lib.clips.length === 0 ? (
         <div className="card empty" data-present="lib-saved-empty">
           <div className="glyph">λ</div>
           <h3>{t('Nothing saved yet')}</h3>
@@ -201,8 +223,8 @@ export function LibraryPage() {
           <section className="lib-col" data-present="lib-split-books"><div className="lib-col-head"><span>{t('Books')}</span>{bk.list.length ? <span className="lf-n">{bk.list.length}</span> : null}<button className="btn sm ghost lib-col-add" onClick={picker.pick}>{t('Import a book')}</button></div><BookShelf onPick={picker.pick} /></section>
         </div>
       ) : shelf === 'books' ? <BookShelf onPick={picker.pick} /> : savedPart}
-      <ItemMenu clip={menu} onClose={() => setMenu(null)} onRename={(c) => { setMenu(null); setRenaming(c) }} />
-      <RenameSheet clip={renaming} onClose={() => setRenaming(null)} />
+      <ItemMenu clip={liveMenu} onClose={() => setMenu(null)} onRename={(c) => { setMenu(null); setRenaming(c) }} />
+      <RenameSheet clip={liveRenaming} onClose={() => setRenaming(null)} />
       <WebImport open={adding} onClose={() => setAdding(false)} onAudioFile={() => file.current?.click()} onBookFile={() => { setShelf('books'); picker.pick() }} />
     </div>
   )
@@ -263,7 +285,7 @@ function ClipCard({ clip, selecting, selected, onSelect, onLongPress, onMore }: 
         </div>
         {!selecting && (
           <div className="clip-side">
-            <button className={`icon-btn fav-btn ${clip.fav ? 'on' : ''}`} data-present="lib-clip-fav" onClick={() => void updateClip(clip.id, { fav: !clip.fav }, false)} aria-label={clip.fav ? t('Remove from favorites') : t('Add to favorites')} aria-pressed={!!clip.fav}>
+            <button className={`icon-btn fav-btn ${clip.fav ? 'on' : ''}`} data-present="lib-clip-fav" onClick={() => void updateClip(clip.id, (cur) => ({ fav: !cur.fav }), false).catch(() => toast(t('That change couldn’t be saved. Your library may be full or unavailable.'), undefined, 5000))} aria-label={clip.fav ? t('Remove from favorites') : t('Add to favorites')} aria-pressed={!!clip.fav}>
               <Star size={19} fill={clip.fav ? 'currentColor' : 'none'} />
             </button>
             <button className="icon-btn" data-present="lib-clip-more" onClick={onMore} aria-label={t('More actions')}><MoreHorizontal size={20} /></button>
@@ -305,7 +327,7 @@ function ItemMenu({ clip, onClose, onRename }: { clip: ClipMeta | null; onClose:
       <div className="menu-list">
         {clip.text && <button data-present="lib-menu-open-listen" onClick={run(() => openInListen(clip))}><AudioLines size={20} /> {t('Open in Listen')}</button>}
         {isText && <button data-present="lib-menu-make-audio" onClick={run(() => makeAudio(clip))}><FileAudio size={20} /> {t('Make audio')}</button>}
-        <button data-present="lib-menu-done" onClick={run(() => updateClip(clip.id, clip.done ? { done: false } : { done: true, pos: 0 }, false))}><CircleCheck size={20} /> {clip.done ? t('Mark as not finished') : t('Mark as finished')}</button>
+        <button data-present="lib-menu-done" onClick={run(() => updateClip(clip.id, (cur) => (cur.done ? { done: false } : { done: true, pos: 0 }), false))}><CircleCheck size={20} /> {clip.done ? t('Mark as not finished') : t('Mark as finished')}</button>
         {!isText && !!clip.pos && !clip.done && <button data-present="lib-menu-startover" onClick={run(() => updateClip(clip.id, { pos: 0 }, false))}><Clock size={20} /> {t('Start over next time')}</button>}
         {clip.url && <button data-present="lib-menu-webpage" onClick={run(() => { window.open(clip.url, '_blank', 'noopener') })}><ExternalLink size={20} /> {t('Open the web page')}</button>}
         <button data-present="lib-menu-rename" onClick={() => onRename(clip)}><Pencil size={20} /> {t('Rename')}</button>
