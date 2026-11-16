@@ -809,7 +809,12 @@ class BubbleService : Service() {
         val next = ctlNext ?: return
         val fast = ctlFast ?: return
         val inner = panelWidth() - dp(36) // the card's own side padding
-        val design = dp(38 + 46 + 54 + 46 + 38)
+        // Proportions (1.4.179, Oscar): the jump keys shrink toward
+        // their proper rank under the toggle — 34 / 42 / 54 / 42 / 34
+        // (they were 38 / 46 / 54 / 46 / 38, the jumps nearly the
+        // toggle's peers). The row stays symmetric, so the toggle
+        // keeps the exact center fitControls always gave it.
+        val design = dp(34 + 42 + 54 + 42 + 34)
         var gap = dp(10)
         var avail = inner - gap * 4
         if (avail < design) { gap = dp(6); avail = inner - gap * 4 }
@@ -821,7 +826,7 @@ class BubbleService : Service() {
             lp.width = s; lp.height = s; lp.marginEnd = if (last) 0 else gap
             v.layoutParams = lp
         }
-        seat(slow, 38, false); seat(prev, 46, false); seat(tog, 54, false); seat(next, 46, false); seat(fast, 38, true)
+        seat(slow, 34, false); seat(prev, 42, false); seat(tog, 54, false); seat(next, 42, false); seat(fast, 34, true)
     }
 
     // THE STRETCHABLE READER (1.4.105, Oscar: 'redimensionar el tamaño del
@@ -1459,7 +1464,7 @@ class BubbleService : Service() {
                 false
             }
             contentDescription = label
-            layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(10) }
+            layoutParams = LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginEnd = dp(10) }
             setOnClickListener { pokeOrWake(cmd); handler.postDelayed({ refreshPanel() }, 350) }
         }
         // The time-jump key (1.4.163, Oscar): a circular arrow wearing
@@ -1542,7 +1547,7 @@ class BubbleService : Service() {
                 false
             }
             v.setOnClickListener { pokeOrWake(cmd); handler.postDelayed({ refreshPanel() }, 350) }
-            v.layoutParams = LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(10) }
+            v.layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(10) }
             return v
         }
         val slowB = speedBtn("−", "Slower", "slower")
@@ -2334,7 +2339,22 @@ class BubbleService : Service() {
                 else j?.optString("sub")?.ifBlank { s("Ready", "Listo") } ?: s("Ready", "Listo")
             if (scrubTarget >= 0 && lastCt > 0) subV?.text = s("Sentence", "Oración") + " ${scrubTarget + 1} " + s("of", "de") + " $lastCt"
             lockBtn?.text = if (isLocked(this@BubbleService)) "🔒" else "🔓"
-            toggleB?.setImageResource(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
+            if (playing) {
+                toggleB?.setImageResource(android.R.drawable.ic_media_pause)
+                toggleB?.setPadding(0, 0, 0, 0)
+            } else {
+                toggleB?.setImageResource(android.R.drawable.ic_media_play)
+                // The play triangle leans left inside its disc
+                // (1.4.179, Oscar: «biased towards the left, not
+                // totally centered»). Measured on his own
+                // screenshot: the disc sits dead center of the
+                // panel — it is the glyph whose mass hangs left of
+                // the disc's middle, as a right-pointing triangle's
+                // does. The image is nudged right inside the disc
+                // (paddingStart 6dp shifts it 3dp); the pause bars
+                // are symmetric and take no nudge.
+                toggleB?.setPadding(dp(6), 0, 0, 0)
+            }
             playingNow = playing
             seekBar?.let { if (!seekHeld) it.progress = ((j?.optDouble("frac", 0.0) ?: 0.0) * 1000).toInt() }
             spectrum?.let { sp ->
