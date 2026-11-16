@@ -171,19 +171,24 @@ export function JumpKey({ dir, size = 24, filled = true, disabled, present }: { 
   // with the shaft in front of the tip, and the arrows read
   // backward. The same recipe is drawn in the bubble panel and
   // the notification shade, so the key looks the same everywhere.
+  // (1.4.178, Oscar: the ring sat too close to the number — the
+  // arc's radius grows 7.9 → 9.4 and its center settles at
+  // (12, 12.9), so the number breathes inside the ring; the head
+  // is re-derived by the same recipe at the new radius. The
+  // bubble panel's own drawing is untouched at his word.)
   return (
     <button className={`icon-btn jump-key ${filled ? 'filled' : ''}`} data-present={present} disabled={disabled} onClick={dir === 'back' ? jumpBack : jumpFwd}
       aria-label={t(dir === 'back' ? 'Jump back {n} seconds' : 'Jump forward {n} seconds', { n: sec })}>
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
         {dir === 'fwd' ? <>
-          <path d="M 16.53 5.93 A 7.9 7.9 0 1 1 9.96 4.77" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
-          <path d="M 13.44 3.84 L 10.81 7.96 L 9.11 1.58 Z" fill="currentColor" />
+          <path d="M 17.39 5.20 A 9.4 9.4 0 1 1 9.57 3.82" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
+          <path d="M 13.04 2.89 L 10.42 7.01 L 8.71 0.63 Z" fill="currentColor" />
         </> : <>
-          <path d="M 7.47 5.93 A 7.9 7.9 0 1 0 14.04 4.77" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
-          <path d="M 10.57 3.84 L 14.89 1.58 L 13.19 7.96 Z" fill="currentColor" />
+          <path d="M 6.61 5.20 A 9.4 9.4 0 1 0 14.43 3.82" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
+          <path d="M 10.96 2.89 L 15.29 0.63 L 13.58 7.01 Z" fill="currentColor" />
         </>}
       </svg>
-      <span className="jump-n" style={{ fontSize: Math.max(8, size * 0.4) }} aria-hidden>{sec}</span>
+      <span className="jump-n" style={{ fontSize: Math.max(8, size * 0.38) }} aria-hidden>{sec}</span>
     </button>
   )
 }

@@ -1,3 +1,11 @@
+## 1.4.178 — The rings grow so the numbers can breathe (web + shell)
+
+Oscar, 2026-11-15, with three screenshots: «in the main app, the numbers stay at the center, but the round arrows sit too close to the numbers. The round arrows should be larger… to provide enough room for the numbers that sit at the center of the buttons. And with regard to the notification player, they don't even have the numbers that they should have. They are empty and they are small… Both of them should follow the same logic… Leave the floating player alone. It is good as it is. Do not touch it.»
+
+The glyph grows by its own recipe: the arc's radius 7.9 → 9.4, its center settling at (12, 12.9), the head re-derived at the new radius (base centered on the arc's end, as 174 settled), the number a touch smaller (0.40 → 0.38 of the key) and seated 1px lower to meet the ring's true center. Applied to the main player's JumpKey (player + mini player) and to the media session's two vector faces (ic_jump_back / ic_jump_fwd), so the card's arrows follow the same logic and read larger. The bubble panel is NOT touched — its canvas drawing keeps the 174 geometry, at his explicit word. The shade notification's bitmap buttons are not touched either: they already draw the live numbers.
+
+The one thing this wave cannot do, stated to Oscar plainly in the delivery: the system media card draws its buttons from FIXED resource icons the app ships, so a number that follows Settings cannot be printed inside the card's arrows — the seconds live in the actions' names there, and drawn live on the shade notification's own buttons. Burning today's numbers into the card icons as pictures was NOT done silently: frozen numbers would lie the day he changes Settings. That fork is his to call, and it is put to him in the delivery message. Presentation review: no teaching surface touched.
+
 ## 1.4.177 — Each search lives with what it searches (web only)
 
 Oscar, 2026-11-15, with two screenshots of Settings: the lesson search («Find a lesson or a function») stood inside the Learn tray, OUTSIDE the Presentations card — «the search bar is misplaced… For presentations, it should have its own integrated search bar, but after I open presentations, not outside… And if that is not the search bar for the general settings, add one at the very top, following the same standards.»
