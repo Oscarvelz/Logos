@@ -98,7 +98,7 @@ function seenClip(t: string) {
 // behind; when the clip ENDS, what was interrupted resumes where it was — the
 // interruption heals itself. A second clip keeps the original card; anything
 // Oscar loads by hand cancels it.
-type ResumeCard = { text: string; idx: number; title: string; draftOnly?: boolean }
+type ResumeCard = { text: string; idx: number; title: string; draftOnly?: boolean; stage?: string }
 let resumeCard: ResumeCard | null = (() => { try { return JSON.parse(localStorage.getItem('logos.bubble.resume') ?? 'null') as ResumeCard | null } catch { return null } })()
 let stageKey = ''
 function saveResume() {
@@ -106,6 +106,33 @@ function saveResume() {
     if (resumeCard) localStorage.setItem('logos.bubble.resume', JSON.stringify(resumeCard))
     else localStorage.removeItem('logos.bubble.resume')
   } catch { /* ignore */ }
+}
+// The card is persisted; its trigger must survive the same night
+// (cure R2-T1-5). The card carries the key of the text that took the
+// stage (`stage`, stamped in playClipboardText below); on load the
+// stage is real only while the box still holds that text — the clip
+// session dies with the page, and a card whose stage is gone would
+// otherwise squat on the slot forever: its watcher could never fire
+// (stageKey was memory-only, '' after every reload) and its standing
+// presence blocked the F8-8 draft leg from ever leaving a card again.
+// A card persisted before the stamp existed is judged by the same
+// witness: a box holding a text that is not the card's own is its
+// stage; a box holding the card's own text — or nothing — means the
+// interruption is over or unknowable, and the card retires.
+if (resumeCard) {
+  const box = drafts.get().listen
+  const boxKey = box.trim() ? clipKey(box) : ''
+  if (resumeCard.stage) {
+    if (boxKey === resumeCard.stage) stageKey = resumeCard.stage
+    else { resumeCard = null; saveResume() }
+  } else if (boxKey && boxKey !== clipKey(resumeCard.text)) {
+    resumeCard.stage = boxKey
+    stageKey = boxKey
+    saveResume()
+  } else {
+    resumeCard = null
+    saveResume()
+  }
 }
 const sessionTitle = (text: string) => nowReadingFor(text)?.title || describeText(text.slice(0, 12000), detectLang(text.slice(0, 2000)).lang).title || 'your text'
 
@@ -132,6 +159,10 @@ export function playClipboardText(raw: string) {
     }
   }
   stageKey = clipKey(text)
+  // The standing card's trigger is the stage's current occupant
+  // (cure R2-T1-5): stamp it onto the card, so the card and its
+  // trigger persist — and are judged — together after a reload.
+  if (resumeCard && resumeCard.stage !== stageKey) { resumeCard.stage = stageKey; saveResume() }
   seenClip(text)
   const prevText = drafts.get().listen
   // Cure F8-8: the Undo used to restore only the draft TEXT — the

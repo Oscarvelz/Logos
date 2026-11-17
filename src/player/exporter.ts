@@ -83,11 +83,20 @@ export async function runExport(text: string, opts: ExportOpts) {
   try {
     await runExportClaimed(text, opts)
   } finally {
-    // Released on every exit — including a pre-flight rejection (today
-    // that rejection propagates unhandled; the claim must not leak with
-    // it and wedge every later admission behind a phantom job).
+    // Released on every exit: the claim must never leak and wedge
+    // every later admission behind a phantom job, whatever road the
+    // job inside took out.
     claimed = false
   }
+}
+
+/** The app's own words for a failed render (audit C-4): the raw system
+ *  message («Failed to fetch») is not user language. One wording for
+ *  every failure surface — the render catch and the pre-flight catch
+ *  (R2-T7-2) speak with this one voice. */
+function exportErrorWording(err: unknown): string {
+  const raw = (err as Error)?.message ?? ''
+  return /quota|storage/i.test(raw) ? t('Not enough storage to finish the audiobook') : t('The audiobook could not be finished — please try again')
 }
 
 async function runExportClaimed(text: string, opts: ExportOpts) {
@@ -97,10 +106,29 @@ async function runExportClaimed(text: string, opts: ExportOpts) {
   // the caller's speed (today: the live Listen speed from LibraryPage)
   // is only the fallback for clips that carry no `sp`, and the global
   // speeds govern only fresh, non-clip renders.
-  const existingEarly = opts.id ? await getClip(opts.id) : null
-  const clipSp = (existingEarly as (ClipMeta & { sp?: unknown }) | null)?.sp
-  const speed = typeof clipSp === 'number' && Number.isFinite(clipSp) && clipSp > 0 ? clipSp : opts.speed
-  const segments = segmentText(text, st.langMode)
+  // The pre-flight (R2-T7-2): this await and the segmentation used to
+  // sit outside every try, so a getClip rejection — IndexedDB blocked,
+  // a storage error — killed the job AFTER queueExport had returned
+  // 'started' and Make audio had toasted "Making the audio…": no error
+  // state, no wording, nothing ever made and nothing ever said so.
+  // A tapped render either runs or says why not (T7-10's law), so the
+  // pre-flight carries its own catch and lands in the same error
+  // state, with the same words, as a render that fails mid-way. The
+  // clip's `rendering` flag is only set after this point, so a
+  // pre-flight failure leaves no clip marked rendering.
+  let existingEarly: ClipMeta | null
+  let speed: number
+  let segments: ReturnType<typeof segmentText>
+  try {
+    existingEarly = opts.id ? await getClip(opts.id) : null
+    const clipSp = (existingEarly as (ClipMeta & { sp?: unknown }) | null)?.sp
+    speed = typeof clipSp === 'number' && Number.isFinite(clipSp) && clipSp > 0 ? clipSp : opts.speed
+    segments = segmentText(text, st.langMode)
+  } catch (err) {
+    exportJob.set({ status: 'error', error: exportErrorWording(err), done: 0, total: 0, result: null, origin: opts.origin ?? 'create', title: opts.title?.trim() || titleFrom(text), itemId: opts.id ?? null })
+    next()
+    return
+  }
   if (!segments.length) { next(); return }
   // T7-11: the resolution itself lives in voices.ts (exportVoiceId) —
   // an explicit pick renders every segment; only Auto (null) picks
@@ -174,12 +202,7 @@ async function runExportClaimed(text: string, opts: ExportOpts) {
   } catch (err) {
     if (opts.id) void updateClip(opts.id, { rendering: false })
     if ((err as Error).name === 'AbortError') exportJob.set({ status: 'idle', done: 0, total: 0 })
-    else {
-      // The raw system message («Failed to fetch») is not user language
-      // (audit C-4): say what happened, in the app's own words.
-      const raw = (err as Error).message ?? ''
-      exportJob.set({ status: 'error', error: /quota|storage/i.test(raw) ? t('Not enough storage to finish the audiobook') : t('The audiobook could not be finished — please try again') })
-    }
+    else exportJob.set({ status: 'error', error: exportErrorWording(err) })
   } finally {
     ctrl = null
     next()

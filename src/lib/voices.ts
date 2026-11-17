@@ -81,6 +81,49 @@ export function resolvedVoiceId(
   return s.defaultVoice[lang]
 }
 
+/** The Listen override standing over a language, when one is
+ *  (R2-T7-4): the override governs a language when it speaks that
+ *  language, or when the language mode is manual — the same condition
+ *  resolvedVoiceId applies. The resolution says WHICH voice will
+ *  read; this says WHY (a standing Listen pick), so a surface can
+ *  name the pick instead of letting its own words fight it. */
+export function governingOverride(
+  s: { voiceOverride: string | null; langMode: Lang | 'auto' },
+  lang: Lang,
+): Voice | undefined {
+  const override = voiceById(s.voiceOverride ?? undefined)
+  return override && (override.lang === lang || s.langMode !== 'auto') ? override : undefined
+}
+
+/** What a Voices-page card may claim (R2-T7-4). M-43 seated the
+ *  "Default" flag on the RESOLVED voice — so while a Listen override
+ *  stands, the override's card wears "Default · English" (the wrong
+ *  office: that voice is the pick, not the default), the stored
+ *  default's card offers "Make default" for what it already is, and
+ *  tapping it elsewhere toasts "…is now your English default" while
+ *  the resolution does not move: the flag and the toast contradicted
+ *  each other. The claims are separated now, one per office: the
+ *  STORED default wears 'default'; the governing override wears
+ *  'reading' on its own card (the picker's own word for the active
+ *  voice — "Now reading"); "Make default" is offered only on a card
+ *  that is not the stored default; and when an override governs the
+ *  language, the toast must name it (toastOverride) instead of
+ *  claiming a crown it cannot hand over. resolvedVoiceId above is
+ *  untouched — what actually reads never changed; the page's words
+ *  about it are what were lying. */
+export function voiceCardTruth(
+  s: { defaultVoice: Record<Lang, string>; voiceOverride: string | null; langMode: Lang | 'auto' },
+  v: Voice,
+): { flag: 'default' | 'reading' | null; makeDefault: boolean; toastOverride: Voice | null } {
+  const stored = s.defaultVoice[v.lang] === v.id
+  const override = governingOverride(s, v.lang)
+  return {
+    flag: stored ? 'default' : override?.id === v.id ? 'reading' : null,
+    makeDefault: !stored,
+    toastOverride: override && override.id !== v.id ? override : null,
+  }
+}
+
 /** Create/Export voice resolution (T7-11): an explicitly picked voice
  *  is the render's voice for EVERY segment. The old exporter rule —
  *  the pick applies only where its language matches the segment (or

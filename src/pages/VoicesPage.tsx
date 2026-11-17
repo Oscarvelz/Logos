@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Loader2, Pause, Play, Search } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
-import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, favoriteIds, favoriteVoices, resolvedVoiceId, VoiceSearchGate, type Voice } from '../lib/voices.ts'
+import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, favoriteIds, favoriteVoices, voiceCardTruth, VoiceSearchGate, type Voice } from '../lib/voices.ts'
 import { clipPlayer, playClip } from '../player/clip.ts'
 import { engine, synthesize } from '../engine/engine.ts'
 import { encodeWav, trimSilence, applyGain, levelGain } from '../lib/audio.ts'
@@ -81,9 +81,15 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
   const [loading, setLoading] = useState(false)
   const key = `preview:${v.id}`
   const playing = cp.key === key && cp.playing
-  // M-43: the flag reads the resolved default (default + override, the
-  // engine's own resolution in voices.ts) — never the raw map alone.
-  const isDefault = resolvedVoiceId(st, v.lang) === v.id
+  // What this card may claim (M-43's resolution, R2-T7-4's words):
+  // the stored default wears "Default", a standing Listen override
+  // wears "Now reading" on its own card, and Make default is offered
+  // only where the card is not already the stored default — so the
+  // flag, the button and the toast can no longer contradict each
+  // other over a pick made in Listen. The decision lives in
+  // voiceCardTruth (voices.ts); resolvedVoiceId still decides what
+  // actually reads.
+  const claim = voiceCardTruth(st, v)
   // M-44: the star reads the same post-gate favorites truth as the list.
   const fav = favoriteIds(st.favorites).has(v.id)
   // M-49: "on this device" is claimed only from the engine store's
@@ -129,15 +135,28 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
   }
 
   return (
-    <div className={`voice-card ${isDefault ? 'is-default' : ''}`} data-present="voice-card" data-voice-id={v.id}>
-      {isDefault && <span className="default-flag">{t('Default · {l}', { l: v.lang === 'en' ? t('English') : 'Español' })}</span>}
+    <div className={`voice-card ${claim.flag ? 'is-default' : ''}`} data-present="voice-card" data-voice-id={v.id}>
+      {claim.flag === 'default' && <span className="default-flag">{t('Default · {l}', { l: v.lang === 'en' ? t('English') : 'Español' })}</span>}
+      {claim.flag === 'reading' && <span className="default-flag">{t('Now reading · {l}', { l: v.lang === 'en' ? t('English') : 'Español' })}</span>}
       <Avatar voice={v} playing={playing} />
       <div className="grow" style={{ minWidth: 0 }}>
         <div className="voice-name">{v.name} <span className="badge" title={t(ACCENT_LABEL[v.accent])}>{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}{onDevice && <span className="badge">{t('On this device')}</span>}</div>
         <div className="voice-tag">{t(v.tagline)}</div>
-        {!isDefault && (
+        {claim.makeDefault && (
           <button className="btn sm ghost" data-present="voice-card:make-default" data-voice-id={v.id} style={{ height: 32, padding: '0 8px', marginLeft: -8, marginTop: 2, fontSize: 13, color: 'var(--text-2)' }}
-            onClick={() => { settings.set((s) => ({ defaultVoice: { ...s.defaultVoice, [v.lang]: v.id } })); refreshVoices(); toast(t('{name} is now your {lang} default', { name: v.name, lang: v.lang === 'en' ? t('English') : 'Español' })) }}>
+            onClick={() => {
+              const ov = claim.toastOverride
+              settings.set((s) => ({ defaultVoice: { ...s.defaultVoice, [v.lang]: v.id } }))
+              refreshVoices()
+              // R2-T7-4: while a Listen pick governs this language, the
+              // tap changes the stored default only — the toast names
+              // the pick instead of claiming a crown it cannot hand
+              // over. With no pick standing, the old words are simply
+              // true and are kept.
+              toast(ov
+                ? t('{name} is your {lang} default — {other} still reads in Listen until you change it there', { name: v.name, lang: v.lang === 'en' ? t('English') : 'Español', other: ov.name })
+                : t('{name} is now your {lang} default', { name: v.name, lang: v.lang === 'en' ? t('English') : 'Español' }))
+            }}>
             <Check size={14} /> {t('Make default')}
           </button>
         )}

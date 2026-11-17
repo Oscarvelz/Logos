@@ -26,25 +26,52 @@ const keyOf = (text: string) => {
   return 'b' + (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0') + '-' + text.length
 }
 
+/** The in-memory mirror (cure R2-T1-3). T1-13 cured the fingerprint;
+ *  its reverse half stood open: the stamp's write is swallowed when
+ *  storage is full (this app parks whole texts in localStorage, so
+ *  quota is a real weather), and with no mirror the record simply did
+ *  not exist — a genuine book published book='' for the whole session:
+ *  no SKIP, no book title on the card, no Back-to-book, no mark filing.
+ *  The record is one small pointer, so the session keeps its own copy.
+ *  `mirrorDurable` remembers whether the mirror's write LANDED: while
+ *  it did, storage stays authoritative — a later absence is a
+ *  deliberate removal (deleteBook's trace purge) and retires the
+ *  mirror with it. While it did not, absence is the failure itself
+ *  and the mirror rules. */
+let mirror: NowReading | null = null
+let mirrorDurable = false
+
+function readRecord(): NowReading | null {
+  // A mirror whose write never landed is the freshest truth there is:
+  // whatever storage holds is older than it.
+  if (mirror && !mirrorDurable) return mirror
+  let stored: NowReading | null = null
+  let readable = true
+  try { stored = JSON.parse(localStorage.getItem(KEY) ?? 'null') as NowReading | null } catch { readable = false }
+  if (stored) { mirror = stored; mirrorDurable = true; return stored }
+  if (readable && mirrorDurable) mirror = null // landed once, gone now: removed on purpose
+  return mirror
+}
+
 /** Remember that `paras` (joined by blank lines) are the book's blocks at `pos`. */
 export function setNowReading(id: string, title: string, paras: string[], pos: Pos[]) {
   const starts: number[] = []
   let o = 0
   for (const p of paras) { starts.push(o); o += p.length + 2 }
-  try { localStorage.setItem(KEY, JSON.stringify({ id, title, key: keyOf(paras.join('\n\n')), starts, pos })) } catch { /* full */ }
+  const rec: NowReading = { id, title, key: keyOf(paras.join('\n\n')), starts, pos }
+  mirror = rec
+  try { localStorage.setItem(KEY, JSON.stringify(rec)); mirrorDurable = true } catch { mirrorDurable = false /* full — the mirror above carries the session */ }
 }
 
 /** The id of the book at the play position, whatever text is loaded now. */
 export function nowReadingId(): string | null {
-  try { return (JSON.parse(localStorage.getItem(KEY) ?? 'null') as NowReading | null)?.id ?? null } catch { return null }
+  return readRecord()?.id ?? null
 }
 
 /** The book behind this Listen text, if it came from one. */
 export function nowReadingFor(text: string): NowReading | null {
-  try {
-    const n = JSON.parse(localStorage.getItem(KEY) ?? 'null') as NowReading | null
-    return n && n.key === keyOf(text) ? n : null
-  } catch { return null }
+  const n = readRecord()
+  return n && n.key === keyOf(text) ? n : null
 }
 
 /** Book position of a character offset in the Listen text. */

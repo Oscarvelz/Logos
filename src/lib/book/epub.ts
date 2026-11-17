@@ -19,7 +19,11 @@ export async function parseEpub(buf: ArrayBuffer, step: (s: string, done: number
   const files = new Map(Object.keys(zip.files).map((k) => [k.toLowerCase(), k]))
   const get = (p: string) => zip.file(p) ?? zip.file(files.get(p.toLowerCase()) ?? '')
   const container = await get('META-INF/container.xml')?.async('text')
-  const opfPath = container && /full-path\s*=\s*"([^"]+)"/.exec(container)?.[1]
+  // Cure R2-T8-20: single-quoted attributes are legal XML and real
+  // toolchains emit them; the double-quote-only pattern refused a
+  // valid book as having "no package file" — blaming the file for
+  // the reader's own narrowness.
+  const opfPath = container && /full-path\s*=\s*["']([^"']+)["']/.exec(container)?.[1]
   if (!opfPath) throw new Error('This EPUB has no package file.')
   // L-2 cure: a container that points at an OPF the zip does not hold
   // used to be dereferenced blind (`get(opfPath)!`), and the reader got

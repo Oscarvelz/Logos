@@ -214,7 +214,29 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
     // Scanned page? When the text layer gave (almost) nothing, read the page
     // with OCR instead — and only then; the rest of the pipeline can't tell.
     if (lines.reduce((n2, l) => n2 + l.text.length, 0) < 30) {
-      try { step('Reading scanned pages (OCR)', p - 1, N); const o = await ocrLines(page, p); if (o.length) { lines.length = 0; lines.push(...o) } } catch { /* the page keeps whatever the text layer had */ }
+      try {
+        step('Reading scanned pages (OCR)', p - 1, N)
+        const o = await ocrLines(page, p)
+        if (o.length) {
+          // Cure R2-T8-19: OCR used to REPLACE the layer wholesale
+          // whenever it found anything at all — a chapter-title page
+          // whose 25 perfect characters ("Chapter 12" + an epigraph)
+          // sat beside a decorated seal came back as OCR's reading of
+          // the seal, its true title gone. The real layer is
+          // evidence, not a placeholder: OCR takes the page alone
+          // only when it yields materially more text than the layer
+          // holds; otherwise its lines JOIN the layer, minus the ones
+          // the layer already carries.
+          const layerChars = lines.reduce((n2, l) => n2 + l.text.length, 0)
+          const ocrChars = o.reduce((n2, l) => n2 + l.text.length, 0)
+          if (ocrChars > layerChars * 3 + 30) { lines.length = 0; lines.push(...o) }
+          else {
+            const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase()
+            const seen = new Set(lines.map((l) => norm(l.text)))
+            for (const l of o) if (!seen.has(norm(l.text))) lines.push(l)
+          }
+        }
+      } catch { /* the page keeps whatever the text layer had */ }
     }
     // Drop caps ("W" + "hen I was…") join their line; OCR noise lines go.
     const kept: Line[] = []

@@ -436,6 +436,29 @@ async function entryMatchesModel(cache: Cache, key: { url: string }, expectedByt
   return true
 }
 
+/** The manifest fetch behind the cached probe, with a deadline
+ *  (R2-T4-6). A connection that is accepted and then held — a captive
+ *  portal, a dead proxy — used to hang this fetch forever, and with
+ *  it every probe: isModelCached's Promise.all never resolved, so
+ *  the App-start probe, the 60 s recheck and keep.ts's stamp checks
+ *  all piled up behind the same stuck fetch, and the cure watchdogs
+ *  (T4-7) watched loads only. The probe now gives the manifest ten
+ *  seconds — a lifetime for a small JSON on any honest link — and
+ *  then treats the network as what it is behaving as: offline. The
+ *  abort lands in pocketCached's existing catch, so the
+ *  language-bound recorded-digest fallback answers instead, and
+ *  every caller settles. */
+const MANIFEST_PROBE_TIMEOUT_MS = 10_000
+async function fetchPocketManifest(lang: PocketLang): Promise<{ model?: { file?: string; sha256?: string; bytes?: number } }> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), MANIFEST_PROBE_TIMEOUT_MS)
+  try {
+    return await (await fetch(`https://huggingface.co/thewh1teagle/pocket-tts-onnx/resolve/main/${lang}/manifest.json`, { signal: ctrl.signal })).json() as { model?: { file?: string; sha256?: string; bytes?: number } }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** Whether a language's model is already on this phone. */
 export async function pocketCached(lang: PocketLang = 'en'): Promise<boolean> {
   try {
@@ -450,7 +473,7 @@ export async function pocketCached(lang: PocketLang = 'en'): Promise<boolean> {
     // model is 176,992,315 B + a 39 MB encoder + assets — exactly
     // the bytes Settings counts in this bucket).
     try {
-      const m = await (await fetch(`https://huggingface.co/thewh1teagle/pocket-tts-onnx/resolve/main/${lang}/manifest.json`)).json() as { model?: { file?: string; sha256?: string; bytes?: number } }
+      const m = await fetchPocketManifest(lang)
       const file = m.model?.file
       const sha = m.model?.sha256
       if (file && sha) {

@@ -1,7 +1,8 @@
 // Import a book file into the shelf.
-import { books, putBook, refreshBooks, getContent, updateBook, type BookMeta, type BookContent } from '../books.ts'
+import { books, putBook, refreshBooks, getContent, updateBook, type BookMeta } from '../books.ts'
 import { t } from '../i18n.ts'
 import { finishBook, isMachineName, type RawBook } from './finish.ts'
+import { sniffFormat, contentHash } from './sniff.ts'
 
 export const BOOK_ACCEPT = '.epub,.pdf,.docx,.fb2,.txt,.md,.markdown,.html,.htm,.xhtml,.rtf,.png,.jpg,.jpeg,.webp,.gif,.bmp,application/epub+zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,application/rtf,image/png,image/jpeg,image/webp'
 
@@ -36,48 +37,11 @@ export function formatOf(file: File): string | null {
   return null
 }
 
-/** What the bytes themselves say the file is (M-1 cure): magic numbers
-    for PDF and the image kinds, the ZIP family told apart by the entries
-    inside it (word/document.xml → DOCX, META-INF/container.xml or an
-    EPUB mimetype entry → EPUB), and the opening markup for RTF, FB2 and
-    HTML. Returns null when the bytes say nothing definite — the name
-    and type then get their say via formatOf. */
-export async function sniffFormat(buf: ArrayBuffer): Promise<string | null> {
-  const b = new Uint8Array(buf)
-  const at = (s: string, off = 0) => { for (let i = 0; i < s.length; i++) if (b[off + i] !== s.charCodeAt(i)) return false; return true }
-  if (at('%PDF-')) return 'pdf'
-  if (at('\x89PNG') || at('\xff\xd8\xff') || at('GIF8') || at('BM') || (at('RIFF') && at('WEBP', 8))) return 'image'
-  if (at('PK\x03\x04')) {
-    try {
-      const JSZip = (await import('jszip')).default
-      const zip = await JSZip.loadAsync(buf)
-      const names = Object.keys(zip.files).map((n) => n.toLowerCase())
-      if (names.some((n) => n.endsWith('word/document.xml'))) return 'docx'
-      if (names.some((n) => n.endsWith('meta-inf/container.xml')) || names.includes('mimetype')) return 'epub'
-    } catch { /* not a readable zip: say nothing */ }
-    return null
-  }
-  const head = new TextDecoder('windows-1252').decode(b.subarray(0, 512)).trimStart()
-  if (/^\{\\rtf/i.test(head)) return 'rtf'
-  if (/^<\?xml[^>]*>\s*<fictionbook/i.test(head) || /^<fictionbook/i.test(head)) return 'fb2'
-  if (/^<!doctype\s+html/i.test(head) || /^<html[\s>]/i.test(head)) return 'html'
-  return null
-}
-
-/** Content fingerprint (M-6): a cyrb53 hash over every block's text. */
-export function contentHash(content: BookContent): string {
-  let h1 = 0xdeadbeef, h2 = 0x41c6ce57
-  const mix = (s: string) => {
-    for (let i = 0; i < s.length; i++) {
-      const ch = s.charCodeAt(i)
-      h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677)
-    }
-    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
-    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
-  }
-  for (const c of content.chapters) for (const b of c.blocks) { mix(b.t); mix('\n') }
-  return `${(h2 >>> 0).toString(16)}:${(h1 >>> 0).toString(16)}:${content.chapters.reduce((n, c) => n + c.blocks.length, 0)}`
-}
+/* sniffFormat and contentHash live in ./sniff.ts (extracted in
+   1.4.190 so the real functions are probeable — this module's chain
+   reaches pdf.ts's `?url` worker import, which the test runner
+   cannot load) and are re-exported here unchanged in surface. */
+export { sniffFormat, contentHash } from './sniff.ts'
 
 /** The book already on the shelf with this exact text, if there is one
     (M-6 cure). Re-importing the same file used to mint a second book —
@@ -98,13 +62,19 @@ async function existingDuplicate(meta: BookMeta): Promise<{ dup: BookMeta | null
   let phantom: BookMeta | null = null
   for (const cand of books.get().list) {
     if (cand.words !== meta.words) continue
-    if (cand.hash) {
-      if (cand.hash !== meta.hash) continue
+    if (cand.hash && cand.hash === meta.hash) {
       const cc = await getContent(cand.id)
       if (cc) return { dup: cand, phantom: null }
       phantom ??= cand
       continue
     }
+    // No fingerprint — or one minted before the fingerprint learned
+    // chapter structure (R2-T3-8): a stored hash from the old formula
+    // can never equal a new one, so the stored value alone must not
+    // be allowed to wave the candidate past. The content itself is
+    // the court of appeal: recompute with the current formula, and
+    // a match backfills the new fingerprint onto the candidate, so
+    // the fast path works for it from then on.
     const cc = await getContent(cand.id)
     if (cc && contentHash(cc) === meta.hash) { void updateBook(cand.id, { hash: meta.hash }, false); return { dup: cand, phantom: null } }
   }

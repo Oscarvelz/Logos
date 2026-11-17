@@ -11,6 +11,24 @@ export type WebText = { title: string; text: string; site: string; url: string; 
 const STOP_SECTIONS = /^(references|notes|footnotes|citations|sources|bibliography|external links|see also|further reading|related (articles|posts|stories)|more (stories|from)|you may also like|read (more|next)|recommended|comments?|share this( article)?|about the author|referencias|notas|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n|lectura adicional|art[ií]culos relacionados|comentarios|fuentes|data safety|ratings and reviews|what[’']s new|app support|similar apps|more by .{1,40}|flag as inappropriate|seguridad de los datos|calificaciones y opiniones|valoraciones y reseñas|asistencia de la app|apps similares)\s*:?$/i
 const JUNK = /(cookie|subscribe|newsletter|sign (up|in)|log ?in|advertis|sponsored|all rights reserved|follow us|share (this|on)|click here|read more|skip to|privacy policy|terms of (use|service)|download (the|our) app|suscr[ií]b|bolet[ií]n|inicia sesi[oó]n|publicidad|todos los derechos|s[ií]guenos|leer m[aá]s|comparte|haz clic)/i
 
+// Cure R2-T8-10: the bare-domain form blessed ANY dotted token —
+// "e.g", "U.S.A", "Ph.D", "word.word" all became addresses, and the
+// number "3.5" became https://3.0.0.5/ — so a lone copied token
+// offered "Read page" instead of being read aloud. A bare host (no
+// scheme, no www.) must now be address-shaped: its last label a
+// two-letter country code or a known TLD, and a dotted all-numeric
+// token is a number unless it is a full IPv4 address. Explicit
+// https:// and www. forms show their intent and are not re-judged.
+const BARE_TLDS = new Set(('com net org edu gov mil int info biz name pro aero asia cat coop jobs mobi museum post tel travel xxx ' +
+  'academy agency app art audio apartments band bar bike blog blue book boutique builders business buzz cafe camera camp capital cards care careers cars casa cash center ceo chat cheap church city claims clinic clothing cloud club coach codes coffee college community company computer condos construction consulting contact contractors cooking cool country credit cruises dating deals degree delivery dental dentist design dev diamonds digital direct directory discount docs dog domains download earth education email energy engineer engineering enterprises equipment estate events exchange expert express extensions faith fan fans farm fashion finance financial fish fishing fitness flights florist flowers football forum foundation fun fund furniture fyi gallery game games garden gifts gives glass global gold golf graphics green group guide guitars guru haus health healthcare help hockey holdings holiday homes horse hospital host hosting house how immo industries ink institute insure international investments io jewelry kitchen land law lawyer lease legal life lighting live living llc loan loans love ltd luxury maison management market marketing markets mba me media meet memorial menu miami mobi moda money movie network news ninja nyc observer one online organic page partners parts party pets pharmacy photo photography photos pics pictures pink pizza place plumbing plus poker press productions promo properties property protection pub racing radio recipes red rehab reisen rentals repair report republican rest restaurant restaurants reviews rocks rugby run sale salon samples school science security services shop shopping show singles site ski soccer social software solar solutions space sport sports storage store stream studio style supplies supply support surf surgery systems tattoo tax taxi team tech technology tennis theater theatre tickets tips tires today tokyo tools top tours town toys trade trading training tube university vacations vegas ventures vet video villas vin vip vision vote voting voyage watch watches webcam website wedding wiki win wine world wtf work works xyz yoga zone').split(' '))
+function bareDomainOk(host: string): boolean {
+  const labels = host.toLowerCase().split('.')
+  if (labels.length < 2 || labels.some((l) => !l)) return false
+  if (labels.every((l) => /^\d+$/.test(l))) return labels.length === 4 && labels.every((l) => Number(l) <= 255)
+  const tld = labels[labels.length - 1]
+  return tld.length === 2 || BARE_TLDS.has(tld)
+}
+
 export function normalizeUrl(raw: string): string | null {
   // Cure F8-6: sentence punctuation copied along with a bare domain
   // ("…see example.com.") used to make the anchored bare-domain form
@@ -21,6 +39,10 @@ export function normalizeUrl(raw: string): string | null {
   const cleaned = raw.trim().replace(/[.,;]+$/, '')
   const s = cleaned.match(/https?:\/\/[^\s<>"'`]+|(?:www\.)[^\s<>"'`]+|^[a-z0-9-]+(\.[a-z0-9-]+)+(\/[^\s]*)?$/i)?.[0]
   if (!s) return null
+  // Cure R2-T8-10 (the test itself is above): a match from the
+  // bare-domain alternative — no scheme, no www. — must be
+  // address-shaped, or the token is prose, not a link.
+  if (!/^https?:/i.test(s) && !/^www\./i.test(s) && !bareDomainOk(s.split('/')[0])) return null
   try {
     const u = new URL(/^https?:/i.test(s) ? s : `https://${s}`)
     if (!u.hostname.includes('.')) return null
@@ -103,9 +125,16 @@ function tidyLine(s: string): string {
     .trim()
 }
 
+// Cure R2-T8-18: the reference apparatus — References, Footnotes,
+// Citations, Bibliography, External links, See also and their Spanish
+// twins — is never article body, at any article length. These stop
+// the import outright; the softer stop sections (Notes, Comments,
+// Recommended…) keep the old rule below.
+const HARD_STOP_SECTIONS = /^(references|footnotes|citations|bibliography|external links|see also|further reading|referencias|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n)\s*:?$/i
+
 /** Paragraph blocks → clean listening text (title first, then paragraphs). */
 function finish(blocks: { text: string; heading?: boolean }[], title: string): string {
-  const out: string[] = []
+  const out: { t: string; heading?: boolean }[] = []
   const seen = new Set<string>()
   const tnorm = title.toLowerCase().replace(/\W+/g, '')
   for (const b of blocks) {
@@ -113,7 +142,13 @@ function finish(blocks: { text: string; heading?: boolean }[], title: string): s
     if (!t) continue
     const words = t.split(' ').length
     if (b.heading || (words <= 6 && !/[.!?…:"”»]$/.test(t))) {
-      if (STOP_SECTIONS.test(t)) { if (out.length > 3) break; else continue }
+      // Cure R2-T8-18: the old rule skipped a stop heading ALONE when
+      // three or fewer blocks were out and imported everything after
+      // it — in a short article the whole reference list became body
+      // and was read aloud. A hard stop section now breaks at any
+      // length; a soft one in a short article still only loses its
+      // heading, as before.
+      if (STOP_SECTIONS.test(t)) { if (HARD_STOP_SECTIONS.test(t) || out.length > 3) break; else continue }
       if (t.toLowerCase().replace(/\W+/g, '') === tnorm) continue
       if (!b.heading && words <= 3 && !/^[A-ZÁÉÍÓÚÑ]/.test(t)) continue
     }
@@ -141,11 +176,20 @@ function finish(blocks: { text: string; heading?: boolean }[], title: string): s
     // only repeated HEADINGS (menu/section crumbs) are deduped now.
     if (b.heading && seen.has(key)) continue
     seen.add(key)
-    out.push(b.heading && !/[.!?:]$/.test(t) ? t : t)
+    out.push({ t, heading: b.heading })
   }
-  // a heading left dangling at the very end reads oddly
-  while (out.length && out[out.length - 1].split(' ').length <= 6 && !/[.!?…"”]$/.test(out[out.length - 1])) out.pop()
-  return [title, ...out].filter(Boolean).join('\n\n')
+  // A heading left dangling at the very end reads oddly — but only a
+  // HEADING may be popped for it (cure R2-T8-17). The old loop popped
+  // any short tail block without terminal punctuation, so a page
+  // ending in unpunctuated closing lines — a poem's last lines, a
+  // caption, "…and that was all" — lost them all, silently, one pop
+  // at a time. A closing line is content; a dangling heading is not.
+  while (out.length) {
+    const last = out[out.length - 1]
+    if (last.heading && last.t.split(' ').length <= 6 && !/[.!?…"”]$/.test(last.t)) out.pop()
+    else break
+  }
+  return [title, ...out.map((o) => o.t)].filter(Boolean).join('\n\n')
 }
 
 function fromMarkdown(md: string, title: string): string {

@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.189'
+const VERSION = '1.4.190'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -52,6 +52,18 @@ function BackupCard() {
       if (r.pronKept === 1) notes.push(t('1 pronunciation kept this phone’s newer reading'))
       else if (r.pronKept > 1) notes.push(t('{k} pronunciations kept this phone’s newer readings', { k: r.pronKept }))
       if (r.draft === 'kept') notes.push(t('The Listen text on this phone was kept — the backup’s draft did not replace it'))
+      // Every stage speaks (R2-T5-3): the clips and marks that landed
+      // were computed but never told, and a book the deletion record
+      // suppressed was skipped with no count anywhere — a reader
+      // re-importing an old file to fetch a deleted book back heard
+      // only the restored count and none of the reason.
+      if (r.skippedDeleted === 1) notes.push(t('1 book in the file was not restored — it stands deleted'))
+      else if (r.skippedDeleted > 1) notes.push(t('{k} books in the file were not restored — they stand deleted', { k: r.skippedDeleted }))
+      if (r.clips === 1) notes.push(t('1 Library item came with it'))
+      else if (r.clips > 1) notes.push(t('{n} Library items came with it', { n: r.clips }))
+      if (r.marks === 1) notes.push(t('1 mark landed'))
+      else if (r.marks > 1) notes.push(t('{n} marks landed', { n: r.marks }))
+      if (r.favoritesKept) notes.push(t('Your favorites were kept — the backup’s list named voices this phone no longer has'))
       toast(notes.length ? `${msg} · ${notes.join(' · ')}` : msg)
     }
     // A BackupImportError carries its true reason (a damaged book, a

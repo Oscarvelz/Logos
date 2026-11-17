@@ -116,8 +116,31 @@ export async function refreshLibrary() {
       // never read a blob for a refresh again.
       const full = await tx<Clip[]>('readonly', (s) => s.getAll() as IDBRequest<Clip[]>)
       if (full.length) {
-        await txBoth((_cs, ms) => { for (const c of full) ms.put(metaOf(c)) })
-        clips = full.map(metaOf)
+        // R2-T3-9: the backfill used to write the metas of the records
+        // the EARLIER read had seen, in a separate later transaction —
+        // a delete landing between the read and the write was
+        // resurrected as a ghost meta (listed, unplayable, undeletable
+        // except by deleting it a second time). The backfill now
+        // re-reads each record INSIDE the write transaction and writes
+        // only the metas of records still there: readwrite
+        // transactions on these stores serialise, so the delete and
+        // the backfill can no longer interleave — one runs wholly
+        // before the other, and either order ends with the twin
+        // telling the truth. The list below is built from what the
+        // backfill actually wrote, so the shown shelf agrees.
+        const present: ClipMeta[] = []
+        await txBoth((cs, ms) => {
+          for (const c of full) {
+            const g = cs.get(c.id) as IDBRequest<Clip | undefined>
+            g.onsuccess = () => {
+              if (!g.result) return
+              const m = metaOf(g.result)
+              ms.put(m)
+              present.push(m)
+            }
+          }
+        })
+        clips = present
       }
     }
     library.set({ clips: clips.sort((a, b) => b.createdAt - a.createdAt), loaded: true, loadError: false })
