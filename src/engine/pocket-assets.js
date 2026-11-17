@@ -93,17 +93,45 @@ const keyFor = (url, version) => version ? `${url.slice(url.lastIndexOf("/") + 1
 // its promised content-length is truncated whatever it is — an early
 // clean close is indistinguishable from a finished file — so every
 // asset, hashed or not (renikud.onnx, the espeak files), is refused
-// when the delivered byte count disagrees with a known total, on the
+// when the delivered byte count falls SHORT of a known total, on the
 // streaming path and the no-body fallback alike. Nothing short is
 // stored, and nothing short is returned.
+// R2-T4-3: the first shape of this check refused on any disagreement
+// (delivered !== total) — but a body can also arrive COMPLETE and
+// longer than the header: whenever a content-encoding is applied on
+// the path, the header carries the wire (encoded) length while the
+// decoded body stream delivers more, and the cure read that healthy
+// download as a truncation and refused it forever. Over-long is not
+// short: a stream that ran to its clean end delivered everything it
+// had. Only falling short is a truncation, so only short is refused;
+// the hashed assets keep their own stronger bar (the digest decides,
+// not the header), and an unhashed asset's parser remains the judge
+// of the bytes it is handed, exactly as for a header-less download.
 function refuseIfShort(url, total, delivered) {
-    if (total > 0 && delivered !== total)
+    if (total > 0 && delivered < total)
         throw new Error(`Truncated download fetching ${url}: content-length promised ${total} bytes, the body delivered ${delivered}. Refusing to use or cache these bytes.`);
 }
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
 export function expectedSha256(version) {
     const v = typeof version === "string" ? version.trim().toLowerCase() : "";
-    return SHA256_HEX.test(v) ? v : null;
+    if (SHA256_HEX.test(v))
+        return v;
+    // R2-T4-4: a version that PRESENTS as a digest — it carries a
+    // sha256 label, or it is a long run of pure hex — but is not
+    // exactly 64 hex chars is a MALFORMED digest, and it used to fall
+    // into the same null as "no digest exists", silently switching
+    // verification OFF while the bytes were filed under the
+    // digest-shaped key: Round-1's C-2 state, re-entered by a parsing
+    // edge. That is precisely the moment verification matters most
+    // (an upstream format change), so it fails CLOSED — a loud load
+    // error, never a silent downgrade to unverified. A version that
+    // was never a digest at all (a release label like
+    // "espeak-ng-1.0.2", or no version) still returns null: there is
+    // no expected digest anywhere to compare against, and inventing
+    // one would be a fabrication, not a check.
+    if (v.startsWith("sha256:") || /^[0-9a-f]{32,}$/.test(v))
+        throw new Error(`Malformed SHA-256 digest "${version}": a digest was promised for this asset but does not parse as 64 hex characters, so its bytes cannot be verified. Refusing to download or trust them.`);
+    return null;
 }
 export async function sha256Hex(data) {
     const digest = await crypto.subtle.digest("SHA-256", data);

@@ -27,8 +27,10 @@ const ABBREV = new Set([
   'u.s', 'u.s.a', 'd.c', 'ee.uu', 'ph.d',
 ])
 
-// Titles and name-prefixes: these NEVER end a sentence — a name always
-// follows — so their period is never a boundary (cure F8-3's class).
+// Titles and name-prefixes: a name follows in the continuation case
+// ("El Sr. García…"), so their period is a boundary only when what
+// follows cannot be a name (cure F8-3's class, gated by cure R2-T8-3 —
+// see TITLE_END_STARTERS below).
 const TITLES = new Set([
   'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'gen', 'sen', 'rep', 'gov', 'col', 'sgt', 'capt', 'lt', 'rev', 'hon', 'st', 'vs', 'mt',
   'sra', 'srta', 'dra', 'lic', 'ing', 'arq', 'cap',
@@ -49,6 +51,28 @@ const SENTENCE_STARTERS = new Set([
   // mid-sentence capitals that continue ("EE. UU. Mexicanos…") are not
   // articles and still join.
   'el', 'la', 'los', 'las', 'un', 'una',
+  // Cure R2-T8-2: the discourse openers were missing too — "…etc.
+  // Suddenly…", "…etc. Today…", "…etc. Well,…" all welded. These words
+  // open sentences and do not continue them after an abbreviation.
+  // ("One" is deliberately NOT here: "No. One in the ranking" is a
+  // continuation; the specimen "etc. One day later…" splits by the
+  // etc. rule in the gate below, not by this list.)
+  'suddenly', 'meanwhile', 'finally', 'today', 'yesterday', 'tomorrow', 'later', 'soon', 'again', 'well',
+  'finalmente', 'hoy', 'ayer', 'también', 'además', 'ahora', 'mientras',
+])
+
+// Cure R2-T8-3: a title word CAN end a sentence — "He walked down Main
+// St. It was quiet." welded forever because TITLES skipped the gate
+// unconditionally. A title now splits when what follows cannot be a
+// name: a pronoun or discourse opener (this set), or a ¿/¡ opener. The
+// set is SENTENCE_STARTERS minus the words that can belong to a name:
+// the articles ("el Sr. Las Heras", "Sr. La Torre" are names), the
+// prepositions, and "well" ("Mr. Well" is a name).
+const TITLE_END_STARTERS = new Set([
+  'he', 'she', 'it', 'they', 'we', 'this', 'that', 'there', 'then', 'but', 'and', 'however', 'when', 'after', 'before', 'so', 'now', 'here',
+  'suddenly', 'meanwhile', 'finally', 'today', 'yesterday', 'tomorrow', 'later', 'soon', 'again',
+  'él', 'ella', 'ello', 'esto', 'eso', 'pero', 'entonces', 'luego', 'cuando', 'después',
+  'también', 'además', 'finalmente', 'ahora', 'mientras',
 ])
 
 // Segments follow the text's own shape: one sentence each. A sentence is only
@@ -206,8 +230,8 @@ function splitSentences(p: string): Span[] {
     // Skip abbreviations, single initials ("J. R. R."), and decimals.
     if (m[1] === '.' && /^\p{L}$/u.test(lastWord)) continue
     if (m[1] === '.' && ABBREV.has(lastWord)) {
-      // Cure F8-5: the guard is no longer unconditional. Titles never end
-      // a sentence, so they always skip. Every other abbreviation —
+      // Cure F8-5: the guard is no longer unconditional. Titles take
+      // the name-safe gate below (cure R2-T8-3). Every other abbreviation —
       // dotted initialism ("U.S.") or plain ("etc.", months, "fig.") —
       // skips unless a capitalised SENTENCE-STARTER follows ("U.S. It…"
       // and "etc. She…" are two sentences; "U.S. Senate" is one). The
@@ -219,7 +243,6 @@ function splitSentences(p: string): Span[] {
       // guard's own cases, so both classes now share the one gate: a
       // capital alone never ends the sentence after an abbreviation;
       // a capital that opens sentences does.
-      if (TITLES.has(lastWord)) continue
       const rest = p.slice(m.index + m[0].length)
       // Cure R2-T8-1, other half: the token test used to read the next
       // word straight off the text, so an opener that is not a letter —
@@ -227,12 +250,31 @@ function splitSentences(p: string): Span[] {
       // sentence, never continue one) or an opening quote hiding the
       // word behind it ("etc. "She went home…" merged) — left the
       // token empty and the gate could never fire.
-      const opensSentence = /^[¿¡]/.test(rest)
-        || (() => {
-          const nextTok = rest.replace(/^["'“‘«(]+/u, '').match(/^[\p{L}]+/u)?.[0] ?? ''
-          return /^\p{Lu}/u.test(nextTok) && SENTENCE_STARTERS.has(nextTok.toLowerCase())
-        })()
-      if (!opensSentence) continue
+      const stripped = rest.replace(/^["'“‘«(]+/u, '')
+      const nextTok = stripped.match(/^[\p{L}]+/u)?.[0] ?? ''
+      const capNext = /^\p{Lu}/u.test(nextTok)
+      const punctOpener = /^[¿¡]/.test(rest)
+      if (TITLES.has(lastWord)) {
+        // Cure R2-T8-3: titles skipped this gate unconditionally, so a
+        // title word at a TRUE sentence end ("Main St. It was quiet.",
+        // "Sam Smith Jr. He left.", "el Sr. Él asintió.") welded the
+        // two sentences forever. A title now ends the sentence when
+        // what follows cannot be a name — a pronoun/discourse opener
+        // (TITLE_END_STARTERS) or a ¿/¡ — and still never splits
+        // before a name ("Sr. García", "St. Paul", "Dr. Smith").
+        if (!punctOpener && !(capNext && TITLE_END_STARTERS.has(nextTok.toLowerCase()))) continue
+      } else {
+        const opensSentence = punctOpener
+          || (capNext && SENTENCE_STARTERS.has(nextTok.toLowerCase()))
+          // Cure R2-T8-2, second half: "etc." closes its clause, so a
+          // capital or a digit after it opens a new sentence — "etc.
+          // Maria went home.", "etc. 3 days later he returned." —
+          // while the capitals that continue after OTHER abbreviations
+          // (a figure label "Fig. A", a name "Jan. Jones", "U.S.
+          // Senate") still join under the starter gate above.
+          || (lastWord === 'etc' && (capNext || /^\d/.test(stripped)))
+        if (!opensSentence) continue
+      }
     }
     if (m[1] === '.' && /\d$/.test(before) && /^\d/.test(p.slice(m.index + 1))) continue
     // A bare list number ("2.") belongs to the sentence that follows it.
@@ -278,7 +320,19 @@ function capLength(p: string, s: Span, soft: number): Span[] {
     if (cut < 0) {
       if (s.end - a <= HARD_MAX) break // no breath point yet: keep the sentence whole
       const inHard = breaks(a, a + HARD_MAX).filter((x) => x - a >= 25 && s.end - x >= 25)
-      cut = inHard.length ? inHard[inHard.length - 1] : (() => { const w = p.slice(a, a + HARD_MAX); const sp = w.lastIndexOf(' '); return sp > 0 ? a + sp + 1 : a + HARD_MAX })()
+      cut = inHard.length ? inHard[inHard.length - 1] : (() => {
+        const w = p.slice(a, a + HARD_MAX)
+        const sp = w.lastIndexOf(' ')
+        if (sp > 0) return a + sp + 1
+        // Cure R2-T8-9: no space inside the whole window means one
+        // spaceless token longer than the cap — a pasted key, hash or
+        // spaceless URL. The old fallback cut at exactly HARD_MAX,
+        // sawing the token in half and pronouncing a sentence break
+        // inside it. Emit the token whole: run to its end (the next
+        // space, or the span's own end) — long, but one unit.
+        const nx = p.indexOf(' ', a + HARD_MAX)
+        return nx > 0 && nx < s.end ? nx : s.end
+      })()
     }
     pieces.push({ start: a, end: cut })
     a = cut
@@ -372,6 +426,10 @@ export function speakable(text: string, lang?: Lang): string {
   // character for ten seconds is named once ("code"), never read — and machine
   // file names (share-media-<hash>.png, IMG_2044.jpg) are dropped entirely.
   const CODE = lang === 'es' ? ' código ' : ' code '
+  // Cure R2-T8-11: the word spoken for a link was hardcoded English —
+  // a Spanish reading announced "link" mid-sentence while the code
+  // substitution right above it was already language-aware.
+  const LINK = lang === 'es' ? 'enlace' : 'link'
   const out = expandAbbrev(text, lang)
     .replace(/\*\*|__|~~|`+/g, '')
     .replace(/(^|\s)[*_](?=\S)|(?<=\S)[*_](?=\s|$|[.,;:!?])/g, '$1')
@@ -379,7 +437,7 @@ export function speakable(text: string, lang?: Lang): string {
     .replace(/(^|\s)>\s+/g, '$1')
     .replace(/(^|\s)[•▪◦]\s+/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/https?:\/\/\S+/g, 'link')
+    .replace(/https?:\/\/\S+/g, LINK)
     .replace(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/gi, CODE)
     .replace(/\S*[0-9a-f]{16,}\S*/gi, (tok) => (/\.(?:png|jpe?g|gif|webp|svg)$/i.test(tok) ? ' ' : CODE))
     .replace(/\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{8,15}\b/gi, CODE)

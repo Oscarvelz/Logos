@@ -166,13 +166,24 @@ export async function refreshBooks() {
 
 /** `content` may be null ONLY for the Undo of a book whose content was
     already missing when it was deleted (see deleteBook): the meta goes
-    back alone, restoring exactly the state that was there before. */
+    back alone, restoring exactly the state that was there before.
+    R2-T3-10: the write takes its turn in the per-book queue, like
+    every other writer. It used to write directly, so a restore (or
+    an Undo, or a phantom heal) landing between an updateBook job's
+    fresh read and its write was clobbered by that job's photo of the
+    pre-restore record — the restore's content stayed while its meta
+    was silently replaced by the older edition's, re-pairing a meta
+    and a text from different books. Every putBook caller (backup
+    import/rollback, shelf Undo, import) sits outside any queue job,
+    so queueing here cannot deadlock. */
 export async function putBook(meta: BookMeta, content: BookContent | null) {
   const clean = meta.bookmarks ? { ...meta, bookmarks: dedupeBookmarks(meta.bookmarks) } : meta
-  await runBoth('readwrite', (_t, bs, cs, ms) => { if (content) cs.put(content); bs.put(clean); ms.put(stripCover(clean)) })
-  coverCache.set(clean.id, clean.cover ?? null)
-  try { await navigator.storage?.persist?.() } catch { /* optional */ }
-  await refreshBooks()
+  await enqueueBookWrite(clean.id, async () => {
+    await runBoth('readwrite', (_t, bs, cs, ms) => { if (content) cs.put(content); bs.put(clean); ms.put(stripCover(clean)) })
+    coverCache.set(clean.id, clean.cover ?? null)
+    try { await navigator.storage?.persist?.() } catch { /* optional */ }
+    await refreshBooks()
+  })
 }
 
 /** One bookmark per place (M-12 cure): a bookmark's identity is its place

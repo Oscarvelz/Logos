@@ -1550,7 +1550,13 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
       // receiving exactly that blank for a finish, as before.
       const book = !s.active ? null : nowReadingFor(s.text)
       const sentence = !ended && s.active ? (s.segments[s.current]?.text.slice(0, 120) ?? '') : ''
-      const key = `${on}|${s.current}|${s.active}|${s.finished}|${book?.title ?? ''}`
+      // The key covers everything the payload says (cure R2-T1-4):
+      // it omitted the voice while the payload below carries the
+      // voice's name as the artist, so a voice change on a PAUSED
+      // session (refreshVoices — the bubble voice wheel's door) was
+      // deduped away and the shell card kept naming the old voice
+      // until the sentence or the play state happened to move.
+      const key = `${on}|${s.current}|${s.active}|${s.finished}|${book?.title ?? ''}|${v?.id ?? ''}`
       if (key === last) return
       last = key
       // Shell 17+ gets the book's title and the artist line separately, so its media card heads

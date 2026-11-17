@@ -123,14 +123,71 @@ export function applyPron(text: string, lang?: Lang): string {
   }
   if (!byLower.size) return text
   const alt = [...byLower.values()].map((e) => esc(e.from.trim())).join('|')
-  // Whole word (M-42): an apostrophe or underscore is part of a word,
-  // not a boundary — "don't", "O'Brien" and my_word are single words,
-  // and a short entry (don, brien, word) must not fire inside them.
+  // Whole word (M-42, widened by R2-T7-3): a boundary is where a word
+  // truly begins or ends — and several marks JOIN rather than divide.
+  // An apostrophe or underscore is part of a word ("don't", "O'Brien",
+  // my_word are single words, so don/brien/word must not fire inside
+  // them). A hyphen or slash between word characters joins one lexeme
+  // ("well-known", "and/or" — the natural home of exactly the names
+  // this dictionary exists for, "Anne-Marie"). A '.' or ',' between
+  // digits is inside one number (3.14, 3,000, 1.4.186). Those joins
+  // are the regex guards below, stated as "not here" on each side of
+  // the match. The '.'-between-letters joins depend on CASE (a
+  // lowercase continuation is the same token — example.com; an
+  // uppercase one opens a sentence — end.Next), and case cannot be
+  // judged inside this regex: it runs case-insensitively, where
+  // \p{Ll} and \p{Lu} fold into each other. Those are judged in the
+  // callback instead (joinedByPeriod), which leaves the match
+  // untouched when the period joins it to its neighbour.
   return text.replace(
-    new RegExp(`(?<![\\p{L}\\p{N}'’_])(${alt})(?![\\p{L}\\p{N}'’_])`, 'giu'),
-    (m) => {
+    new RegExp(
+      `(?<![\\p{L}\\p{N}'’_])` + // a word character before: inside a word
+      `(?<![\\p{L}\\p{N}][-/])` + // hyphen/slash joiner before ("…well-KNOWN", "and/OR")
+      `(?<!\\p{N}[.,])` + // digit-grouping separator before ("3.14", "3,000")
+      `(${alt})` +
+      `(?![\\p{L}\\p{N}'’_])` + // a word character after: inside a word
+      `(?![-/][\\p{L}\\p{N}])` + // hyphen/slash joiner after ("WELL-known", "AND/or")
+      `(?![.,]\\p{N})`, // digit-grouping separator after ("3.14", "3,000")
+      'giu',
+    ),
+    (m, _g, offset: number, full: string) => {
+      if (joinedByPeriod(full, offset, offset + m.length)) return m
       const to = byLower.get(m.toLowerCase())?.to
       return to === undefined ? m : matchCase(m, to)
     },
   )
+}
+
+const isLetter = (c: string): boolean => /\p{L}/u.test(c)
+const isLowerCased = (c: string): boolean => c === c.toLowerCase() && c !== c.toUpperCase()
+const isUpperCased = (c: string): boolean => c === c.toUpperCase() && c !== c.toLowerCase()
+
+/** Whether a '.' touching the match at [start, end) JOINS it to its
+ *  neighbour instead of bounding it (R2-T7-3 — judged here, not in
+ *  the boundary regex, because the regex's case-insensitive flag folds
+ *  \p{Ll} and \p{Lu} together and the distinction IS the case):
+ *  before the match, a '.' after an uppercase letter is an
+ *  abbreviation chain (U.S.A), and a '.' after a lowercase letter
+ *  joins a continuation that starts lowercase or with a digit
+ *  (example.com) — but a continuation starting uppercase opens a new
+ *  sentence and is NOT joined (end.Next: an entry on "Next" fires).
+ *  After the match, a '.' before a lowercase letter continues the
+ *  token (example.com); before an uppercase letter it ends the
+ *  sentence (end.Next: an entry on "end" fires). Digit-flanked
+ *  periods never reach here — the regex's digit-grouping guards
+ *  already refuse those matches. */
+function joinedByPeriod(full: string, start: number, end: number): boolean {
+  if (start >= 2 && full[start - 1] === '.') {
+    const before = full[start - 2]
+    if (isLetter(before)) {
+      if (isUpperCased(before)) return true
+      const first = full[start]
+      if (isLowerCased(first) || /\p{N}/u.test(first)) return true
+    }
+  }
+  if (full[end] === '.' && end + 1 < full.length) {
+    const after = full[end + 1]
+    if (isLetter(after) && isLowerCased(after)) return true
+  }
+  return false
 }

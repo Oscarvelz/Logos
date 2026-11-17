@@ -7,7 +7,7 @@
 // old "they can always be re-made" rationale was false for both and the
 // clips are inside now, as the "whole library in one file" promise says.
 import { books, refreshBooks, getBook, getBookCover, getContent, putBook, deleteBook, type BookMeta, type BookContent } from './books.ts'
-import { settings, saveLastText, type Settings } from './settings.ts'
+import { settings, saveLastText, clampSettingNumber, type Settings } from './settings.ts'
 import { drafts } from './drafts.ts'
 import { pronEntries, savePronEntries, isValidPronEntry, type PronEntry } from './pronounce.ts'
 import { loadMarks, mergeMarks } from './marks.ts'
@@ -149,14 +149,28 @@ export async function exportBackup(): Promise<ExportReport> {
  * The settings a backup file may restore (H-5 cure, 2026-11-15): the
  * export always carried settings but the import never read them.
  * A backup file is not trusted blindly — this mirrors load()'s
- * sanitisation in settings.ts: only known fields land, enum fields
- * must match their whitelists, numbers must be finite, booleans must
- * be booleans, favorites must be an array of strings, and
+ * sanitisation in settings.ts: known fields land sanitised, enum
+ * fields must match their whitelists, numbers must be finite AND
+ * inside the envelope their own UI can produce (R2-T5-6, through
+ * settings.ts's one clamp table), booleans must be booleans, and
  * defaultVoice merges over the current voices so a partial block
- * can never hollow it out. Anything else in the block is ignored.
+ * can never hollow it out. Two fields carry more than sanitisation:
+ * favorites can never land EMPTY (R2-T5-4) — a list that filters to
+ * nothing, ghosts or an explicit empty alike, is withheld whole and
+ * reported, where every other field's filter fails safe; and fields
+ * this version does not know are carried through VERBATIM (R2-T5-5),
+ * the same honesty load()'s spread keeps across restarts — the
+ * export writes the whole object, future fields included, and the
+ * trip to a new phone is the one journey the backup exists for.
  */
-function settingsPatch(raw: unknown): Partial<Settings> {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+const SETTINGS_KNOWN_KEYS = new Set([
+  'theme', 'lastLegacy', 'uiLang', 'langMode', 'format',
+  'autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'bubbleText', 'bubbleFade', 'highlight',
+  'listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec',
+  'bubbleSize', 'voiceOverride', 'favorites', 'defaultVoice',
+])
+function settingsPatch(raw: unknown): { patch: Partial<Settings>; favoritesWithheld: boolean } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { patch: {}, favoritesWithheld: false }
   const r = raw as Record<string, unknown>
   const patch: Partial<Settings> = {}
   if (r.theme === 'dark' || r.theme === 'light' || r.theme === 'system' || r.theme === 'tron' || r.theme === 'cyberpunk') patch.theme = r.theme
@@ -168,7 +182,7 @@ function settingsPatch(raw: unknown): Partial<Settings> {
     if (typeof r[k] === 'boolean') patch[k] = r[k] as boolean
   }
   for (const k of ['listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec'] as const) {
-    if (typeof r[k] === 'number' && Number.isFinite(r[k])) patch[k] = r[k] as number
+    if (typeof r[k] === 'number' && Number.isFinite(r[k])) patch[k] = clampSettingNumber(k, r[k] as number)
   }
   // Whitelisted like load() (M-28 residue): the sanitiser used to
   // admit any string here, a value the load path would then repair —
@@ -180,15 +194,38 @@ function settingsPatch(raw: unknown): Partial<Settings> {
   // default/override/favorite until the next launch's cleanup.
   if (r.voiceOverride === null) patch.voiceOverride = null
   else if (typeof r.voiceOverride === 'string' && VOICE_BY_ID.has(r.voiceOverride)) patch.voiceOverride = r.voiceOverride
-  if (Array.isArray(r.favorites)) patch.favorites = r.favorites.filter((f): f is string => typeof f === 'string' && VOICE_BY_ID.has(f))
+  // The one filter that could DESTROY local state (cure R2-T5-4):
+  // every other field's rejection leaves the phone's value standing,
+  // but a favorites list that filters to empty — all ghosts, the
+  // cross-version case H-29 built the existence gate for — used to
+  // replace the phone's real stars with [], in-session and persisted,
+  // and no later load repaired it ([] is a valid array; load()'s own
+  // floor fires only when filtering CHANGES the list). A patch whose
+  // favorites end up empty never lands: the phone keeps its stars,
+  // and the withholding is reported, not silent.
+  let favoritesWithheld = false
+  if (Array.isArray(r.favorites)) {
+    const kept = r.favorites.filter((f): f is string => typeof f === 'string' && VOICE_BY_ID.has(f))
+    if (kept.length) patch.favorites = kept
+    else favoritesWithheld = true
+  }
   if (r.defaultVoice && typeof r.defaultVoice === 'object' && !Array.isArray(r.defaultVoice)) {
     const dv = r.defaultVoice as Record<string, unknown>
-    const merged = { ...settings.get().defaultVoice }
+    const merged = { ...settings.get().defaultVoice } as Record<string, unknown>
     if (typeof dv.en === 'string' && VOICE_BY_ID.has(dv.en)) merged.en = dv.en
     if (typeof dv.es === 'string' && VOICE_BY_ID.has(dv.es)) merged.es = dv.es
-    patch.defaultVoice = merged
+    // A newer version's extra voice slots ride through verbatim
+    // (R2-T5-5) — the rebuild used to drop every key but en/es.
+    for (const k of Object.keys(dv)) if (k !== 'en' && k !== 'es') merged[k] = dv[k]
+    patch.defaultVoice = merged as Settings['defaultVoice']
   }
-  return patch
+  // Unknown top-level fields ride through verbatim (R2-T5-5): what
+  // load() preserves across every restart must also survive the trip
+  // the backup exists for.
+  for (const k of Object.keys(r)) {
+    if (!SETTINGS_KNOWN_KEYS.has(k)) (patch as Record<string, unknown>)[k] = r[k]
+  }
+  return { patch, favoritesWithheld }
 }
 
 /** An import failure with its true reason, fit to show the user.
@@ -218,11 +255,25 @@ export type ImportReport = {
    *  stayed and the backup's did not replace it; 'none' — the file
    *  carried no draft, or the same one. */
   draft: 'landed' | 'kept' | 'none'
-  /** Marks carried in by the file (merged by id, as always). */
+  /** Marks that actually landed — merged by id under the standing
+   *  cap, measured around the merge, not the file's raw count
+   *  (cure R2-T5-3: the count used to be the file's, so marks the
+   *  cap or the dedupe turned away were still announced as in). */
   marks: number
   /** Library clips written: new ones whole, existing ones only when
    *  the backup supplied a blob the local copy was missing (H-31). */
   clips: number
+  /** Books the file carried that the deletion record suppressed —
+   *  deliberately deleted on this phone (or recorded deleted in the
+   *  file itself), so the import left them out ON PURPOSE and says
+   *  how many (cure R2-T5-3: the skip used to be counted nowhere,
+   *  and a reader re-importing an old backup to fetch a deleted
+   *  book back was told only the restored count). */
+  skippedDeleted: number
+  /** The backup's favorites were withheld whole because they would
+   *  have landed empty (every entry a ghost, or the list itself
+   *  empty): the phone kept its own stars (cure R2-T5-4). */
+  favoritesKept: boolean
 }
 
 // ── Whole-file validation (F6 cure, 2026-11-16) ─────────────────
@@ -232,8 +283,10 @@ export type ImportReport = {
 // told the user the file was "not a Logos backup" — for a file that
 // was one, and was now half inside the library. Now the WHOLE file
 // is proven before a single write: version, every book's meta and
-// content shape, every pronunciation, mark, clip, the draft, the
-// settings block, the deletion record. A malformed file fails at
+// content shape, every pronunciation, mark and clip — each exactly
+// as deep as its consumers dereference (the draft, the settings
+// block and the deletion record are tolerated as their consumers
+// tolerate them, R2-T5-7). A malformed file fails at
 // the door with the true reason and zero writes. What validation
 // cannot foresee (a storage failure mid-restore) is covered by the
 // staged apply below: every write carries its before-image, and a
@@ -340,24 +393,26 @@ function validateBackup(data: unknown): ValidBackup {
     })
     marks = data.marks as ValidBackup['marks']
   }
+  // Three blocks are validated only as deep as their consumers
+  // dereference (cure R2-T5-7): the draft stage reads drafts.listen
+  // only when it is a string, settingsPatch opens by tolerating any
+  // shape, and the deletion stage consults a Set by string book id,
+  // so a non-string member can never match anything. A non-object
+  // settings block, a non-object drafts block, or a mixed-type
+  // deletion list used to veto the WHOLE restore — perfect books
+  // included — over damage that is inert downstream. They are now
+  // treated the way their consumers treat them: absent, or filtered
+  // to the members that can act.
   let draftListen: string | null = null
-  if (data.drafts !== undefined) {
-    if (!isObj(data.drafts)) damaged('its draft is unreadable')
-    if (data.drafts.listen !== undefined && typeof data.drafts.listen !== 'string') damaged('its draft is not text')
-    if (typeof data.drafts.listen === 'string' && data.drafts.listen.trim()) draftListen = data.drafts.listen
-  }
+  if (isObj(data.drafts) && typeof data.drafts.listen === 'string' && data.drafts.listen.trim()) draftListen = data.drafts.listen
   let clips: ValidBackup['clips'] = []
   if (data.clips !== undefined) {
     if (!Array.isArray(data.clips)) damaged('its Library list is unreadable')
     clips = data.clips.map((c, i) => validateClip(c, i))
   }
-  if (data.settings !== undefined && !isObj(data.settings)) damaged('its settings block is unreadable')
   let deletedBooks: string[] = []
-  if (data.deletedBooks !== undefined) {
-    if (!Array.isArray(data.deletedBooks) || !data.deletedBooks.every((x) => typeof x === 'string')) damaged('its deletion record is unreadable')
-    deletedBooks = data.deletedBooks as string[]
-  }
-  return { books, pronounce, marks, draftListen, clips, settingsRaw: data.settings, deletedBooks }
+  if (Array.isArray(data.deletedBooks)) deletedBooks = data.deletedBooks.filter((x): x is string => typeof x === 'string')
+  return { books, pronounce, marks, draftListen, clips, settingsRaw: isObj(data.settings) ? data.settings : undefined, deletedBooks }
 }
 
 /** The merge for a book that lives on both shelves (F7 cure).
@@ -416,8 +471,9 @@ export async function importBackup(file: File): Promise<ImportReport> {
   const bookWrites: BookWrite[] = []
   let restored = 0
   let keptNewer = 0
+  let skippedDeleted = 0
   for (const b of data.books) {
-    if (gone.has(b.meta.id)) continue
+    if (gone.has(b.meta.id)) { skippedDeleted++; continue }
     const meta = { ...b.meta } as BookMeta & { coverB64?: string }
     if (meta.coverB64) {
       try { meta.cover = await (await fetch(meta.coverB64)).blob() } catch { /* cover is decoration */ }
@@ -498,14 +554,18 @@ export async function importBackup(file: File): Promise<ImportReport> {
   // Settings (H-5): sanitised field by field by settingsPatch, and
   // pushed through settings.set at apply time so the store, its
   // subscribers and persistence all update together.
-  const patch = settingsPatch(data.settingsRaw)
+  const { patch, favoritesWithheld } = settingsPatch(data.settingsRaw)
   const prevSettings = settings.get()
+  // The marks count is measured around the merge, not read off the
+  // file (R2-T5-3): the dedupe and the standing 120 cap can each
+  // turn a file mark away, and the report tells what landed.
+  const marksBefore = loadMarks().length
 
   // ── Apply: staged, with rollback. If any write fails here, every
   // write already made is undone from its before-image and the
   // error says the library was put back — a half-restored library
   // claiming success is the F6 disease, and it does not recur.
-  const report: ImportReport = { books: restored, keptNewer, pronAdded: pronAdd.length, pronKept, draft: draftState, marks: data.marks.length, clips: clipWrites.length }
+  const report: ImportReport = { books: restored, keptNewer, pronAdded: pronAdd.length, pronKept, draft: draftState, marks: 0, clips: clipWrites.length, skippedDeleted, favoritesKept: favoritesWithheld }
   const doneBooks: BookWrite[] = []
   const doneClips: ClipWrite[] = []
   let pronApplied = false
@@ -521,6 +581,7 @@ export async function importBackup(file: File): Promise<ImportReport> {
     // writes are guarded inside marks.ts), so once it runs the
     // restore is complete.
     if (data.marks.length) mergeMarks(data.marks)
+    report.marks = loadMarks().length - marksBefore
   } catch (e) {
     if (settingsApplied) { try { settings.set({ ...prevSettings }) } catch { /* rollback is best-effort */ } }
     if (draftApplied) { try { drafts.set({ listen: prevDraft }); saveLastText(prevDraft) } catch { /* best-effort */ } }

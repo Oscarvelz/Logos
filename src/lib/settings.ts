@@ -91,6 +91,39 @@ export function stepReaderScale(current: number, dir: 1 | -1): number {
   return READER_SCALES[Math.min(READER_SCALES.length - 1, Math.max(0, i + dir))]
 }
 
+/** The numeric envelope (cure R2-T5-6): the bounds each number's own
+ *  UI can produce — the Listening speed Range runs 0.5–2.5, the
+ *  export Range 0.6–1.6, the sentence pause 0–800, the transparency
+ *  sliders 0–100, the word-timing stepper −150…450, the jump inputs
+ *  0–600 (0 is a real value since F9). Both sanitisers — load() below
+ *  and backup.ts's settingsPatch — clamp through THIS table, so no
+ *  input channel (storage or file) can put a consumer outside its
+ *  own invariant: listen.ts assigns listenSpeed to playbackRate raw
+ *  and ListenPage writes readerScale into a CSS variable raw, so a
+ *  backup carrying listenSpeed 40 or readerScale 0 used to land
+ *  exactly that — an unplayable rate, an invisible reader. The
+ *  reader's size snaps to the nearest ladder rung, the ladder being
+ *  the only values its stepper can stand on. */
+const NUMERIC_ENVELOPE: Partial<Record<keyof Settings, readonly [number, number]>> = {
+  listenSpeed: [0.5, 2.5],
+  exportSpeed: [0.6, 1.6],
+  sentencePauseMs: [0, 800],
+  bubbleAlpha: [0, 100],
+  panelAlpha: [0, 100],
+  wordLeadMs: [-150, 450],
+  jumpBackSec: [0, 600],
+  jumpFwdSec: [0, 600],
+}
+export function clampSettingNumber(key: keyof Settings, v: number): number {
+  if (key === 'readerScale') {
+    let best = READER_SCALES[0]
+    for (const r of READER_SCALES) if (Math.abs(r - v) < Math.abs(best - v)) best = r
+    return best
+  }
+  const b = NUMERIC_ENVELOPE[key]
+  return b ? Math.min(b[1], Math.max(b[0], v)) : v
+}
+
 function load(): Settings {
   try {
     const raw = localStorage.getItem(KEY)
@@ -123,6 +156,7 @@ function load(): Settings {
     }
     for (const k of ['listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec'] as const) {
       if (typeof out[k] !== 'number' || !Number.isFinite(out[k])) out[k] = DEFAULTS[k]
+      else out[k] = clampSettingNumber(k, out[k]) // finite is not enough — inside the envelope (R2-T5-6)
     }
     if (Array.isArray(out.favorites)) out.favorites = out.favorites.filter((f) => typeof f === 'string')
     else out.favorites = [...DEFAULTS.favorites]

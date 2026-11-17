@@ -91,7 +91,12 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
           if (listen.get().active) endSession()
           loadText(prevText)
         },
-      }, 6000)
+        // Cure R2-T8-21: F8-7's cure text claimed parity with the
+        // clipboard Undo window, but the F8-8 mop-up later raised the
+        // clipboard window to ten seconds (bubble.ts) and this door
+        // never followed — the same destroyed draft got four fewer
+        // seconds of rescue here. Ten seconds, both doors.
+      }, 10000)
     }
   }
   const later = async () => {

@@ -59,13 +59,29 @@ const ls = {
 // Pocket model never fetched, "Not downloaded" over one sitting in
 // the cache. Each kind now keeps its own probe result (null = never
 // probed), and isModelCached probes and stores both.
-const cachedFlags: Record<EngineKind, boolean | null> = { phonon: null, pocket: null }
+// And Pocket's flag is per LANGUAGE (R2-T4-5): its models are
+// separate ~179 MB downloads per language, but the flag was probed
+// for the wanted language only and then read for whichever language
+// the Pocket store showed active — with only English downloaded, a
+// switch to Spanish still showed "Downloaded" and labelled the
+// Spanish load 'warm' until the 60 s recheck happened to re-probe.
+// (The routing layer never had the lie: engineUsable always asked
+// Pocket per language. Only the shown flag was language-blind.)
+// Phonon keeps a single flag — one model serves both its languages.
+let phononCachedFlag: boolean | null = null
+const pocketCachedFlags: Record<PocketLang, boolean | null> = { en: null, es: null }
 /** The M-20 routing substitution note, read by computeFrom below —
  *  declared here, above the engine store's creation, because that
  *  creation calls compute() immediately. */
 let routeNote: string | null = null
 let lastSubstitution = ''
-const cachedOf = (kind: EngineKind): boolean => cachedFlags[kind] ?? false
+const cachedOf = (kind: EngineKind, lang?: PocketLang): boolean =>
+  kind === 'phonon' ? (phononCachedFlag ?? false) : (pocketCachedFlags[lang ?? wantedLang()] ?? false)
+/** Whether an engine's cached verdict (Pocket: for the language in
+ *  question) has never been probed — the subscribers' cue to ask for
+ *  a first probe rather than let an unprobed answer stand in. */
+const cachedUnprobed = (kind: EngineKind, lang?: PocketLang): boolean =>
+  kind === 'phonon' ? phononCachedFlag === null : pocketCachedFlags[lang ?? wantedLang()] === null
 const wantedLang = (): PocketLang => (settings.get().langMode === 'es' ? 'es' : 'en')
 /** The engine of the voice Listen will use. */
 let lastKind: EngineKind | null = null
@@ -117,10 +133,10 @@ function computeFrom(p: { langs: Record<PocketLang, { status: string; loaded: nu
     // phonon.ts verifies the bucket before filing its instance),
     // and the ready transition below re-probes the real caches, so
     // a verified save certifies here without anyReady's say-so.
-    cached: cachedOf(kind),
+    cached: cachedOf(kind, lang),
     lastRtf: p.lastRtf,
     loadMs: l.loadMs,
-    phase: l.status === 'loading' ? (l.fromCache || (cachedOf(kind) && !l.total) ? 'warm' : 'download') : null,
+    phase: l.status === 'loading' ? (l.fromCache || (cachedOf(kind, lang) && !l.total) ? 'warm' : 'download') : null,
     lang,
     kind,
     threads: p.threads ?? null,
@@ -134,12 +150,13 @@ export const engine = createStore<EngineState>(compute())
 // the probe, not the readiness, is what says "saved". One probe
 // per ready spell per engine; a release back to not-ready re-arms it.
 const readyProbeSeen: Record<EngineKind, boolean> = { phonon: false, pocket: false }
-function reprobeOnReady(kind: EngineKind, p: { langs: Record<PocketLang, { status: string }> }) {
+function reprobeOnReady(kind: EngineKind, p: { langs: Record<PocketLang, { status: string }>; active?: PocketLang | null }) {
   const anyReadyNow = (['en', 'es'] as PocketLang[]).some((x) => p.langs[x].status === 'ready')
   if (!anyReadyNow) { readyProbeSeen[kind] = false; return }
   if (readyProbeSeen[kind]) return
   readyProbeSeen[kind] = true
-  if (cachedFlags[kind] !== true) void isModelCached()
+  const knownTrue = kind === 'phonon' ? phononCachedFlag === true : pocketCachedFlags[p.active ?? wantedLang()] === true
+  if (!knownTrue) void isModelCached()
 }
 pocket.subscribe(() => { engine.set(compute()); reprobeOnReady('pocket', pocket.get()) })
 phonon.subscribe(() => { engine.set(compute()); reprobeOnReady('phonon', phonon.get()) })
@@ -151,9 +168,9 @@ settings.subscribe(() => {
   lastSubstitution = ''
   engine.set(compute())
   // A voice switch can land on an engine whose cached state was never
-  // probed; probe it (both engines are probed and stored per kind)
-  // rather than letting the other engine's answer stand in.
-  if (cachedFlags[activeKind()] === null) void isModelCached()
+  // probed; probe it (both engines are probed and stored per kind —
+  // Pocket per language) rather than letting another answer stand in.
+  if (cachedUnprobed(activeKind())) void isModelCached()
 })
 
 // Crash guard: if the app closed while loading last time, don't auto-load on
@@ -216,13 +233,13 @@ function engineReady(kind: EngineKind, lang: PocketLang): boolean {
 async function engineUsable(kind: EngineKind, lang: PocketLang): Promise<boolean> {
   if (engineReady(kind, lang)) { downloadedMemo.add(memoKey(kind, lang)); return true }
   if (downloadedMemo.has(memoKey(kind, lang))) return true
-  if (cachedFlags[kind] === true && kind === 'phonon') { downloadedMemo.add(memoKey(kind, lang)); return true }
-  // Pocket's flag is probed for one language only (isModelCached), so
-  // Pocket is always asked per language through its own cured probe;
-  // Phonon reaches here only when its per-engine flag is not already
-  // a positive answer.
+  if (kind === 'phonon' && phononCachedFlag === true) { downloadedMemo.add(memoKey(kind, lang)); return true }
+  // Pocket is always asked per language through its own cured probe
+  // (its shown flag is per-language too, since R2-T4-5 — the two
+  // finally agree); Phonon reaches here only when its per-engine
+  // flag is not already a positive answer.
   const ok = kind === 'phonon' ? await phononCached() : await pocketCached(lang)
-  if (kind === 'phonon') cachedFlags.phonon = ok
+  if (kind === 'phonon') phononCachedFlag = ok
   if (ok) downloadedMemo.add(memoKey(kind, lang))
   return ok
 }
@@ -259,7 +276,7 @@ export function synthesize(text: string, voice: string, speed: number, opts: { p
     if (opts.priority && opts.priority >= 1000 && kind !== lastKind) {
       lastKind = kind
       engine.set(compute())
-      if (cachedFlags[kind] === null) void isModelCached()
+      if (cachedUnprobed(kind)) void isModelCached()
     }
     const job = kind === 'phonon' ? phononSynth(text, lang, routed, opts) : pocketSynth(text, lang, routed.replace(/^pk_/, ''), opts)
     const r = await job
@@ -277,9 +294,10 @@ export function clearQueue(maxPriority?: number) { pocketClear(maxPriority); pho
 // attempt failed. The first probe (App start calls isModelCached)
 // arms this re-check for the rest of the session: every 60 s both
 // engines are re-probed through the same cured probes, each flag is
-// re-filed under its own kind, and a probe that now fails also
-// retires that engine's memoised routing verdicts (phonon for both
-// languages — one shared model; pocket for the probed language).
+// re-filed under its own kind (Pocket: under its own language), and
+// a probe that now fails also retires that engine's memoised
+// routing verdicts (phonon for both languages — one shared model;
+// pocket per language, matching its per-language flags).
 // keep.ts runs the matching watch over its stamps and posts the
 // "phone cleared the saved voice" note from the same discovery.
 const CACHED_RECHECK_MS = 60_000
@@ -294,11 +312,17 @@ export async function isModelCached(): Promise<boolean> {
   // Probe BOTH engines and store each answer under its own kind, so
   // the flag that answers for an engine is always that engine's own —
   // whichever engine is active when the question is asked later.
-  const [ph, pk] = await Promise.all([phononCached(), pocketCached(wantedLang())])
-  cachedFlags.phonon = ph
-  cachedFlags.pocket = pk
+  // Pocket is probed for BOTH languages and each verdict filed under
+  // its own language (R2-T4-5): two small manifest fetches per cycle
+  // is the price of neither language ever borrowing the other's
+  // answer.
+  const [ph, pkEn, pkEs] = await Promise.all([phononCached(), pocketCached('en'), pocketCached('es')])
+  phononCachedFlag = ph
+  pocketCachedFlags.en = pkEn
+  pocketCachedFlags.es = pkEs
   if (!ph) { downloadedMemo.delete(memoKey('phonon', 'en')); downloadedMemo.delete(memoKey('phonon', 'es')) }
-  if (!pk) downloadedMemo.delete(memoKey('pocket', wantedLang()))
+  if (!pkEn) downloadedMemo.delete(memoKey('pocket', 'en'))
+  if (!pkEs) downloadedMemo.delete(memoKey('pocket', 'es'))
   engine.set(compute())
   return cachedOf(activeKind())
 }
@@ -325,8 +349,9 @@ export async function deleteModel() {
   downloadedMemo.clear()
   routeNote = null
   lastSubstitution = ''
-  cachedFlags.phonon = false
-  cachedFlags.pocket = false
+  phononCachedFlag = false
+  pocketCachedFlags.en = false
+  pocketCachedFlags.es = false
   engine.set(compute())
 }
 
