@@ -289,7 +289,12 @@ function BookMenu({ b, onClose, onRename }: { b: BookMeta | null; onClose: () =>
     const shown = b.title.length > 90 ? b.title.slice(0, 90) + '…' : b.title
     if (!await confirmDelete(t('Delete this book?'), t('“{title}” will be removed from your library.', { title: shown }))) return
     const gone = await deleteBook(b.id, { force: true })
-    if (gone) toast(t('Book deleted'), { label: t('Undo'), run: () => { void putBook(gone.meta, gone.content) } }, 6000)
+    // L-3 cure: Undo restores the book KEPT. The deleted record used to
+    // go back verbatim — temp flag and all — so a book the reader had
+    // just chosen to recover was swept again at the next sweep, and the
+    // Undo promise revoked itself. An undone deletion is a keeping by
+    // deed: the book comes back with temp cleared.
+    if (gone) toast(t('Book deleted'), { label: t('Undo'), run: () => { void putBook({ ...gone.meta, temp: false }, gone.content) } }, 6000)
   }
   return (
     <Sheet open onClose={onClose} title={b.title.length > 34 ? t('Book') : b.title}>

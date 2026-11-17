@@ -2,7 +2,18 @@
 // differently (names, places, terms of art). Stored on this device only and
 // applied to everything Logos speaks — listening and exported audio alike —
 // at the single point where text becomes speech (speakable in text.ts).
-export type PronEntry = { from: string; to: string }
+import type { Lang } from './voices.ts'
+
+/**
+ * A dictionary entry. `lang` scopes it (T7-09): the same spelling is
+ * often a different word in the other language — the reader's
+ * English pan→pahn must never rewrite Spanish "el pan nuestro". An
+ * entry WITH a language fires only on segments of that language; an
+ * entry without one is unscoped and fires everywhere (the shape
+ * every existing dictionary carries — scoping must never silently
+ * retire the reader's standing entries).
+ */
+export type PronEntry = { from: string; to: string; lang?: Lang }
 
 const KEY = 'logos.pronounce.v1'
 let cache: PronEntry[] | null = null
@@ -17,6 +28,9 @@ export function isValidPronEntry(e: unknown): e is PronEntry {
   return Boolean(e) && typeof e === 'object'
     && typeof (e as PronEntry).from === 'string' && typeof (e as PronEntry).to === 'string'
     && (e as PronEntry).from.trim() !== '' && (e as PronEntry).to.trim() !== ''
+    // A scope, when present, must name a language the app speaks —
+    // an uninterpretable scope is a malformed entry, not a wild card.
+    && ((e as PronEntry).lang === undefined || (e as PronEntry).lang === 'en' || (e as PronEntry).lang === 'es')
 }
 
 export function pronEntries(): PronEntry[] {
@@ -68,9 +82,33 @@ export function savePronEntries(list: PronEntry[]) {
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-/** Replace each dictionary word (whole word, any case) with how it should be said. */
-export function applyPron(text: string): string {
-  const list = pronEntries()
+/** Shape the replacement to the matched word's own capitalization
+ *  (T7-07): the match is case-insensitive, but the word as written
+ *  carries case the sentence means — a shout stays a shout
+ *  ("TOMATO!" → "TOMAHTO!"), a sentence opening keeps its capital
+ *  ("Tomato" → "Tomahto"), a lowercase word takes the entry as
+ *  written. Mixed case has no honest mapping and takes the entry as
+ *  written too. */
+function matchCase(matched: string, to: string): string {
+  const letters = matched.replace(/[^\p{L}]/gu, '')
+  if (letters.length > 1 && letters === letters.toUpperCase() && letters !== letters.toLowerCase()) {
+    return to.toUpperCase()
+  }
+  const first = matched.charAt(0)
+  const rest = matched.slice(1)
+  if (first && first === first.toUpperCase() && first !== first.toLowerCase() && rest === rest.toLowerCase()) {
+    return to.charAt(0).toUpperCase() + to.slice(1)
+  }
+  return to
+}
+
+/** Replace each dictionary word (whole word, any case) with how it
+ *  should be said. `lang` is the language of THIS text segment
+ *  (T7-09): scoped entries fire only on their own language — and,
+ *  with no language known, do not fire at all rather than guess;
+ *  unscoped entries fire everywhere, as they always have. */
+export function applyPron(text: string, lang?: Lang): string {
+  const list = pronEntries().filter((e) => e.lang === undefined || (lang !== undefined && e.lang === lang))
   if (!list.length) return text
   // Single pass (T7-05): ONE combined match over the original text,
   // longest word first — never a loop of passes over a mutating
@@ -90,6 +128,9 @@ export function applyPron(text: string): string {
   // and a short entry (don, brien, word) must not fire inside them.
   return text.replace(
     new RegExp(`(?<![\\p{L}\\p{N}'’_])(${alt})(?![\\p{L}\\p{N}'’_])`, 'giu'),
-    (m) => byLower.get(m.toLowerCase())?.to ?? m,
+    (m) => {
+      const to = byLower.get(m.toLowerCase())?.to
+      return to === undefined ? m : matchCase(m, to)
+    },
   )
 }

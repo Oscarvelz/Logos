@@ -22,7 +22,7 @@
  * Settings, where the search above and the index live.
  */
 import { useMemo, useState } from 'react'
-import { MODULE_CATALOGUE, catalogueModule } from './presentation/catalogue.ts'
+import { catalogueModule } from './presentation/catalogue.ts'
 import {
   anchorRecordFor,
   isStageOnlyAnchor,
@@ -30,10 +30,11 @@ import {
   unfoldHeaderId,
   type RootLike,
 } from './presentation/anchors.ts'
-import { flattenSteps, pickText } from './presentation/engine/types.ts'
 import {
+  answerOffer,
   defaultPresentationStorage,
   loadPresentationState,
+  offerPending,
   savePresentationState,
   withWatchLanding,
 } from './presentation/presentation-state.ts'
@@ -51,73 +52,14 @@ import { t } from './i18n.ts'
 import './presentation/scripts/index.ts'
 
 // ── The registry ──────────────────────────────────────────────────
-export interface SceneHit {
-  moduleId: string
-  moduleTitle: string
-  sceneId: string
-  sceneTitle: string
-  /** Global step index of the scene's first step (the Watch landing). */
-  step: number
-  stepId: string
-  /** The scene's first web anchor (the Go landing), when it has one. */
-  anchorId: string | null
-  haystack: string
-}
-
-const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
-
-let cachedIndex: SceneHit[] | null = null
-export function presentationSceneIndex(): SceneHit[] {
-  if (cachedIndex) return cachedIndex
-  const out: SceneHit[] = []
-  for (const entry of MODULE_CATALOGUE) {
-    const script = entry.script
-    if (!script) continue
-    const flat = flattenSteps(script)
-    for (const scene of script.scenes) {
-      const first = flat.find((f) => f.scene === scene)
-      if (!first) continue
-      let anchorId: string | null = null
-      for (const f of flat) {
-        if (f.scene !== scene) continue
-        const rec = anchorRecordFor(f.step.anchorId)
-        // The «Go» landing must be landable IN THE REAL APP: a
-        // stage-only anchor (the sealed fiction stage's own seats)
-        // can never exist there, so it is passed over for the
-        // scene's next real anchor — and a scene with none offers
-        // no «Go» rather than a button that polls and dies (H-25).
-        if (rec && rec.record.kind === 'web' && !isStageOnlyAnchor(rec.record)) { anchorId = f.step.anchorId; break }
-      }
-      const words: string[] = [pickText(entry.title, 'en'), pickText(entry.title, 'es'), pickText(scene.chapter, 'en'), pickText(scene.chapter, 'es')]
-      for (const f of flat) {
-        if (f.scene !== scene) continue
-        if (f.step.text) words.push(pickText(f.step.text, 'en'), pickText(f.step.text, 'es'))
-        if (f.step.question) words.push(pickText(f.step.question, 'en'), pickText(f.step.question, 'es'))
-      }
-      out.push({
-        moduleId: entry.id,
-        moduleTitle: pickText(entry.title, settings.get().uiLang),
-        sceneId: scene.id,
-        sceneTitle: pickText(scene.chapter, settings.get().uiLang),
-        step: first.globalIndex,
-        stepId: first.step.id,
-        anchorId,
-        haystack: norm(words.join(' · ')),
-      })
-    }
-  }
-  cachedIndex = out
-  return out
-}
-
-export function searchScenes(query: string): SceneHit[] {
-  const q = norm(query.trim())
-  if (q.length < 2) return []
-  const terms = q.split(/\s+/)
-  return presentationSceneIndex()
-    .filter((hit) => terms.every((term) => hit.haystack.includes(term)))
-    .slice(0, 8)
-}
+// The scene index itself (SceneHit, presentationSceneIndex,
+// searchScenes) lives in presentation/scene-index.ts (T6-16) — a
+// plain .ts module the node suites can probe, whose cache holds
+// only language-independent structure while titles derive from the
+// live UI language on every read. Re-exported here for this
+// surface's existing consumers.
+export { presentationSceneIndex, searchScenes, type SceneHit } from './presentation/scene-index.ts'
+import { searchScenes, type SceneHit } from './presentation/scene-index.ts'
 
 // ── The two landings ──────────────────────────────────────────────
 /** Watch: open the module at the scene. The landing MERGES into
@@ -224,7 +166,12 @@ export function goToAnchor(anchorId: string, onMiss?: (anchorId: string, reason:
 export function PresentationSearch() {
   const [query, setQuery] = useState('')
   const [goMiss, setGoMiss] = useState<{ id: string; reason: string } | null>(null)
-  const hits = useMemo(() => searchScenes(query), [query])
+  // The UI language rides the memo (T6-16): titles are derived per
+  // read now, and a language switch while the index stands open must
+  // re-derive the hits on the re-render it causes — not leave the
+  // previous language's titles standing behind an unchanged query.
+  const uiLang = settings.get().uiLang
+  const hits = useMemo(() => searchScenes(query), [query, uiLang])
   return (
     <div className="pres-search">
       <div className="field-label"><span>{t('Find a lesson or a function')}</span></div>
@@ -269,21 +216,17 @@ export function PresentationSearch() {
 }
 
 // ── The first-run offer ───────────────────────────────────────────
-const OFFER_KEY = 'logos.presentation.offer.v1'
-
-export function offerPending(): boolean {
-  try {
-    if (localStorage.getItem(OFFER_KEY)) return false
-  } catch { return false }
-  const state = loadPresentationState(defaultPresentationStorage())
-  return Object.keys(state.modules).length === 0
-}
+// The pending rule and the answer's write live in
+// presentation-state.ts (T6-14): the offer stands until it is
+// answered either way, only an answer consumes it, and a storage
+// host whose getItem throws cannot suppress it.
+export { offerPending } from './presentation/presentation-state.ts'
 
 export function PresentationOffer() {
   const [gone, setGone] = useState(false)
   if (gone || !offerPending()) return null
   const answer = (start: boolean) => {
-    try { localStorage.setItem(OFFER_KEY, 'done') } catch { /* private mode */ }
+    answerOffer()
     setGone(true)
     if (start) launchPresentation('Q0')
   }

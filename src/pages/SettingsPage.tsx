@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.188'
+const VERSION = '1.4.189'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -33,7 +33,7 @@ function BackupCard() {
   const file = useRef<HTMLInputElement>(null)
   const run = async () => {
     setBusy('out')
-    try { const n = await exportBackup(); toast(n === 1 ? t('Backup saved · 1 book inside') : t('Backup saved · {n} books inside', { n })) }
+    try { const r = await exportBackup(); const base = r.books === 1 ? t('Backup saved · 1 book inside') : t('Backup saved · {n} books inside', { n: r.books }); toast(r.skipped ? `${base} ${t('· {s} left out — their text is missing on this phone', { s: r.skipped })}` : base) }
     catch { toast(t('The backup could not be made')) }
     setBusy('')
   }
@@ -299,9 +299,9 @@ export function SettingsPage() {
             <div className="d" data-present="set-storage-note">{t('Voice models {x}', { x: formatBytes(modelBytes) })}{usage?.quota ? t(' · {u} of {q} used', { u: formatBytes(usage.usage), q: formatBytes(usage.quota) }) : ''}</div>
             {IN_APP ? <div className="d" data-present="set-storage-protect">{t('Kept inside the Logos app. Only clearing Logos’s own data removes it.')}</div>
               : persisted !== null && <div className="d" data-present="set-storage-protect">{persisted ? t('Protected from automatic cleanup') : t('Not protected: the phone may clear the voice')}</div>}
-            {kn.note && <div className="d" style={{ color: 'var(--accent)' }}>{kn.note.kind === 'cleared'
-              ? t('The phone cleared the saved {eng} voice (noticed {when}).', { eng: kn.note.engine === 'pocket' ? 'Pocket' : 'Phonon', when: new Date(kn.note.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) })
-              : t('The {eng} voice loaded but couldn’t be saved on this phone.', { eng: kn.note.engine === 'pocket' ? 'Pocket' : 'Phonon' })}</div>}
+            {kn.notes.map((n) => <div key={`${n.engine}.${n.lang}`} className="d" style={{ color: 'var(--accent)' }}>{n.kind === 'cleared'
+              ? t('The phone cleared the saved {eng} voice (noticed {when}).', { eng: n.engine === 'pocket' ? 'Pocket' : 'Phonon', when: new Date(n.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) })
+              : t('The {eng} voice loaded but couldn’t be saved on this phone.', { eng: n.engine === 'pocket' ? 'Pocket' : 'Phonon' })}</div>)}
           </div>
           {!IN_APP && persisted === false && <button className="btn sm" onClick={async () => { const ok = await navigator.storage?.persist?.(); setPersisted(Boolean(ok)); toast(ok ? t('Storage protected from automatic cleanup') : t('The browser declined — install the app to keep storage')) }}>{t('Protect')}</button>}
         </div>

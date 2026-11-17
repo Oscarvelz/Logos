@@ -370,7 +370,7 @@ export function prepareText(text: string) {
     if (st.text !== text || st.playing || !st.segments.length) return
     const spoken = speakable(st.segments[0].text, st.segments[0].lang)
     if (!spoken) return
-    void hasPersistedRender(renderKey(spoken, st.voices[0])).then((has) => {
+    void hasPersistedRender(renderKey(spoken, st.voices[0], pauseAfter(st.segments[0], settings.get().sentencePauseMs))).then((has) => {
       if (has && listen.get().text === text && !listen.get().playing) go()
     })
   })
@@ -446,11 +446,15 @@ function render(i: number, priority: number): Promise<Rendered> {
     // pronunciation dictionary. A sentence that was only a code becomes a breath
     // of silence instead of a spelling bee.
     const spoken = speakable(seg.text, lang)
+    // The pause this render will bake in, computed once, up front:
+    // it is appended to the samples before encoding (below), so it
+    // belongs to the cache key as well (cure T1-14 — see rendercache).
+    const pauseMs = pauseAfter(seg, settings.get().sentencePauseMs)
     // The saved processing (1.4.112): a sentence rendered before — in a
     // past session, another day, another book — plays from disk and is
     // never rendered twice. The key is the spoken string + the voice,
     // so a dictionary edit or a voice change correctly misses.
-    const key = spoken ? renderKey(spoken, voice) : null
+    const key = spoken ? renderKey(spoken, voice, pauseMs) : null
     if (key) {
       const saved = await getPersistedRender(key)
       if (saved && renderSilent(saved.peak)) {
@@ -472,7 +476,6 @@ function render(i: number, priority: number): Promise<Rendered> {
     rtfWindow.push({ ms: res.ms, sec: res.samples.length / res.sampleRate })
     if (rtfWindow.length > 8) rtfWindow.shift()
     const trimmed = trimSilence(res.samples, res.sampleRate)
-    const pauseMs = pauseAfter(seg, settings.get().sentencePauseMs)
     const joined = concat([trimmed, silence(pauseMs, res.sampleRate)])
     // Level each sentence toward a common loudness, so a long book sounds even.
     const full = applyGain(joined, levelGain(joined))
@@ -831,6 +834,17 @@ export function applyNativePos(pos: { idx?: number; total?: number; playing?: bo
   if (Object.keys(patch).length) { listen.set(patch); updateMediaSession() }
 }
 
+/**
+ * The browser device voice's place inside the sentence it is reading
+ * (cure T1-17): the fraction of the sentence's characters the voice
+ * has reached, fed by the utterance's real boundary events. Kept
+ * monotonic — a late or repeated event never walks the light
+ * backward. Only the browser road reports: the shell's native voice
+ * has its own sentence-level channel (applyNativePos) and reports
+ * no within-sentence position, so nothing is invented for it.
+ */
+let deviceFrac = { idx: -1, frac: 0 }
+
 async function playDevice(i: number) {
   const s = listen.get()
   // In the Android app, the page's own speechSynthesis is a trap
@@ -846,7 +860,12 @@ async function playDevice(i: number) {
   updateMediaSession()
   if (neuralUsable()) prefetch(i + 1)
   const seg = s.segments[i]
-  const ok = await speakDevice(seg.text, sentenceLang(seg, settings.get().langMode), settings.get().listenSpeed)
+  deviceFrac = { idx: i, frac: 0 }
+  const ok = await speakDevice(seg.text, sentenceLang(seg, settings.get().langMode), settings.get().listenSpeed, (charIndex) => {
+    if (deviceFrac.idx !== i || !seg.text.length) return
+    const f = Math.min(1, Math.max(0, charIndex / seg.text.length))
+    if (f > deviceFrac.frac) deviceFrac = { idx: i, frac: f }
+  })
   if (my !== token || !listen.get().playing) return
   if (!ok) {
     // No usable device voice: wait for the neural voice instead.
@@ -1092,9 +1111,22 @@ export function jumpBy(deltaSec: number) {
   }
 }
 
-/** The configured leaps, clamped to the sane field Oscar set: 1..600 s. */
-export const jumpBack = () => jumpBy(-Math.min(600, Math.max(1, settings.get().jumpBackSec || 15)))
-export const jumpFwd = () => jumpBy(Math.min(600, Math.max(1, settings.get().jumpFwdSec || 30)))
+/**
+ * A configured leap, in the stored value's own semantics (cure F9).
+ * The settings load guarantees a finite number and keeps a stored 0
+ * a 0; the consumers used to substitute 15/30 through `||`, so zero
+ * could never mean zero — the substitution the 1.4.158 sliders-to-
+ * zero ruling forbids. The clamp is the field's own ceiling with 0
+ * admitted: a stored 0 is an honest no-op leap (jumpBy already
+ * refuses a zero delta), never a silent 15. Only a value of the
+ * wrong kind — which the load itself already replaces — falls back.
+ */
+export const jumpSeconds = (v: number, fallback: number): number =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.min(600, Math.max(0, v)) : fallback
+
+/** The configured leaps, clamped to the field's own range: 0..600 s. */
+export const jumpBack = () => jumpBy(-jumpSeconds(settings.get().jumpBackSec, 15))
+export const jumpFwd = () => jumpBy(jumpSeconds(settings.get().jumpFwdSec, 30))
 
 /**
  * The scrub hold (cure M-4). While the listener drags the progress
@@ -1162,6 +1194,38 @@ export function prev() {
   const s = listen.get()
   if (s.mode === 'neural' && audio && localTime() > 2.5) seek(s.current)
   else seek(s.current - 1)
+}
+
+/**
+ * The SKIP deed (cure T1-19). The media card's ⏭/⏮ are declared
+ * only over a BOOK (1.4.172), and Oscar's framing for the seat is a
+ * song queue: «como si fuese una canción, pasar de un libro a
+ * otro» (1.4.163). No queue ever existed, so the press landed here
+ * and stepped one sentence — the card's promise had no deed behind
+ * it. Now the SKIP roads (the shell's logosandroid-next/prev, which
+ * only the session's Skip callbacks send, and the browser's
+ * nexttrack/previoustrack) route here: over a book session the
+ * press travels to the neighbouring BOOK through the deed the book
+ * layer registers below; over anything else it keeps the sentence
+ * step it has always had. The in-page transport keeps calling
+ * next()/prev() directly — sentence precision lives there, as
+ * 1.4.163 settled. The book layer registers its deed at its own
+ * module scope: it owns loading a book into Listen, and a book
+ * session can only exist once that module has run.
+ */
+let bookSkipImpl: ((dir: 1 | -1) => void) | null = null
+export function registerBookSkip(fn: (dir: 1 | -1) => void) { bookSkipImpl = fn }
+
+export function skipNext() {
+  const s = listen.get()
+  if (bookSkipImpl && s.active && nowReadingFor(s.text)) { bookSkipImpl(1); return }
+  next()
+}
+
+export function skipPrev() {
+  const s = listen.get()
+  if (bookSkipImpl && s.active && nowReadingFor(s.text)) { bookSkipImpl(-1); return }
+  prev()
 }
 
 export function stop() {
@@ -1322,6 +1386,12 @@ export function sentenceProgress(): number {
   // listener actually put the playhead, not the sentence's start,
   // until sound resumes and the audio clock takes over again.
   if (!s.playing && (s.seekFrac ?? 0) > 0) return Math.min(1, s.seekFrac)
+  // The browser device voice reports its own place (cure T1-17):
+  // the boundary-fed fraction of the sentence it is reading, so the
+  // word highlight follows the voice instead of sitting on word one
+  // for the whole session. The shell's native road (shellHanded)
+  // reports no within-sentence position and keeps the honest zero.
+  if (s.mode === 'device' && !shellHanded && deviceFrac.idx === s.current) return deviceFrac.frac
   if (s.mode !== 'neural' || !audio) return 0
   const r = cache.get(s.current)
   return r && onTrack() ? Math.min(1, localTime() / r.duration) : 0
@@ -1384,8 +1454,8 @@ export function installMediaSession() {
   set('play', () => resume())
   set('pause', () => pause())
   set('stop', () => stop())
-  set('nexttrack', () => next())
-  set('previoustrack', () => prev())
+  set('nexttrack', () => skipNext())
+  set('previoustrack', () => skipPrev())
   set('seekforward', () => jumpFwd())
   set('seekbackward', () => jumpBack())
 }
@@ -1541,9 +1611,9 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
       return cp.key && !cp.key.startsWith('preview:') && (cp.playing || !listen.get().active) ? cp : null
     }
     addEventListener('logosandroid-toggle', () => { const cp = clipStage(); if (cp) { if (cp.playing) pauseClip(); else resumeClip(); return } toggle() })
-    addEventListener('logosandroid-next', () => { if (clipStage()) { stepClip(15); return } next() })
-    addEventListener('logosandroid-prev', () => { if (clipStage()) { stepClip(-15); return } prev() })
-    addEventListener('logosandroid-jumpfwd', () => { if (clipStage()) { stepClip(Math.min(600, Math.max(1, settings.get().jumpFwdSec || 30))); return } jumpFwd() })
-    addEventListener('logosandroid-jumpback', () => { if (clipStage()) { stepClip(-Math.min(600, Math.max(1, settings.get().jumpBackSec || 15))); return } jumpBack() })
+    addEventListener('logosandroid-next', () => { if (clipStage()) { stepClip(15); return } skipNext() })
+    addEventListener('logosandroid-prev', () => { if (clipStage()) { stepClip(-15); return } skipPrev() })
+    addEventListener('logosandroid-jumpfwd', () => { if (clipStage()) { stepClip(jumpSeconds(settings.get().jumpFwdSec, 30)); return } jumpFwd() })
+    addEventListener('logosandroid-jumpback', () => { if (clipStage()) { stepClip(-jumpSeconds(settings.get().jumpBackSec, 15)); return } jumpBack() })
   }
 }

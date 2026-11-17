@@ -61,7 +61,13 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
   const lang = res ? detectLang(res.text.slice(0, 4000)).lang : 'en'
   const info = res ? describeText(res.text, lang) : null
   const st = settings.get()
-  const speed = Math.min(2, Math.max(0.6, st.listenSpeed))
+  // Cure F8-13: this clamp used to cap the speed at [0.6, 2] while
+  // Listen's own speed control runs [0.5, 2.5] — so at 2.5× the
+  // "about {d} at {s}×" line named a speed and duration playback
+  // would not keep, and worse, the same clamped value fed
+  // queueExport below, so saved audio was actually RENDERED at 2.0×.
+  // The display and the deed now use the playback range itself.
+  const speed = Math.min(2.5, Math.max(0.5, st.listenSpeed))
 
   const listenNow = () => {
     if (!res) return
@@ -90,7 +96,7 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
   }
   const later = async () => {
     if (!res) return
-    await saveForLater(res.text, { title: res.title || info!.title, summary: info?.summary, lang, voice: st.voiceOverride ?? '', duration: estimateSeconds(res.text, 1), url: res.url, site: res.site })
+    await saveForLater(res.text, { title: res.title || info!.title, summary: info?.summary, lang, voice: st.voiceOverride ?? '', duration: estimateSeconds(res.text, 1, lang), url: res.url, site: res.site })
     onClose(); toast(t('Saved to Listen later'), { label: t('Library'), run: () => navigate('library') }, 4000)
   }
   const saveAudio = () => {
@@ -142,7 +148,7 @@ export function WebImport({ open, onClose, initialUrl, onAudioFile, onBookFile }
         <>
           <div className="web-site" data-present="web-import-ready"><Globe size={13} /> {res.site}</div>
           <div className="keep-title" style={{ marginTop: 4 }}>{res.title || info?.title}</div>
-          <div className="keep-sub">{t('{n} words · about {d} at {s}×', { n: res.words.toLocaleString(), d: formatDuration(estimateSeconds(res.text, speed)), s: speed })}</div>
+          <div className="keep-sub">{t('{n} words · about {d} at {s}×', { n: res.words.toLocaleString(), d: formatDuration(estimateSeconds(res.text, speed, lang)), s: speed })}</div>
           <div className="web-preview" lang={lang}>
             {res.text.split('\n\n').slice(1, 5).map((p, i) => <p key={i}>{p}</p>)}
           </div>

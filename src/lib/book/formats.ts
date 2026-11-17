@@ -1,5 +1,6 @@
 // Word, FB2, web pages, Markdown, plain text and RTF.
 import type { Block, Pos } from '../books.ts'
+import { isWrappedLines } from '../text.ts'
 import { chapterize, type RawBook } from './finish.ts'
 import { parseMarkup, toBlocks, isWebLink } from './html.ts'
 
@@ -91,11 +92,13 @@ export function parseText(text: string, markdown: boolean): RawBook {
   const lines = t.split('\n')
   const blocks: Block[] = []
   const ids = new Map<string, number>()
-  // Hard-wrapped text (most lines end near the same width) joins lines into paragraphs; otherwise each line stands.
-  const long = lines.filter((l) => l.trim().length > 40)
-  const widths = long.map((l) => l.trimEnd().length).sort((a, b) => a - b)
-  const wrapAt = widths[Math.floor(widths.length * 0.8)] ?? 0
-  const wrapped = long.length > 20 && wrapAt < 100 && long.filter((l) => l.trimEnd().length >= wrapAt - 12).length > long.length * 0.5
+  // Hard-wrapped text joins lines into paragraphs; otherwise each line
+  // stands. The verdict is text.ts's isWrappedLines — the same rule
+  // intake applies per paragraph (cure R2-T8-7: the two doors used to
+  // run different thresholds, >20 lines / width <100 here against ≥6 /
+  // <110 plus wrap evidence there, so the same wrapped page segmented
+  // one way pasted and another way imported).
+  const wrapped = isWrappedLines(lines)
   const blankParas = lines.filter((l) => !l.trim()).length > lines.length * 0.08
   let para: string[] = []
   const flush = () => {

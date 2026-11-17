@@ -28,6 +28,8 @@ check('clearKeepStamps removes logos.keepNote', store.get('logos.keepNote') === 
 store.set('logos.kept', JSON.stringify({ 'pocket.en': { at: 123, digest: 'x' } }))
 await checkStamps()
 check('checkStamps deletes stamp with no model behind it', (store.get('logos.kept') ?? '{}') === '{}')
-check('checkStamps posts cleared note', keep.get().note?.kind === 'cleared' && keep.get().note?.engine === 'pocket')
+// The note is a list since the T4-16 cure (1.4.189): a joint eviction
+// reports every loss, so the cleared note stands in `notes`.
+check('checkStamps posts cleared note', keep.get().notes?.some((n: any) => n.kind === 'cleared' && n.engine === 'pocket') === true)
 console.log(`KEEP probe: ${pass}/${pass + fail} PASS`)
 process.exitCode = fail ? 1 : 0

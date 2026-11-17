@@ -106,7 +106,7 @@ export function CreatePage() {
               <EngineNote present="create-engine-note" />
             </div>
           ) : job.status === 'done' && job.result && job.origin !== 'listen' ? (
-            <Result onAgain={resetExport} />
+            <Result onAgain={() => { resetExport(); setTitle('') }} />
           ) : (
             <div className="card card-pad stack">
               <div>

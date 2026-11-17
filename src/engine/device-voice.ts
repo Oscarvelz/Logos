@@ -44,8 +44,13 @@ export async function pickDeviceVoice(lang: Lang): Promise<SpeechSynthesisVoice 
 
 let current: SpeechSynthesisUtterance | null = null
 
-/** Speak one sentence; resolves true when it finished, false on failure/cancel. */
-export async function speakDevice(text: string, lang: Lang, rate: number): Promise<boolean> {
+/** Speak one sentence; resolves true when it finished, false on failure/cancel.
+ *  `onBoundary`, when given, receives the character index the voice
+ *  has reached (speechSynthesis word-boundary events — cure T1-17, so
+ *  the Reader's word highlight can follow the voice instead of
+ *  sitting on word one). Engines that never fire boundary events
+ *  simply never call it. */
+export async function speakDevice(text: string, lang: Lang, rate: number, onBoundary?: (charIndex: number) => void): Promise<boolean> {
   if (!deviceSpeechAvailable()) return false
   const voice = await pickDeviceVoice(lang)
   return new Promise<boolean>((resolve) => {
@@ -57,6 +62,7 @@ export async function speakDevice(text: string, lang: Lang, rate: number): Promi
     const done = (ok: boolean) => { if (!settled) { settled = true; resolve(ok) } }
     u.onend = () => done(current === u)
     u.onerror = () => done(false)
+    if (onBoundary) u.onboundary = (e) => { if (typeof e.charIndex === 'number') onBoundary(e.charIndex) }
     current = u
     speechSynthesis.cancel()
     speechSynthesis.speak(u)

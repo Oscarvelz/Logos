@@ -82,7 +82,14 @@ const blobToB64 = (b: Blob) => new Promise<string>((res, rej) => {
   r.readAsDataURL(b)
 })
 
-export async function exportBackup(): Promise<number> {
+/** What an export actually did (F8 cure): how many books are inside,
+ *  and how many shelf books were LEFT OUT because their text record
+ *  is missing on this phone. The Settings toast declares both — a
+ *  backup that silently omits a book teaches the reader to trust a
+ *  file that does not hold what they think it holds. */
+export type ExportReport = { books: number; skipped: number }
+
+export async function exportBackup(): Promise<ExportReport> {
   await refreshBooks()
   await refreshLibrary()
   // The deletion record rides in the file (M-27): what this device
@@ -101,9 +108,13 @@ export async function exportBackup(): Promise<number> {
     clips: [],
     deletedBooks: [...deleted],
   }
+  let skipped = 0
   for (const m of books.get().list) {
     const content = await getContent(m.id)
-    if (!content) continue
+    // F8 cure: a book whose text record is gone cannot ride in the
+    // file — but the skip is COUNTED and declared (see ExportReport),
+    // never silent.
+    if (!content) { skipped++; continue }
     const meta = { ...m } as BookMeta & { coverB64?: string }
     // The list's metas are cover-free since M-11 — the cover rides
     // only in the full record, so fetch it for this book alone.
@@ -128,10 +139,10 @@ export async function exportBackup(): Promise<number> {
   const name = `logos-backup-${new Date().toISOString().slice(0, 10)}.json`
   const file = new File([blob], name, { type: 'application/json' })
   if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'Logos backup' }); return out.books.length } catch { /* cancelled */ }
+    try { await navigator.share({ files: [file], title: 'Logos backup' }); return { books: out.books.length, skipped } } catch { /* cancelled */ }
   }
   downloadBlob(blob, name, true)
-  return out.books.length
+  return { books: out.books.length, skipped }
 }
 
 /**
@@ -373,6 +384,12 @@ function mergeBookMeta(local: BookMeta, incoming: BookMeta): { meta: BookMeta; w
   else delete meta.bookmarks
   if (local.done || incoming.done) meta.done = true
   if (local.fav || incoming.fav) meta.fav = true
+  // L-4 cure: temp survives the merge only if BOTH copies are still
+  // "for now". A book kept on either shelf is a kept book; the merged
+  // record must not walk back into the temp sweep wearing the other
+  // copy's flag (the winner-takes-the-record rule above would happily
+  // carry a backup's temp: true over a phone book that was kept).
+  meta.temp = local.temp === true && incoming.temp === true
   return { meta, winner }
 }
 
@@ -408,7 +425,12 @@ export async function importBackup(file: File): Promise<ImportReport> {
     }
     const clean = meta as BookMeta
     const local = shelf.get(b.meta.id)
-    if (!local) { bookWrites.push({ meta: clean, content: b.content, before: null }); restored++; continue }
+    // L-4 cure: a book that exists only in the backup lands KEPT. It
+    // used to land with the backup's temp flag verbatim, so a book the
+    // reader had deliberately fetched back walked straight into the
+    // temp sweep and could be deleted again before it was ever opened
+    // on this phone. A restore is a keeping by deed.
+    if (!local) { bookWrites.push({ meta: { ...clean, temp: false }, content: b.content, before: null }); restored++; continue }
     // The merge and the rollback must work from the FULL local
     // record, never from the shelf list: since M-11 the list is the
     // blob-free bookmeta twin, so a `local` taken from it is

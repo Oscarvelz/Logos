@@ -4,10 +4,11 @@
 import { createStore } from '../lib/store.ts'
 import { settings } from '../lib/settings.ts'
 import { segmentText, pauseAfter, speakable } from '../lib/text.ts'
-import { voiceById, exportVoiceId, type Lang } from '../lib/voices.ts'
+import { exportVoiceId, type Lang } from '../lib/voices.ts'
 import { concat, createMp3Encoder, encodeWav, silence, trimSilence, applyGain, levelGain, slugify } from '../lib/audio.ts'
 import { synthesize } from '../engine/engine.ts'
 import { saveClip, updateClip, getClip, type ClipMeta } from '../lib/library.ts'
+import { voiceCredit } from './voice-credit.ts'
 import { t } from '../lib/i18n.ts'
 
 export type ExportState = {
@@ -115,6 +116,11 @@ async function runExportClaimed(text: string, opts: ExportOpts) {
     const mp3 = opts.format === 'mp3' ? await createMp3Encoder(SR, 128) : null
     const pcm: Float32Array[] = []
     let samples = 0
+    // Rendered samples per voice actually used (T7-14): in Auto the
+    // pick switches per segment language, so a mixed-language book is
+    // sung by several voices — the credit below is tallied from what
+    // each voice truly rendered, not assumed from the first segment.
+    const voiceSamples = new Map<string, number>()
     // Keep two requests queued so the worker never idles between sentences.
     const inflight: Promise<{ samples: Float32Array; sampleRate: number }>[] = []
     const request = (i: number) => {
@@ -138,19 +144,32 @@ async function runExportClaimed(text: string, opts: ExportOpts) {
       const lead = i === 0 ? silence(150, res.sampleRate) : null
       const chunk = concat(lead ? [lead, body, gap] : [body, gap])
       samples += chunk.length
+      const vid = pick(segments[i].lang)
+      voiceSamples.set(vid, (voiceSamples.get(vid) ?? 0) + chunk.length)
       if (mp3) await mp3.push(chunk)
       else pcm.push(chunk)
       exportJob.set({ done: i + 1, audioSec: samples / SR })
     }
     const blob = mp3 ? mp3.finish() : encodeWav(concat(pcm), SR)
-    const first = voiceById(pick(segments[0].lang))
+    // Credit every voice that sang (T7-14, computed in
+    // voice-credit.ts from the per-voice tally above): `voice` is
+    // the dominant voice; `voices` — present only when more than one
+    // sang — lists them all. A single-voice re-render also CLEARS a
+    // stale `voices` a previous mixed render left on the record.
+    const { voice: credit, voices: creditVoices } = voiceCredit(voiceSamples)
+    const withVoices = <T extends object>(rec: T): T => {
+      const out = { ...rec } as T & { voices?: string[] }
+      if (creditVoices) out.voices = creditVoices
+      else delete out.voices
+      return out
+    }
     const existing = existingEarly
     const meta = existing
-      ? await saveClip({ ...existing, voice: first?.id ?? '', duration: samples / SR, format: opts.format, blob, kind: 'audio', rendering: false, pos: 0 })
-      : await saveClip({
-        title: opts.title?.trim() || titleFrom(text), summary: opts.summary, text, voice: first?.id ?? '', lang: segments[0].lang,
+      ? await saveClip(withVoices({ ...existing, voice: credit, duration: samples / SR, format: opts.format, blob, kind: 'audio', rendering: false, pos: 0 }))
+      : await saveClip(withVoices({
+        title: opts.title?.trim() || titleFrom(text), summary: opts.summary, text, voice: credit, lang: segments[0].lang,
         duration: samples / SR, format: opts.format, blob, kind: 'audio', source: opts.origin ?? 'create', url: opts.url, site: opts.site,
-      })
+      }))
     exportJob.set({ status: 'done', result: { blob, meta } })
   } catch (err) {
     if (opts.id) void updateClip(opts.id, { rendering: false })

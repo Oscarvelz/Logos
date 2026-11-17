@@ -52,7 +52,12 @@ for (const sp of [0.5, 1, 2]) {
   check(`T1-5 setup @${sp}x: 10 segments`, listen.get().segments.length === 10, `got ${listen.get().segments.length}: ${listen.get().segments.map((s: any) => s.text.slice(0, 20)).join('|')}`)
   jumpBy(30)
   const s = listen.get()
-  check(`T1-5 jumpBy(30) @${sp}x lands sentence 4 (idx 3) frac~0.65`, s.current === 3 && Math.abs((s.seekFrac ?? 0) - 0.652) < 0.03, `current=${s.current} seekFrac=${s.seekFrac}`)
+  // The frac constant was re-pinned in 1.4.189: it used to encode the
+  // old flat-168 wpm estimate (0.652); the F8-13 cure made durations
+  // derive from the honest table (EN 165), which lands this jump at
+  // 0.587 at every speed. The property under test — the landing does
+  // not move with speed — is unchanged.
+  check(`T1-5 jumpBy(30) @${sp}x lands sentence 4 (idx 3) frac~0.59`, s.current === 3 && Math.abs((s.seekFrac ?? 0) - 0.587) < 0.03, `current=${s.current} seekFrac=${s.seekFrac}`)
 }
 settings.set({ listenSpeed: 1 })
 

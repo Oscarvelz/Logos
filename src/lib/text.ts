@@ -102,37 +102,49 @@ export function segmentText(source: string, langMode: Lang | 'auto' = 'auto'): S
 
 type Span = { start: number; end: number }
 
+/** True when a line ends mid-phrase, on a word that cannot close one
+ * (an article, preposition, conjunction or complementiser, left bare —
+ * a line ending "…went to." ends on the period, not the word, and does
+ * not match). Shared by the wrap verdict and the continuation glue. */
+const lineEndsOpen = (l: string) => /\b(?:the|a|an|of|to|in|on|at|by|for|with|from|and|or|but|that|el|la|los|las|un|una|de|del|en|con|por|para|y|o|que)$/i.test(l.trim())
+
+/**
+ * The ONE wrap verdict (cure R2-T8-7): are these lines hard-wrapped
+ * prose — most long lines ending near one width — rather than a list
+ * of standalone lines? Width alone also convicts a tidy list of long
+ * items, whose lines cluster at one width exactly like a wrap column
+ * (cure R2-T8-5), so a wrap verdict additionally needs wrap EVIDENCE
+ * a list does not leave: the LAST line is a short remainder (the text
+ * ran out mid-column), or at least two lines end mid-phrase. This
+ * function is shared verbatim by intake (splitParaSentences, per
+ * paragraph) and book import (formats.ts parseText, per document),
+ * so the same text is judged the same way at both doors.
+ */
+export function isWrappedLines(lines: string[]): boolean {
+  const long = lines.filter((l) => l.trim().length > 40)
+  if (long.length < 6) return false
+  const widths = long.map((l) => l.trimEnd().length).sort((a, b) => a - b)
+  const wrapAt = widths[Math.floor(widths.length * 0.8)] ?? 0
+  if (!(wrapAt < 110)) return false
+  if (long.filter((l) => l.trimEnd().length >= wrapAt - 12).length <= long.length * 0.5) return false
+  const lastLen = lines[lines.length - 1].trimEnd().length
+  return lastLen < wrapAt - 12 || lines.filter(lineEndsOpen).length >= 2
+}
+
 /**
  * Sentence spans for one paragraph, line-aware (cure F8-9). Unpunctuated
  * newline-separated lines — pasted lists, addresses, poem lines — used to
  * collapse into a single "sentence" that was then chopped mid-phrase by
- * the length cap. The rule is the book splitter's own (formats.ts
- * parseText), so intake and book import judge the same text the same
- * way: hard-wrapped prose (most long lines ending near one width) joins
+ * the length cap. Hard-wrapped prose (the shared verdict above) joins
  * its lines and splits by punctuation exactly as before; otherwise each
- * line stands as its own unit — except a line flowing into a lowercase
+ * line stands as its own unit — except a line flowing into a
  * continuation of a prose-shaped paragraph, which is wrapped prose
- * whatever the widths say (conditions in the body, cure R2-T8-4).
+ * whatever the widths say (conditions in the body, cures R2-T8-4/6).
  */
 function splitParaSentences(para: string): Span[] {
   if (!para.includes('\n')) return splitSentences(para)
   const lines = para.split('\n')
-  const long = lines.filter((l) => l.trim().length > 40)
-  const widths = long.map((l) => l.trimEnd().length).sort((a, b) => a - b)
-  const wrapAt = widths[Math.floor(widths.length * 0.8)] ?? 0
-  // Cure R2-T8-5: the width verdict alone also convicts a tidy list of
-  // long items — an agenda's lines cluster at one width exactly like a
-  // wrap column, and the whole list became one segment. Real wrap
-  // leaves evidence a list does not: its LAST line is a short remainder
-  // (the paragraph ran out mid-column), or its lines end mid-phrase on
-  // words that cannot close one (articles, prepositions, conjunctions).
-  // A run of full-width, phrase-complete lines is a list, however
-  // uniform its widths.
-  const endsOpen = (l: string) => /\b(?:the|a|an|of|to|in|on|at|by|for|with|from|and|or|but|el|la|los|las|un|una|de|del|en|con|por|para|y|o|que)$/i.test(l.trim())
-  const lastLen = lines[lines.length - 1].trimEnd().length
-  const wrapped = long.length >= 6 && wrapAt < 110 && long.filter((l) => l.trimEnd().length >= wrapAt - 12).length > long.length * 0.5
-    && (lastLen < wrapAt - 12 || lines.filter(endsOpen).length >= 2)
-  if (wrapped) return splitSentences(para)
+  if (isWrappedLines(lines)) return splitSentences(para)
   const spans: Span[] = []
   let chunkStart = 0
   let chunk = lines[0]
@@ -152,17 +164,31 @@ function splitParaSentences(para: string): Span[] {
   const proseShaped = /^\p{Lu}/u.test(lines[0].trim())
   let off = lines[0].length + 1
   let prevLen = lines[0].trim().length
+  let prevTrim = lines[0].trim()
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i]
-    if (proseShaped && prevLen >= 14 && /^[a-zà-ÿ]/u.test(line.trim())) {
-      chunk += `\n${line}` // a lowercase continuation is the same sentence, wrapped
+    const t = line.trim()
+    // Cure R2-T8-6: the glue only recognised LOWERCASE continuations,
+    // so narrow-wrapped prose whose next line opens with a capital —
+    // a proper noun ("…crossed over to / Santander…") or "I" ("She
+    // told me that / I should wait…") — still split mid-sentence. A
+    // capital continuation glues too, but only on mid-phrase evidence:
+    // the previous line must end bare on a word that cannot close a
+    // phrase (lineEndsOpen — a terminal period or comma after the word
+    // defeats the match, so a completed sentence never glues). List
+    // items end on phrase-complete words ("Item one", "…papers
+    // today"), so lists keep standing per line.
+    const continuation = /^[a-zà-ÿ]/u.test(t) || (/^\p{Lu}/u.test(t) && lineEndsOpen(prevTrim))
+    if (proseShaped && prevLen >= 14 && continuation) {
+      chunk += `\n${line}` // a continuation is the same sentence, wrapped
     } else {
       flush()
       chunkStart = off
       chunk = line
     }
     off += line.length + 1
-    prevLen = line.trim().length
+    prevLen = t.length
+    prevTrim = t
   }
   flush()
   return spans
@@ -293,9 +319,17 @@ export function wordCount(text: string): number {
   return text.match(/[\p{L}\p{N}']+/gu)?.length ?? 0
 }
 
-/** Rough listening time at ~165 wpm (EN) / ~175 wpm (ES), divided by speed. */
-export function estimateSeconds(text: string, speed = 1): number {
-  return (wordCount(text) / 168) * 60 / speed
+/** The one honest words-per-minute table (cure F8-13): the comment
+ * below promised ~165 wpm (EN) / ~175 wpm (ES) for years while the
+ * code divided everything by a flat 168 — neither language's number.
+ * The table IS the promise now; every duration in the app derives
+ * from it through this function. */
+const WPM: Record<Lang, number> = { en: 165, es: 175 }
+
+/** Rough listening time at the table's rate for the text's language, divided by speed. */
+export function estimateSeconds(text: string, speed = 1, lang?: Lang): number {
+  const l = lang ?? detectLang(text).lang
+  return (wordCount(text) / WPM[l]) * 60 / speed
 }
 
 export function formatDuration(sec: number): string {
@@ -352,5 +386,7 @@ export function speakable(text: string, lang?: Lang): string {
     .replace(/\b[\w-]*(?:\d|_)[\w-]*\.(?:png|jpe?g|gif|webp|mp3|mp4|wav|pdf|epub|docx?|txt|zip)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-  return applyPron(out)
+  // The segment's language rides along (T7-09): language-scoped
+  // dictionary entries fire only on their own language's segments.
+  return applyPron(out, lang)
 }

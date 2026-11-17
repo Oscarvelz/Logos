@@ -21,14 +21,29 @@ export async function parseEpub(buf: ArrayBuffer, step: (s: string, done: number
   const container = await get('META-INF/container.xml')?.async('text')
   const opfPath = container && /full-path\s*=\s*"([^"]+)"/.exec(container)?.[1]
   if (!opfPath) throw new Error('This EPUB has no package file.')
-  const opf = parseMarkup(await get(opfPath)!.async('text'), 'application/xml')
+  // L-2 cure: a container that points at an OPF the zip does not hold
+  // used to be dereferenced blind (`get(opfPath)!`), and the reader got
+  // a raw "Cannot read properties of undefined" toast. The failure is
+  // the book's, and it is named as one.
+  const opfFile = get(opfPath)
+  if (!opfFile) throw new Error('This EPUB’s package file is missing from the book.')
+  const opf = parseMarkup(await opfFile.async('text'), 'application/xml')
   const base = dirOf(opfPath)
 
   const dc = (n: string) => byTag(opf, n)[0]?.textContent?.trim() ?? ''
   const manifest = new Map<string, { href: string; type: string; props: string }>()
   for (const it of byTag(opf, 'item')) manifest.set(it.getAttribute('id') ?? '', { href: join(base, it.getAttribute('href') ?? ''), type: it.getAttribute('media-type') ?? '', props: it.getAttribute('properties') ?? '' })
   const spineEl = byTag(opf, 'spine')[0]
-  const spine = byTag(opf, 'itemref').map((r) => manifest.get(r.getAttribute('idref') ?? '')).filter((x): x is NonNullable<typeof x> => !!x && /html|xml/.test(x.type))
+  // L-2 cure: spine entries that cannot be read as chapters — an idref
+  // the manifest never declares, or a file whose type is not a readable
+  // document — used to fall out of the book silently, truncating it
+  // with no trace. They are counted here and named on the book's
+  // warning at the end of the parse.
+  let droppedSpine = 0
+  const spine = byTag(opf, 'itemref').map((r) => manifest.get(r.getAttribute('idref') ?? '')).filter((x): x is NonNullable<typeof x> => {
+    if (!x || !/html|xml/.test(x.type)) { droppedSpine++; return false }
+    return true
+  })
 
   // Cover image.
   let cover: Blob | undefined
@@ -43,13 +58,25 @@ export async function parseEpub(buf: ArrayBuffer, step: (s: string, done: number
   const inSpine = new Set(spine.map((s) => s.href))
   const chapters: RawChapter[] = []
   const anchors = new Map<string, Pos>()
+  let missingChapters = 0
   for (let i = 0; i < spine.length; i++) {
     step('Reading chapters', i, spine.length)
     const path = spine[i].href
-    const text = await get(path)?.async('text')
+    let text: string | undefined
+    try { text = await get(path)?.async('text') } catch { text = undefined }
+    if (!text) {
+      // L-2 cure: a spine file that is not in the book (or cannot be
+      // read) leaves NO anchor behind. The anchor used to be registered
+      // before the load, so every link and contents entry aimed at the
+      // missing chapter silently resolved to the NEXT chapter's start
+      // — a redirect the reader never chose and never saw. Now the aim
+      // resolves nowhere, finishBook drops the link, and the loss is
+      // counted onto the book's warning below.
+      missingChapters++
+      continue
+    }
     const here = chapters.length
     anchors.set(path, { ch: here, b: 0 })
-    if (!text) continue
     const doc = parseMarkup(text, 'application/xhtml+xml')
     const body = doc.body ?? byTag(doc, 'body')[0] ?? doc.documentElement
     const { blocks, ids } = toBlocks(body, {
@@ -145,5 +172,13 @@ export async function parseEpub(buf: ArrayBuffer, step: (s: string, done: number
     }
   }
 
-  return { title: dc('title'), author: byTag(opf, 'creator').map((c) => c.textContent?.trim()).filter(Boolean).join(', '), lang: dc('language'), cover, chapters: split, anchors, toc }
+  // L-2: what the parse had to leave out is said on the book, in the
+  // open — a truncated import is a fact about this copy of the book,
+  // and the reader hears it at import time, not never.
+  const leftOut: string[] = []
+  if (missingChapters) leftOut.push(`${missingChapters} chapter file${missingChapters === 1 ? ' was' : 's were'} missing from the book`)
+  if (droppedSpine) leftOut.push(`${droppedSpine} item${droppedSpine === 1 ? '' : 's'} in the reading order could not be read as a chapter`)
+  const warn = leftOut.length ? `Part of this book was left out: ${leftOut.join('; ')}.` : undefined
+
+  return { title: dc('title'), author: byTag(opf, 'creator').map((c) => c.textContent?.trim()).filter(Boolean).join(', '), lang: dc('language'), cover, chapters: split, anchors, toc, ...(warn ? { warn } : {}) }
 }

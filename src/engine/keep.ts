@@ -34,12 +34,38 @@ const NOTE = 'logos.keepNote'
 const read = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) as T : d } catch { return d } }
 const write = (k: string, v: unknown) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)) } catch { /* blocked */ } }
 
-export const keep = createStore<{ persisted: boolean | null; note: KeepNote | null }>({ persisted: null, note: read<KeepNote | null>(NOTE, null) })
+/** Every standing loss report (T4-16 cure): the note used to be a
+ *  single slot, so when one eviction took both engines — the normal
+ *  shape of a phone storage cleanup — checkStamps reported the losses
+ *  one over the other and only the last was ever shown; the other
+ *  stamp was already deleted, so that loss could never be reported
+ *  later either. Losses now accumulate, one per model, and Settings
+ *  lists them all. A note stored by an older version (a single
+ *  object) reads as a one-loss list. */
+const readNotes = (): KeepNote[] => {
+  const v = read<unknown>(NOTE, null)
+  if (Array.isArray(v)) return v.filter((n): n is KeepNote => !!n && typeof n === 'object')
+  if (v && typeof v === 'object') return [v as KeepNote]
+  return []
+}
+
+export const keep = createStore<{ persisted: boolean | null; notes: KeepNote[] }>({ persisted: null, notes: readNotes() })
 
 const isCached = (e: Kind, l: Lang) => (e === 'pocket' ? pocketCached(l) : phononCached())
 
-function setNote(n: KeepNote | null) { write(NOTE, n); keep.set({ note: n }) }
-export function dismissKeepNote() { setNote(null) }
+function setNotes(notes: KeepNote[]) { write(NOTE, notes.length ? notes : null); keep.set({ notes }) }
+/** Report a loss: one standing note per model — a re-detected loss of
+ *  the same model replaces its own note, never duplicates it, and
+ *  never evicts another model's. */
+function addNote(n: KeepNote) {
+  setNotes([...keep.get().notes.filter((x) => !(x.engine === n.engine && x.lang === n.lang)), n])
+}
+/** Retire the standing notes for one model (it is verifiably saved). */
+function clearNotesFor(e: Kind, l: Lang) {
+  const notes = keep.get().notes
+  if (notes.some((x) => x.engine === e && x.lang === l)) setNotes(notes.filter((x) => !(x.engine === e && x.lang === l)))
+}
+export function dismissKeepNote() { setNotes([]) }
 
 export async function protectStorage(): Promise<boolean> {
   try {
@@ -78,10 +104,9 @@ async function stamp(e: Kind, l: Lang) {
     const kept = read<StampRecord>(KEY, {})
     kept[`${e}.${l}`] = { at: Date.now(), digest }
     write(KEY, kept)
-    const n = keep.get().note
-    if (n && n.engine === e && n.lang === l) setNote(null)
+    clearNotesFor(e, l)
   } else {
-    setNote({ kind: 'notSaved', engine: e, lang: l, at: Date.now() })
+    addNote({ kind: 'notSaved', engine: e, lang: l, at: Date.now() })
   }
   void protectStorage()
 }
@@ -99,7 +124,7 @@ export async function checkStamps() {
     if (!(await isCached(e, l))) {
       delete kept[k]
       write(KEY, kept)
-      setNote({ kind: 'cleared', engine: e, lang: l, at: Date.now(), keptAt: stampAt(v) })
+      addNote({ kind: 'cleared', engine: e, lang: l, at: Date.now(), keptAt: stampAt(v) })
       continue
     }
     // The probe passes. A legacy bare-number stamp, or one bound to a
@@ -117,8 +142,11 @@ export async function checkStamps() {
   // A 'notSaved' note whose model is in fact saved is a false alarm
   // (Pocket's probe lied about exactly this until 1.4.149); clear it on
   // sight instead of waiting for the next load's stamp to retire it.
-  const n = keep.get().note
-  if (n?.kind === 'notSaved' && (await isCached(n.engine, n.lang))) setNote(null)
+  // Per note, now (T4-16): one model's false alarm retires alone and
+  // leaves every other standing loss reported.
+  for (const n of [...keep.get().notes]) {
+    if (n.kind === 'notSaved' && (await isCached(n.engine, n.lang))) clearNotesFor(n.engine, n.lang)
+  }
 }
 
 /** Forget every stamp and any standing note (M-24): a deliberate
@@ -127,7 +155,7 @@ export async function checkStamps() {
  *  voice", and no note may outlive the models it described. */
 export function clearKeepStamps() {
   write(KEY, null)
-  setNote(null)
+  setNotes([])
 }
 
 // Mid-session eviction watch (T4-14): checkStamps used to run
