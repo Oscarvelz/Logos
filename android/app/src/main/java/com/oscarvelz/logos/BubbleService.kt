@@ -189,7 +189,7 @@ class BubbleService : Service() {
          *  the stored press was the only copy, and a poke fired into
          *  a backstage window whose JS context had died in a reload
          *  spent it on a channel that did not exist. */
-        fun peekPendingPress(): PendingPress? {
+        private fun peekPendingPress(): PendingPress? {
             synchronized(pendingLock) {
                 while (true) {
                     val press = pendingQueue.firstOrNull() ?: return null
