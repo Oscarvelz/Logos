@@ -80,6 +80,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-open-tap',
           anchorId: 'bk-tile',
+          effectAnchorId: 'book-page',
           act: 'tap',
           establishes: 'book-open',
           text: {
@@ -99,6 +100,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-contents-tap',
           anchorId: 'book-head-toc',
+          effectAnchorId: 'book-side-toc',
           act: 'tap',
           establishes: 'contents-open',
           text: {
@@ -145,6 +147,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-contents-jump',
           anchorId: 'book-toc-row',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Tap The Storm: you land at its very first line.',
@@ -163,6 +166,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-marks-tab',
           anchorId: 'book-toc-tabs',
+          effectAnchorId: 'book-marks-list',
           act: 'tap',
           text: {
             en: "The second tab keeps this book's own bookmarks.",
@@ -181,6 +185,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-marks-jump',
           anchorId: 'book-marks-row',
+          effectAnchorId: 'book-page',
           act: 'tap',
           optional: true,
           text: {
@@ -197,6 +202,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-search-open',
           anchorId: 'book-head-search',
+          effectAnchorId: 'book-search-input',
           act: 'tap',
           establishes: 'book-search-open',
           text: {
@@ -216,6 +222,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-search-type',
           anchorId: 'book-search-input',
+          effectAnchorId: 'book-search-row',
           act: 'type',
           payload: { value: 'LAMP' },
           text: {
@@ -253,6 +260,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-search-pick',
           anchorId: 'book-search-row',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Tap a row: the sheet closes, the word stands painted.',
@@ -280,6 +288,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-find-next',
           anchorId: 'book-find-next',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Step forward: at the last match, it wraps around.',
@@ -298,6 +307,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-find-close',
           anchorId: 'book-find-close',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Close the bar, and the painted word washes away.',
@@ -331,6 +341,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-link-tap',
           anchorId: 'book-link',
+          effectAnchorId: 'book-note-sheet',
           act: 'tap',
           text: {
             en: 'Watch: this one does not take you anywhere.',
@@ -367,6 +378,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-note-go',
           anchorId: 'book-note-go',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Prefer going? This button jumps — and arms Back.',
@@ -376,6 +388,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-back-tap',
           anchorId: 'book-back',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Tap Back: you return to the exact paragraph.',
@@ -436,6 +449,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-bar-drag',
           anchorId: 'book-seek',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Drag it: the numbers follow your finger, honestly.',
@@ -463,6 +477,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-bar-keys',
           anchorId: 'book-seek',
+          effectAnchorId: 'book-page',
           act: 'key',
           payload: { key: 'ArrowRight' },
           text: {
@@ -509,6 +524,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-bar-listen-tap',
           anchorId: 'book-bar-listen',
+          effectAnchorId: 'book-page',
           act: 'tap',
           optional: true,
           text: {
@@ -545,6 +561,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-tools-again',
           anchorId: 'book-block:1',
+          effectAnchorId: 'book-actions',
           act: 'tap',
           establishes: 'paragraph-tools-open',
           text: {
@@ -573,6 +590,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-tools-reopen',
           anchorId: 'book-block:1',
+          effectAnchorId: 'book-actions',
           act: 'tap',
           establishes: 'paragraph-tools-open',
           text: {
@@ -602,6 +620,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-size',
           anchorId: 'book-type-size-plus',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Size steps one point at a time, eleven to thirty.',
@@ -611,6 +630,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-font',
           anchorId: 'book-type-font',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Tap the font: serif to sans — the text changes face.',
@@ -620,6 +640,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-lines',
           anchorId: 'book-type-lines',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Change the spacing: every book you open wears it.',
@@ -644,6 +665,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-sort',
           anchorId: 'bk-shelf-sort',
+          effectAnchorId: 'bk-tile',
           act: 'tap',
           text: {
             en: 'Tap Sort: five orders; Recently read means recently opened.',
@@ -717,6 +739,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-menu-fav',
           anchorId: 'bk-menu-fav',
+          effectAnchorId: 'bk-tile',
           act: 'tap',
           text: {
             en: 'Favorite it: the star and the Favorites filter follow.',
@@ -726,6 +749,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-menu-rename',
           anchorId: 'bk-menu-rename',
+          effectAnchorId: 'bk-rename-title',
           act: 'tap',
           text: {
             en: 'Rename offers two fields: title and author both.',
@@ -744,6 +768,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-menu-finish',
           anchorId: 'bk-menu-done',
+          effectAnchorId: 'bk-tile',
           act: 'tap',
           text: {
             en: 'Finish it by hand — and notice: its place survives.',
@@ -762,6 +787,7 @@ export const AD7: PresentationModule = {
         {
           id: 'ad7-delete',
           anchorId: 'bk-menu-delete',
+          effectAnchorId: 'shell-confirm-host',
           act: 'tap',
           text: {
             en: 'Tap Delete: it asks first, always.',

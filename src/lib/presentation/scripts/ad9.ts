@@ -92,6 +92,7 @@ export const AD9: PresentationModule = {
         {
           id: 'legs-book-tap',
           anchorId: 'listen-continue-book',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'The book row names its percent already read.',
@@ -137,6 +138,7 @@ export const AD9: PresentationModule = {
         {
           id: 'legs-text-tap',
           anchorId: 'listen-continue-text',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Its row names the sentence where you stopped.',
@@ -234,6 +236,7 @@ export const AD9: PresentationModule = {
         {
           id: 'clip-row',
           anchorId: 'listen-continue-clip',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'The audio row says Left at — its exact saved second.',
@@ -395,6 +398,7 @@ export const AD9: PresentationModule = {
         {
           id: 'marks-tap-paragraph',
           anchorId: 'book-block:1',
+          effectAnchorId: 'book-actions',
           act: 'tap',
           establishes: 'paragraph-toolbar',
           text: {
@@ -405,6 +409,7 @@ export const AD9: PresentationModule = {
         {
           id: 'marks-listen-from',
           anchorId: 'book-act-listen',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Listen from here plays from this paragraph onward.',
@@ -486,6 +491,7 @@ export const AD9: PresentationModule = {
         {
           id: 'marks-remove',
           anchorId: 'lib-mark-remove',
+          effectAnchorId: 'shell-confirm-host',
           act: 'tap',
           text: {
             en: 'Removing a mark always asks first.',
@@ -575,6 +581,7 @@ export const AD9: PresentationModule = {
         {
           id: 'end-clip-finish',
           anchorId: 'lib-menu-done',
+          effectAnchorId: 'lib-clip-card',
           act: 'tap',
           text: {
             en: "Mark finished also erases the clip's saved place.",
@@ -584,6 +591,7 @@ export const AD9: PresentationModule = {
         {
           id: 'end-clip-unfinish',
           anchorId: 'lib-menu-done',
+          effectAnchorId: 'lib-clip-card',
           act: 'tap',
           text: {
             en: 'Un-finishing brings back the clip, not its place.',
@@ -593,6 +601,7 @@ export const AD9: PresentationModule = {
         {
           id: 'end-clip-startover',
           anchorId: 'lib-menu-startover',
+          effectAnchorId: 'lib-clip-card',
           act: 'tap',
           text: {
             en: 'Start over next time forgets only the resume point.',
@@ -621,6 +630,7 @@ export const AD9: PresentationModule = {
         {
           id: 'end-book-finish',
           anchorId: 'bk-menu-done',
+          effectAnchorId: 'bk-tile',
           act: 'tap',
           text: {
             en: 'A hand-finished book keeps its place untouched.',
@@ -639,6 +649,7 @@ export const AD9: PresentationModule = {
         {
           id: 'end-book-startover',
           anchorId: 'bk-menu-startover',
+          effectAnchorId: 'bk-tile',
           act: 'tap',
           text: {
             en: 'Start over resets the place — but its bookmarks survive.',

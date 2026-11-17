@@ -51,6 +51,7 @@ export const Q4: PresentationModule = {
         {
           id: 'keep-open-from-reader',
           anchorId: 'listen-reader-save',
+          effectAnchorId: 'listen-keep-sheet',
           act: 'tap',
           establishes: 'keep-sheet-open',
           text: {
@@ -178,6 +179,7 @@ export const Q4: PresentationModule = {
         {
           id: 'shelf-search',
           anchorId: 'lib-saved-search',
+          effectAnchorId: 'lib-clip-card',
           act: 'type',
           payload: { value: 'honey' },
           text: {
@@ -188,6 +190,7 @@ export const Q4: PresentationModule = {
         {
           id: 'shelf-filters',
           anchorId: 'lib-saved-filters',
+          effectAnchorId: 'lib-clip-card',
           act: 'tap',
           text: {
             en: 'Filters line up your shelf: Later, New, Favorites, Finished.',
@@ -230,6 +233,7 @@ export const Q4: PresentationModule = {
         {
           id: 'card-text-listen',
           anchorId: 'lib-clip-play',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'A text card opens inside Listen, already playing.',
@@ -281,6 +285,7 @@ export const Q4: PresentationModule = {
         {
           id: 'make-audio',
           anchorId: 'lib-clip-make-audio',
+          effectAnchorId: 'lib-render-card',
           act: 'tap',
           text: {
             en: 'Make audio renders this text in your listening voice.',
@@ -352,6 +357,7 @@ export const Q4: PresentationModule = {
         {
           id: 'mark-tap',
           anchorId: 'listen-mark',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'This button marks the sentence sounding right now.',
@@ -430,6 +436,7 @@ export const Q4: PresentationModule = {
         {
           id: 'continue-clip-audio',
           anchorId: 'listen-continue-clip',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'An audio clip resumes at its saved second.',

@@ -50,9 +50,10 @@
    wording): the background DARKENS and DESATURATES SLIGHTLY — it
    NEVER BLURS. Four panels tile the viewport around the contained
    hole (geometry.ts) — top and bottom span the full width, left and
-   right fill the hole's own band. Each panel tints (.55 of the theme
-   ground, as the veil always did) and slightly desaturates what lies
-   beneath it (saturate(0.65)), so the backdrop's colours read muted
+   right fill the hole's own band. Each panel tints (.45 of the theme
+   ground — the P7 veil ceiling: 45% is the most the veil may ever
+   lay down) and slightly desaturates what lies beneath it
+   (saturate(0.65)), so the backdrop's colours read muted
    while its buttons and layout stay clearly inferable — a module
    touring the app is useless if the app behind cannot be seen; the
    veil is a map's dimming, never a fog. No panel ever covers the
@@ -61,7 +62,7 @@
   position: fixed;
   z-index: 110;
   pointer-events: none;
-  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
   backdrop-filter: saturate(0.65);
   -webkit-backdrop-filter: saturate(0.65);
 }
@@ -89,6 +90,20 @@
   border-radius: 18px;
   pointer-events: none;
   box-shadow: 0 0 0 2px var(--accent), 0 0 26px 3px var(--accent-glow);
+}
+
+/* The subject box (P11, for Builder 3b): the visible box that ties a
+   caption to its SUBJECT region — the thing the caption is about, as
+   distinct from the focus the ring breathes around. It is a pointer,
+   not a focus: a quiet dashed outline in the second accent, NO
+   animation, NO breathing, never in the way of a touch. Painted by
+   the component at the subject rect (positioned inline). */
+.lp-subject {
+  position: fixed;
+  pointer-events: none;
+  z-index: 111;
+  border: 1.5px dashed color-mix(in srgb, var(--accent-2, var(--accent)) 80%, transparent);
+  border-radius: 14px;
 }
 
 /* The card: ~370px on phones, beside the focus (positioned inline).
@@ -134,7 +149,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 5px;
 }
 .lp-counter {
   margin: 0;
@@ -148,7 +163,7 @@
 .lp-cluster {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   flex: none;
 }
 
@@ -185,21 +200,28 @@
   justify-content: center;
 }
 
-/* The HEADER controls run SMALLER (Oscar's order, 2026-11-14, from his
-   own crops of this card: the ✕ stood cut by the card's corner at phone
-   width — «hazlos más pequeños para que respiren mejor»). Header-scoped:
-   25px tall, 25px icon pads, 12px icons (set in the component), tighter
-   padding and gaps — the whole row now sits inside the card's content
-   box with air to spare at 390px. The bottom row and the stay window
-   are NOT the header: they keep the 30px quiet size above. */
+/* The HEADER controls meet the HOUSE TARGET FLOOR (P18): the app's
+   own smallest real button is 32px, so the header's controls are 32px
+   too — 32px tall word buttons, 32px icon pads. (This supersedes the
+   2026-11-14 25px shrink, ordered then because the ✕ stood cut by the
+   card's corner at phone width: the floor is now met WITHOUT cutting
+   any control, by recovering the width from spacing alone — the head
+   gap, the cluster gap, the nav-pair gap, the header buttons' padding
+   and their icon-to-word gap are all tightened above/elsewhere in
+   this file; no word is shrunk and no target is narrowed. Verified
+   rendered at 390×844 in the ES bench: the full cluster — counter,
+   ‹ ›, the mode button WITH its word, speed, chapters, ✕ — sits on
+   ONE line inside the card, no control cut, with air to spare. The
+   bottom row and the stay window are NOT the header: they keep the
+   30px quiet size above.) */
 .lp-head .lp-qbtn {
-  height: 25px;
-  padding: 0 7px;
+  height: 32px;
+  padding: 0 6px;
   font-size: 11.5px;
-  gap: 4px;
+  gap: 3px;
 }
 .lp-head .lp-qicon {
-  width: 25px;
+  width: 32px;
   padding: 0;
 }
 
@@ -213,7 +235,7 @@
 }
 .lp-speed {
   flex: 1;
-  height: 30px;
+  height: 32px;
   border-radius: 99px;
   font-size: 12.5px;
   font-weight: 650;
@@ -333,7 +355,7 @@
 .lp-navpair {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   flex: none;
 }
 .lp-navbtn {
@@ -368,23 +390,113 @@
   border: 1px solid transparent;
 }
 
-/* The card's windows — the stay-here window and the ✕ confirmation
-   window are one family (Oscar's laws, Brizna lane 2026-11-14): a small
-   pop-up unfolded on the card (the codex's context pop-up seat), framed
-   by the same built border family as the card (theme-mixed border, the
-   inner top light), opening on the one motion clock. THE WINDOW ASKS
-   BIG AND EXPLAINS SHORT: the QUESTION is the headline — protagonist
-   scale, the largest type in the window — and the body stays brief:
-   one or two short lines, never a paragraph. Theme paint only. */
+/* The presentation's windows (Oscar's laws, Brizna lane 2026-11-14;
+   the centring COMPLETED by Oscar's ruling 2026-11-15 — «Ventanas
+   emergentes o de confirmación se centran»): ALL THREE windows are
+   CENTRED MODALS — the STAY-HERE window, the ✕ CONFIRMATION window
+   (P5) and the OPENING window (P1, below). Each stands fixed at the
+   viewport's centre, over the card, rendered as a sibling under
+   .lp-player (never inside the card), in the same built border family
+   as the card (theme-mixed border, the inner top light, the
+   two-storey shadow). A centred window carries NO scrim or backdrop
+   of its own — any added alpha over the veil would breach the P7
+   veil ceiling (45%). lp-in animates opacity only, so it cannot
+   fight the centring transform. THE WINDOW ASKS BIG AND EXPLAINS
+   SHORT: the QUESTION is the headline — protagonist scale, the
+   largest type in the window — and the body stays brief: one or two
+   short lines, never a paragraph. Theme paint only. */
 .lp-staywin,
 .lp-closewin {
-  margin-top: 12px;
-  padding: 14px 16px;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(370px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  padding: 18px;
   border-radius: 16px;
-  background: var(--surface-2);
+  z-index: 118;
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-2));
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line-2));
-  box-shadow: inset 0 1px 0 var(--sheen);
+  box-shadow:
+    inset 0 1px 0 var(--sheen),
+    0 26px 55px -22px color-mix(in srgb, var(--accent) 30%, transparent),
+    var(--shadow);
   animation: lp-in var(--lp-dur) var(--lp-ease);
+}
+
+/* The OPENING window (P1, for Builder 3b): the centred modal that
+   prepares a lesson before its clock starts — same centring pattern,
+   same border/shadow/background stack as .lp-closewin, a little
+   wider (430px) for its control list. No scrim of its own (P7). */
+.lp-openwin {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(430px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  padding: 18px;
+  border-radius: 16px;
+  z-index: 118;
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line-2));
+  box-shadow:
+    inset 0 1px 0 var(--sheen),
+    0 26px 55px -22px color-mix(in srgb, var(--accent) 30%, transparent),
+    var(--shadow);
+  animation: lp-in var(--lp-dur) var(--lp-ease);
+}
+.lp-openwin-t {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
+}
+.lp-openwin-modes {
+  margin: 10px 0 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.lp-openwin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+.lp-openwin-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+.lp-openwin-row svg {
+  flex: none;
+}
+.lp-openwin-row .lp-openwin-name {
+  font-weight: 650;
+  color: var(--text);
+  white-space: nowrap;
+  flex: none;
+}
+.lp-openwin-hint {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.lp-openwin-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
 }
 .lp-staywin-t,
 .lp-closewin-t {
@@ -445,12 +557,15 @@
   .lp-qbtn,
   .lp-navbtn,
   .lp-chapter,
+  .lp-done-btn,
+  .lp-speed,
   .lp-card {
     transition: none;
   }
   .lp-card,
   .lp-staywin,
   .lp-closewin,
+  .lp-openwin,
   .lp-speedstrip,
   .lp-chapters {
     animation: none;

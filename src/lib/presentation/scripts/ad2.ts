@@ -120,6 +120,7 @@ export const AD2: PresentationModule = {
         {
           id: 'ad2-share-link-tap',
           anchorId: 'share-link-to-webimport',
+          effectAnchorId: 'web-import',
           act: 'tap',
           establishes: 'webimport-open',
           text: {
@@ -193,6 +194,7 @@ export const AD2: PresentationModule = {
         {
           id: 'ad2-files-import-tap',
           anchorId: 'bk-shelf-import',
+          effectAnchorId: 'bk-tile',
           act: 'tap',
           text: {
             en: 'The imported book lands on the Library shelf.',
@@ -514,6 +516,7 @@ export const AD2: PresentationModule = {
         {
           id: 'ad2-web-paste-tap',
           anchorId: 'web-import-paste',
+          effectAnchorId: 'web-import-url',
           act: 'tap',
           establishes: 'web-phase-loading',
           text: {
@@ -552,6 +555,7 @@ export const AD2: PresentationModule = {
         {
           id: 'ad2-web-go-tap',
           anchorId: 'web-import-go',
+          effectAnchorId: 'web-import-loading',
           act: 'tap',
           text: {
             en: 'Logos tries several roads until one brings the text.',
@@ -713,6 +717,7 @@ export const AD2: PresentationModule = {
         {
           id: 'ad2-pasted-type',
           anchorId: 'listen-editor',
+          effectAnchorId: 'listen-url-banner',
           act: 'type',
           payload: { value: 'www.example.org/la-carta-del-faro' },
           text: {
@@ -741,6 +746,7 @@ export const AD2: PresentationModule = {
         {
           id: 'ad2-pasted-banner-tap',
           anchorId: 'listen-url-banner',
+          effectAnchorId: 'web-import',
           act: 'tap',
           establishes: 'webimport-open',
           text: {

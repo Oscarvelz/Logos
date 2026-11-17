@@ -60,6 +60,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-play-fiction',
           anchorId: 'listen-play',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           payload: { param: TEXT_EN.id },
           establishes: 'scenario-session-playing',
@@ -125,6 +126,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-highlight-off',
           anchorId: 'set-highlight',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Inside Playback, this switch turns the sentence light off.',
@@ -161,6 +163,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-highlight-on',
           anchorId: 'set-highlight',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Switch it back on: nothing else changed.',
@@ -194,6 +197,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-bigger',
           anchorId: 'listen-text-bigger',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Tapping A+ steps the size up one rung.',
@@ -221,6 +225,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-smaller',
           anchorId: 'listen-text-smaller',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'A− steps back down, one rung at a time.',
@@ -239,6 +244,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-size-stepper',
           anchorId: 'set-reader-size-plus',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'This stepper walks exactly that same ladder.',
@@ -257,6 +263,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-timing-plus',
           anchorId: 'set-word-timing-plus',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Word timing, stepped up: the light lands earlier.',
@@ -284,6 +291,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-tap-word',
           anchorId: 'listen-reader-sentence:2',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Tap a word: the voice lands just before it.',
@@ -302,6 +310,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-enter',
           anchorId: 'listen-reader-sentence:3',
+          effectAnchorId: 'listen-reader',
           act: 'key',
           payload: { key: 'Enter' },
           text: {
@@ -327,6 +336,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-seek-drag',
           anchorId: 'listen-scrubber',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Drag the bar: the place moves by sentences.',
@@ -372,6 +382,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-seek-pause',
           anchorId: 'listen-play',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Pause here a moment, then drag again.',
@@ -381,6 +392,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-seek-paused-drag',
           anchorId: 'listen-scrubber',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Dragged while paused, the place moves, still paused.',
@@ -390,6 +402,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-seek-resume',
           anchorId: 'listen-play',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Play resumes from exactly the new place.',
@@ -414,6 +427,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-edit-tap',
           anchorId: 'listen-reader-edit',
+          effectAnchorId: 'listen-editor',
           act: 'tap',
           text: {
             en: 'Edit opens the text; the session stays loaded.',
@@ -442,6 +456,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-edit-back',
           anchorId: 'listen-reading-view',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'This cross returns you to the reading view.',
@@ -637,6 +652,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-key-space',
           anchorId: 'listen-page',
+          effectAnchorId: 'listen-reader',
           act: 'key',
           payload: { key: 'Space' },
           text: {
@@ -647,6 +663,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-key-right',
           anchorId: 'listen-page',
+          effectAnchorId: 'listen-reader',
           act: 'key',
           payload: { key: 'ArrowRight' },
           text: {
@@ -657,6 +674,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-key-left',
           anchorId: 'listen-page',
+          effectAnchorId: 'listen-reader',
           act: 'key',
           payload: { key: 'ArrowLeft' },
           text: {
@@ -676,6 +694,7 @@ export const AD3: PresentationModule = {
         {
           id: 'ad3-key-scrubber',
           anchorId: 'listen-scrubber',
+          effectAnchorId: 'listen-reader',
           act: 'key',
           payload: { key: 'ArrowRight' },
           text: {

@@ -313,6 +313,7 @@ export const AD1: PresentationModule = {
         {
           id: 's3-seek-bar',
           anchorId: 'bubble-seek',
+          effectAnchorId: 'bubble-stage-words',
           act: 'tap',
           text: {
             en: 'The seek bar lands on release, at that sentence.',
@@ -322,6 +323,7 @@ export const AD1: PresentationModule = {
         {
           id: 's3-grip',
           anchorId: 'bubble-stage-grip',
+          effectAnchorId: 'bubble-stage-panel',
           act: 'tap',
           text: {
             en: 'Drag this corner grip: the reader stretches two ways.',
@@ -349,6 +351,7 @@ export const AD1: PresentationModule = {
         {
           id: 's3-arrival',
           anchorId: 'bubble-arrival',
+          effectAnchorId: 'bubble-stage-words',
           act: 'tap',
           text: {
             en: 'Or copy, then simply open Logos: the new text plays.',
@@ -382,6 +385,7 @@ export const AD1: PresentationModule = {
         {
           id: 's4-prev',
           anchorId: 'bubble-prev',
+          effectAnchorId: 'bubble-stage-words',
           act: 'tap',
           text: {
             en: 'Previous steps back exactly one sentence — never another track.',
@@ -391,6 +395,7 @@ export const AD1: PresentationModule = {
         {
           id: 's4-next',
           anchorId: 'bubble-next',
+          effectAnchorId: 'bubble-stage-words',
           act: 'tap',
           text: {
             en: 'Next steps forward one sentence; the triangles say fast-wind.',
@@ -400,6 +405,7 @@ export const AD1: PresentationModule = {
         {
           id: 's4-pause-named',
           anchorId: 'bubble-pause',
+          effectAnchorId: 'bubble-stage-words',
           act: 'tap',
           text: {
             en: 'This key sends «pause» by name — never a blind toggle.',
@@ -445,6 +451,7 @@ export const AD1: PresentationModule = {
         {
           id: 's4-speed-minus',
           anchorId: 'bubble-speed',
+          effectAnchorId: 'bubble-stage-words',
           act: 'tap',
           text: {
             en: 'Minus steps down the same ladder Listen uses.',
@@ -454,6 +461,7 @@ export const AD1: PresentationModule = {
         {
           id: 's4-speed-plus',
           anchorId: 'bubble-speed',
+          effectAnchorId: 'bubble-stage-words',
           act: 'tap',
           text: {
             en: 'Plus steps up one rung — never a leap.',
@@ -568,6 +576,7 @@ export const AD1: PresentationModule = {
         {
           id: 's5-lock-card',
           anchorId: 'bubble-stage-lock',
+          effectAnchorId: 'bubble-lock-state',
           act: 'tap',
           text: {
             en: 'The lock explains itself before changing, both directions.',
@@ -673,6 +682,7 @@ export const AD1: PresentationModule = {
         {
           id: 's6-eye',
           anchorId: 'bubble-stage-eye',
+          effectAnchorId: 'shell-confirm-host',
           act: 'tap',
           text: {
             en: 'The eye asks first: Remove the bubble?',
@@ -734,6 +744,7 @@ export const AD1: PresentationModule = {
         {
           id: 's7-skip',
           anchorId: 'bubble-prev',
+          effectAnchorId: 'bubble-stage-words',
           act: 'tap',
           text: {
             en: 'Previous and next become fifteen-second steps here.',
@@ -784,6 +795,16 @@ export const AD1: PresentationModule = {
           text: {
             en: 'One panel, two stages — and every key accounted for.',
             es: 'Un panel, dos escenas — y cada tecla explicada.',
+          },
+        },
+        {
+          id: 's7-unlock',
+          anchorId: 'bubble-stage-lock',
+          effectAnchorId: 'bubble-lock-state',
+          act: 'tap',
+          text: {
+            en: 'Last, tap the lock again: the panel unlocks, as it began.',
+            es: 'Por último, toca el candado otra vez: el panel se desbloquea.',
           },
         },
       ],

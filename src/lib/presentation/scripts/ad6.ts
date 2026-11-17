@@ -82,6 +82,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-search-type',
           anchorId: 'lib-saved-search',
+          effectAnchorId: 'lib-clip-card',
           act: 'type',
           payload: { value: 'honey' },
           text: {
@@ -110,6 +111,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-filters',
           anchorId: 'lib-saved-filters',
+          effectAnchorId: 'lib-clip-card',
           act: 'tap',
           text: {
             en: "Six filters split the shelf by each clip's state.",
@@ -128,6 +130,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-filter-done',
           anchorId: 'lib-filter:done',
+          effectAnchorId: 'lib-clip-card',
           act: 'tap',
           text: {
             en: 'Finished gathers everything you heard to the end.',
@@ -137,6 +140,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-sort',
           anchorId: 'lib-saved-sort',
+          effectAnchorId: 'lib-clip-card',
           act: 'tap',
           text: {
             en: 'Five orders: newest, oldest, longest, shortest, A to Z.',
@@ -155,6 +159,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-nomatch-type',
           anchorId: 'lib-saved-search',
+          effectAnchorId: 'lib-saved-nomatch',
           act: 'type',
           payload: { value: 'zzzz' },
           text: {
@@ -174,6 +179,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-search-clear',
           anchorId: 'lib-saved-search',
+          effectAnchorId: 'lib-clip-card',
           act: 'type',
           payload: { value: '' },
           text: {
@@ -199,6 +205,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-select-door',
           anchorId: 'lib-select-toggle',
+          effectAnchorId: 'lib-selbar',
           act: 'tap',
           establishes: 'selection',
           text: {
@@ -209,6 +216,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-select-longpress',
           anchorId: 'lib-clip-card',
+          effectAnchorId: 'lib-selbar',
           act: 'hover',
           payload: { holdMs: 480 },
           establishes: 'selection',
@@ -238,6 +246,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-sel-all',
           anchorId: 'lib-sel-all',
+          effectAnchorId: 'lib-clip-card',
           act: 'tap',
           text: {
             en: "'All' selects everything shown, nothing the filter hides.",
@@ -256,6 +265,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-sel-fav',
           anchorId: 'lib-sel-fav',
+          effectAnchorId: 'lib-clip-card',
           act: 'tap',
           text: {
             en: 'The star gives every selected clip a star.',
@@ -274,6 +284,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-sel-done',
           anchorId: 'lib-sel-done',
+          effectAnchorId: 'lib-clip-card',
           act: 'tap',
           text: {
             en: "'Finish' marks every selected clip as finished.",
@@ -292,6 +303,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-sel-delete',
           anchorId: 'lib-sel-delete',
+          effectAnchorId: 'shell-confirm-host',
           act: 'tap',
           establishes: 'delete-confirm',
           text: {
@@ -412,6 +424,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-menu-rename',
           anchorId: 'lib-menu-rename',
+          effectAnchorId: 'lib-rename-input',
           act: 'tap',
           establishes: 'rename-sheet',
           text: {
@@ -432,6 +445,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-rename-save',
           anchorId: 'lib-rename-input',
+          effectAnchorId: 'lib-clip-card',
           act: 'key',
           payload: { key: 'Enter' },
           text: {
@@ -575,6 +589,7 @@ export const AD6: PresentationModule = {
         {
           id: 'ad6-queue-start',
           anchorId: 'lib-clip-make-audio',
+          effectAnchorId: 'lib-render-card',
           act: 'tap',
           establishes: 'render-running',
           text: {

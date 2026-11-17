@@ -51,19 +51,21 @@ import {
 } from '../../src/lib/presentation/presentation-state.ts'
 import { CLIP_TEXT, TEXT_EN, containsScenarioData, createScenario } from '../../src/lib/presentation/scenario/index.ts'
 import {
-  ASK_BEAT_MS,
   CAPTION_MAX_MS,
   CAPTION_MIN_MS,
   HOVER_REST_MS,
   ACTION_BEAT_MS,
+  RESULT_DWELL_MS,
   captionDurationMs,
   createPresentationClock,
   durationLabel,
   durationLabelForMs,
   moduleDurationMs,
+  performDelayMs,
+  physicalSpeed,
   stepDurationMs,
 } from '../../src/lib/presentation/engine/clock.ts'
-import { cardSeat, containedHole } from '../../src/lib/presentation/engine/geometry.ts'
+import { cardSeat, containedHole, unionRect } from '../../src/lib/presentation/engine/geometry.ts'
 import { REFRESH_LINE, createPresentationRunner } from '../../src/lib/presentation/engine/runner.ts'
 import { createScenarioPort } from '../../src/lib/presentation/engine/scenario-port.ts'
 import {
@@ -120,6 +122,9 @@ class FakeStorage {
 }
 
 const bi = (en, es) => ({ en, es })
+
+/** Wall ms a presentation-time wait takes at a speed LABEL (P2: physical = label / 2). */
+const wallMs = (presMs, label = 1) => presMs / physicalSpeed(label)
 
 function sampleModule() {
   return {
@@ -180,21 +185,79 @@ describe('clock', () => {
     assert.equal(captionDurationMs(pair, 'es'), 900 + 10 * 340)
   })
 
-  test('step durations: ask adds the beat, hover rests, bare acts dwell', () => {
+  test('step durations: ask adds the result dwell, hover rests, bare acts dwell on the result', () => {
     const ask = { id: 'a', anchorId: 'listen-paste', act: 'ask', question: bi('Where does it go?', '¿Adónde va?') }
-    assert.equal(stepDurationMs(ask, 'en'), captionDurationMs(ask.question, 'en') + ASK_BEAT_MS)
+    assert.equal(stepDurationMs(ask, 'en'), captionDurationMs(ask.question, 'en') + RESULT_DWELL_MS)
     const hover = { id: 'h', anchorId: 'listen-play', act: 'hover' }
     assert.equal(stepDurationMs(hover), HOVER_REST_MS)
     const tap = { id: 't', anchorId: 'listen-play', act: 'tap' }
-    assert.equal(stepDurationMs(tap), ACTION_BEAT_MS)
+    // Uncaptioned performed act: max(ACTION_BEAT_MS, 0 + RESULT_DWELL_MS).
+    assert.equal(stepDurationMs(tap), Math.max(ACTION_BEAT_MS, RESULT_DWELL_MS))
+    assert.equal(stepDurationMs(tap), 1000)
+  })
+
+  test('two-phase beats (P9+P16): read first, then perform, then rest on the result', () => {
+    // Captioned tap: caption (the perform delay) + RESULT_DWELL_MS.
+    const tap = { id: 't', anchorId: 'listen-play', act: 'tap', text: bi('Tap Play and Logos reads it aloud.', 'Toca Reproducir y Logos lo lee.') }
+    assert.equal(performDelayMs(tap, 'en'), captionDurationMs(tap.text, 'en'))
+    assert.equal(stepDurationMs(tap, 'en'), captionDurationMs(tap.text, 'en') + RESULT_DWELL_MS)
+    // ask: the question is the read phase; the total rests RESULT_DWELL_MS on the answer.
+    const ask = { id: 'a', anchorId: 'listen-paste', act: 'ask', question: bi('Where does it go?', '¿Adónde va?') }
+    assert.equal(performDelayMs(ask, 'en'), captionDurationMs(ask.question, 'en'))
+    assert.equal(stepDurationMs(ask, 'en'), captionDurationMs(ask.question, 'en') + RESULT_DWELL_MS)
+    // Captioned hover with holdMs: caption + its announced hold (no shadowing).
+    const hover = { id: 'h', anchorId: 'listen-play', act: 'hover', text: bi('Rest on the Play key.', 'Descansa en Reproducir.'), payload: { holdMs: 2000 } }
+    assert.equal(performDelayMs(hover, 'en'), captionDurationMs(hover.text, 'en'))
+    assert.equal(stepDurationMs(hover, 'en'), captionDurationMs(hover.text, 'en') + 2000)
+    // Captioned hover without holdMs: caption + HOVER_REST_MS.
+    const hoverDefault = { id: 'h2', anchorId: 'listen-play', act: 'hover', text: bi('Rest on the Play key.', 'Descansa en Reproducir.') }
+    assert.equal(stepDurationMs(hoverDefault, 'en'), captionDurationMs(hoverDefault.text, 'en') + HOVER_REST_MS)
+    // Uncaptioned acts: no read phase; hover keeps its hold exactly as before.
+    const bareTap = { id: 'bt', anchorId: 'listen-play', act: 'tap' }
+    assert.equal(performDelayMs(bareTap, 'en'), 0)
+    assert.equal(stepDurationMs(bareTap, 'en'), Math.max(ACTION_BEAT_MS, RESULT_DWELL_MS))
+    const bareHover = { id: 'bh', anchorId: 'listen-play', act: 'hover', payload: { holdMs: 2000 } }
+    assert.equal(stepDurationMs(bareHover, 'en'), 2000)
+    assert.equal(stepDurationMs({ id: 'bh2', anchorId: 'listen-play', act: 'hover' }, 'en'), HOVER_REST_MS)
+    // say: nothing performed — no delay, no dwell, caption alone.
+    const say = { id: 's', anchorId: 'listen-play', act: 'say', text: bi('That is the whole probe.', 'Eso es toda la sonda.') }
+    assert.equal(performDelayMs(say, 'en'), 0)
+    assert.equal(stepDurationMs(say, 'en'), captionDurationMs(say.text, 'en'))
+  })
+
+  test('physical speed mapping (P2): label / 2 — a 1000 ms wait at label 1 takes 2000 ms wall', () => {
+    assert.equal(physicalSpeed(0.5), 0.25)
+    assert.equal(physicalSpeed(0.75), 0.375)
+    assert.equal(physicalSpeed(1), 0.5)
+    assert.equal(physicalSpeed(1.5), 0.75)
+    assert.equal(physicalSpeed(2), 1)
+    const timer = new FakeTimer()
+    const clock = createPresentationClock(timer)
+    assert.equal(clock.speed, 1, 'the snapshot speed stays a LABEL')
+    let firedAt = null
+    clock.after(1000, () => {
+      firedAt = timer.nowMs
+    })
+    timer.advance(1999)
+    assert.equal(firedAt, null)
+    timer.advance(1)
+    assert.equal(firedAt, 2000, '1000 presentation ms at the new 1× (physical 0.5×) = 2000 wall ms')
+    // Elapsed presentation time also converts through the physical rate.
+    const timer2 = new FakeTimer()
+    const clock2 = createPresentationClock(timer2)
+    clock2.setSpeed(2) // physical 1× — the old 1×
+    timer2.advance(1000)
+    assert.equal(clock2.elapsedMs(), 1000)
+    assert.equal(clock2.speed, 2, 'setSpeed still takes and reports LABELS')
   })
 
   test('module duration + label come from the one calibration, per language', () => {
     const script = sampleModule()
-    // EN: s1 7 words → 3280 · s2 7 words → 3280 · s3 5 words → 2600
-    assert.equal(moduleDurationMs(script, 'en'), 3280 + 3280 + 2600)
-    // ES: s1 7 → 3280 · s2 9 → 3960 · s3 5 → 2600
-    assert.equal(moduleDurationMs(script, 'es'), 3280 + 3960 + 2600)
+    // Presentation-time sums (two-phase): EN s1 tap 7 words → 3280 + 1000 dwell · s2 tap 7 → 3280 + 1000 · s3 say 5 → 2600.
+    // moduleDurationMs is the WALL duration at the new Automatic 1×: the sum / physicalSpeed(1) = sum × 2.
+    assert.equal(moduleDurationMs(script, 'en'), (4280 + 4280 + 2600) * 2)
+    // ES: s1 7 → 4280 · s2 9 → 3960 + 1000 · s3 say 5 → 2600
+    assert.equal(moduleDurationMs(script, 'es'), (4280 + 4960 + 2600) * 2)
     assert.equal(durationLabel(script, 'en'), durationLabelForMs(moduleDurationMs(script, 'en'), 'en'))
     assert.equal(durationLabel(script, 'en'), 'Approx. 1 min')
     assert.equal(durationLabel(script, 'es'), 'Aprox. 1 min')
@@ -208,12 +271,12 @@ describe('clock', () => {
     clock.after(2000, () => {
       firedAt = timer.nowMs
     })
-    timer.advance(500) // 1500 presentation ms remain
-    clock.setSpeed(2) // remainder now runs at 2× → 750 wall ms
-    timer.advance(749)
+    timer.advance(500) // at label 1 (physical 0.5×) 500 wall ms consume 250 presentation ms — 1750 remain
+    clock.setSpeed(2) // label 2 is physical 1× → the remainder runs 1750 wall ms
+    timer.advance(1749)
     assert.equal(firedAt, null)
     timer.advance(1)
-    assert.equal(firedAt, 1250)
+    assert.equal(firedAt, 2250)
   })
 
   test('pause holds a wait without consuming it', () => {
@@ -223,12 +286,12 @@ describe('clock', () => {
     clock.after(1000, () => {
       fired = true
     })
-    timer.advance(400)
+    timer.advance(400) // 200 presentation ms consumed at label 1; 800 remain → 1600 wall ms after resume
     clock.pause()
     timer.advance(10_000)
     assert.equal(fired, false)
     clock.resume()
-    timer.advance(599)
+    timer.advance(1599)
     assert.equal(fired, false)
     timer.advance(1)
     assert.equal(fired, true)
@@ -241,14 +304,14 @@ describe('clock', () => {
     clock.after(1000, () => {
       fired = true
     })
-    timer.advance(400)
+    timer.advance(400) // 200 presentation ms consumed at label 1
     clock.beginSpeedChoice()
     assert.equal(clock.speedChoiceOpen, true)
     timer.advance(10_000)
     assert.equal(fired, false)
-    clock.setSpeed(2) // the choice itself, made inside the hold
+    clock.setSpeed(2) // the choice itself, made inside the hold — label 2, physical 1×
     clock.endSpeedChoice()
-    timer.advance(299) // 600 presentation ms remain at 2× → 300 wall ms
+    timer.advance(799) // 800 presentation ms remain at physical 1× → 800 wall ms
     assert.equal(fired, false)
     timer.advance(1)
     assert.equal(fired, true)
@@ -262,13 +325,13 @@ describe('clock', () => {
     clock.after(1000, () => {
       fired = true
     })
-    timer.advance(400)
+    timer.advance(400) // 200 presentation ms consumed at label 1; 800 remain → 1600 wall ms
     clock.beginHold()
     assert.equal(clock.holdOpen, true)
     timer.advance(60_000)
     assert.equal(fired, false, 'a held clock does not consume the wait')
     clock.endHold()
-    timer.advance(599)
+    timer.advance(1599)
     assert.equal(fired, false)
     timer.advance(1)
     assert.equal(fired, true)
@@ -286,7 +349,7 @@ describe('clock', () => {
     timer2.advance(60_000)
     assert.equal(fired2, false, 'the hold ends, the user’s pause stands')
     clock2.resume()
-    timer2.advance(1000)
+    timer2.advance(2000) // 1000 presentation ms at label 1 = 2000 wall ms
     assert.equal(fired2, true)
   })
 })
@@ -306,6 +369,20 @@ describe('script format', () => {
     script.scenes[0].steps[0].anchorId = 'no-such-anchor'
     const problems = validatePresentationModule(script)
     assert.ok(problems.some((p) => p.includes('no-such-anchor') && p.includes('not in ANCHORS')))
+  })
+
+  test('effectAnchorId / subjectAnchorId / leaves are accepted; an unregistered effect id is rejected', () => {
+    const script = sampleModule()
+    script.scenes[0].steps[0].effectAnchorId = 'listen-play'
+    script.scenes[0].steps[0].subjectAnchorId = 'listen-editor'
+    script.scenes[0].steps[0].leaves = 'text-on-stage'
+    assert.deepEqual(validatePresentationModule(script), [], 'registered effect/subject ids and a free leaves state-name validate clean')
+    script.scenes[0].steps[0].effectAnchorId = 'no-such-anchor'
+    const problems = validatePresentationModule(script)
+    assert.ok(problems.some((p) => p.includes('effect') && p.includes('no-such-anchor') && p.includes('not in ANCHORS')))
+    const badSubject = sampleModule()
+    badSubject.scenes[0].steps[0].subjectAnchorId = 'no-such-anchor'
+    assert.ok(validatePresentationModule(badSubject).some((p) => p.includes('subject') && p.includes('not in ANCHORS')))
   })
 
   test('the banned-key scan catches smuggled selectors/coordinates at any depth', () => {
@@ -349,18 +426,19 @@ describe('runner', () => {
     runner.start()
     assert.equal(runner.getSnapshot().status, 'playing')
     assert.equal(runner.getSnapshot().current?.step.id, 's1')
-    timer.advance(stepDurationMs(script.scenes[0].steps[0], 'en'))
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[0], 'en')))
     assert.equal(runner.getSnapshot().current?.step.id, 's2')
-    timer.advance(stepDurationMs(script.scenes[0].steps[1], 'en'))
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[1], 'en')))
     assert.equal(runner.getSnapshot().current?.step.id, 's3')
-    timer.advance(stepDurationMs(script.scenes[0].steps[2], 'en'))
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[2], 'en')))
     const done = runner.getSnapshot()
     assert.equal(done.status, 'done')
     assert.equal(done.endReason, 'completed')
     assert.equal(done.progress.state, 'seen')
 
     const file = JSON.parse(storage.getItem(PRESENTATION_STATE_KEY))
-    assert.deepEqual(Object.keys(file).sort(), ['modules', 'myScenes', 'speed'])
+    assert.deepEqual(Object.keys(file).sort(), ['modules', 'myScenes', 'speed', 'speedScale'])
+    assert.equal(file.speedScale, 2)
     assert.equal(file.modules['engine-probe'].state, 'seen')
     assert.equal(file.speed, 1)
     assert.deepEqual(file.myScenes, [])
@@ -382,6 +460,11 @@ describe('runner', () => {
     runner.next()
     assert.equal(runner.getSnapshot().current?.step.id, 's2')
     runner.showMe()
+    // P16: «Show me» performs at once, then dwells on the result for
+    // RESULT_DWELL_MS — the step completes only when the dwell elapses.
+    assert.equal(runner.getSnapshot().current?.step.id, 's2', 'the shown result dwells before the step completes')
+    assert.equal(runner.getSnapshot().showMeDwelling, true)
+    timer.advance(wallMs(RESULT_DWELL_MS))
     assert.equal(runner.getSnapshot().current?.step.id, 's3')
     // s3 is a narration beat (say): no gesture to skip, › advances it.
     assert.equal(runner.getSnapshot().gestureBeat, false)
@@ -393,7 +476,7 @@ describe('runner', () => {
     const { runner, timer } = makeRunner()
     const script = sampleModule()
     runner.start()
-    timer.advance(stepDurationMs(script.scenes[0].steps[0], 'en')) // → s2
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[0], 'en'))) // → s2
     runner.setMode('interactive')
     assert.equal(runner.getSnapshot().status, 'interactive-wait')
     assert.equal(runner.getSnapshot().current?.step.id, 's2')
@@ -402,7 +485,7 @@ describe('runner', () => {
     runner.setMode('automatic')
     assert.equal(runner.getSnapshot().status, 'playing')
     assert.equal(runner.getSnapshot().current?.step.id, 's2')
-    timer.advance(stepDurationMs(script.scenes[0].steps[1], 'en'))
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[1], 'en')))
     assert.equal(runner.getSnapshot().current?.step.id, 's3')
   })
 
@@ -586,7 +669,7 @@ describe('runner', () => {
     assert.equal(runner.getSnapshot().current?.step.id, 's1')
     runner.setSpeed(2)
     runner.endSpeedChoice()
-    timer.advance(stepDurationMs(script.scenes[0].steps[0], 'en') / 2)
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[0], 'en'), 2))
     assert.equal(runner.getSnapshot().current?.step.id, 's2')
   })
 
@@ -620,7 +703,7 @@ describe('stay-here window', () => {
     const script = sampleModule()
     const s1Ms = stepDurationMs(script.scenes[0].steps[0], 'en')
     runner.start()
-    timer.advance(1000) // part-way into s1's caption life
+    timer.advance(wallMs(1000)) // part-way into s1's caption life (1000 presentation ms)
     runner.requestStayHere()
     assert.equal(runner.getSnapshot().stayWindowOpen, true)
     assert.equal(runner.getSnapshot().status, 'playing')
@@ -628,7 +711,7 @@ describe('stay-here window', () => {
     assert.equal(runner.getSnapshot().current?.step.id, 's1', 'in Automatic the lesson must not advance behind the window')
     runner.cancelStayHere()
     assert.equal(runner.getSnapshot().stayWindowOpen, false)
-    timer.advance(s1Ms - 1000 - 1)
+    timer.advance(wallMs(s1Ms - 1000) - 1)
     assert.equal(runner.getSnapshot().current?.step.id, 's1', 'the held remainder is still owed')
     timer.advance(1)
     assert.equal(runner.getSnapshot().current?.step.id, 's2', 'the lesson continues exactly where it stood')
@@ -644,7 +727,7 @@ describe('stay-here window', () => {
     timer.advance(60_000)
     assert.equal(runner.getSnapshot().current?.step.id, 's1', 'the user’s pause survives the window')
     runner.resume()
-    timer.advance(stepDurationMs(script.scenes[0].steps[0], 'en'))
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[0], 'en')))
     assert.equal(runner.getSnapshot().current?.step.id, 's2')
   })
 
@@ -695,7 +778,7 @@ describe('stay-here window', () => {
     runner.requestStayHere() // before start: nothing to leave
     assert.equal(runner.getSnapshot().stayWindowOpen, false)
     runner.start()
-    for (const step of script.scenes[0].steps) timer.advance(stepDurationMs(step, 'en'))
+    for (const step of script.scenes[0].steps) timer.advance(wallMs(stepDurationMs(step, 'en')))
     assert.equal(runner.getSnapshot().status, 'done')
     assert.equal(runner.getSnapshot().endReason, 'completed')
     runner.requestStayHere()
@@ -709,7 +792,7 @@ describe('the ✕ asks first (close window)', () => {
     const script = sampleModule()
     const s1Ms = stepDurationMs(script.scenes[0].steps[0], 'en')
     runner.start()
-    timer.advance(1000) // part-way into s1's caption life
+    timer.advance(wallMs(1000)) // part-way into s1's caption life (1000 presentation ms)
     runner.requestClose()
     assert.equal(runner.getSnapshot().closeWindowOpen, true)
     assert.equal(runner.getSnapshot().status, 'playing')
@@ -717,7 +800,7 @@ describe('the ✕ asks first (close window)', () => {
     assert.equal(runner.getSnapshot().current?.step.id, 's1', 'in Automatic the lesson must not advance behind the ✕ window')
     runner.cancelClose()
     assert.equal(runner.getSnapshot().closeWindowOpen, false)
-    timer.advance(s1Ms - 1000 - 1)
+    timer.advance(wallMs(s1Ms - 1000) - 1)
     assert.equal(runner.getSnapshot().current?.step.id, 's1', 'the held remainder is still owed')
     timer.advance(1)
     assert.equal(runner.getSnapshot().current?.step.id, 's2', 'the lesson continues exactly where it stood')
@@ -758,7 +841,7 @@ describe('the ✕ asks first (close window)', () => {
     runner.requestClose() // before start: nothing to leave
     assert.equal(runner.getSnapshot().closeWindowOpen, false)
     runner.start()
-    for (const step of script.scenes[0].steps) timer.advance(stepDurationMs(step, 'en'))
+    for (const step of script.scenes[0].steps) timer.advance(wallMs(stepDurationMs(step, 'en')))
     assert.equal(runner.getSnapshot().status, 'done')
     assert.equal(runner.getSnapshot().endReason, 'completed')
     runner.requestClose()
@@ -789,15 +872,15 @@ describe('the last-used mark (first-card law)', () => {
     const read = () => JSON.parse(storage.getItem(PRESENTATION_STATE_KEY))
     runner.start()
     assert.equal(read().lastUsed, 'engine-probe', 'the mark is set from module start')
-    timer.advance(stepDurationMs(script.scenes[0].steps[0], 'en'))
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[0], 'en')))
     assert.equal(runner.getSnapshot().current?.step.id, 's2')
     assert.equal(read().lastUsed, 'engine-probe', '…and rides every advance')
-    timer.advance(stepDurationMs(script.scenes[0].steps[1], 'en'))
-    timer.advance(stepDurationMs(script.scenes[0].steps[2], 'en'))
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[1], 'en')))
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[2], 'en')))
     assert.equal(runner.getSnapshot().progress.state, 'seen')
     const file = read()
     assert.equal('lastUsed' in file, false, 'completion clears the mark — the key itself leaves the file')
-    assert.deepEqual(Object.keys(file).sort(), ['modules', 'myScenes', 'speed'])
+    assert.deepEqual(Object.keys(file).sort(), ['modules', 'myScenes', 'speed', 'speedScale'])
   })
 
   test('the mark names the latest module used, even with another left part-way', () => {
@@ -835,6 +918,7 @@ describe('presentation state', () => {
         Q1: { state: 'in-progress', step: 4, scene: 'reader', stepId: 'q1-s5', verifiedAgainst: '1.4.156', skips: [] },
       },
       speed: 0.75,
+      speedScale: 2,
       myScenes: [{ module: 'Q1', scene: 'reader', step: 3, stepId: 'q1-s4', savedAt: '2026-11-14T09:00:00.000Z' }],
       lastUsed: 'Q1',
     }
@@ -843,13 +927,69 @@ describe('presentation state', () => {
     assert.equal(loadPresentationState(storage).modules.Q1.state, 'in-progress')
   })
 
+  test('pace migration (P2): an unstamped file’s speed is discarded once — never reinterpreted', () => {
+    // Old file: no speedScale, speed 2 (an OLD label — physical 2× then).
+    const migrated = normalizePresentationState({ modules: {}, speed: 2, myScenes: [] })
+    assert.equal(migrated.speed, 1, 'the old speed is discarded to the new label 1, not carried across')
+    assert.equal(migrated.speedScale, 2, '…and the file is stamped with the new scale')
+    // The migration runs once: the stamped result round-trips untouched.
+    assert.equal(normalizePresentationState(migrated).speed, 1)
+    // A speedScale: 2 file keeps its (new-label) speed, validated as before.
+    assert.equal(normalizePresentationState({ modules: {}, speed: 2, speedScale: 2, myScenes: [] }).speed, 2)
+    assert.equal(normalizePresentationState({ modules: {}, speed: 0.5, speedScale: 2, myScenes: [] }).speed, 0.5)
+    assert.equal(normalizePresentationState({ modules: {}, speed: 3, speedScale: 2, myScenes: [] }).speed, 1, 'an invalid new-label speed still falls back to 1')
+    // Through storage, the same: an old file on disk loads migrated.
+    const storage = new FakeStorage()
+    savePresentationState(storage, { modules: {}, speed: 2, myScenes: [] })
+    const loaded = loadPresentationState(storage)
+    assert.equal(loaded.speed, 1)
+    assert.equal(loaded.speedScale, 2)
+  })
+
+  test('ModuleProgress mode / userPaused / seededRequiredMiss survive the load gate intact', () => {
+    const state = {
+      modules: {
+        Q1: {
+          state: 'in-progress',
+          step: 4,
+          scene: 'reader',
+          stepId: 'q1-s5',
+          verifiedAgainst: '1.4.156',
+          skips: [],
+          mode: 'interactive',
+          userPaused: true,
+          seededRequiredMiss: true,
+        },
+      },
+      speed: 1,
+      speedScale: 2,
+      myScenes: [],
+    }
+    const storage = new FakeStorage()
+    savePresentationState(storage, state)
+    const loaded = loadPresentationState(storage)
+    assert.deepEqual(loaded, state, 'all three fields round-trip through save/load — the normaliser names them, so it cannot strip them')
+    assert.equal(loaded.modules.Q1.mode, 'interactive')
+    assert.equal(loaded.modules.Q1.userPaused, true)
+    assert.equal(loaded.modules.Q1.seededRequiredMiss, true)
+    // A bogus mode value is still refused by the gate.
+    const bogus = normalizePresentationState({
+      modules: { Q1: { state: 'seen', verifiedAgainst: '1.4.156', skips: [], mode: 'sideways' } },
+      speed: 1,
+      speedScale: 2,
+      myScenes: [],
+    })
+    assert.equal(bogus.modules.Q1.mode, undefined)
+  })
+
   test('a corrupt or foreign state file degrades to the empty state, never throws', () => {
     const storage = new FakeStorage()
     storage.setItem(PRESENTATION_STATE_KEY, '{not json')
-    assert.deepEqual(loadPresentationState(storage), { modules: {}, speed: 1, myScenes: [] })
+    assert.deepEqual(loadPresentationState(storage), { modules: {}, speed: 1, speedScale: 2, myScenes: [] })
     assert.deepEqual(normalizePresentationState({ speed: 3, modules: 'x', myScenes: [42] }), {
       modules: {},
       speed: 1,
+      speedScale: 2,
       myScenes: [],
     })
   })
@@ -866,8 +1006,9 @@ describe('payload isolation', () => {
       if (flat.step.id === 's1') sc.stage.playText(TEXT_EN.id)
     })
     const storage = new FakeStorage()
+    const timer = new FakeTimer()
     const runner = createPresentationRunner(sampleModule(), {
-      clock: createPresentationClock(new FakeTimer()),
+      clock: createPresentationClock(timer),
       resolver: fakeResolver(),
       storage,
       scenarioPort: port,
@@ -875,9 +1016,10 @@ describe('payload isolation', () => {
       now: () => 1_762_902_000_000,
     })
     runner.start()
-    runner.showMe() // performs s1 through the port, then advances
+    runner.showMe() // performs s1 through the port, then dwells on the result (P16)
     assert.deepEqual(performed, ['s1'])
     assert.equal(scenario.stage.session()?.textId, TEXT_EN.id, 'the act landed on the scenario, nowhere else')
+    timer.advance(wallMs(RESULT_DWELL_MS)) // the dwell elapses → s2 on stage
     runner.userAct()
     runner.userAct()
     assert.equal(runner.getSnapshot().status, 'done')
@@ -919,14 +1061,20 @@ describe('payload isolation', () => {
         },
       ],
     }
+    const timer = new FakeTimer()
     const runner = createPresentationRunner(clipModule, {
-      clock: createPresentationClock(new FakeTimer()),
+      clock: createPresentationClock(timer),
       resolver: fakeResolver(),
       storage: new FakeStorage(),
       scenario, // no port injected → the default scenario port is built
       now: () => 1_762_902_000_000,
     })
     runner.start()
+    // P16 two-phase: in Automatic the caption is read FIRST — the replace
+    // lands only when the perform delay elapses, and the step is still on
+    // stage then (its advance is a further RESULT_DWELL_MS away).
+    assert.equal(scenario.stage.session(), null, 'nothing is performed before the caption has been read')
+    timer.advance(wallMs(performDelayMs(clipModule.scenes[0].steps[0], 'en')))
     assert.equal(scenario.stage.session()?.title, CLIP_TEXT.title, 'the replace happened inside the sandbox')
     runner.abort()
     assert.equal(await scenario.isGone(), true, '✕ discards the scenario whole')
@@ -1066,8 +1214,12 @@ describe('entry seeding (mid-module entry)', () => {
     // the walked chain has performed the Undo's replace for it.
     const flat = flattenSteps(Q2)
     const undoAt = idxOf(Q2, 's3-undo-tap')
-    for (let i = 0; i < undoAt; i++) timer.advance(stepDurationMs(flat[i].step, 'en'))
+    for (let i = 0; i < undoAt; i++) timer.advance(wallMs(stepDurationMs(flat[i].step, 'en')))
     assert.equal(runner.getSnapshot().current?.step.id, 's3-undo-tap')
+    // P16 two-phase: the Undo is a performed act — it fires after its
+    // caption's reading time, while the beat is still on stage.
+    timer.advance(wallMs(performDelayMs(flat[undoAt].step, 'en')))
+    assert.equal(runner.getSnapshot().current?.step.id, 's3-undo-tap', 'the Undo beat is still on stage when its act fires')
     const restored = scenario.stage.session()
     assert.equal(restored?.textId, TEXT_EN.id, 'the walked Undo restored the harbour text')
     assert.equal(restored?.playing, false, 'loaded and paused (§2.6-1)')
@@ -1124,7 +1276,7 @@ describe('dead anchors (blind-skip audit)', () => {
       ['live-1', 'live-2', 'done'],
       'the dead beats emitted nothing — no invisible state was ever painted',
     )
-    assert.equal(emits[emits.length - 1].at, 2600 + 2600, 'total time is the two live beats only: 3 dead anchors ≪ 3 × any wait')
+    assert.equal(emits[emits.length - 1].at, wallMs(2600 + 2600), 'total wall time is the two live beats only (2600 presentation ms each at label 1): 3 dead anchors ≪ 3 × any wait')
     assert.ok(emits.filter((e) => e.status === 'playing').every((e) => e.step !== null), 'every active snapshot carries its live beat')
     assert.equal(runner.getSnapshot().progress.skips.length, 3, 'all three skips were logged')
   })
@@ -1147,37 +1299,64 @@ describe('the screen-edge law — the breathing hole contained', () => {
     assert.deepEqual(hole, { top: 290, left: 90, width: 100, height: 68 })
   })
 
-  test('a focus flush with the BOTTOM edge: the hole ends at vh − 4, never past the screen', () => {
+  test('a focus flush with the BOTTOM edge (P6): the hole ends at vh itself — the element is never cropped', () => {
     // The Brizna defect, staged: a bottom-bar control whose own bottom is
-    // the viewport's bottom (844). The old ±10px hole ended at 854.
+    // the viewport's bottom (844). The old ±10px hole ended at 854; the
+    // first containment pass ended it at 840, veiling the element's own
+    // bottom 4px (P6). Now the air below gives to zero and the hole
+    // contains the element whole, ending exactly at the screen's edge.
     const hole = containedHole({ top: 780, left: 24, width: 72, height: 64 }, VW, VH)
     const e = edges(hole)
-    assert.equal(e.bottom, VH - 4)
+    assert.equal(e.bottom, VH)
     assert.equal(e.top, 770, 'the air above the focus is untouched')
-    assert.ok(e.left >= 4 && e.right <= VW - 4)
+    assert.ok(e.left >= 0 && e.right <= VW)
+    assert.ok(e.left <= 24 && e.right >= 96, 'the hole contains the element’s on-screen rect')
   })
 
-  test('a focus flush with the RIGHT edge: the hole ends at vw − 4', () => {
+  test('a focus flush with the RIGHT edge (P6): the hole ends at vw itself', () => {
     const hole = containedHole({ top: 320, left: 318, width: 72, height: 52 }, VW, VH)
     const e = edges(hole)
-    assert.equal(e.right, VW - 4)
+    assert.equal(e.right, VW)
     assert.equal(e.left, 308, 'the air left of the focus is untouched')
-    assert.ok(e.top >= 4 && e.bottom <= VH - 4)
+    assert.ok(e.top >= 0 && e.bottom <= VH)
   })
 
-  test('top and left edges compress the same way (the frame never starts off-screen)', () => {
+  test('top and left edges (P6): a flush focus starts the hole at 0,0 — air only where the screen allows', () => {
     const hole = containedHole({ top: 0, left: 0, width: 60, height: 44 }, VW, VH)
     const e = edges(hole)
-    assert.equal(e.top, 4)
-    assert.equal(e.left, 4)
+    assert.equal(e.top, 0)
+    assert.equal(e.left, 0)
     assert.equal(e.bottom, 54)
     assert.equal(e.right, 70)
   })
 
-  test('a corner focus (bottom-right) is contained on both axes at once', () => {
+  test('a corner focus (bottom-right, P6) is contained on both axes at once — and never cropped', () => {
     const hole = containedHole({ top: 800, left: 330, width: 60, height: 44 }, VW, VH)
     const e = edges(hole)
-    assert.deepEqual(e, { left: 320, top: 790, right: VW - 4, bottom: VH - 4 })
+    assert.deepEqual(e, { left: 320, top: 790, right: VW, bottom: VH })
+  })
+
+  test('a partially off-screen focus (left): the hole frames the visible portion at the old edge margin', () => {
+    // rect.left −30 is genuinely off screen: that side clamps as before
+    // (HOLE_EDGE), while the on-screen sides keep their full air and the
+    // hole still contains everything of the element that is visible
+    // from the margin inward.
+    const hole = containedHole({ top: 300, left: -30, width: 80, height: 48 }, VW, VH)
+    const e = edges(hole)
+    assert.deepEqual(e, { left: 4, top: 290, right: 60, bottom: 358 })
+  })
+
+  test('an element wider than vw − 8: the hole spans edge to edge and still contains it whole', () => {
+    const hole = containedHole({ top: 200, left: 0, width: 390, height: 48 }, VW, VH)
+    const e = edges(hole)
+    assert.deepEqual(e, { left: 0, top: 190, right: VW, bottom: 258 })
+    assert.equal(hole.width, VW)
+  })
+
+  test('an element fully below the viewport: NULL — no target (the 3b contract: null = paint no veil, no ring)', () => {
+    assert.equal(containedHole({ top: 900, left: 100, width: 80, height: 48 }, VW, VH), null)
+    assert.equal(containedHole({ top: 100, left: -200, width: 80, height: 48 }, VW, VH), null, 'fully off the left is likewise no target')
+    assert.equal(containedHole({ top: -120, left: 100, width: 80, height: 48 }, VW, VH), null, 'fully above is likewise no target')
   })
 
   test('with no measured viewport, the plain breathing hole comes back (pre-measure frame)', () => {
@@ -1219,5 +1398,787 @@ describe('the card is born where it will live (cardSeat)', () => {
     assert.equal(cardSeat({ top: 100, left: 600, width: 10, height: 10 }, 1000, 800, 0).left, 508) // 480px card ≥840
     assert.equal(cardSeat({ top: 100, left: 1400, width: 10, height: 10 }, 1600, 900, 0).left, 1038) // 550px card ≥1500
     assert.equal(cardSeat({ top: 100, left: 2, width: 10, height: 10 }, VW, VH, 0).left, 12)
+  })
+})
+
+/* ── unionRect + the footprint seat (P8/P11/P4 geometry) ────────────── */
+
+describe('unionRect', () => {
+  test('empty → null; a single rect → itself; many → the smallest containing rect', () => {
+    assert.equal(unionRect([]), null)
+    assert.deepEqual(unionRect([{ top: 10, left: 20, width: 30, height: 40 }]), { top: 10, left: 20, width: 30, height: 40 })
+    assert.deepEqual(
+      unionRect([
+        { top: 100, left: 40, width: 56, height: 56 },
+        { top: 300, left: 10, width: 200, height: 80 },
+        { top: 50, left: 300, width: 20, height: 20 },
+      ]),
+      { top: 50, left: 10, width: 310, height: 330 }, // right edge 320, bottom edge 380
+    )
+  })
+})
+
+describe('the footprint seat (cardSeat with a footprint)', () => {
+  const VW = 390
+  const VH = 844
+
+  test('no footprint → the legacy result, unchanged', () => {
+    const focus = { top: 100, left: 40, width: 56, height: 56 }
+    assert.deepEqual(cardSeat(focus, VW, VH, 0), { left: 12, top: 172 })
+    assert.deepEqual(cardSeat(focus, VW, VH, 0, undefined), cardSeat(focus, VW, VH, 0))
+    assert.deepEqual(cardSeat(focus, VW, VH, 0, null), cardSeat(focus, VW, VH, 0))
+    const low = { top: 700, left: 40, width: 56, height: 56 }
+    assert.deepEqual(cardSeat(low, VW, VH, 0, undefined, 200), { left: 12, bottom: 160 }, 'cardHeight alone (no footprint) changes nothing')
+  })
+
+  test('effect below the anchor → the card seats ABOVE the footprint', () => {
+    // Anchor at 400; its effect occupies 456–600 below it. The footprint
+    // is their union (400–600). A 180px card above the footprint ends
+    // its bottom edge at 400 − 16 = 384 → bottom offset 844 − 384 = 460,
+    // covering neither the anchor nor the effect.
+    const focus = { top: 400, left: 40, width: 56, height: 56 }
+    const footprint = unionRect([focus, { top: 456, left: 40, width: 200, height: 144 }])
+    assert.deepEqual(footprint, { top: 400, left: 40, width: 200, height: 200 })
+    assert.deepEqual(cardSeat(focus, VW, VH, 0, footprint, 180), { left: 12, bottom: 460 })
+  })
+
+  test('effect above the anchor → the card seats BELOW the footprint', () => {
+    // Anchor at 400; its effect occupies 200–400 above it, so the
+    // footprint runs 200–456. Above the footprint a 180px card would
+    // start at 200 − 16 − 180 = 4 < the 12px margin — not valid — so
+    // the seat below wins: top = 456 + 16 = 472.
+    const focus = { top: 400, left: 40, width: 56, height: 56 }
+    const footprint = unionRect([{ top: 200, left: 40, width: 200, height: 200 }, focus])
+    assert.deepEqual(footprint, { top: 200, left: 40, width: 200, height: 256 })
+    assert.deepEqual(cardSeat(focus, VW, VH, 0, footprint, 180), { left: 12, top: 472 })
+  })
+
+  test('footprint without cardHeight keeps the single-point placement style for the side', () => {
+    const focus = { top: 400, left: 40, width: 56, height: 56 }
+    const footprint = { top: 400, left: 40, width: 200, height: 200 }
+    // Above: the card's bottom edge point stands at 400 − 16 = 384.
+    assert.deepEqual(cardSeat(focus, VW, VH, 0, footprint), { left: 12, bottom: 460 })
+  })
+
+  test('neither side fits → the side covering LESS of the footprint, clamped into the viewport', () => {
+    // Footprint 200–640 (440 tall), a 300px card: above it would start
+    // at −116, below it would end at 956 — neither is valid. Clamped,
+    // above covers 200–312 of the footprint (112px), below covers
+    // 532–640 (108px): below covers less, so below wins, its top
+    // clamped to 844 − 12 − 300 = 532. Neither clamped seat covers the
+    // anchor itself (380–430).
+    const focus = { top: 380, left: 40, width: 56, height: 50 }
+    const footprint = { top: 200, left: 40, width: 200, height: 440 }
+    assert.deepEqual(cardSeat(focus, VW, VH, 0, footprint, 300), { left: 12, top: 532 })
+  })
+})
+
+/* ── P1 · Prepare / confirm / clean abort (Builder 2 wave) ──────────── */
+
+describe('P1 prepare / confirm / abortClean', () => {
+  test('prepare holds the clock from t=0 and suppresses every write; confirm writes the place and playback runs from confirmation', () => {
+    const { runner, timer, storage } = makeRunner()
+    const script = sampleModule()
+    runner.prepare()
+    const openingSnap = runner.getSnapshot()
+    assert.equal(openingSnap.opening, true)
+    assert.equal(openingSnap.current?.step.id, 's1')
+    assert.equal(openingSnap.status, 'playing', 'Automatic is armed — but the clock is held')
+    assert.equal(storage.getItem(PRESENTATION_STATE_KEY), null, 'no markPlace, no lastUsed, no progress write of any kind while opening')
+    timer.advance(60_000)
+    assert.equal(runner.getSnapshot().current?.step.id, 's1', 'Automatic cannot advance behind the opening window')
+    runner.confirmStart()
+    assert.equal(runner.getSnapshot().opening, false)
+    const file = JSON.parse(storage.getItem(PRESENTATION_STATE_KEY))
+    assert.equal(file.lastUsed, 'engine-probe', 'the deferred last-used write lands on confirm')
+    assert.equal(file.modules['engine-probe'].step, 0, 'the deferred markPlace lands on confirm')
+    assert.equal(file.modules['engine-probe'].state, 'in-progress')
+    const s1Ms = stepDurationMs(script.scenes[0].steps[0], 'en')
+    timer.advance(wallMs(s1Ms) - 1)
+    assert.equal(runner.getSnapshot().current?.step.id, 's1', 'the two-phase schedule runs FROM confirmation, not from prepare')
+    timer.advance(1)
+    assert.equal(runner.getSnapshot().current?.step.id, 's2')
+    runner.abort()
+  })
+
+  test('abortClean leaves a recorded resume point byte-identical and tears the scenario down', async () => {
+    const storage = new FakeStorage()
+    savePresentationState(storage, {
+      modules: {
+        'engine-probe': {
+          state: 'in-progress',
+          step: 1,
+          scene: 'opening',
+          stepId: 's2',
+          verifiedAgainst: '1.4.156',
+          skips: [],
+        },
+      },
+      speed: 1,
+      speedScale: 2,
+      myScenes: [],
+      lastUsed: 'engine-probe',
+    })
+    const before = storage.getItem(PRESENTATION_STATE_KEY)
+    const scenario = createScenario()
+    const runner = createPresentationRunner(sampleModule(), {
+      clock: createPresentationClock(new FakeTimer()),
+      resolver: fakeResolver(),
+      storage,
+      scenario,
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+    })
+    runner.prepare()
+    assert.equal(runner.getSnapshot().current?.step.id, 's2', 'prepare computed the resume point')
+    assert.equal(runner.getSnapshot().opening, true)
+    runner.abortClean()
+    const snap = runner.getSnapshot()
+    assert.equal(snap.status, 'aborted')
+    assert.equal(snap.endReason, 'abort')
+    assert.equal(snap.cleanAbort, true)
+    assert.equal(snap.opening, false)
+    assert.equal(storage.getItem(PRESENTATION_STATE_KEY), before, 'the previously recorded resume point is byte-identical — nothing was written')
+    assert.equal(await scenario.isGone(), true, 'the scenario is discarded whole')
+  })
+
+  test('prepare blocked on a required miss at the entry beat: opening + blockedNotice, non-done, only abortClean exits', () => {
+    const { runner, storage } = makeRunner({ resolver: fakeResolver(new Set(['listen-paste'])) })
+    runner.prepare()
+    const snap = runner.getSnapshot()
+    assert.equal(snap.opening, true)
+    assert.equal(snap.blockedNotice, REFRESH_LINE.en, 'the refresh line, in the run language')
+    assert.notEqual(snap.status, 'done', 'the run does NOT silently finish behind the opening window')
+    assert.equal(storage.getItem(PRESENTATION_STATE_KEY), null, 'the blocked miss persisted nothing')
+    runner.next()
+    runner.userAct()
+    assert.notEqual(runner.getSnapshot().status, 'done', 'transport verbs do not exit the blocked prepare')
+    runner.abortClean()
+    assert.equal(runner.getSnapshot().status, 'aborted')
+    assert.equal(runner.getSnapshot().cleanAbort, true)
+    assert.equal(storage.getItem(PRESENTATION_STATE_KEY), null)
+  })
+
+  test('a finish reached during prepare (entry skip chain runs off the end) defers its persist + teardown to confirm', async () => {
+    const script = sampleModule()
+    script.scenes[0].steps[2].optional = true // s3, the recorded place, is now a dead optional beat
+    const storage = new FakeStorage()
+    savePresentationState(storage, {
+      modules: {
+        'engine-probe': { state: 'in-progress', step: 2, scene: 'opening', stepId: 's3', verifiedAgainst: '1.4.156', skips: [] },
+      },
+      speed: 1,
+      speedScale: 2,
+      myScenes: [],
+      lastUsed: 'engine-probe',
+    })
+    const before = storage.getItem(PRESENTATION_STATE_KEY)
+    const scenario = createScenario()
+    const runner = createPresentationRunner(script, {
+      clock: createPresentationClock(new FakeTimer()),
+      resolver: fakeResolver(new Set(['listen-editor'])),
+      storage,
+      scenario,
+      initialMode: 'interactive',
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+    })
+    runner.prepare()
+    assert.equal(runner.getSnapshot().status, 'done', 'the skip chain ran off the end during prepare')
+    assert.equal(runner.getSnapshot().opening, true)
+    assert.equal(storage.getItem(PRESENTATION_STATE_KEY), before, '…but nothing was persisted yet')
+    assert.equal(await scenario.isGone(), false, '…and the scenario is not torn down yet')
+    runner.confirmStart()
+    const file = JSON.parse(storage.getItem(PRESENTATION_STATE_KEY))
+    assert.equal(file.modules['engine-probe'].state, 'needs-refresh', 'the deferred finish persists on confirm — with its skip, so needs-refresh (P17)')
+    assert.equal(await scenario.isGone(), true, '…and the scenario is discarded on confirm')
+  })
+
+  test('start() on the same entry miss keeps its old semantics: done, required-anchor-miss, needs-refresh persisted', () => {
+    const { runner, storage } = makeRunner({ resolver: fakeResolver(new Set(['listen-paste'])) })
+    runner.start()
+    const snap = runner.getSnapshot()
+    assert.equal(snap.status, 'done')
+    assert.equal(snap.endReason, 'required-anchor-miss')
+    assert.equal(snap.opening, false)
+    assert.equal(snap.notice.en, REFRESH_LINE.en)
+    const file = JSON.parse(storage.getItem(PRESENTATION_STATE_KEY))
+    assert.equal(file.modules['engine-probe'].state, 'needs-refresh')
+  })
+})
+
+/* ── P16 · Two-phase scheduling, showMe dwell, setLanguage ──────────── */
+
+describe('P16 two-phase scheduling', () => {
+  function countingPort() {
+    const performed = []
+    return {
+      performed,
+      port: {
+        scenario: null,
+        perform: (flat) => performed.push(flat.step.id),
+        teardown: () => {},
+      },
+    }
+  }
+
+  test('Automatic: the act fires after its caption reading time, the advance after the result dwell', () => {
+    const { performed, port } = countingPort()
+    const { runner, timer } = makeRunner({ scenarioPort: port })
+    const s1 = sampleModule().scenes[0].steps[0]
+    runner.start()
+    timer.advance(wallMs(performDelayMs(s1, 'en')) - 1)
+    assert.deepEqual(performed, [], 'the caption is still being read — nothing performed yet')
+    timer.advance(1)
+    assert.deepEqual(performed, ['s1'], 'the act fires at its perform delay')
+    assert.equal(runner.getSnapshot().current?.step.id, 's1', 'the result dwells — the beat is still on stage')
+    timer.advance(wallMs(RESULT_DWELL_MS) - 1)
+    assert.equal(runner.getSnapshot().current?.step.id, 's1')
+    timer.advance(1)
+    assert.equal(runner.getSnapshot().current?.step.id, 's2', 'the advance lands at the full two-phase duration')
+    runner.abort()
+  })
+
+  test('setLanguage mid-ask re-schedules the pending perform — the ask act happens exactly once', () => {
+    const askModule = {
+      id: 'engine-probe-ask',
+      floor: 'quick',
+      title: bi('Ask probe', 'Sonda de pregunta'),
+      capability: bi('You can work the ask probe.', 'Puedes usar la sonda de pregunta.'),
+      verifiedAgainst: '1.4.156',
+      scenes: [
+        {
+          id: 'asking',
+          chapter: bi('Asking', 'Preguntando'),
+          steps: [
+            {
+              id: 'a1',
+              anchorId: 'listen-paste',
+              act: 'ask',
+              question: bi('Where does it go?', '¿Adónde va lo que copiaste en la otra aplicación ayer?'),
+            },
+            { id: 'a2', anchorId: 'listen-play', act: 'say', text: bi('There it is.', 'Ahí está.') },
+          ],
+        },
+      ],
+    }
+    const { performed, port } = countingPort()
+    const { runner, timer } = makeRunner({ scenarioPort: port }, askModule)
+    const a1 = askModule.scenes[0].steps[0]
+    runner.start()
+    timer.advance(wallMs(500)) // part-way through the EN question's reading time
+    assert.deepEqual(performed, [])
+    runner.setLanguage('es')
+    // The pending perform is re-armed at the ES perform delay, from now.
+    timer.advance(wallMs(performDelayMs(a1, 'es')) - 1)
+    assert.deepEqual(performed, [], 'the act is owed at the new language’s delay — not deleted, not early')
+    timer.advance(1)
+    assert.deepEqual(performed, ['a1'], 'the ask act is performed exactly once after the switch')
+    timer.advance(wallMs(RESULT_DWELL_MS))
+    assert.equal(runner.getSnapshot().current?.step.id, 'a2', 'the re-armed advance lands at the new language’s duration')
+    assert.deepEqual(performed, ['a1'], 'still exactly once')
+    runner.abort()
+  })
+
+  test('setLanguage after the perform already fired re-arms only the advance — no second performance', () => {
+    const { performed, port } = countingPort()
+    const { runner, timer } = makeRunner({ scenarioPort: port })
+    const s1 = sampleModule().scenes[0].steps[0]
+    runner.start()
+    timer.advance(wallMs(performDelayMs(s1, 'en')))
+    assert.deepEqual(performed, ['s1'])
+    runner.setLanguage('es')
+    timer.advance(wallMs(stepDurationMs(s1, 'es')))
+    assert.deepEqual(performed, ['s1'], 'the fired act is never re-performed by a language switch')
+    assert.equal(runner.getSnapshot().current?.step.id, 's2')
+    runner.abort()
+  })
+
+  test('showMe dwells: while dwelling, Show-me / › / userAct are inert', () => {
+    const { performed, port } = countingPort()
+    const { runner, timer } = makeRunner({ scenarioPort: port, initialMode: 'interactive' })
+    runner.start()
+    runner.showMe()
+    assert.deepEqual(performed, ['s1'], '«Show me» performs immediately')
+    assert.equal(runner.getSnapshot().showMeDwelling, true)
+    runner.showMe()
+    runner.next()
+    runner.userAct()
+    assert.deepEqual(performed, ['s1'], 'nothing re-performs during the dwell')
+    assert.equal(runner.getSnapshot().current?.step.id, 's1', 'nothing advances during the dwell')
+    timer.advance(wallMs(RESULT_DWELL_MS) - 1)
+    assert.equal(runner.getSnapshot().current?.step.id, 's1')
+    timer.advance(1)
+    assert.equal(runner.getSnapshot().current?.step.id, 's2', 'the step completes when the dwell elapses')
+    assert.equal(runner.getSnapshot().showMeDwelling, false)
+    runner.abort()
+  })
+})
+
+/* ── P13 · No re-performance + the λ fiction ledger ─────────────────── */
+
+describe('P13 no re-performance', () => {
+  test('back over the λ tap: the port performed it exactly once (Automatic re-entry does not re-fire)', () => {
+    let real = false
+    const lambdaPort = {
+      getBubbleOn: () => real,
+      setBubbleOn: (on) => {
+        real = on
+      },
+    }
+    const scenario = createScenario({ lambdaPort })
+    const performed = []
+    const port = createScenarioPort(scenario, (flat) => performed.push(flat.step.id))
+    const lambdaModule = {
+      id: 'engine-probe-lambda',
+      floor: 'quick',
+      title: bi('Lambda probe', 'Sonda lambda'),
+      capability: bi('You can work the lambda probe.', 'Puedes usar la sonda lambda.'),
+      verifiedAgainst: '1.4.156',
+      scenes: [
+        {
+          id: 'out',
+          chapter: bi('Out', 'Fuera'),
+          steps: [
+            { id: 'l1', anchorId: 'bubble-lambda', act: 'tap', text: bi('One tap, and Logos floats.', 'Un toque, y Logos flota.') },
+            { id: 'l2', anchorId: 'listen-play', act: 'say', text: bi('She is out now.', 'Ya está fuera.') },
+          ],
+        },
+      ],
+    }
+    const timer = new FakeTimer()
+    const runner = createPresentationRunner(lambdaModule, {
+      clock: createPresentationClock(timer),
+      resolver: fakeResolver(),
+      storage: new FakeStorage(),
+      scenarioPort: port,
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+    })
+    const l1 = lambdaModule.scenes[0].steps[0]
+    runner.start()
+    timer.advance(wallMs(stepDurationMs(l1, 'en')))
+    assert.equal(runner.getSnapshot().current?.step.id, 'l2')
+    assert.deepEqual(performed.filter((id) => id === 'l1'), ['l1'])
+    assert.equal(real, true)
+    runner.back()
+    assert.equal(runner.getSnapshot().current?.step.id, 'l1', '‹ re-enters the λ beat')
+    timer.advance(wallMs(stepDurationMs(l1, 'en')))
+    assert.deepEqual(performed.filter((id) => id === 'l1'), ['l1'], 're-entry performed the λ tap ZERO further times')
+    assert.equal(real, true, 'the λ was not toggled back off by the re-entry')
+    assert.equal(scenario.stage.lambdaOn(), true)
+    runner.abort()
+  })
+
+  test('userAct then setMode(automatic): exactly one performance total — the learner’s own act counts', () => {
+    const performed = []
+    const port = {
+      scenario: null,
+      perform: (flat) => performed.push(flat.step.id),
+      teardown: () => {},
+    }
+    const { runner, timer } = makeRunner({ scenarioPort: port, initialMode: 'interactive' })
+    const s1 = sampleModule().scenes[0].steps[0]
+    runner.start()
+    runner.userAct() // the learner performs s1 by hand — that IS its one performance
+    assert.equal(runner.getSnapshot().current?.step.id, 's2')
+    runner.back()
+    assert.equal(runner.getSnapshot().current?.step.id, 's1')
+    runner.setMode('automatic')
+    timer.advance(wallMs(stepDurationMs(s1, 'en')))
+    assert.deepEqual(performed, [], 'Automatic did not perform s1 a second time after userAct')
+    assert.equal(runner.getSnapshot().current?.step.id, 's2', '…but its advance scheduling was unaffected')
+    runner.abort()
+  })
+})
+
+describe('P13/P14 the λ fiction ledger (scenario)', () => {
+  test('the fiction flag starts at the fiction default — never read from the real switch', () => {
+    let real = true // the user's real switch is ON at creation
+    const scenario = createScenario({
+      lambdaPort: {
+        getBubbleOn: () => real,
+        setBubbleOn: (on) => {
+          real = on
+        },
+      },
+    })
+    assert.equal(scenario.stage.lambdaOn(), false, 'the fiction λ starts OFF (bubbleOn: false), whatever the real switch says')
+    assert.equal(scenario.getSettings().bubbleOn, false)
+    scenario.teardown()
+    assert.equal(real, true, 'teardown with an unmoved fiction writes nothing — the real switch stands as captured')
+  })
+
+  test('(a) kill with the real switch left ON, then seeding the same λ tap converges ON — never inverted OFF', () => {
+    let real = false
+    const makePort = () => ({
+      getBubbleOn: () => real,
+      setBubbleOn: (on) => {
+        real = on
+      },
+    })
+    // First run: Q2's λ tap is lived (ask → next, tap → «Show me»).
+    const scenario1 = createScenario({ lambdaPort: makePort() })
+    const runner1 = createPresentationRunner(Q2, {
+      clock: createPresentationClock(new FakeTimer()),
+      resolver: fakeResolver(),
+      storage: new FakeStorage(),
+      scenario: scenario1,
+      initialMode: 'interactive',
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+    })
+    runner1.start()
+    runner1.next() // the ask beat: › advances narration
+    assert.equal(runner1.getSnapshot().current?.step.id, 's1-tap-lambda')
+    runner1.showMe()
+    assert.equal(real, true, 'the lived tap left the real switch ON')
+    // HARD KILL: no teardown, no abort — scenario1 is simply dropped.
+    // Relaunch: a NEW scenario over a port reading the left real value ON.
+    const scenario2 = createScenario({ lambdaPort: makePort() })
+    assert.equal(scenario2.stage.lambdaOn(), false, 'the new fiction still starts at its own default')
+    const storage = new FakeStorage()
+    const at = flattenSteps(Q2).find((f) => f.step.id === 's3-undo-tap')
+    savePresentationState(storage, {
+      modules: {
+        Q2: { state: 'in-progress', step: at.globalIndex, scene: at.scene.id, stepId: 's3-undo-tap', verifiedAgainst: Q2.verifiedAgainst, skips: [] },
+      },
+      speed: 1,
+      speedScale: 2,
+      myScenes: [],
+      lastUsed: 'Q2',
+    })
+    const runner2 = createPresentationRunner(Q2, {
+      clock: createPresentationClock(new FakeTimer()),
+      resolver: fakeResolver(),
+      storage,
+      scenario: scenario2,
+      initialMode: 'interactive',
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+    })
+    runner2.start() // seedBefore replays the same λ tap on the new fiction
+    assert.equal(scenario2.stage.lambdaOn(), true, 'the seeded tap set the FICTION flag')
+    assert.equal(real, true, 'the real switch ends ON — the taught state — not inverted OFF')
+    runner2.abort()
+  })
+
+  test('(b) teardown after λ ON restores the real switch to its creation value', () => {
+    let real = false
+    const scenario = createScenario({
+      lambdaPort: {
+        getBubbleOn: () => real,
+        setBubbleOn: (on) => {
+          real = on
+        },
+      },
+    })
+    scenario.stage.setLambda(true)
+    assert.equal(real, true, 'setLambda wrote the absolute value through the port')
+    scenario.teardown()
+    assert.equal(real, false, 'teardown restored the value captured at creation')
+
+    // And the mirror: created with the real switch ON, a lesson that
+    // turns the fiction OFF leaves the real switch ON again at teardown.
+    let real2 = true
+    const scenario2 = createScenario({
+      lambdaPort: {
+        getBubbleOn: () => real2,
+        setBubbleOn: (on) => {
+          real2 = on
+        },
+      },
+    })
+    scenario2.stage.setLambda(false)
+    assert.equal(real2, false)
+    scenario2.teardown()
+    assert.equal(real2, true, 'restored to the creation value, not to the fiction’s end state')
+  })
+})
+
+/* ── P17 · Seeding honesty + the finish rule ────────────────────────── */
+
+describe('P17 seeding honesty + finish rule', () => {
+  function skipModule() {
+    return {
+      id: 'engine-probe-skips',
+      floor: 'quick',
+      title: bi('Skip probe', 'Sonda de saltos'),
+      capability: bi('You can work the skip probe.', 'Puedes usar la sonda de saltos.'),
+      verifiedAgainst: '1.4.156',
+      scenes: [
+        {
+          id: 'only',
+          chapter: bi('Only chapter', 'Capítulo único'),
+          steps: [
+            { id: 'k1', anchorId: 'listen-paste', act: 'say', text: bi('First beat here.', 'Primer paso aquí.') },
+            { id: 'k2', anchorId: 'listen-play', act: 'tap', text: bi('Second beat here.', 'Segundo paso aquí.') },
+            { id: 'k3', anchorId: 'listen-editor', act: 'say', text: bi('Third beat here.', 'Tercer paso aquí.') },
+          ],
+        },
+      ],
+    }
+  }
+  const silentPort = () => ({ scenario: null, perform: () => {}, teardown: () => {} })
+
+  test('the Brizna hole, door one: goToStep jumping over a dead REQUIRED anchor → needs-refresh + a seed-miss log entry', () => {
+    const { runner } = makeRunner(
+      { resolver: fakeResolver(new Set(['listen-play'])), initialMode: 'interactive', scenarioPort: silentPort() },
+      skipModule(),
+    )
+    runner.start()
+    runner.goToStep(2) // jumps over k2 — seeding meets its dead anchor
+    assert.equal(runner.getSnapshot().current?.step.id, 'k3')
+    const seeded = runner.getSnapshot().progress
+    assert.equal(seeded.seededRequiredMiss, true, 'the seeded required miss is flagged in the record')
+    assert.ok(
+      seeded.skips.some((s) => s.reason === 'seed-miss' && s.anchor === 'listen-play'),
+      'seeding was visually silent — but not silent in the record',
+    )
+    runner.next() // k3 is narration: › finishes the module
+    const done = runner.getSnapshot()
+    assert.equal(done.status, 'done')
+    assert.equal(done.progress.state, 'needs-refresh', 'a run with a seeded required miss never lands seen')
+    assert.equal(done.endInfo.skipCount, 1)
+    assert.deepEqual(done.endInfo.skipChapters, ['Only chapter'])
+  })
+
+  test('the Brizna hole, door two: resume at N with an earlier REQUIRED anchor newly dead → finishing the tail lands needs-refresh', () => {
+    const script = skipModule()
+    const storage = new FakeStorage()
+    savePresentationState(storage, {
+      modules: {
+        [script.id]: { state: 'in-progress', step: 2, scene: 'only', stepId: 'k3', verifiedAgainst: '1.4.156', skips: [] },
+      },
+      speed: 1,
+      speedScale: 2,
+      myScenes: [],
+      lastUsed: script.id,
+    })
+    const runner = createPresentationRunner(script, {
+      clock: createPresentationClock(new FakeTimer()),
+      resolver: fakeResolver(new Set(['listen-play'])),
+      storage,
+      scenarioPort: silentPort(),
+      initialMode: 'interactive',
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+    })
+    runner.start()
+    assert.equal(runner.getSnapshot().current?.step.id, 'k3', 'resume lands on the recorded beat')
+    runner.next()
+    const done = runner.getSnapshot()
+    assert.equal(done.progress.state, 'needs-refresh', 'the tail cannot complete to seen over a dead required anchor behind it')
+    assert.equal(done.progress.seededRequiredMiss, true)
+    const file = JSON.parse(storage.getItem(PRESENTATION_STATE_KEY))
+    assert.equal(file.modules[script.id].seededRequiredMiss, true, 'the flag is persisted, not just in memory')
+    assert.ok(file.modules[script.id].skips.some((s) => s.reason === 'seed-miss'))
+  })
+
+  test('an OPTIONAL skip on a walked beat → needs-refresh, with endInfo naming the chapter', () => {
+    const script = skipModule()
+    script.scenes[0].steps[1].optional = true
+    const { runner } = makeRunner(
+      { resolver: fakeResolver(new Set(['listen-play'])), initialMode: 'interactive' },
+      script,
+    )
+    runner.start()
+    runner.next() // k1 narration → k2 misses (optional, walked) → k3 on stage
+    assert.equal(runner.getSnapshot().current?.step.id, 'k3')
+    runner.next()
+    const done = runner.getSnapshot()
+    assert.equal(done.progress.state, 'needs-refresh', 'ANY skip — even an optional walked one — blocks seen')
+    assert.equal(done.endInfo.skipCount, 1)
+    assert.deepEqual(done.endInfo.skipChapters, ['Only chapter'])
+    assert.equal(done.progress.skips[0].reason, 'fake-miss', 'a walked skip keeps its own reason, distinct from seed-miss')
+  })
+
+  test('a genuinely clean full replay still clears needs-refresh to seen', () => {
+    const script = skipModule()
+    script.scenes[0].steps[1].optional = true
+    const storage = new FakeStorage()
+    const dead = createPresentationRunner(script, {
+      clock: createPresentationClock(new FakeTimer()),
+      resolver: fakeResolver(new Set(['listen-play'])),
+      storage,
+      initialMode: 'interactive',
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+    })
+    dead.start()
+    dead.next()
+    dead.next()
+    assert.equal(dead.getSnapshot().progress.state, 'needs-refresh')
+    // Replay from the top, every anchor alive this time.
+    const clean = createPresentationRunner(script, {
+      clock: createPresentationClock(new FakeTimer()),
+      resolver: fakeResolver(),
+      storage,
+      initialMode: 'interactive',
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+    })
+    clean.start({ resume: false })
+    clean.next() // k1
+    clean.userAct() // k2, a tap — the learner's gesture
+    clean.next() // k3
+    assert.equal(clean.getSnapshot().progress.state, 'seen', 'the clean full play clears the flag')
+    assert.equal(clean.getSnapshot().endInfo.skipCount, 0)
+  })
+})
+
+/* ── P12 · Reveal wait ──────────────────────────────────────────────── */
+
+describe('P12 reveal wait', () => {
+  test('a sheet-style anchor that materialises after ~300 presentation-ms resolves with NO skip recorded', () => {
+    const script = {
+      id: 'engine-probe-reveal',
+      floor: 'quick',
+      title: bi('Reveal probe', 'Sonda de aparición'),
+      capability: bi('You can work the reveal probe.', 'Puedes usar la sonda de aparición.'),
+      verifiedAgainst: '1.4.156',
+      scenes: [
+        {
+          id: 'sheet',
+          chapter: bi('Sheet', 'Hoja'),
+          steps: [
+            { id: 'r1', anchorId: 'listen-paste', act: 'say', text: bi('First live beat here now.', 'Primer paso vivo aquí.') },
+            { id: 'r2', anchorId: 'listen-speed-sheet', act: 'tap', text: bi('The sheet is here now.', 'La hoja ya está aquí.') },
+          ],
+        },
+      ],
+    }
+    let attempts = 0
+    const resolver = (step) => {
+      const record = anchorById(step.anchorId)
+      if (step.anchorId === 'listen-speed-sheet') {
+        attempts += 1
+        if (attempts <= 3) return { status: 'miss', record, anchorId: step.anchorId, reason: 'not-yet' }
+      }
+      return { status: 'resolved', record, target: {} }
+    }
+    const timer = new FakeTimer()
+    const runner = createPresentationRunner(script, {
+      clock: createPresentationClock(timer),
+      resolver,
+      storage: new FakeStorage(),
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+    })
+    runner.start()
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[0], 'en'))) // r1 completes; r2's entry attempt misses
+    assert.equal(runner.getSnapshot().current?.step.id, 'r1', 'during the wait the previous beat’s snapshot stands — nothing wrong is painted')
+    timer.advance(wallMs(100)) // retry 1 (100 presentation-ms)
+    timer.advance(wallMs(100)) // retry 2 (200)
+    assert.equal(runner.getSnapshot().current?.step.id, 'r1', 'still waiting — no skip, no wrong snapshot')
+    timer.advance(wallMs(100)) // retry 3 (300): the target has materialised
+    assert.equal(runner.getSnapshot().current?.step.id, 'r2', 'the SAME declared resolution succeeded on retry')
+    assert.equal(attempts, 4, 'one entry attempt + three retries at 100 presentation-ms intervals')
+    assert.equal(runner.getSnapshot().progress.skips.length, 0, 'no skip was recorded for a beat that only needed its precondition to materialise')
+    runner.abort()
+  })
+
+  test('a previous step’s `establishes` also earns the wait — and a target that never appears still takes the miss path after 1200', () => {
+    const script = {
+      id: 'engine-probe-reveal-2',
+      floor: 'quick',
+      title: bi('Reveal probe two', 'Sonda de aparición dos'),
+      capability: bi('You can work the probe.', 'Puedes usar la sonda.'),
+      verifiedAgainst: '1.4.156',
+      scenes: [
+        {
+          id: 'door',
+          chapter: bi('Door', 'Puerta'),
+          steps: [
+            {
+              id: 'e1',
+              anchorId: 'listen-paste',
+              act: 'say',
+              establishes: 'speed-sheet-open',
+              text: bi('First live beat here now.', 'Primer paso vivo aquí.'),
+            },
+            { id: 'e2', anchorId: 'listen-play', act: 'say', optional: true, text: bi('A beat behind the door.', 'Un paso tras la puerta.') },
+            { id: 'e3', anchorId: 'listen-editor', act: 'say', text: bi('Second live beat here now.', 'Segundo paso vivo aquí.') },
+          ],
+        },
+      ],
+    }
+    const timer = new FakeTimer()
+    const runner = createPresentationRunner(script, {
+      clock: createPresentationClock(timer),
+      resolver: fakeResolver(new Set(['listen-play'])), // e2 NEVER appears
+      storage: new FakeStorage(),
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+    })
+    runner.start()
+    timer.advance(wallMs(stepDurationMs(script.scenes[0].steps[0], 'en')))
+    assert.equal(runner.getSnapshot().current?.step.id, 'e1', 'the wait is running — e2 has not been skipped yet')
+    timer.advance(wallMs(1200)) // the full reveal budget
+    assert.equal(runner.getSnapshot().current?.step.id, 'e3', 'after 1200 presentation-ms the miss path applies: e2 skipped + logged, the scene continues')
+    assert.equal(runner.getSnapshot().progress.skips.length, 1)
+    runner.abort()
+  })
+})
+
+/* ── P14 · Backgrounding + mode/paused persistence ──────────────────── */
+
+describe('P14 backgrounding + mode/paused persistence', () => {
+  test('playing Automatic → hidden → visible → the clock runs again', () => {
+    const { runner, timer } = makeRunner()
+    const s1 = sampleModule().scenes[0].steps[0]
+    runner.start()
+    runner.handleHidden()
+    timer.advance(60_000)
+    assert.equal(runner.getSnapshot().current?.step.id, 's1', 'a hidden lesson does not advance')
+    runner.handleVisible()
+    timer.advance(wallMs(stepDurationMs(s1, 'en')))
+    assert.equal(runner.getSnapshot().current?.step.id, 's2', 'a lesson that was playing resumes playing')
+    runner.abort()
+  })
+
+  test('user-paused → hidden → visible → still paused', () => {
+    const { runner, timer } = makeRunner()
+    runner.start()
+    runner.pause()
+    runner.handleHidden()
+    runner.handleVisible()
+    timer.advance(60_000)
+    assert.equal(runner.getSnapshot().current?.step.id, 's1')
+    assert.equal(runner.getSnapshot().status, 'paused', 'visibility never resurrects a user pause')
+    runner.abort()
+  })
+
+  test('mode + userPaused persist, and a resumed start restores them over host defaults', () => {
+    const storage = new FakeStorage()
+    const first = createPresentationRunner(sampleModule(), {
+      clock: createPresentationClock(new FakeTimer()),
+      resolver: fakeResolver(),
+      storage,
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+    })
+    first.start() // Automatic by host default
+    first.pause() // userPaused = true
+    first.setMode('interactive') // mode changes while paused — both must persist
+    const file = JSON.parse(storage.getItem(PRESENTATION_STATE_KEY))
+    assert.equal(file.modules['engine-probe'].mode, 'interactive', 'the record carries the mode')
+    assert.equal(file.modules['engine-probe'].userPaused, true, 'the record carries the paused state')
+    first.abort()
+
+    const resumed = createPresentationRunner(sampleModule(), {
+      clock: createPresentationClock(new FakeTimer()),
+      resolver: fakeResolver(),
+      storage,
+      now: () => 1_762_902_000_000,
+      appVersion: '1.4.156',
+      initialMode: 'automatic', // the host default the record must override
+    })
+    resumed.start()
+    const snap = resumed.getSnapshot()
+    assert.equal(snap.mode, 'interactive', 'the paused Interactive lesson resumes in Interactive — not playing in Automatic')
+    assert.equal(snap.progress.userPaused, true, '…and still paused')
+    assert.equal(snap.status, 'interactive-wait')
+    resumed.abort()
   })
 })

@@ -65,6 +65,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-import-tap',
           anchorId: 'bk-shelf-import',
+          effectAnchorId: 'bk-keepask',
           act: 'tap',
           establishes: 'keepask-window',
           text: {
@@ -144,6 +145,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-keep-tap',
           anchorId: 'bk-keepask-keep',
+          effectAnchorId: 'bk-tile',
           act: 'tap',
           text: {
             en: 'Tap Keep, and this book stays in your library.',
@@ -195,6 +197,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-shelf-search',
           anchorId: 'bk-shelf-search',
+          effectAnchorId: 'bk-tile',
           act: 'type',
           payload: { value: 'Lighthouse' },
           text: {
@@ -205,6 +208,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-search-clear',
           anchorId: 'bk-shelf-search',
+          effectAnchorId: 'bk-tile',
           act: 'type',
           payload: { value: '' },
           text: {
@@ -215,6 +219,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-filters',
           anchorId: 'bk-shelf-filters',
+          effectAnchorId: 'bk-tile',
           act: 'tap',
           text: {
             en: 'Tap the filters: reading, new, favorites, finished.',
@@ -224,6 +229,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-cover-sizes',
           anchorId: 'bk-cover-size',
+          effectAnchorId: 'bk-tile',
           act: 'tap',
           text: {
             en: 'Three cover sizes, and the shelf remembers your pick.',
@@ -260,6 +266,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-continue-tap',
           anchorId: 'bk-shelf-continue',
+          effectAnchorId: 'book-page',
           act: 'tap',
           establishes: 'book-open',
           text: {
@@ -294,6 +301,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-contents-open',
           anchorId: 'book-head-toc',
+          effectAnchorId: 'book-side-toc',
           act: 'tap',
           establishes: 'contents-open',
           text: {
@@ -313,6 +321,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-contents-jump',
           anchorId: 'book-toc-row',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Tap any chapter, and you land at its start.',
@@ -356,6 +365,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-next-card',
           anchorId: 'book-next-card',
+          effectAnchorId: 'book-page',
           act: 'tap',
           optional: true,
           text: {
@@ -366,6 +376,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-paragraph-tap',
           anchorId: 'book-block:1',
+          effectAnchorId: 'book-actions',
           act: 'tap',
           establishes: 'paragraph-tools-open',
           text: {
@@ -394,6 +405,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-paragraph-again',
           anchorId: 'book-block:1',
+          effectAnchorId: 'book-actions',
           act: 'tap',
           establishes: 'paragraph-tools-open',
           text: {
@@ -404,6 +416,7 @@ export const Q5: PresentationModule = {
         {
           id: 'q5-listen-from-here',
           anchorId: 'book-act-listen',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: "Listen from here reads on to the book's end.",

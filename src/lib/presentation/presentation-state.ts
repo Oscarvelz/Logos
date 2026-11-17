@@ -7,8 +7,10 @@
  * The shape, exactly as designed:
  *
  *   { modules: { <moduleId>: { state, step?, scene?, stepId?,
- *                              verifiedAgainst, skips: [...] } },
+ *                              verifiedAgainst, skips: [...],
+ *                              mode?, userPaused?, seededRequiredMiss? } },
  *     speed: <the user's remembered speed, one per user>,
+ *     speedScale: 2 <the pace-scale stamp: speed is a NEW label (P2)>,
  *     myScenes: [ { module, scene, step, stepId?, savedAt } ],
  *     lastUsed?: <the last module used — set at module start and on every
  *                 advance, cleared when that module completes; the index
@@ -60,7 +62,7 @@ export function defaultPresentationStorage(): PresentationStorage {
 }
 
 export function emptyPresentationState(): PresentationStateFile {
-  return { modules: {}, speed: 1, myScenes: [] }
+  return { modules: {}, speed: 1, speedScale: 2, myScenes: [] }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -78,8 +80,22 @@ export function normalizePresentationState(value: unknown): PresentationStateFil
   if (!isRecord(value)) return emptyPresentationState()
   const out = emptyPresentationState()
 
-  if (typeof value.speed === 'number' && PRESENTATION_SPEEDS.includes(value.speed)) {
-    out.speed = value.speed
+  // Pace migration (P2), once, never reinterpret: a file whose
+  // speedScale is not 2 holds an OLD-scale speed — the same label meant
+  // twice the physical rate — so it is DISCARDED to the new label 1,
+  // never carried across. Only a file already stamped 2 has its stored
+  // label validated against the five speeds. Either way the returned
+  // state carries speedScale: 2 (emptyPresentationState), so the
+  // migration can only ever run once. This normaliser is the single
+  // gate: every reader of the stored speed goes through it.
+  if (value.speedScale === 2) {
+    out.speedScale = 2
+    if (typeof value.speed === 'number' && PRESENTATION_SPEEDS.includes(value.speed)) {
+      out.speed = value.speed
+    }
+  } else {
+    out.speed = 1
+    out.speedScale = 2
   }
 
   if (isRecord(value.modules)) {
@@ -97,6 +113,9 @@ export function normalizePresentationState(value: unknown): PresentationStateFil
       if (typeof raw.step === 'number' && Number.isFinite(raw.step)) progress.step = raw.step
       if (typeof raw.scene === 'string') progress.scene = raw.scene
       if (typeof raw.stepId === 'string') progress.stepId = raw.stepId
+      if (raw.mode === 'automatic' || raw.mode === 'interactive') progress.mode = raw.mode
+      if (typeof raw.userPaused === 'boolean') progress.userPaused = raw.userPaused
+      if (typeof raw.seededRequiredMiss === 'boolean') progress.seededRequiredMiss = raw.seededRequiredMiss
       out.modules[id] = progress
     }
   }

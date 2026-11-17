@@ -141,6 +141,15 @@ const STATE_WORDS: Record<string, BilingualText> = {
   'needs-refresh': { en: 'Needs a refresh', es: 'Necesita una actualización' },
 }
 
+/**
+ * The per-module device-scope line (OQ-3): a module whose script
+ * declares android-only surfaces carries this line on its own card,
+ * under its promise — the general announcement at the fold's head
+ * speaks of the bubble lessons as a family; this line names THIS
+ * module's scope. Wording follows the announcement's own.
+ */
+const ANDROID_SCOPE_LINE: BilingualText = { en: 'Lives in the Android app', es: 'Vive en la app de Android' }
+
 const START_WORD: BilingualText = { en: 'Start', es: 'Empezar' }
 const RESUME_WORD: BilingualText = { en: 'Resume', es: 'Reanudar' }
 
@@ -217,6 +226,9 @@ function ModuleRow({
         {duration ? <span className="pres-dur">{duration.label}</span> : null}
       </div>
       <div className="d">{pickText(entry.capability, lang)}</div>
+      {entry.surfaces?.includes('android') && !entry.surfaces.includes('web') ? (
+        <div className="d" style={{ marginTop: 2 }}>{pickText(ANDROID_SCOPE_LINE, lang)}</div>
+      ) : null}
       <div className="pres-mod-foot">
         <span className={`pres-state ${announced.state === 'seen' ? 'seen' : ''} ${announced.state === 'needs-refresh' ? 'refresh' : ''}`}>
           {pickText(STATE_WORDS[announced.state], lang)}

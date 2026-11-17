@@ -175,6 +175,7 @@ export const AD13: PresentationModule = {
         {
           id: 'ad13-open-the-book',
           anchorId: 'desk-book',
+          effectAnchorId: 'book-page',
           act: 'tap',
           establishes: 'book-open',
           text: {
@@ -272,6 +273,7 @@ export const AD13: PresentationModule = {
         {
           id: 'ad13-open-book-again',
           anchorId: 'bk-shelf-continue',
+          effectAnchorId: 'book-page',
           act: 'tap',
           establishes: 'book-open',
           text: {
@@ -300,6 +302,7 @@ export const AD13: PresentationModule = {
         {
           id: 'ad13-info-marks',
           anchorId: 'book-info-marks',
+          effectAnchorId: 'book-page',
           act: 'tap',
           text: {
             en: 'Newest first: tap one, and you land right there.',

@@ -73,7 +73,12 @@ export function createScenarioPort(scenario: Scenario, hostPerform?: ScenarioPer
     const stage = scenario.stage
 
     // The λ itself (Q2's one real touch goes through the sandbox's
-    // LambdaPort discipline inside setLambda — see scenario.ts).
+    // LambdaPort discipline inside setLambda — see scenario.ts). The
+    // toggle shape is kept, but it toggles the FICTION LEDGER:
+    // lambdaOn() reads the ledger only, so both branches compute the
+    // taught absolute end-state deterministically (P13/P14 semantics
+    // delivered through the H-1 discipline), and the seeded path never
+    // reaches the port at all.
     if (step.anchorId === 'bubble-lambda' && step.act === 'tap') {
       if (seeded) stage.setLambdaSeeded(!stage.lambdaOn())
       else stage.setLambda(!stage.lambdaOn())

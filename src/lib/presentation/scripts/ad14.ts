@@ -373,6 +373,7 @@ export const AD14: PresentationModule = {
         {
           id: 'ad14-download-button',
           anchorId: 'set-neural-download',
+          effectAnchorId: 'set-neural-status',
           act: 'tap',
           optional: true,
           text: {
@@ -404,18 +405,20 @@ export const AD14: PresentationModule = {
           id: 'ad14-auto-download',
           anchorId: 'set-auto-download',
           act: 'tap',
+          establishes: 'auto-download-off',
           text: {
-            en: 'This switch lets the first Play download by itself.',
-            es: 'Este interruptor deja que el primer Play descargue solo.',
+            en: 'Download on first play starts on — this tap turns it off.',
+            es: 'Descargar al primer Play empieza encendido — este toque lo apaga.',
           },
         },
         {
           id: 'ad14-auto-download-off',
           anchorId: 'set-auto-download',
           act: 'tap',
+          establishes: 'auto-download-on',
           text: {
-            en: 'Turn it off: nothing downloads until you ask.',
-            es: 'Apágalo: nada se descarga hasta que lo pidas.',
+            en: 'Off, nothing downloads until you ask; tap again: back on.',
+            es: 'Apagado, nada se descarga hasta pedirlo; toca otra vez: se enciende.',
           },
         },
         {
@@ -900,6 +903,16 @@ export const AD14: PresentationModule = {
           text: {
             en: 'Before believing nothing changed, check this stamp first.',
             es: 'Antes de creer que nada cambió, revisa este sello.',
+          },
+        },
+        {
+          id: 'ad14-theme-restore',
+          anchorId: 'set-theme:dark',
+          act: 'tap',
+          establishes: 'theme-restored-dark',
+          text: {
+            en: 'At the end, the theme returns to dark, its starting choice.',
+            es: 'Al final, el tema vuelve a oscuro, su elección inicial.',
           },
         },
       ],

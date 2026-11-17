@@ -84,6 +84,7 @@ export const AD8: PresentationModule = {
         {
           id: 'ad8-paste',
           anchorId: 'create-paste',
+          effectAnchorId: 'create-editor',
           act: 'tap',
           text: {
             en: "Paste swaps in the clipboard's text, if it holds any.",
@@ -135,6 +136,7 @@ export const AD8: PresentationModule = {
         {
           id: 'ad8-voice-chip-auto',
           anchorId: 'create-voice-chip:auto',
+          effectAnchorId: 'create-voice-chosen',
           act: 'tap',
           payload: { param: 'auto' },
           text: {
@@ -214,6 +216,7 @@ export const AD8: PresentationModule = {
         {
           id: 'ad8-use-listen-tap',
           anchorId: 'create-use-listen',
+          effectAnchorId: 'create-editor',
           act: 'tap',
           optional: true,
           establishes: 'create-text-from-listen',
@@ -259,6 +262,7 @@ export const AD8: PresentationModule = {
         {
           id: 'ad8-generate',
           anchorId: 'create-generate',
+          effectAnchorId: 'create-progress',
           act: 'tap',
           establishes: 'render-running',
           text: {

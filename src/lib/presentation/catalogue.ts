@@ -36,6 +36,7 @@ import {
   type PresentationFloor,
   type PresentationModule,
   type PresentationStateFile,
+  type PresentationSurface,
 } from './engine/types.ts'
 import { currentModuleId, moduleProgress } from './presentation-state.ts'
 
@@ -50,6 +51,12 @@ export interface CatalogueModule {
   scenes: BilingualText[]
   /** The module's script; null until its scene wave lands. */
   script: PresentationModule | null
+  /**
+   * The surfaces the module's lesson lives on, copied from its script at
+   * registration (P15): the index names a module's scope per card — an
+   * Android-only lesson says so on its own card.
+   */
+  surfaces?: PresentationSurface[]
 }
 
 /** Where Resume re-enters a part-way module (the recorded exact point). */
@@ -423,6 +430,7 @@ export function registerPresentationScript(script: PresentationModule): Catalogu
     throw new Error(`presentation catalogue: script "${script.id}" capability promise disagrees with the catalogue (PLAN §3 owns the words)`)
   }
   entry.script = script
+  entry.surfaces = script.surfaces ? [...script.surfaces] : undefined
   return entry
 }
 
