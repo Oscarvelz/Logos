@@ -104,6 +104,7 @@ export const Q1: PresentationModule = {
         {
           id: 'q1-paste-tap',
           anchorId: 'listen-paste',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           payload: { param: POEM_EN.id },
           text: {
@@ -160,6 +161,7 @@ export const Q1: PresentationModule = {
         {
           id: 'q1-clear-tap',
           anchorId: 'listen-clear',
+          effectAnchorId: 'listen-editor',
           act: 'tap',
           text: {
             en: 'The eraser clears the text and ends the session.',
@@ -202,6 +204,7 @@ export const Q1: PresentationModule = {
         {
           id: 'q1-play-tap',
           anchorId: 'listen-play',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           payload: { param: TEXT_EN.id },
           text: {
@@ -212,6 +215,7 @@ export const Q1: PresentationModule = {
         {
           id: 'q1-play-pause',
           anchorId: 'listen-play',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Tap it again: the reading pauses right here.',
@@ -282,6 +286,7 @@ export const Q1: PresentationModule = {
         {
           id: 'q1-tap-word',
           anchorId: 'listen-reader-sentence:3',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Tap any word: reading starts right there.',
@@ -309,6 +314,7 @@ export const Q1: PresentationModule = {
         {
           id: 'q1-scrub-drag',
           anchorId: 'listen-scrubber',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Drag this bar: it moves sentence by sentence.',
@@ -354,6 +360,7 @@ export const Q1: PresentationModule = {
         {
           id: 'q1-prev-tap',
           anchorId: 'listen-prev',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Previous, deep inside a sentence, restarts that sentence.',
@@ -372,6 +379,7 @@ export const Q1: PresentationModule = {
         {
           id: 'q1-next-tap',
           anchorId: 'listen-next',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Next steps exactly one sentence forward.',
@@ -405,6 +413,7 @@ export const Q1: PresentationModule = {
         {
           id: 'q1-end-tap',
           anchorId: 'listen-play',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           payload: { param: TEXT_EN.id },
           text: {

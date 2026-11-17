@@ -51,6 +51,7 @@ export const Q3: PresentationModule = {
         {
           id: 'q3-play-fiction',
           anchorId: 'listen-play',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           payload: { param: TEXT_EN.id },
           establishes: 'scenario-session-playing',
@@ -71,6 +72,7 @@ export const Q3: PresentationModule = {
         {
           id: 'q3-chip-opens-picker',
           anchorId: 'listen-voice-chip',
+          effectAnchorId: 'voice-picker',
           act: 'tap',
           establishes: 'voice-picker-open',
           text: {
@@ -114,6 +116,7 @@ export const Q3: PresentationModule = {
         {
           id: 'q3-open-group',
           anchorId: 'voice-picker-group:en-US:head',
+          effectAnchorId: 'voice-picker-group:en-US',
           act: 'tap',
           establishes: 'picker-group-open',
           text: {
@@ -184,6 +187,7 @@ export const Q3: PresentationModule = {
         {
           id: 'q3-pick-row',
           anchorId: `voice-picker-row:${JUNIPER}`,
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Tap the row itself and that voice is chosen; the picker closes.',
@@ -237,6 +241,7 @@ export const Q3: PresentationModule = {
         {
           id: 'q3-filter-pocket',
           anchorId: 'voices-filter:pocket',
+          effectAnchorId: 'voices-grid',
           act: 'tap',
           establishes: 'voices-filter-pocket',
           text: {
@@ -343,6 +348,7 @@ export const Q3: PresentationModule = {
         {
           id: 'q3-back-to-picker',
           anchorId: 'listen-voice-chip',
+          effectAnchorId: 'voice-picker',
           act: 'tap',
           establishes: 'voice-picker-open',
           text: {
@@ -353,6 +359,7 @@ export const Q3: PresentationModule = {
         {
           id: 'q3-open-favorites-group',
           anchorId: 'voice-picker-group:fav:head',
+          effectAnchorId: 'voice-picker-group:fav',
           act: 'tap',
           establishes: 'picker-group-open',
           text: {

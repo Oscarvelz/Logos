@@ -168,27 +168,30 @@ export const AD11: PresentationModule = {
           id: 'ad11-lever-on',
           anchorId: 'set-bubble-auto',
           act: 'tap',
+          establishes: 'bubble-auto-off',
           text: {
-            en: 'Second switch: play the clipboard. It starts on.',
-            es: 'Segundo interruptor: reproducir el portapapeles. Empieza encendido.',
+            en: 'Second switch, play the clipboard: starts on — this tap turns it off.',
+            es: 'Segundo interruptor, reproducir el portapapeles: empieza encendido — este toque lo apaga.',
           },
         },
         {
           id: 'ad11-lever-off',
           anchorId: 'set-bubble-auto',
           act: 'tap',
+          establishes: 'bubble-auto-on',
           text: {
-            en: 'Switch it off: the bubble only controls; nothing plays alone.',
-            es: 'Apágalo: la burbuja solo controla; nada suena solo.',
+            en: 'Off, the bubble only controls; tap again: back on.',
+            es: 'Apagado, la burbuja solo controla; toca otra vez: vuelve a encenderse.',
           },
         },
         {
           id: 'ad11-words-on',
           anchorId: 'set-bubble-text',
           act: 'tap',
+          establishes: 'bubble-text-off',
           text: {
-            en: 'Third switch: the words inside the bubble’s panel.',
-            es: 'Tercer interruptor: las palabras dentro del panel.',
+            en: 'Third switch, words in the panel: starts on — this tap turns it off.',
+            es: 'Tercer interruptor, palabras en el panel: empieza encendido — este toque lo apaga.',
           },
         },
         {
@@ -196,17 +199,18 @@ export const AD11: PresentationModule = {
           anchorId: 'set-bubble-text',
           act: 'say',
           text: {
-            en: 'On, the panel reads along; on tablets, neighbours ride dimmed.',
-            es: 'Encendido, el panel lee contigo; en tabletas, las vecinas acompañan atenuadas.',
+            en: 'Off now: the panel keeps only its transport keys.',
+            es: 'Ahora apagado: el panel conserva solo sus teclas de transporte.',
           },
         },
         {
           id: 'ad11-words-off',
           anchorId: 'set-bubble-text',
           act: 'tap',
+          establishes: 'bubble-text-on',
           text: {
-            en: 'Switch it off: the panel keeps only its transport keys.',
-            es: 'Apágalo: el panel conserva solo sus teclas de transporte.',
+            en: 'Tap again: back on — panel reads along; tablets dim neighbours.',
+            es: 'Toca otra vez: se enciende — el panel lee contigo, vecinas atenuadas.',
           },
         },
       ],
@@ -419,7 +423,7 @@ export const AD11: PresentationModule = {
         {
           id: 'ad11-one-lever',
           anchorId: 'set-bubble-auto',
-          act: 'tap',
+          act: 'say',
           text: {
             en: 'One lever, two houses: this switch and the panel’s Auto.',
             es: 'Una palanca, dos casas: este interruptor y el Auto del panel.',

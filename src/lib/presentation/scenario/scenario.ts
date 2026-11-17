@@ -18,6 +18,12 @@
  *    Fence 0 injects a port wired to the real settings seam and tallies it
  *    as exception E-λ; with no port injected, the toggle lands on the
  *    scenario's own settings copy and nothing real is touched at all.
+ *    The fiction owns the λ state (the λ ledger, P14/P13): the scenario's
+ *    flag starts at the fiction default and is the only thing lambdaOn()
+ *    reads; setLambda writes absolutes derived from it through the port.
+ *    The real value is captured at creation, and teardown restores it by
+ *    comparing the CURRENT real value against the capture — a lesson
+ *    never leaves the user's real switch changed.
  */
 import { ScenarioDbHost, ScenarioKv, SCENARIO_BOOKS_DB, SCENARIO_DB } from './backends.ts'
 import {
@@ -94,14 +100,16 @@ export function createScenario(options: ScenarioOptions = {}) {
   } catch {
     lambdaEntryOn = null
   }
-  // The scenario's OWN λ state after a SEEDED tap: entry seeding replays
-  // earlier beats as silent machinery, and a seeded λ tap is absorbed
-  // here only — it never reaches the LambdaPort, so resuming or jumping
-  // into a lesson cannot flip the user's real switch before (or without)
-  // a presented beat. While this is set it is what lambdaOn() reports:
-  // the fiction stands as if the tap had been lived, the real switch
-  // stands exactly as the user left it.
-  let lambdaSeededOn: boolean | null = null
+  // The fiction's OWN λ state — the ledger (P14/P13, merged with the
+  // C-1/H-1 cure): born at the fiction default, it is the ONLY thing
+  // lambdaOn() ever reads — never the real switch, never a seeded
+  // override — so a replayed toggle converges to the taught end-state
+  // no matter where the user's real switch happens to stand. A seeded
+  // λ tap moves the ledger only (it never reaches the LambdaPort), so
+  // resuming or jumping into a lesson cannot flip the real switch
+  // before (or without) a presented beat; a presented tap writes the
+  // ledger's absolute value through the port.
+  let fictionLambda = DEFAULT_SETTINGS.bubbleOn
   // True while the runner is seeding (seed-mode): ANY setLambda in that
   // window absorbs internally instead of touching the real switch, even
   // if it arrives through the ordinary perform path.
@@ -118,7 +126,6 @@ export function createScenario(options: ScenarioOptions = {}) {
     } catch {
       // A dead port must never break a teardown.
     }
-    lambdaSeededOn = null
   }
 
   let session: ScenarioSession | null = null
@@ -372,29 +379,30 @@ export function createScenario(options: ScenarioOptions = {}) {
      * the stage can show the gold dot.
      */
     setLambda(on: boolean): void {
+      // The ledger moves first: whatever discipline governs the write,
+      // the fiction's truth is now `on`.
+      fictionLambda = on
       // Seed-mode absorbs: while the runner is seeding, a λ act is
       // machinery, not a demonstration — it lands on the scenario's own
       // state only and the real switch is never touched (H-1 cure).
       if (lambdaSeeding) {
-        lambdaSeededOn = on
         patchSettings({ bubbleOn: on })
         return
       }
-      // A presented tap supersedes any seeded state: the real switch
-      // and the scenario copy move together, as they always have.
-      lambdaSeededOn = null
+      // A presented tap: the real switch takes the ledger's absolute
+      // value through the port, and the scenario copy moves with it.
       if (lambdaPort) lambdaPort.setBubbleOn(on)
       patchSettings({ bubbleOn: on })
     },
     /**
      * A SEEDED λ tap (entry seeding only): the flip is absorbed by the
-     * scenario's own internal state — its settings copy and the seeded
-     * override lambdaOn() reports — and NEVER reaches the LambdaPort.
-     * The lesson's fiction is built exactly as if the tap had been
-     * lived; the user's real bubble switch does not move.
+     * fiction ledger and the scenario's settings copy — and NEVER
+     * reaches the LambdaPort. The lesson's fiction is built exactly as
+     * if the tap had been lived; the user's real bubble switch does
+     * not move.
      */
     setLambdaSeeded(on: boolean): void {
-      lambdaSeededOn = on
+      fictionLambda = on
       patchSettings({ bubbleOn: on })
     },
     /** Enter / leave seed-mode (the runner brackets seedBefore in this). */
@@ -405,11 +413,10 @@ export function createScenario(options: ScenarioOptions = {}) {
       lambdaSeeding = false
     },
     lambdaOn(): boolean {
-      // A seeded λ state is the fiction's truth until a presented tap
-      // supersedes it: report it over the real switch, which seeding
-      // deliberately left standing at its entry value.
-      if (lambdaSeededOn !== null) return lambdaSeededOn
-      return lambdaPort ? lambdaPort.getBubbleOn() : getSettings().bubbleOn
+      // The ledger is the fiction's truth, always: never a read of the
+      // real switch (whose position at relaunch would otherwise decide
+      // what a replayed toggle means — the P14 inversion).
+      return fictionLambda
     },
   }
 

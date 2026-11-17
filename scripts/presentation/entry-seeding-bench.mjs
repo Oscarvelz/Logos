@@ -251,7 +251,7 @@ console.log('\nCASE 4 · dead anchors ×3 in a row (optional misses, Automatic)'
   })
   runner.start()
   timer.advance(60_000)
-  const liveMs = 2600 + 2600 // captionDurationMs of the two live beats (5 words → 900 + 5×340)
+  const liveMs = 10400 // WALL ms: the two live beats total 2600 + 2600 presentation ms, and at label 1 (physical 0.5×) wall = presentation × 2
   console.log(`  snapshots emitted: ${emits.map((e) => `${e.step ?? e.status}@${e.at}ms`).join(' · ')}`)
   console.log(`  total run: ${emits[emits.length - 1].at} fake ms for 2 live beats (${liveMs} ms) + 3 dead anchors`)
   console.log(`  skips logged: ${runner.getSnapshot().progress.skips.length}`)

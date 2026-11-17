@@ -44,6 +44,7 @@ export const AD4: PresentationModule = {
         {
           id: 'ad4-play-fiction',
           anchorId: 'listen-play',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           payload: { param: TEXT_EN.id },
           establishes: 'scenario-session-playing',
@@ -64,6 +65,7 @@ export const AD4: PresentationModule = {
         {
           id: 'ad4-speed-chip-tap',
           anchorId: 'listen-speed-chip',
+          effectAnchorId: 'listen-speed-sheet',
           act: 'tap',
           establishes: 'speed-sheet-open',
           text: {
@@ -83,6 +85,7 @@ export const AD4: PresentationModule = {
         {
           id: 'ad4-speed-pick',
           anchorId: 'listen-speed-sheet',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Tap 1.5: the reading speeds up right now.',
@@ -197,6 +200,7 @@ export const AD4: PresentationModule = {
         {
           id: 'ad4-sleep-chip-tap',
           anchorId: 'listen-sleep-chip',
+          effectAnchorId: 'listen-sleep-sheet',
           act: 'tap',
           establishes: 'sleep-sheet-open',
           text: {
@@ -216,6 +220,7 @@ export const AD4: PresentationModule = {
         {
           id: 'ad4-sleep-set',
           anchorId: 'listen-sleep-sheet',
+          effectAnchorId: 'listen-sleep-chip',
           act: 'tap',
           text: {
             en: 'Choose twenty minutes: the countdown begins now.',

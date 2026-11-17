@@ -136,6 +136,45 @@ describe('the duration fence (FENCE-DESIGN §5)', () => {
     assert.equal(entryDuration(bare, 'es'), null, 'ES duration must be null without a script')
   })
 
+  test('D-2 (P2 + two-phase table): the recomputed 20-module labels — a sample asserted against the real functions', () => {
+    // Computed with the REAL entryDuration after the P2 pace recalibration
+    // (moduleDurationMs = presentation-time sum × 2 at the new 1×) and the
+    // P9+P16 two-phase step formula (caption + RESULT_DWELL_MS per performed
+    // act). Full table (EN label / ES label):
+    //   Q0  Approx. 3 min  / Aprox. 3 min      AD7  Approx. 13 min / Aprox. 13 min
+    //   Q1  Approx. 6 min  / Aprox. 6 min      AD8  Approx. 6 min  / Aprox. 6 min
+    //   Q2  Approx. 6 min  / Aprox. 6 min      AD9  Approx. 11 min / Aprox. 11 min
+    //   Q3  Approx. 7 min  / Aprox. 7 min      AD10 Approx. 4 min  / Aprox. 4 min
+    //   Q4  Approx. 7 min  / Aprox. 7 min      AD11 Approx. 8 min  / Aprox. 8 min
+    //   Q5  Approx. 6 min  / Aprox. 6 min      AD12 Approx. 5 min  / Aprox. 5 min
+    //   AD1 Approx. 12 min / Aprox. 12 min     AD13 Approx. 7 min  / Aprox. 7 min
+    //   AD2 Approx. 11 min / Aprox. 11 min     AD14 Approx. 12 min / Aprox. 13 min
+    //   AD3 Approx. 10 min / Aprox. 11 min
+    //   AD4 Approx. 4 min  / Aprox. 4 min
+    //   AD5 Approx. 5 min  / Aprox. 6 min
+    //   AD6 Approx. 10 min / Aprox. 10 min
+    // (Builder-4 pass, P8/P13/P15: AD14's ES label moved 12 → 13 — the
+    // performed theme-restore beat at the module's end, plus the truthful
+    // auto-download pair, carry its ES total past 720 s; AD1 grew by its
+    // performed unlock beat and Q0's ES by one word less in its λ caption.
+    // Every other label of the twenty stands as the table above records.)
+    const sample = {
+      Q0: { enMs: 167160, esMs: 166480, en: 'Approx. 3 min', es: 'Aprox. 3 min' },
+      Q1: { enMs: 326520, esMs: 333320, en: 'Approx. 6 min', es: 'Aprox. 6 min' },
+      AD1: { enMs: 673520, esMs: 703440, en: 'Approx. 12 min', es: 'Aprox. 12 min' },
+      AD14: { enMs: 700120, esMs: 732080, en: 'Approx. 12 min', es: 'Aprox. 13 min' },
+    }
+    for (const [id, want] of Object.entries(sample)) {
+      const entry = catalogueModule(id)
+      const en = entryDuration(entry, 'en')
+      const es = entryDuration(entry, 'es')
+      assert.equal(en.ms, want.enMs, `${id}: EN wall ms at the new Automatic 1×`)
+      assert.equal(es.ms, want.esMs, `${id}: ES wall ms at the new Automatic 1×`)
+      assert.equal(en.label, want.en, `${id}: EN label`)
+      assert.equal(es.label, want.es, `${id}: ES label`)
+    }
+  })
+
   test('D-2 (computed half): every registered module exposes the clock’s label, never a handwritten one', () => {
     for (const entry of MODULE_CATALOGUE) {
       const en = entryDuration(entry, 'en')

@@ -17,7 +17,10 @@
  * front). The only performed step is the opening `goto`, which loads the
  * fiction text through the scenario port so a reading is playing on stage.
  * Declared `surfaces: ['android']`: in a browser none of this exists, and
- * the index explains that instead of pretending (OQ-3).
+ * the index explains that instead of pretending (OQ-3). The module opens
+ * with a declared-narration beat saying exactly that — told, not shown,
+ * nothing faked — and scenes 1–3 speak in picture/promise voice for the
+ * surfaces Android draws.
  *
  * B-15's seat: the registry carries no row of its own for the bubble's
  * notification — its contract is the bubble service's own on/off door, so
@@ -58,6 +61,15 @@ export const AD12: PresentationModule = {
       chapter: { en: 'The system media card', es: 'La tarjeta multimedia del sistema' },
       steps: [
         {
+          id: 's1-declared-narration',
+          anchorId: 'listen-page',
+          act: 'say',
+          text: {
+            en: 'This lesson tells what Logos cannot show here — and pictures nothing false.',
+            es: 'Esta lección cuenta lo que Logos no puede mostrar aquí — sin fingir nada.',
+          },
+        },
+        {
           id: 's1-setup-playing',
           anchorId: 'listen-page',
           act: 'goto',
@@ -81,8 +93,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-card',
           act: 'say',
           text: {
-            en: 'On the lock screen, a card carries it.',
-            es: 'En la pantalla de bloqueo, una tarjeta la lleva.',
+            en: 'Picture the lock screen: a card carries it there.',
+            es: 'Imagina la pantalla de bloqueo: una tarjeta la lleva.',
           },
         },
         {
@@ -90,8 +102,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-card',
           act: 'say',
           text: {
-            en: 'Its title is your book, never a loose sentence.',
-            es: 'Su título es tu libro, nunca una frase suelta.',
+            en: 'Picture it: its title is your book, never loose sentences.',
+            es: 'Imagínala: su título es tu libro, nunca frase suelta.',
           },
         },
         {
@@ -99,8 +111,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-card',
           act: 'say',
           text: {
-            en: 'With no book, the sentence itself becomes the title.',
-            es: 'Sin libro, la propia frase se vuelve el título.',
+            en: 'Picture having no book: the sentence itself becomes the title.',
+            es: 'Sin libro, imagínalo: la frase misma se vuelve título.',
           },
         },
         {
@@ -108,8 +120,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-card',
           act: 'say',
           text: {
-            en: "Its face is Logos' own artwork — spot it among other apps.",
-            es: 'Su cara es el arte propio de Logos: reconócelo entre otras apps.',
+            en: "Picture its face: Logos' own artwork — spot it among apps.",
+            es: 'Imagina su cara: arte propio de Logos, reconocible entre apps.',
           },
         },
         {
@@ -117,8 +129,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-session-active',
           act: 'say',
           text: {
-            en: "While paused, the card's session sleeps.",
-            es: 'En pausa, la sesión de la tarjeta duerme.',
+            en: "Picture it paused: the card's session sleeps.",
+            es: 'En pausa, imagínala: su sesión duerme.',
           },
         },
         {
@@ -126,8 +138,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-session-active',
           act: 'say',
           text: {
-            en: 'No foreign play can wake it; yours always can.',
-            es: 'Ningún play ajeno la despierta; el tuyo, siempre.',
+            en: 'Picture this promise: no foreign play wakes it; yours can.',
+            es: 'Promesa: ningún play ajeno la despierta; el tuyo, siempre.',
           },
         },
         {
@@ -135,8 +147,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-dismissal',
           act: 'say',
           text: {
-            en: 'Paused, you cannot swipe the card away.',
-            es: 'En pausa, no puedes barrer la tarjeta.',
+            en: 'Picture it paused: you cannot swipe the card away.',
+            es: 'En pausa, imagínala: no puedes barrerla.',
           },
         },
         {
@@ -153,8 +165,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-dismissal',
           act: 'say',
           text: {
-            en: 'Finished or closed, it leaves by itself.',
-            es: 'Terminada o cerrada, se va sola.',
+            en: 'Picture it finished or closed: it leaves by itself.',
+            es: 'Terminada o cerrada, imagínala: se va sola.',
           },
         },
       ],
@@ -168,8 +180,8 @@ export const AD12: PresentationModule = {
           anchorId: 'bubble-state',
           act: 'say',
           text: {
-            en: 'While the bubble floats, its own notification waits.',
-            es: 'Mientras la burbuja flota, su propia notificación espera.',
+            en: 'Picture the bubble floating: its own notification waits.',
+            es: 'Imagina la burbuja flotando: su propia notificación espera.',
           },
         },
         {
@@ -177,8 +189,8 @@ export const AD12: PresentationModule = {
           anchorId: 'bubble-state',
           act: 'say',
           text: {
-            en: 'It waits in the shade: Logos bubble.',
-            es: 'Espera en la cortina: «Logos bubble».',
+            en: 'Picture the shade: it waits there, named Logos bubble.',
+            es: 'Imagina la cortina: ahí espera «Logos bubble».',
           },
         },
         {
@@ -186,8 +198,8 @@ export const AD12: PresentationModule = {
           anchorId: 'bubble-state',
           act: 'say',
           text: {
-            en: 'Tap it, and you enter Logos.',
-            es: 'Tócala, y entras en Logos.',
+            en: 'Picture tapping it: you enter Logos.',
+            es: 'Imagina tocarla: entras en Logos.',
           },
         },
         {
@@ -195,8 +207,8 @@ export const AD12: PresentationModule = {
           anchorId: 'bubble-state',
           act: 'say',
           text: {
-            en: 'Its one action is a word: Hide bubble.',
-            es: 'Su única acción es una palabra: «Hide bubble».',
+            en: 'Picture its one action, a word: Hide bubble.',
+            es: 'Imagina su única acción, una palabra: «Hide bubble».',
           },
         },
         {
@@ -204,8 +216,8 @@ export const AD12: PresentationModule = {
           anchorId: 'bubble-state',
           act: 'say',
           text: {
-            en: 'Tap it, and the bubble goes home.',
-            es: 'Tócala, y la burbuja se recoge.',
+            en: 'Picture «Hide bubble» tapped: the bubble goes home.',
+            es: 'Imagina «Hide bubble»: la burbuja se recoge.',
           },
         },
       ],
@@ -228,8 +240,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-actions',
           act: 'say',
           text: {
-            en: 'Each one steps exactly one sentence.',
-            es: 'Cada uno pisa exactamente una frase.',
+            en: 'Picture them: each one steps exactly one sentence.',
+            es: 'Imagínalos: cada uno pisa exactamente una frase.',
           },
         },
         {
@@ -237,8 +249,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-actions',
           act: 'say',
           text: {
-            en: 'Never another book, never another track.',
-            es: 'Nunca otro libro, nunca otra pista.',
+            en: 'Picture the promise: never another book or track.',
+            es: 'Promesa: nunca otro libro, nunca otra pista.',
           },
         },
         {
@@ -273,8 +285,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-actions',
           act: 'say',
           text: {
-            en: 'When a recording holds the stage, they walk fifteen seconds.',
-            es: 'Cuando una grabación tiene la escena, caminan quince segundos.',
+            en: 'Picture a recording on stage: they walk fifteen seconds.',
+            es: 'Imagina una grabación en escena: caminan quince segundos.',
           },
         },
         {
@@ -282,8 +294,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-actions',
           act: 'say',
           text: {
-            en: 'Tap the card itself, and Logos opens.',
-            es: 'Toca la tarjeta misma, y Logos se abre.',
+            en: 'Picture tapping the card itself: Logos opens.',
+            es: 'Imagina tocar la tarjeta misma: Logos se abre.',
           },
         },
         {
@@ -291,8 +303,8 @@ export const AD12: PresentationModule = {
           anchorId: 'media-actions',
           act: 'say',
           text: {
-            en: 'Its keys arrive even if Android retired the app.',
-            es: 'Sus teclas llegan aunque Android haya retirado la app.',
+            en: 'Picture this: its keys arrive even if Android retired Logos.',
+            es: 'Imagina esto: sus teclas llegan aunque Android retire Logos.',
           },
         },
         {

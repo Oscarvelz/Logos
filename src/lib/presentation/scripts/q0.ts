@@ -80,6 +80,7 @@ export const q0: PresentationModule = {
         {
           id: 'q0-paste',
           anchorId: 'listen-paste',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Tap Paste: the harbour text lands and starts playing at once.',
@@ -117,6 +118,7 @@ export const q0: PresentationModule = {
         {
           id: 'q0-tap-word',
           anchorId: 'listen-reader-sentence:2',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Tap any word: reading jumps there and continues from that word.',
@@ -132,6 +134,7 @@ export const q0: PresentationModule = {
         {
           id: 'q0-open-voices',
           anchorId: 'listen-voice-chip',
+          effectAnchorId: 'voice-picker',
           act: 'tap',
           text: {
             en: 'The voice chip opens every voice Logos can read with.',
@@ -141,6 +144,7 @@ export const q0: PresentationModule = {
         {
           id: 'q0-pick-voice',
           anchorId: 'voice-picker-row:scenario-voice-es',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'Pick another voice: the reading continues in it, from this sentence.',
@@ -150,6 +154,7 @@ export const q0: PresentationModule = {
         {
           id: 'q0-open-keep',
           anchorId: 'listen-reader-save',
+          effectAnchorId: 'listen-keep-sheet',
           act: 'tap',
           text: {
             en: 'Save keeps this reading: choose the audio, and Logos makes it.',
@@ -185,8 +190,8 @@ export const q0: PresentationModule = {
           anchorId: 'bubble-lambda',
           act: 'tap',
           text: {
-            en: 'Tap it: the bubble floats over every app; the gold dot confirms.',
-            es: 'Tócala: la burbuja flota sobre cada app; el punto dorado lo confirma.',
+            en: 'Tap it: she floats over every app, gold dot lit, staying out.',
+            es: 'Tócala: flota sobre cada app, punto dorado encendido, y queda fuera.',
           },
         },
         {

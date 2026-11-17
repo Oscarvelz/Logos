@@ -78,6 +78,7 @@ export const AD5: PresentationModule = {
         {
           id: 'ad5-play-mixed',
           anchorId: 'listen-play',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           establishes: 'scenario-session-playing',
           text: {
@@ -175,6 +176,7 @@ export const AD5: PresentationModule = {
         {
           id: 'ad5-tap-english',
           anchorId: 'listen-lang-chip',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           establishes: 'lang-forced-en',
           text: {
@@ -203,6 +205,7 @@ export const AD5: PresentationModule = {
         {
           id: 'ad5-tap-spanish',
           anchorId: 'listen-lang-chip',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           establishes: 'lang-forced-es',
           text: {
@@ -213,6 +216,7 @@ export const AD5: PresentationModule = {
         {
           id: 'ad5-tap-auto',
           anchorId: 'listen-lang-chip',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           establishes: 'lang-auto',
           text: {
@@ -247,6 +251,7 @@ export const AD5: PresentationModule = {
         {
           id: 'ad5-open-picker',
           anchorId: 'listen-voice-chip',
+          effectAnchorId: 'voice-picker',
           act: 'tap',
           establishes: 'voice-picker-open',
           text: {

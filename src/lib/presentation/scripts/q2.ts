@@ -147,6 +147,7 @@ export const Q2: PresentationModule = {
         {
           id: 's2-open-panel',
           anchorId: 'bubble-stage-orb',
+          effectAnchorId: 'bubble-stage-panel',
           act: 'tap',
           text: {
             en: 'Tap her and the panel opens: your reading, in miniature.',
@@ -196,6 +197,7 @@ export const Q2: PresentationModule = {
         {
           id: 's3-tap-bubble',
           anchorId: 'bubble-clip',
+          effectAnchorId: 'bubble-stage-panel',
           act: 'tap',
           text: {
             en: 'The panel opens and reads what you copied.',
@@ -241,6 +243,7 @@ export const Q2: PresentationModule = {
         {
           id: 's3-undo-tap',
           anchorId: 'bubble-clip',
+          effectAnchorId: 'bubble-stage-panel',
           act: 'key',
           payload: { key: 'Undo' },
           text: {
@@ -288,6 +291,7 @@ export const Q2: PresentationModule = {
         {
           id: 's3-replace-again',
           anchorId: 'bubble-clip',
+          effectAnchorId: 'bubble-stage-panel',
           act: 'tap',
           text: {
             en: 'The note takes the stage again.',
@@ -297,6 +301,7 @@ export const Q2: PresentationModule = {
         {
           id: 's3-advance-clip',
           anchorId: 'listen-next',
+          effectAnchorId: 'listen-reader',
           act: 'tap',
           text: {
             en: 'The note is short: two sentences, and it ends.',
@@ -396,8 +401,8 @@ export const Q2: PresentationModule = {
           anchorId: 'bubble-lambda',
           act: 'say',
           text: {
-            en: 'That is the bubble: out with one tap, home with another.',
-            es: 'Esa es la burbuja: sale con un toque, vuelve con otro.',
+            en: 'The bubble stays floating when the lesson ends — by design, not forgotten.',
+            es: 'La burbuja queda flotando al terminar la lección — por diseño, no por olvido.',
           },
         },
       ],

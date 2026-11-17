@@ -63,6 +63,22 @@ export interface PresentationStep {
   id: string
   /** Registry id only — must exist in ANCHORS (checked by validation). */
   anchorId: string
+  /**
+   * Optional second anchor: where the step's EFFECT lands, when that is
+   * a different registered anchor than the acted-on one. Registry id
+   * only, validated exactly as `anchorId` is.
+   */
+  effectAnchorId?: string
+  /**
+   * Optional anchor naming the step's SUBJECT, when it differs from the
+   * acted-on anchor. Registry id only, validated exactly as `anchorId`.
+   */
+  subjectAnchorId?: string
+  /**
+   * The presence/state this step LEAVES behind — a free state-name
+   * string, like `establishes`, never a locator.
+   */
+  leaves?: string
   act: StepAct
   /** Caption for say/tap/type/key/scroll/hover/goto steps, in both languages. */
   text?: BilingualText
@@ -129,6 +145,12 @@ export interface ModuleProgress {
   stepId?: string
   verifiedAgainst: string
   skips: PresentationSkip[]
+  /** The mode this module's progress was last recorded in. */
+  mode?: 'automatic' | 'interactive'
+  /** True when the learner had the lesson paused at the recorded place. */
+  userPaused?: boolean
+  /** True when entry seeding found a required step missing on the way in. */
+  seededRequiredMiss?: boolean
 }
 
 /** A scene the user saved from the player's chapters panel («My scenes»). */
@@ -150,6 +172,14 @@ export interface PresentationStateFile {
   modules: Record<string, ModuleProgress>
   /** The user's remembered speed — one speed per user, across modules. */
   speed: number
+  /**
+   * The pace-scale stamp (P2): 2 marks a file whose `speed` is a NEW
+   * label (physical rate = label / 2). A file without it — or with any
+   * other value — holds an OLD-scale speed, which must never be
+   * reinterpreted: the normaliser discards it to label 1 and stamps 2
+   * (presentation-state.ts, a once-only migration).
+   */
+  speedScale?: number
   myScenes: SavedScene[]
   /**
    * The last module the learner used — set at module start and on every
@@ -235,6 +265,9 @@ export const SCENE_KEY_WHITELIST: ReadonlySet<string> = new Set(['id', 'chapter'
 export const STEP_KEY_WHITELIST: ReadonlySet<string> = new Set([
   'id',
   'anchorId',
+  'effectAnchorId',
+  'subjectAnchorId',
+  'leaves',
   'act',
   'text',
   'question',
@@ -397,6 +430,20 @@ export function validatePresentationModule(script: PresentationModule): string[]
         problems.push(`${stepPath} (${step.id}): anchorId is missing — a step names its anchor by registry id`)
       } else if (!isRegisteredAnchorId(step.anchorId)) {
         problems.push(`${stepPath} (${step.id}): anchor "${step.anchorId}" is not in ANCHORS`)
+      }
+      if (step.effectAnchorId !== undefined) {
+        if (typeof step.effectAnchorId !== 'string' || !step.effectAnchorId) {
+          problems.push(`${stepPath} (${step.id}): effectAnchorId must be a registry id when present`)
+        } else if (!isRegisteredAnchorId(step.effectAnchorId)) {
+          problems.push(`${stepPath} (${step.id}): effect anchor "${step.effectAnchorId}" is not in ANCHORS`)
+        }
+      }
+      if (step.subjectAnchorId !== undefined) {
+        if (typeof step.subjectAnchorId !== 'string' || !step.subjectAnchorId) {
+          problems.push(`${stepPath} (${step.id}): subjectAnchorId must be a registry id when present`)
+        } else if (!isRegisteredAnchorId(step.subjectAnchorId)) {
+          problems.push(`${stepPath} (${step.id}): subject anchor "${step.subjectAnchorId}" is not in ANCHORS`)
+        }
       }
       if (!STEP_ACTS.includes(step.act)) {
         problems.push(`${stepPath} (${step.id}): act "${String(step.act)}" is not one of ${STEP_ACTS.join(' / ')}`)

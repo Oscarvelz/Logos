@@ -121,6 +121,7 @@ export const AD10: PresentationModule = {
         {
           id: 'ad10-add-tap',
           anchorId: 'set-pron-add',
+          effectAnchorId: 'set-pron-entry',
           act: 'tap',
           text: {
             en: 'Tap Add: the fields clear, the entry stays.',
@@ -225,6 +226,7 @@ export const AD10: PresentationModule = {
         {
           id: 'ad10-replace-tap',
           anchorId: 'set-pron-add',
+          effectAnchorId: 'set-pron-entry',
           act: 'tap',
           text: {
             en: 'No second row appears: the new reading wins.',
@@ -243,6 +245,7 @@ export const AD10: PresentationModule = {
         {
           id: 'ad10-remove-tap',
           anchorId: 'set-pron-remove',
+          effectAnchorId: 'set-pron-entry',
           act: 'tap',
           text: {
             en: 'The ✕ removes Tomas — instantly, no confirmation asked.',

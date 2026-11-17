@@ -51,24 +51,6 @@
  *   Q2's Undo has its replace to undo, AD1's save has its playing text.
  *   Backward movement (‹, a chapters jump back) never re-seeds: what
  *   was built stays built, exactly as ‹ has always ruled.
- *   THE SEED-GAP LAW (the M-34 cure): seeding is honest about what it
- *   could NOT build. A step whose anchor misses at seed time (or whose
- *   declared precondition fails, or whose act throws) leaves a GAP —
- *   the fiction that step would have built does not exist, and landing
- *   the learner past it would present a beat on a stage that was never
- *   built. So a launch, resume or forward jump whose target lies past
- *   the first gap lands AT the gap step instead — the nearest seedable
- *   point — where the step is presented live and its own act (or its
- *   own fail-safe) builds the fiction in the open from there. The
- *   adjustment is written into the bookkeeping, never faked: the gap
- *   step enters the skip log with reason "seed-gap", and the recorded
- *   place is the place the learner actually landed.
- *   THE ONE EXCEPTION INSIDE SEEDING (the H-1 cure): a seeded λ tap is
- *   NOT a performed act — seeding brackets the pass in the scenario's
- *   seed-mode and uses the port's seeded path, so the tap is absorbed
- *   by the scenario's own internal state only and the user's REAL
- *   bubble switch never moves before a beat is shown. A PRESENTED λ
- *   tap still flips the real switch: that flip is the demonstration.
  * - «Stay here» (the stay-here window law, Oscar, Brizna lane 2026-11-14):
  *   a mid-module tap does NOT dissolve the stage. `requestStayHere()`
  *   opens the card's window and HOLDS THE CLOCK (clock.beginHold — in
@@ -99,9 +81,6 @@
  * shell: performed acts go to the ScenarioPort (scenario-port.ts) and
  * nowhere else, and every exit — natural end, ✕, required miss, «Stay
  * here» — discards the scenario whole through the port's teardown. The
- * scenario's teardown also restores the ONE real thing a presented λ
- * tap may flip — the user's bubble switch — to the value captured at
- * scenario creation (the C-1 cure), so no exit path can leak it. The
  * only payloads the runner emits are the presentation state file and the
  * skip log inside it; both are leak-scanned before every write, and they
  * carry module/scene/step/anchor ids only (the payload-isolation test in
@@ -110,13 +89,28 @@
  *
  * Progress persists per module in `logos.presentation.state.v1`
  * (presentation-state.ts) — presentation-owned storage, NOT a user store.
+ *
+ * BUILDER-2 WAVE (P1/P12–P17), in brief: start is split into
+ * prepare / confirmStart / abortClean (the opening phase: clock held,
+ * persistence suppressed, a required entry miss blocks instead of
+ * finishing); Automatic beats are TWO-PHASE (perform at performDelayMs,
+ * advance at stepDurationMs) and «Show me» dwells RESULT_DWELL_MS;
+ * a run-wide lived set makes re-performance impossible (back re-entry,
+ * mode switch after userAct, seeded steps); seeding records every miss
+ * ('seed-miss', seededRequiredMiss on a required one) and ANY skip in a
+ * run bars 'seen' at the finish; a miss whose anchor's declared
+ * precondition is sheet/menu-style (or whose previous step `establishes`)
+ * earns a reveal wait — the same resolution retried every 100
+ * presentation-ms up to 1200 before the miss path applies; and the
+ * record carries mode + userPaused, restored on a resumed start, with
+ * handleHidden/handleVisible pausing and reviving the clock honestly.
  */
 import { anchorById, logSkip, type AnchorRecord } from '../anchors.ts'
 import { defaultPresentationStorage, loadPresentationState, savePresentationState, withLastUsed, withSavedScene } from '../presentation-state.ts'
 import type { PresentationStorage } from '../presentation-state.ts'
 import { containsScenarioData } from '../scenario/index.ts'
 import type { Scenario } from '../scenario/index.ts'
-import { ASK_BEAT_MS, PRESENTATION_SPEEDS, createPresentationClock, stepDurationMs, type PresentationClock } from './clock.ts'
+import { PRESENTATION_SPEEDS, RESULT_DWELL_MS, createPresentationClock, performDelayMs, stepDurationMs, type PresentationClock } from './clock.ts'
 import { createAnchorResolver, type AnchorResolution, type AnchorResolver } from './resolve.ts'
 import { createScenarioPort, type ScenarioPort } from './scenario-port.ts'
 import {
@@ -178,11 +172,44 @@ export interface RunnerOptions {
   performPrecondition?: (record: AnchorRecord, flat: FlatStep) => boolean
 }
 
+/** Run-local skip tally carried on the final snapshot (P17): the done card
+ *  (a later builder) renders the declaration from this data alone. */
+export interface RunnerEndInfo {
+  skipCount: number
+  /** Chapter names (in the snapshot's language) of the scenes skipped this run, de-duplicated, in skip order. */
+  skipChapters: string[]
+}
+
 export interface RunnerSnapshot {
   status: RunnerStatus
   mode: PlaybackMode
   lang: PresentationLanguage
   speed: number
+  /**
+   * True during the PREPARE phase (P1): `prepare()` has seeded and entered
+   * the first beat, but the opening window has not been confirmed — the
+   * clock is held from t=0 and NO place / last-used / progress write of any
+   * kind has been persisted. `confirmStart()` ends the phase.
+   */
+  opening: boolean
+  /**
+   * The plain refresh line, in the run's language, when a REQUIRED anchor
+   * missed at the entry beat during `prepare()`: the run is blocked behind
+   * the opening window (status stays non-done) and only `abortClean()`
+   * exits from there. Absent otherwise.
+   */
+  blockedNotice?: string
+  /** True only on the snapshot produced by `abortClean()` (the «Ahora no» path). */
+  cleanAbort?: boolean
+  /**
+   * True while «Show me»'s result dwell (P16) is running: the act has been
+   * performed and the step completes after RESULT_DWELL_MS on the clock.
+   * While it stands, Show-me / › (and userAct) are inert — the chosen
+   * exposure for the dwell (status stays 'interactive-wait').
+   */
+  showMeDwelling: boolean
+  /** The run-local skip declaration, present on a final (done / aborted) snapshot. */
+  endInfo?: RunnerEndInfo
   /** True while the C′ speed strip is open and the clock is held for the choice. */
   speedChoiceOpen: boolean
   /**
@@ -218,17 +245,36 @@ export interface RunnerSnapshot {
 export interface PresentationRunner {
   getSnapshot: () => RunnerSnapshot
   subscribe: (listener: () => void) => () => void
-  /**
-   * Begin a run. Without a launch point, a part-way module resumes at
-   * its recorded place (the progress record is the only memory). A
-   * launch carrying `resumeFrom` — the index's «My scenes» rows and
-   * search «Watch», whose point lives OUTSIDE the progress record —
-   * starts at that exact step instead (the H-26 cure): entry seeding
-   * builds the fiction before it, λ-safe as everywhere, and the run
-   * counts as started there, so a part-way launch can never pass as a
-   * clean full play.
-   */
   start: (options?: { resume?: boolean; resumeFrom?: { step: number; scene?: string; stepId?: string } }) => void
+  /**
+   * P1, phase one: load state, compute the resume point, seed, and enter
+   * the first beat — with the clock HELD from t=0 and persistence
+   * SUPPRESSED (no markPlace, no last-used write, no progress write) until
+   * `confirmStart()`. Snapshot `opening: true` while this phase stands.
+   */
+  prepare: (options?: { resume?: boolean; resumeFrom?: { step: number; scene?: string; stepId?: string } }) => void
+  /**
+   * P1, phase two: end the hold, lift suppression, perform the deferred
+   * markPlace + last-used write for the current beat, `opening: false`.
+   * (If prepare blocked on a required entry miss, confirming instead
+   * finalises that miss the way `start()` always has: done,
+   * needs-refresh, the plain line, scenario discarded.)
+   */
+  confirmStart: () => void
+  /**
+   * P1, the «Ahora no» path: tear down the scenario and stop pending with
+   * NO place / last-used / progress writes — a resume cancelled here
+   * leaves the previously recorded resume point byte-identical.
+   * endReason 'abort', snapshot `cleanAbort: true`.
+   */
+  abortClean: () => void
+  /**
+   * P14 backgrounding: the app went hidden mid-run — record whether the
+   * lesson was playing, pause the clock, persist mode/paused.
+   */
+  handleHidden: () => void
+  /** The app is visible again: resume the clock ONLY if it was playing when hidden. */
+  handleVisible: () => void
   pause: () => void
   resume: () => void
   /**
@@ -339,20 +385,48 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
   let notice: BilingualText | undefined
   let cancelPending: (() => void) | null = null
   let cancelPerform: (() => void) | null = null
-  let performedKey: string | null = null
+  /** Cancels a pending REVEAL WAIT retry (P12) — the same slot family as the other two. */
+  let cancelReveal: (() => void) | null = null
   let startedAt = 0
-  /**
-   * The steps this run has actually PRESENTED (the H-28 cure): a step
-   * enters the set when it takes the stage resolved in `enterCurrent`,
-   * or when the machinery passes it as an optional miss during a lived
-   * walk. Entry seeding and chapters jumps never add to it — seeded
-   * steps were built, not presented — so a run that reaches the end
-   * over un-presented steps cannot earn a clean full play.
-   */
-  let presentedSteps = new Set<number>()
   let hadRequiredMiss = false
   let userPaused = false
   let scenarioLive = false
+  /* ── P1 prepare/confirm ──────────────────────────────────────────── */
+  /** True in the prepare phase: clock held, persistence suppressed. */
+  let opening = false
+  /** True when prepare blocked on a required miss at the entry beat. */
+  let blockedOpening = false
+  /** True when the run reached its natural end during prepare (an entry
+   *  skip chain running off the end): its persist + teardown are deferred
+   *  to confirmStart, like everything else in the phase. */
+  let finishDeferred = false
+  let blockedNotice: string | undefined
+  /** Set only by abortClean(), carried on its snapshot. */
+  let cleanAbortFlag = false
+  /* ── P16 two-phase + dwell ───────────────────────────────────────── */
+  /** True while a scheduled perform has not yet fired. */
+  let performPending = false
+  let performPendingKey: string | null = null
+  /** True during showMe()'s RESULT_DWELL_MS dwell. */
+  let showMeDwelling = false
+  /* ── P14/P13 run-wide lived performances ─────────────────────────── */
+  /**
+   * Step keys (`scene:step`) whose act has been performed IN THIS RUN —
+   * by the port (Automatic / «Show me»), by the learner's own hand
+   * (userAct), or by entry seeding. A key in this set is never performed
+   * again this run: back() re-entry and a mode switch after userAct()
+   * cannot re-fire a toggle and unbuild the fiction.
+   */
+  const livedPerformed = new Set<string>()
+  /* ── P17 run-local skip tally ────────────────────────────────────── */
+  let runSkipCount = 0
+  let runSkipChapters: BilingualText[] = []
+  let runSkipChapterIds = new Set<string>()
+  let seededRequiredMissRun = false
+  /* ── P12 reveal wait ─────────────────────────────────────────────── */
+  let revealTries = 0
+  /* ── P14 backgrounding ───────────────────────────────────────────── */
+  let hiddenWasPlaying = false
   /** True while the stay-here window is open: the clock is held, verbs stand down. */
   let stayWindowOpen = false
   /** True while the ✕ confirmation window is open: same hold, same stand-down. */
@@ -390,10 +464,23 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       stepId: stored.stepId,
       verifiedAgainst: stored.verifiedAgainst ?? script.verifiedAgainst ?? appVersion,
       skips: Array.isArray(stored.skips) ? stored.skips : [],
+      // Threaded through the normaliser by Builder 1 — the runner must
+      // name them too, or its own load gate strips them (P14/P17).
+      mode: stored.mode,
+      userPaused: stored.userPaused,
+      seededRequiredMiss: stored.seededRequiredMiss,
     }
   }
 
   function persistProgress(): void {
+    // P1 suppression: while `opening` stands, NO progress / place /
+    // last-used write of any kind leaves this runner. In-memory progress
+    // still moves (skip log, seeded-miss flag); confirmStart()'s deferred
+    // markPlace persists it whole, and abortClean() discards it unwritten.
+    if (opening) return
+    // P14: every persisted record carries the CURRENT mode and paused
+    // state, so a resumed start can restore them over host defaults.
+    progress = { ...progress, mode, userPaused }
     stateFile = loadState()
     stateFile = withLastUsed(
       {
@@ -418,11 +505,17 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
   let snapshot: RunnerSnapshot = buildSnapshot()
 
   function buildSnapshot(): RunnerSnapshot {
+    const final = status === 'done' || status === 'aborted'
     return {
       status,
       mode,
       lang,
       speed: clock.speed,
+      opening,
+      blockedNotice,
+      cleanAbort: cleanAbortFlag || undefined,
+      showMeDwelling,
+      endInfo: final ? { skipCount: runSkipCount, skipChapters: runSkipChapters.map((c) => c[lang]) } : undefined,
       speedChoiceOpen: clock.speedChoiceOpen,
       stayWindowOpen,
       closeWindowOpen,
@@ -438,20 +531,40 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     }
   }
 
+  /** True only inside start()'s synchronous prepare+confirm: the entry
+   *  beat must emit ONCE (at confirm), exactly as the old start() did. */
+  let startBatching = false
+
   function emit(): void {
     snapshot = buildSnapshot()
+    if (startBatching) return
     for (const listener of [...listeners]) listener()
   }
 
-  function stopPending(): void {
+  function cancelAdvanceTimer(): void {
     if (cancelPending) {
       cancelPending()
       cancelPending = null
     }
+  }
+
+  function cancelPerformTimer(): void {
     if (cancelPerform) {
       cancelPerform()
       cancelPerform = null
     }
+    performPending = false
+    performPendingKey = null
+  }
+
+  function stopPending(): void {
+    cancelAdvanceTimer()
+    cancelPerformTimer()
+    if (cancelReveal) {
+      cancelReveal()
+      cancelReveal = null
+    }
+    showMeDwelling = false
   }
 
   function teardownScenario(reason: 'completed' | 'required-anchor-miss' | 'stay-here' | 'abort'): void {
@@ -482,6 +595,13 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
   }
 
   function recordSkip(step: FlatStep, reason: string): void {
+    // P17: every skip this run — walked or seeded, optional or required —
+    // joins the run-local tally the finish rule and endInfo read.
+    runSkipCount += 1
+    if (!runSkipChapterIds.has(step.scene.id)) {
+      runSkipChapterIds.add(step.scene.id)
+      runSkipChapters.push(step.scene.chapter)
+    }
     progress = {
       ...progress,
       skips: logSkip(progress.skips, {
@@ -497,27 +617,54 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     }
   }
 
-  /** Perform the current step's act through the scenario port, once per entry. */
-  function performCurrent(): void {
-    if (!port || !current || !resolution || resolution.status !== 'resolved') return
-    const key = `${current.scene.id}:${current.step.id}`
-    if (performedKey === key) return
-    performedKey = key
-    const flatStep = current
-    const res = resolution
-    if (flatStep.step.act === 'ask') {
-      // ask → one-beat pause → show: the act lands after the beat.
-      cancelPerform = clock.after(ASK_BEAT_MS, () => {
-        cancelPerform = null
-        port.perform(flatStep, res)
-      })
-    } else {
-      port.perform(flatStep, res)
-    }
+  const stepKey = (flatStep: FlatStep): string => `${flatStep.scene.id}:${flatStep.step.id}`
+
+  /** Acts the stage actually performs (clock.ts's performed set, mirrored: `say` performs nothing). */
+  const PERFORMED_ACTS: ReadonlySet<string> = new Set(['tap', 'type', 'key', 'goto', 'scroll', 'hover', 'ask'])
+
+  /**
+   * Fire one step's act through the scenario port — at most once per run
+   * (P14/P13): the run-wide lived set is the guard, so a back() re-entry,
+   * a mode switch after the learner's own act, or a later entry onto a
+   * seeded step can never perform it a second time.
+   */
+  function doPerform(flatStep: FlatStep, res: AnchorResolution): void {
+    if (!port || res.status !== 'resolved') return
+    const key = stepKey(flatStep)
+    if (livedPerformed.has(key)) return
+    livedPerformed.add(key)
+    port.perform(flatStep, res)
   }
 
+  /**
+   * P16 two-phase, phase one: schedule the current step's PERFORM at
+   * performDelayMs(step, lang) on the presentation clock — the caption is
+   * read first, the act fires only after its reading time. (`say` has no
+   * perform phase.) The handle is cancellable; `performPending` remembers
+   * that the act is still owed, which is what setLanguage re-arms.
+   */
+  function performCurrent(): void {
+    if (!port || !current || !resolution || resolution.status !== 'resolved') return
+    if (!PERFORMED_ACTS.has(current.step.act)) return
+    const flatStep = current
+    const res = resolution
+    const key = stepKey(flatStep)
+    if (livedPerformed.has(key)) return
+    if (performPending && performPendingKey === key) return
+    performPending = true
+    performPendingKey = key
+    cancelPerform = clock.after(performDelayMs(flatStep.step, lang), () => {
+      cancelPerform = null
+      performPending = false
+      performPendingKey = null
+      doPerform(flatStep, res)
+    })
+  }
+
+  /** P16 two-phase, phase two: the ADVANCE at the step's full duration (read + perform + result dwell). */
   function scheduleCurrent(): void {
     if (!current) return
+    cancelAdvanceTimer()
     cancelPending = clock.after(stepDurationMs(current.step, lang), () => {
       cancelPending = null
       completeCurrent()
@@ -538,28 +685,32 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
    * it is building the stage they built. A throwing port or hook never
    * breaks an entry.
    *
-   * Returns the global index of the FIRST step in the seeded range
-   * whose act could not be performed — the seed gap — or -1 when the
-   * whole range was built. Callers land the learner at the gap rather
-   * than past it (the seed-gap law in this file's header).
+   * THE λ SEED RULE (H-1 cure, kept over the lane runner): seeding is
+   * silent machinery, so a seeded λ tap must NEVER reach the user's
+   * real bubble switch. The whole pass is bracketed in the scenario's
+   * seed-mode — while it stands, any setLambda absorbs into the
+   * fiction ledger only, whichever perform path a port takes — and
+   * each step is performed through the port's seeded path when it
+   * offers one (performSeeded). The seed-miss record above stands
+   * alongside: the bracket governs the λ, the record governs honesty.
    */
-  function seedBefore(target: number): number {
+  function seedBefore(target: number): void {
     if (!port || !scenarioLive) {
       builtThrough = Math.max(builtThrough, target)
-      return -1
+      return
     }
-    let gap = -1
-    const noteGap = (flatStep: FlatStep) => {
-      if (gap === -1) gap = flatStep.globalIndex
+    let missedThisCall = false
+    const seedMiss = (flatStep: FlatStep): void => {
+      // P17 seeding honesty: seeding stays VISUALLY silent — never silent
+      // in the record. Any miss is skip-logged as 'seed-miss'; a REQUIRED
+      // miss also raises the persisted seededRequiredMiss flag.
+      missedThisCall = true
+      recordSkip(flatStep, 'seed-miss')
+      if (!flatStep.step.optional) {
+        seededRequiredMissRun = true
+        progress = { ...progress, seededRequiredMiss: true }
+      }
     }
-    // THE λ SEED RULE (H-1 cure): seeding is silent machinery, so a
-    // seeded λ tap must NEVER reach the user's real bubble switch. The
-    // whole seeding pass is bracketed in the scenario's seed-mode —
-    // while it stands, any setLambda absorbs into the scenario's own
-    // internal state only, whichever perform path a port takes — and
-    // each step is performed through the port's seeded path when it
-    // offers one. Every other data act seeds exactly as before: the
-    // fiction is built, the real switch is not.
     const seedScenario = port.scenario
     let seedModeOn = false
     try {
@@ -583,23 +734,25 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
           }
         }
         if (preconditionFailed) {
-          noteGap(flatStep)
+          seedMiss(flatStep)
           continue
         }
         const res = resolveStep(flatStep.step)
         if (res.status !== 'resolved') {
-          noteGap(flatStep)
+          seedMiss(flatStep)
           continue
         }
         try {
           if (typeof port.performSeeded === 'function') port.performSeeded(flatStep, res)
           else port.perform(flatStep, res)
+          // P13: a seeded step counts as performed — a later entry onto it
+          // never performs it again (a seeded λ toggle must not invert).
+          livedPerformed.add(stepKey(flatStep))
         } catch {
           // Machinery never breaks an entry: a failed seed act leaves the
           // fiction as the live acts built it, and the target beat's own
-          // resolution decides what the learner sees. The step is a seed
-          // gap all the same: its act was not performed.
-          noteGap(flatStep)
+          // resolution decides what the learner sees — but it is recorded.
+          seedMiss(flatStep)
         }
       }
     } finally {
@@ -612,40 +765,29 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
         }
       }
     }
-    return gap
+    // Persist the honesty record now (suppressed centrally while opening;
+    // confirmStart's deferred markPlace then carries it whole).
+    if (missedThisCall) persistProgress()
   }
 
   /**
-   * The seed-gap landing (the M-34 cure): when seeding could not build
-   * every step before the requested target, the learner lands at the
-   * first unbuilt step instead — the nearest seedable point — and the
-   * adjustment is written into the bookkeeping (the skip log carries
-   * the gap step with reason "seed-gap"; the recorded place will be
-   * the landed place, via markPlace). Returns the landing index.
+   * P12 reveal eligibility: a miss may still MATERIALISE when its anchor's
+   * declared precondition is sheet/menu-style — the AnchorRecord carries
+   * the precondition as free text (registry §5), so sheet/menu-style is
+   * read from that declared text (sheet / menu / unfold / open) — or when
+   * the previous step in the script declares `establishes`. State
+   * preconditions (reading view, shell present, selection mode…) are not
+   * materialising waits and never qualify.
    */
-  function seedGapLanding(target: number): number {
-    const gap = seedBefore(target)
-    if (gap >= 0 && gap < target) {
-      const gapStep = flat[gap]
-      if (gapStep) recordSkip(gapStep, 'seed-gap')
-      return gap
-    }
-    return target
+  function revealEligible(step: FlatStep): boolean {
+    const prev = flat[step.globalIndex - 1]
+    if (prev?.step.establishes) return true
+    const precondition = anchorById(step.step.anchorId)?.precondition ?? ''
+    return /sheet|menu|unfold|open/i.test(precondition)
   }
 
-  function enterCurrent(): void {
-    stopPending()
-    const step = flat[pointer]
-    if (!step) {
-      finishCompleted()
-      return
-    }
-    current = step
-    endReason = undefined
-    notice = undefined
-    performedKey = null
-
-    // A declared precondition is a resolution step, performed first (§7.1/§2 L-5).
+  /** One declared resolution attempt: the declared precondition hook first, then the live resolver. */
+  function tryResolve(step: FlatStep): AnchorResolution {
     const record = anchorById(step.step.anchorId)
     let preconditionFailed = false
     if (record?.precondition && options.performPrecondition) {
@@ -655,11 +797,45 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
         preconditionFailed = true
       }
     }
-
-    // Resolve LATE and LIVE, at this moment, for this step only.
-    resolution = preconditionFailed
+    return preconditionFailed
       ? { status: 'miss', record, anchorId: step.step.anchorId, reason: 'precondition-failed' }
       : resolveStep(step.step)
+  }
+
+  function enterCurrent(): void {
+    stopPending()
+    revealTries = 0
+    attemptEnter()
+  }
+
+  function attemptEnter(): void {
+    const step = flat[pointer]
+    if (!step) {
+      finishCompleted()
+      return
+    }
+
+    // Resolve LATE and LIVE, at this moment, for this step only.
+    const res = tryResolve(step)
+
+    if (res.status === 'miss' && revealTries < 12 && revealEligible(step)) {
+      // P12 REVEAL WAIT: retry the SAME declared resolution every 100
+      // presentation-ms, up to 1200, while its declared precondition
+      // materialises. No fallback locator, no coordinates. During the
+      // wait NOTHING is emitted and `current` does not move — the
+      // previous beat's snapshot stands.
+      revealTries += 1
+      cancelReveal = clock.after(100, () => {
+        cancelReveal = null
+        attemptEnter()
+      })
+      return
+    }
+
+    current = step
+    endReason = undefined
+    notice = undefined
+    resolution = res
 
     if (resolution.status === 'miss') {
       recordSkip(step, resolution.reason)
@@ -667,18 +843,29 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
         // Skip + log; the scene continues at the next step. The skipped step
         // counts as passed for place purposes: resume lands after it. It
         // also counts as passed for the built frontier: its act can never
-        // be performed, so seeding never owes it either. And it counts as
-        // walked for the presented set: the machinery passed it DURING a
-        // lived walk, in order — unlike a seeded step, which no walk met.
-        presentedSteps.add(step.globalIndex)
+        // be performed, so seeding never owes it either.
         builtThrough = Math.max(builtThrough, step.globalIndex + 1)
         pointer = step.globalIndex + 1
         persistProgress()
         enterCurrent()
         return
       }
-      // Required miss: the scene ends cleanly, back to the index, one line.
+      // Required miss.
       hadRequiredMiss = true
+      if (opening) {
+        // P1: behind the opening window this must NOT silently finish.
+        // Nothing is persisted, the scenario is NOT torn down, status
+        // stays non-done, and only abortClean() exits from here.
+        blockedOpening = true
+        blockedNotice = REFRESH_LINE[lang]
+        notice = REFRESH_LINE
+        status = 'paused'
+        resolution = null
+        current = step
+        emit()
+        return
+      }
+      // The scene ends cleanly, back to the index, one plain line.
       progress = {
         ...progress,
         state: 'needs-refresh',
@@ -698,8 +885,6 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       return
     }
 
-    // The step takes the stage: this run has PRESENTED it (H-28).
-    presentedSteps.add(step.globalIndex)
     markPlace(step)
     if (mode === 'automatic') {
       status = userPaused ? 'paused' : 'playing'
@@ -708,6 +893,29 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     } else {
       status = 'interactive-wait'
     }
+    emit()
+  }
+
+  /** confirmStart() on a blocked prepare: finalise the entry required miss exactly as a normal run ends it. */
+  function finalizeBlockedOpening(): void {
+    const step = current
+    blockedOpening = false
+    blockedNotice = undefined
+    if (!step) return
+    progress = {
+      ...progress,
+      state: 'needs-refresh',
+      step: step.globalIndex,
+      scene: step.scene.id,
+      stepId: step.step.id,
+      verifiedAgainst: script.verifiedAgainst ?? appVersion,
+    }
+    persistProgress()
+    status = 'done'
+    endReason = 'required-anchor-miss'
+    notice = REFRESH_LINE
+    resolution = null
+    teardownScenario('required-anchor-miss')
     emit()
   }
 
@@ -740,39 +948,41 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     pointer = flat.length
     current = null
     resolution = null
-    // A clean FULL play clears a needs-refresh flag; a resumed tail does not
-    // (FENCE-DESIGN §7 clause 5: "a clean full play clears the state").
-    // FULL means PRESENTED (the H-28 cure): every step of the module
-    // either took the stage in this run or was machinery-passed as an
-    // optional miss during the walk. A run that reached the end over
-    // steps it never presented — a chapters jump to the last beat and
-    // one tap — did not walk the module: it completes as in-progress,
-    // resumable at the end beat, never as seen.
-    const presentedEveryStep = flat.every((f) => presentedSteps.has(f.globalIndex))
-    const cleanFullPlay = startedAt === 0 && !hadRequiredMiss && presentedEveryStep
-    if (!cleanFullPlay && startedAt === 0 && !hadRequiredMiss && !presentedEveryStep && flat.length > 0) {
-      const last = flat[flat.length - 1]
-      progress = {
-        state: 'in-progress',
-        step: last.globalIndex,
-        scene: last.scene.id,
-        stepId: last.step.id,
-        verifiedAgainst: script.verifiedAgainst ?? appVersion,
-        skips: progress.skips,
-      }
-    } else {
-      progress = {
-        state: cleanFullPlay || progress.state !== 'needs-refresh' ? 'seen' : 'needs-refresh',
-        verifiedAgainst: script.verifiedAgainst ?? appVersion,
-        skips: progress.skips,
-      }
+    // P17 finish rule: 'seen' ONLY with no disqualifier — a clean full
+    // play, no required miss (walked), no seeded required miss, and a
+    // run-local skip count of zero. ANY skip (required or optional,
+    // walked or seeded) lands 'needs-refresh'. Preserved from before:
+    // a resumed tail of a healthy record still completes to 'seen' (it
+    // carries no disqualifier), a resumed tail never CLEARS a
+    // pre-existing needs-refresh, and a genuinely clean full replay does.
+    const cleanFullPlay = startedAt === 0 && !hadRequiredMiss
+    const disqualified = hadRequiredMiss || seededRequiredMissRun || runSkipCount > 0
+    let nextState: ModuleProgress['state']
+    if (disqualified) nextState = 'needs-refresh'
+    else if (cleanFullPlay) nextState = 'seen'
+    else if (progress.state === 'needs-refresh') nextState = 'needs-refresh'
+    else nextState = 'seen'
+    progress = {
+      state: nextState,
+      verifiedAgainst: script.verifiedAgainst ?? appVersion,
+      skips: progress.skips,
+      // The seeded-miss flag stands while it is the reason for the flag;
+      // a clean finish clears it from the record.
+      seededRequiredMiss: seededRequiredMissRun ? true : undefined,
     }
     // The last-used mark clears when the module completes (Brizna's
     // pattern): a finished module returns to its floor in the index.
     if (progress.state === 'seen') lastUsedModule = null
-    persistProgress()
     status = 'done'
     endReason = 'completed'
+    if (opening) {
+      // P1: a finish reached during prepare persists and tears down only
+      // on confirmStart — nothing leaves the phase early.
+      finishDeferred = true
+      emit()
+      return
+    }
+    persistProgress()
     teardownScenario('completed')
     emit()
   }
@@ -786,6 +996,19 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     progress: () => progress,
 
     start(startOptions = {}) {
+      // start() keeps its current semantics exactly: prepare + confirm,
+      // synchronously — existing tests and harnesses see one call, and
+      // the entry beat emits once, at the confirm.
+      startBatching = true
+      try {
+        runner.prepare(startOptions)
+      } finally {
+        startBatching = false
+      }
+      runner.confirmStart()
+    },
+
+    prepare(startOptions = {}) {
       const resume = startOptions.resume !== false
       stateFile = loadState()
       progress = readProgress()
@@ -794,14 +1017,24 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
         progress = { ...progress, state: 'needs-refresh' }
       }
       hadRequiredMiss = false
-      presentedSteps = new Set()
       endReason = undefined
       notice = undefined
-      userPaused = false
       stayWindowOpen = false
       closeWindowOpen = false
+      blockedOpening = false
+      blockedNotice = undefined
+      finishDeferred = false
+      cleanAbortFlag = false
+      hiddenWasPlaying = false
+      livedPerformed.clear()
+      runSkipCount = 0
+      runSkipChapters = []
+      runSkipChapterIds = new Set()
+      seededRequiredMissRun = false
       // The last-used mark is recorded from module start (Brizna's
-      // pattern); enterCurrent's markPlace persists it with the place.
+      // pattern); enterCurrent's markPlace persists it with the place —
+      // in this phase that persistence is SUPPRESSED (below) and the
+      // mark lands only on confirmStart().
       lastUsedModule = script.id
       // Every run starts with an empty return stack — even a resumed one:
       // ‹ answers only for places THIS run has lived.
@@ -811,61 +1044,154 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       builtThrough = 0
       scenarioLive = port !== null
       let startAt = 0
-      // A launch point (the H-26 cure) outranks the progress record:
-      // it names a place the record may never have held («My scenes»,
-      // search «Watch»). The stepId is the exact identity and wins;
-      // the recorded step, then the scene's first step, are its
-      // fallbacks. An unresolvable point falls through to the ordinary
-      // resume below rather than landing nowhere.
-      let launchAt = -1
+      let hasRecordedPlace = false
+      if (resume && (progress.state === 'in-progress' || progress.state === 'needs-refresh')) {
+        if (typeof progress.step === 'number' && progress.step >= 0 && progress.step < flat.length) {
+          startAt = progress.step
+          hasRecordedPlace = true
+        }
+      }
+      // A launch point (canon's H-26 cure, restored over the lane
+      // runner — the integration map's §8 threading): «My scenes» and
+      // search «Watch» name a place outside the module's own progress
+      // record, and it outranks the record. The stepId is the exact
+      // identity and wins; the recorded step, then the scene's first
+      // step, are its fallbacks. An unresolvable point falls through
+      // to the ordinary resume rather than landing nowhere.
       const launchPoint = startOptions.resumeFrom
       if (launchPoint) {
+        let launchAt = -1
         if (launchPoint.stepId) launchAt = flat.findIndex((f) => f.step.id === launchPoint.stepId)
         if (launchAt < 0 && typeof launchPoint.step === 'number' && launchPoint.step >= 0 && launchPoint.step < flat.length) {
           launchAt = Math.floor(launchPoint.step)
         }
         if (launchAt < 0 && launchPoint.scene) launchAt = flat.findIndex((f) => f.scene.id === launchPoint.scene)
-      }
-      if (launchAt >= 0) {
-        startAt = launchAt
-      } else if (resume && (progress.state === 'in-progress' || progress.state === 'needs-refresh')) {
-        if (typeof progress.step === 'number' && progress.step >= 0 && progress.step < flat.length) {
-          startAt = progress.step
+        if (launchAt >= 0) {
+          startAt = launchAt
+          hasRecordedPlace = true
         }
       }
+      // P14: on a RESUMED start, the record's mode and paused state win
+      // over host defaults; a fresh start keeps the host's.
+      if (hasRecordedPlace && progress.mode) mode = progress.mode
+      userPaused = hasRecordedPlace ? progress.userPaused === true : false
+      startedAt = startAt
+      // P1: the clock is HELD from t=0 — before any scheduleCurrent — so
+      // Automatic cannot advance behind the opening window, and
+      // persistence is suppressed until confirmStart().
+      opening = true
+      // A resumed user-paused lesson pauses the clock BEFORE the hold is
+      // taken, so the hold remembers "was not running" and confirmStart's
+      // endHold cannot resurrect it.
+      if (userPaused) clock.pause()
+      clock.beginHold()
       // ENTRY SEEDING: the recorded place's fiction is built BEFORE the
       // first presented beat — the earlier scenes' scenario acts replay
       // silently, in order, so the beat lands on the stage it teaches.
-      // THE SEED-GAP LANDING (the M-34 cure): if any earlier act could
-      // not be built, the run lands at that first unbuilt step instead
-      // of the recorded place — never mid-beat on an unbuilt stage —
-      // and the skip log says so (see seedGapLanding).
-      startAt = seedGapLanding(startAt)
-      startedAt = startAt
+      seedBefore(startAt)
       pointer = startAt
       enterCurrent()
     },
 
+    confirmStart() {
+      if (!opening) return
+      opening = false
+      clock.endHold()
+      if (blockedOpening) {
+        // The entry beat's required miss, finalised the way start()
+        // always ended it (see the interface note).
+        finalizeBlockedOpening()
+        return
+      }
+      if (finishDeferred) {
+        finishDeferred = false
+        persistProgress()
+        teardownScenario('completed')
+        emit()
+        return
+      }
+      // The deferred place + last-used write for the beat on stage.
+      // (Timers armed while the clock was held kept their full remaining
+      // presentation time — the clock's hold never consumed them — so
+      // endHold above is itself the re-arm: in Automatic the current
+      // beat's two-phase schedule runs from this confirmation.)
+      if (current) markPlace(current)
+      emit()
+    },
+
+    abortClean() {
+      const wasOpening = opening
+      stopPending()
+      if (stayWindowOpen || closeWindowOpen) {
+        stayWindowOpen = false
+        closeWindowOpen = false
+        clock.endHold()
+      }
+      if (wasOpening) {
+        opening = false
+        clock.endHold()
+      }
+      blockedOpening = false
+      blockedNotice = undefined
+      // NO markPlace, NO last-used write, NO progress write: the record
+      // on disk stays byte-identical to before prepare().
+      status = 'aborted'
+      endReason = 'abort'
+      cleanAbortFlag = true
+      teardownScenario('abort')
+      emit()
+    },
+
+    handleHidden() {
+      if (status !== 'playing' && status !== 'paused' && status !== 'interactive-wait') return
+      // Playing = Automatic, running, not user-paused, no window/hold.
+      hiddenWasPlaying =
+        mode === 'automatic' &&
+        status === 'playing' &&
+        !userPaused &&
+        !stayWindowOpen &&
+        !closeWindowOpen &&
+        !opening &&
+        !clock.holdOpen &&
+        !clock.speedChoiceOpen
+      clock.pause()
+      persistProgress() // carries mode + userPaused (suppressed while opening)
+    },
+
+    handleVisible() {
+      const wasPlaying = hiddenWasPlaying
+      hiddenWasPlaying = false
+      // Resume ONLY a lesson that was playing when it hid: a user-paused
+      // lesson stays paused, an Interactive lesson never auto-advances.
+      if (wasPlaying) clock.resume()
+    },
+
     pause() {
+      if (opening) return // P1: transport stands down behind the opening window
       if (stayWindowOpen || closeWindowOpen) return // a window is modal; the clock already stands still
       if (status !== 'playing') return
       userPaused = true
       clock.pause()
       status = 'paused'
+      persistProgress() // P14: the paused state is part of the record
       emit()
     },
 
     resume() {
+      if (opening) return
       if (stayWindowOpen || closeWindowOpen) return
       if (status !== 'paused') return
       userPaused = false
       status = 'playing'
       clock.resume()
+      persistProgress()
       emit()
     },
 
     next() {
+      if (opening) return
       if (stayWindowOpen || closeWindowOpen) return // nothing advances behind a window
+      if (showMeDwelling) return // P16: › stays inert while the shown result dwells
       // The nav-pair law: on a gesture beat, › would skip the gesture —
       // it does not exist there, and neither does its effect. The
       // learner's own act on the stage, or «Show me», is the way through.
@@ -874,24 +1200,40 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     },
 
     userAct() {
+      if (opening) return
       if (stayWindowOpen || closeWindowOpen) return
-      if (status === 'interactive-wait') completeCurrent()
+      if (showMeDwelling) return
+      if (status === 'interactive-wait') {
+        // P13: the learner's own act counts as performed — a later mode
+        // switch or re-entry must never perform this step again.
+        if (current) livedPerformed.add(stepKey(current))
+        completeCurrent()
+      }
     },
 
     showMe() {
+      if (opening) return
       if (stayWindowOpen || closeWindowOpen) return
+      if (showMeDwelling) return // a second «Show me» during the dwell is inert
       if (status !== 'interactive-wait' || !current) return
-      performCurrent()
-      if (cancelPerform) {
-        // An ask step's act is beat-delayed; «Show me» shows it now.
-        cancelPerform()
-        cancelPerform = null
-        if (port && resolution && resolution.status === 'resolved') port.perform(current, resolution)
-      }
-      completeCurrent()
+      // Perform NOW (cancelling any scheduled perform — e.g. an ask's
+      // read delay), then dwell on the result: the step completes only
+      // after RESULT_DWELL_MS on the presentation clock (P16), which
+      // respects pause, holds and windows like every other wait.
+      cancelPerformTimer()
+      if (resolution && resolution.status === 'resolved') doPerform(current, resolution)
+      showMeDwelling = true
+      const dwelling = current
+      cancelPending = clock.after(RESULT_DWELL_MS, () => {
+        cancelPending = null
+        showMeDwelling = false
+        if (current === dwelling) completeCurrent()
+      })
+      emit()
     },
 
     back() {
+      if (opening) return
       if (stayWindowOpen || closeWindowOpen) return
       if (status !== 'playing' && status !== 'paused' && status !== 'interactive-wait') return
       // ‹ pops the return stack: one beat back, to a position this run
@@ -908,17 +1250,16 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     },
 
     goToStep(globalIndex) {
+      if (opening) return
       if (stayWindowOpen || closeWindowOpen) return
       if (status !== 'playing' && status !== 'paused' && status !== 'interactive-wait') return
       if (flat.length === 0) return
-      let target = Math.min(Math.max(0, Math.floor(globalIndex)), flat.length - 1)
+      const target = Math.min(Math.max(0, Math.floor(globalIndex)), flat.length - 1)
       // ENTRY SEEDING: a jump forward lands beyond the built frontier —
       // the passed-over scenes' scenario acts replay silently first, so
       // the landing beat's fiction exists. A jump back seeds nothing:
       // what was built stays built (the frontier only moves forward).
-      // THE SEED-GAP LANDING (the M-34 cure) governs jumps too: a jump
-      // past a step seeding could not build lands at that step instead.
-      target = seedGapLanding(target)
+      seedBefore(target)
       // A jump is a leaving: the place jumped FROM is a lived position,
       // and ‹ from the landing returns there — not to the flat neighbour.
       if (current && target !== current.globalIndex) pushReturn(current.globalIndex)
@@ -927,6 +1268,7 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     },
 
     setMode(nextMode) {
+      if (opening) return
       if (stayWindowOpen || closeWindowOpen) return
       if (nextMode === mode) return
       mode = nextMode
@@ -937,11 +1279,16 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       if (mode === 'interactive') {
         stopPending()
         status = 'interactive-wait'
+        persistProgress() // P14: the new mode is part of the record
         emit()
       } else {
         status = userPaused ? 'paused' : 'playing'
+        // P13: performCurrent is lived-guarded — if the learner already
+        // acted this step by hand, this performs nothing a second time;
+        // the advance is (re)scheduled regardless.
         performCurrent()
         scheduleCurrent()
+        persistProgress()
         emit()
       }
     },
@@ -957,8 +1304,17 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       lang = nextLang
       // The place never moves; an Automatic wait is re-timed in the new
       // language (durations are computed per language — clock.ts).
+      // P16 fix: a perform still PENDING (scheduled, not yet fired) is
+      // cancelled and re-scheduled at the NEW language's performDelayMs,
+      // and the advance re-armed at the new stepDurationMs — the act
+      // still happens exactly once. (The old code stopped both timers
+      // and re-armed only the advance: the act was silently deleted.)
+      // If the perform already fired, only the advance is re-armed.
       if (current && mode === 'automatic' && (status === 'playing' || status === 'paused')) {
-        stopPending()
+        const owed = performPending
+        cancelPerformTimer()
+        cancelAdvanceTimer()
+        if (owed) performCurrent()
         scheduleCurrent()
       }
       emit()
@@ -977,6 +1333,7 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     },
 
     saveCurrentScene() {
+      if (opening) return
       if (stayWindowOpen || closeWindowOpen) return
       if (!current) return
       stateFile = withSavedScene(stateFile, {
@@ -1000,7 +1357,7 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       // module has nothing to leave part-way, so there is nothing to ask.
       // And the two windows never stack: while the ✕ window is open,
       // this request stands down.
-      if (stayWindowOpen || closeWindowOpen || !current) return
+      if (opening || stayWindowOpen || closeWindowOpen || !current) return
       if (status !== 'playing' && status !== 'paused' && status !== 'interactive-wait') return
       // THE CLOCK STOPS while the window is open (Oscar's refinement):
       // beginHold freezes every pending wait — in Automatic the lesson
@@ -1019,6 +1376,7 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     },
 
     stayHere() {
+      if (opening) return // P1: the opening phase exits only via confirmStart / abortClean
       if (!current) return
       stopPending()
       // The window's confirm (or a direct call): the window, if open,
@@ -1040,7 +1398,7 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       // The ✕ window exists only mid-module: on a finished module the ✕
       // exits directly, with nothing to confirm. And the two windows
       // never stack: while the stay-here window is open, this stands down.
-      if (closeWindowOpen || stayWindowOpen || !current) return
+      if (opening || closeWindowOpen || stayWindowOpen || !current) return
       if (status !== 'playing' && status !== 'paused' && status !== 'interactive-wait') return
       // THE CLOCK STOPS while the window is open — the same hold the
       // stay-here window takes: in Automatic the lesson must not advance
@@ -1059,6 +1417,7 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     },
 
     abort() {
+      if (opening) return // P1: use abortClean() — it writes nothing
       stopPending()
       // The ✕ window's confirm lands here (and a direct ✕ with a window
       // open is still an exit, never an advance): any open window closes
