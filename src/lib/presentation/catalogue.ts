@@ -28,6 +28,7 @@
  * as a pure function so the index component stays a thin rendering of it.
  */
 import { durationLabel, moduleDurationMs } from './engine/clock.ts'
+import { registerModuleStepCount } from './engine/module-lengths.ts'
 import {
   assertValidPresentationModule,
   flattenSteps,
@@ -431,6 +432,11 @@ export function registerPresentationScript(script: PresentationModule): Catalogu
   }
   entry.script = script
   entry.surfaces = script.surfaces ? [...script.surfaces] : undefined
+  // File the module's length with the state layer's registry (R3-T6-2):
+  // the normaliser bounds each record's done[] witness by the length of
+  // the module it witnesses, and registration is where a length becomes
+  // known — the state layer never imports this catalogue.
+  registerModuleStepCount(script.id, flattenSteps(script).length)
   return entry
 }
 
@@ -564,8 +570,12 @@ export function overallProgress(state: PresentationStateFile): OverallProgress {
     inProgress += 1
     const totalSteps = entry.script ? flattenSteps(entry.script).length : 0
     if (totalSteps > 0) {
+      // Only steps the module HAS can count as walked (R3-T6-2): the
+      // record's done set is counted as the distinct in-range steps it
+      // names, never at the face value of its length — a count alone
+      // must not be able to buy a whole module's walk.
       const walkedCount = Array.isArray(progress.done)
-        ? progress.done.length
+        ? new Set(progress.done.filter((n) => typeof n === 'number' && n >= 0 && n < totalSteps)).size
         : (typeof progress.step === 'number' && progress.step > 0 ? progress.step : 0)
       if (walkedCount > 0) walked += Math.min(walkedCount, totalSteps) / totalSteps
     }

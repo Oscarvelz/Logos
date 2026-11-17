@@ -65,7 +65,9 @@ export function CreatePage() {
   const big = useMediaQuery('(min-width: 1500px)')
   const generate = () => {
     if (!speakable) { toast(t('Add some words first — punctuation alone has nothing to read')); return }
-    if (queueExport(text, { voice, speed: st.exportSpeed, format: st.format, title, origin: 'create' }) === 'queued') toast(t('Queued — it starts after the audio being made now'), { label: t('Library'), run: () => navigate('library') })
+    const r = queueExport(text, { voice, speed: st.exportSpeed, format: st.format, title, origin: 'create' })
+    if (r === 'queued') toast(t('Queued — it starts after the audio being made now'), { label: t('Library'), run: () => navigate('library') })
+    else if (r === 'duplicate') toast(t('Already making that audio — find it in your Library when it’s ready'), { label: t('Library'), run: () => navigate('library') })
   }
 
   return (

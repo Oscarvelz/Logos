@@ -589,8 +589,11 @@ class MainActivity : Activity() {
          *  silence (T2-21). */
         @JavascriptInterface fun bubblePendingCmd(): String {
             val cmd = BubbleService.takePendingCmd() ?: ""
-            BubbleService.pendingDropNote?.let { note ->
-                BubbleService.pendingDropNote = null
+            // Every drop since the last collection surfaces together
+            // (R3-T2-5): the reasons accumulate shell-side, so a busy
+            // stretch's earlier deaths are not overwritten by its
+            // last one before this door opens.
+            BubbleService.takeDropNote()?.let { note ->
                 BubbleService.noteTry(this@MainActivity, note)
             }
             return cmd
@@ -735,25 +738,18 @@ class MainActivity : Activity() {
         /** The clipboard text the bubble caught, pulled once by the page. */
         /** The pull is the delivery's confirmation (T2-7) and its
          *  expiry gate (T2-13): a catch older than twenty seconds
-         *  is dropped here — with its uncommitted dedupe key, and a
+         *  is dropped there — with its uncommitted dedupe key, and a
          *  receipt on the Settings line — instead of ambushing this
          *  opening hours after it was copied. A catch pulled inside
          *  its law commits its dedupe key (confirmClipPulled), so
          *  the same text is never delivered twice, even across a
          *  process restart; a catch never pulled commits nothing,
-         *  so copying it again delivers it fresh. */
-        @JavascriptInterface fun bubbleClip(): String {
-            val t = BubbleService.clipText ?: return ""
-            if (System.currentTimeMillis() - BubbleService.clipTextAt > 20_000) {
-                BubbleService.expireClip()
-                BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored catch went stale", "una captura guardada caducó"))
-                return ""
-            }
-            val m = BubbleService.clipManual
-            BubbleService.clipText = null
-            BubbleService.confirmClipPulled(this@MainActivity)
-            return JSONObject().put("t", t).put("m", m).toString()
-        }
+         *  so copying it again delivers it fresh. The pull itself
+         *  lives in BubbleService.takeClip (R3-T2-4): snapshot,
+         *  clear and commit as one locked step, so a delivery
+         *  landing mid-pull can neither be destroyed by it nor have
+         *  its key committed unheard. */
+        @JavascriptInterface fun bubbleClip(): String = BubbleService.takeClip(this@MainActivity)
     }
 
     /** The app updates itself: if GitHub has a newer android-N build, offer it and install it in place. */

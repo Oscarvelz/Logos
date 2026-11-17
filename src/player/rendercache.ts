@@ -181,7 +181,10 @@ async function loadTotal(d: IDBDatabase): Promise<number> {
  * and then re-anchors the ledger to the store it actually left
  * behind (the sum of the survivors it just enumerated). The
  * ledger is the store, or it is re-derived from the store at the
- * next sweep.
+ * next sweep. Round 3 (R3-T1-5) closed the chain's last intent-
+ * based step: a delete is now believed only when it lands — a
+ * failed delete subtracts nothing, in the sweep or in a drop, so
+ * the ledger cannot under-count a store that kept the record.
  */
 let ledgerChain: Promise<void> = Promise.resolve()
 function enqueueLedger(fn: () => Promise<void>): Promise<void> {
@@ -245,7 +248,16 @@ export function putPersistedRender(key: string, blob: Blob): void {
     const gone = new Set<string>()
     for (const r of all) {
       if (totalBytes <= SWEEP_TO) break
-      await tx('readwrite', (st) => st.delete(r.key))
+      // A delete is believed only when it LANDS (cure R3-T1-5):
+      // the sweep used to subtract on intent, so one failed delete
+      // — a locked or aborting store, the weather T1-18 describes —
+      // left the record in the store while the ledger counted it
+      // gone, and the re-anchor below inherited the lie. A failed
+      // delete keeps its size in the ledger (and out of `gone`),
+      // and the sweep moves on to the next victim: the cap is
+      // enforced against what the store actually holds.
+      const landed = await tx('readwrite', (st) => st.delete(r.key))
+      if (landed === null) continue
       totalBytes -= r.size
       gone.add(r.key)
     }
@@ -262,7 +274,10 @@ export function dropPersistedRender(key: string): void {
     const prev = totalBytes >= 0
       ? await tx<Rec | undefined>('readonly', (st) => st.get(key) as IDBRequest<Rec | undefined>)
       : undefined
-    await tx('readwrite', (st) => st.delete(key) as IDBRequest<undefined>)
-    if (prev) totalBytes -= prev.size
+    // The subtraction follows the delete, never precedes it (cure
+    // R3-T1-5): a drop whose delete failed leaves the record in the
+    // store, so its size stays in the ledger too.
+    const landed = await tx('readwrite', (st) => st.delete(key) as IDBRequest<undefined>)
+    if (prev && landed !== null) totalBytes -= prev.size
   })
 }

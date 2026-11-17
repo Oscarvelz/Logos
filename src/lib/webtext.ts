@@ -8,8 +8,14 @@
 
 export type WebText = { title: string; text: string; site: string; url: string; words: number; via: string }
 
-const STOP_SECTIONS = /^(references|notes|footnotes|citations|sources|bibliography|external links|see also|further reading|related (articles|posts|stories)|more (stories|from)|you may also like|read (more|next)|recommended|comments?|share this( article)?|about the author|referencias|notas|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n|lectura adicional|art[ií]culos relacionados|comentarios|fuentes|data safety|ratings and reviews|what[’']s new|app support|similar apps|more by .{1,40}|flag as inappropriate|seguridad de los datos|calificaciones y opiniones|valoraciones y reseñas|asistencia de la app|apps similares)\s*:?$/i
-const JUNK = /(cookie|subscribe|newsletter|sign (up|in)|log ?in|advertis|sponsored|all rights reserved|follow us|share (this|on)|click here|read more|skip to|privacy policy|terms of (use|service)|download (the|our) app|suscr[ií]b|bolet[ií]n|inicia sesi[oó]n|publicidad|todos los derechos|s[ií]guenos|leer m[aá]s|comparte|haz clic)/i
+// Cure R3-T8-15: both stop lists were anchored to the bare name, so
+// a heading wearing its full real-world name — "References and
+// notes" — matched neither, was imported as a heading, and every
+// citation after it imported as article body. A trailing
+// "and/&/y …" qualifier now belongs to the section's name on both
+// lists. (A connector is required: "Notes on the text" is a real
+// section and still does not match.)
+const STOP_SECTIONS = /^(references|notes|footnotes|citations|sources|bibliography|external links|see also|further reading|related (articles|posts|stories)|more (stories|from)|you may also like|read (more|next)|recommended|comments?|share this( article)?|about the author|referencias|notas|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n|lectura adicional|art[ií]culos relacionados|comentarios|fuentes|data safety|ratings and reviews|what[’']s new|app support|similar apps|more by .{1,40}|flag as inappropriate|seguridad de los datos|calificaciones y opiniones|valoraciones y reseñas|asistencia de la app|apps similares)(\s+(and|&|y)\s+.{1,40})?\s*:?$/i
 
 // Cure R2-T8-10: the bare-domain form blessed ANY dotted token —
 // "e.g", "U.S.A", "Ph.D", "word.word" all became addresses, and the
@@ -20,7 +26,7 @@ const JUNK = /(cookie|subscribe|newsletter|sign (up|in)|log ?in|advertis|sponsor
 // token is a number unless it is a full IPv4 address. Explicit
 // https:// and www. forms show their intent and are not re-judged.
 const BARE_TLDS = new Set(('com net org edu gov mil int info biz name pro aero asia cat coop jobs mobi museum post tel travel xxx ' +
-  'academy agency app art audio apartments band bar bike blog blue book boutique builders business buzz cafe camera camp capital cards care careers cars casa cash center ceo chat cheap church city claims clinic clothing cloud club coach codes coffee college community company computer condos construction consulting contact contractors cooking cool country credit cruises dating deals degree delivery dental dentist design dev diamonds digital direct directory discount docs dog domains download earth education email energy engineer engineering enterprises equipment estate events exchange expert express extensions faith fan fans farm fashion finance financial fish fishing fitness flights florist flowers football forum foundation fun fund furniture fyi gallery game games garden gifts gives glass global gold golf graphics green group guide guitars guru haus health healthcare help hockey holdings holiday homes horse hospital host hosting house how immo industries ink institute insure international investments io jewelry kitchen land law lawyer lease legal life lighting live living llc loan loans love ltd luxury maison management market marketing markets mba me media meet memorial menu miami mobi moda money movie network news ninja nyc observer one online organic page partners parts party pets pharmacy photo photography photos pics pictures pink pizza place plumbing plus poker press productions promo properties property protection pub racing radio recipes red rehab reisen rentals repair report republican rest restaurant restaurants reviews rocks rugby run sale salon samples school science security services shop shopping show singles site ski soccer social software solar solutions space sport sports storage store stream studio style supplies supply support surf surgery systems tattoo tax taxi team tech technology tennis theater theatre tickets tips tires today tokyo tools top tours town toys trade trading training tube university vacations vegas ventures vet video villas vin vip vision vote voting voyage watch watches webcam website wedding wiki win wine world wtf work works xyz yoga zone').split(' '))
+  'academy agency app art audio apartments band bar bike blog blue book boutique builders business buzz cafe camera camp capital cards care careers cars casa cash center ceo chat cheap church city claims clinic clothing cloud club coach codes coffee college community company computer condos construction consulting contact contractors cooking cool country credit cruises dating deals degree delivery dental dentist design dev diamonds digital direct directory discount docs dog domains download earth education email energy engineer engineering enterprises equipment estate events exchange expert express extensions faith fan fans farm fashion finance financial fish fishing fitness flights florist flowers football forum foundation fun fund furniture fyi gallery game games garden gifts gives glass global gold golf graphics green group guide guitars guru haus health healthcare help hockey holdings holiday homes horse hospital host hosting house how immo industries ink institute insure international investments io jewelry kitchen land law lawyer lease legal life lighting link live living llc loan loans lol love ltd luxury maison management market marketing markets mba me media meet memorial menu miami mobi moda money movie network news ninja nyc observer one online organic page partners parts party pets pharmacy photo photography photos pics pictures pink pizza place plumbing plus poker press productions promo properties property protection pub racing radio recipes red rehab reisen rentals repair report republican rest restaurant restaurants reviews rocks rugby run sale salon samples school science security services shop shopping show singles site ski soccer social software solar solutions space sport sports storage store stream studio style supplies supply support surf surgery systems tattoo tax taxi team tech technology tennis theater theatre tickets tips tires today tokyo tools top tours town toys trade trading training tube university vacations vegas ventures vet video villas vin vip vision vote voting voyage watch watches webcam website wedding wiki win wine world wtf work works xyz yoga zone click').split(' '))
 function bareDomainOk(host: string): boolean {
   const labels = host.toLowerCase().split('.')
   if (labels.length < 2 || labels.some((l) => !l)) return false
@@ -68,7 +74,12 @@ export function normalizeUrl(raw: string): string | null {
 // article body. The two genres are separate families now: a pitch
 // that works both of them is boilerplate-shaped, while a real
 // paragraph mentioning one of them in passing still counts once.
-const JUNK_FAMILIES = [/cookie/i, /privacy|terms of/i, /subscribe|newsletter|suscr[ií]b|bolet[ií]n/i, /sign (up|in)|log ?in|inicia sesi[oó]n/i, /advertis|sponsored|publicidad/i, /all rights reserved|todos los derechos/i, /follow us|share (this|on)|click here|download (the|our) app|s[ií]guenos|haz clic/i]
+// Cure R3-T8-14: the families are now the ONLY junk test (the old
+// single-regex JUNK retired into them — "comparte" joins the share
+// family and the navigation crumbs "skip to / read more / leer más"
+// form a family of their own), because finish() applies the
+// two-family standard at every length; see there.
+const JUNK_FAMILIES = [/cookie/i, /privacy|terms of/i, /subscribe|newsletter|suscr[ií]b|bolet[ií]n/i, /sign (up|in)|log ?in|inicia sesi[oó]n/i, /advertis|sponsored|publicidad/i, /all rights reserved|todos los derechos/i, /follow us|share (this|on)|click here|download (the|our) app|s[ií]guenos|haz clic|comparte/i, /skip to|read more|leer m[aá]s/i]
 /** Boilerplate-shaped: junk terms from at least two different families. */
 const junkHeavy = (t: string) => JUNK_FAMILIES.filter((re) => re.test(t)).length >= 2
 
@@ -89,7 +100,13 @@ function cleanTitle(raw: string, u?: URL): string {
     if (!u) return false
     const host = u.hostname.replace(/^(www|m|mobile|amp)\./, '').split('.')[0].toLowerCase()
     const t = tail.toLowerCase().replace(/[^a-z0-9]+/g, '')
-    return !!host && !!t && (t === host || t.startsWith(host) || host.startsWith(t))
+    // Cure R3-T8-16: the third leg — host.startsWith(t) — convicted
+    // innocent titles: on ports.com, "Sailing Home - Port" lost
+    // " - Port", because "ports" starts with the title's own word
+    // "port". A tail names the site when it IS the host's name, or
+    // carries it whole at its head ("bbcnews" on bbc) — never when
+    // it is merely a prefix of a longer host word.
+    return !!host && !!t && (t === host || t.startsWith(host))
   }
   const pipe = title.lastIndexOf(' | ')
   if (pipe > 0 && namesSite(title.slice(pipe + 3))) return title.slice(0, pipe).trim()
@@ -130,7 +147,7 @@ function tidyLine(s: string): string {
 // twins — is never article body, at any article length. These stop
 // the import outright; the softer stop sections (Notes, Comments,
 // Recommended…) keep the old rule below.
-const HARD_STOP_SECTIONS = /^(references|footnotes|citations|bibliography|external links|see also|further reading|referencias|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n)\s*:?$/i
+const HARD_STOP_SECTIONS = /^(references|footnotes|citations|bibliography|external links|see also|further reading|referencias|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n)(\s+(and|&|y)\s+.{1,40})?\s*:?$/i
 
 /** Paragraph blocks → clean listening text (title first, then paragraphs). */
 function finish(blocks: { text: string; heading?: boolean }[], title: string): string {
@@ -152,14 +169,19 @@ function finish(blocks: { text: string; heading?: boolean }[], title: string): s
       if (t.toLowerCase().replace(/\W+/g, '') === tnorm) continue
       if (!b.heading && words <= 3 && !/^[A-ZÁÉÍÓÚÑ]/.test(t)) continue
     }
-    if (t.length < 160 && JUNK.test(t)) continue
     // Cure F8-12: the junk test used to stop at 160 chars, so a long
     // GDPR/consent paragraph — exactly the boilerplate that runs long —
     // was never tested and imported as article body. Long blocks are
     // now dropped too, but only when they are boilerplate-shaped: at
     // least two distinct junk families (a real paragraph that merely
     // mentions subscribing or cookies once is kept, untouched).
-    if (t.length >= 160 && junkHeavy(t)) continue
+    // Cure R3-T8-14: the short road kept the pre-F8-12 standard —
+    // ONE family dropped a block under 160 chars while a long one
+    // needed two — so a real 118-char paragraph mentioning
+    // "subscribe" once was silently deleted while its 218-char twin
+    // was kept. F8-12's ruling (one mention is not boilerplate)
+    // governs every length now: junkHeavy is the only junk test.
+    if (junkHeavy(t)) continue
     if (/^(image|photo|foto|imagen|credit|cr[eé]dito|source|fuente)s?\b.{0,80}$/i.test(t)) continue
     if (/(hide|toggle|show) caption$/i.test(t)) continue
     if (t.length < 160 && /(Getty Images|AP Photo|Reuters|AFP|Shutterstock|iStock|EFE|Europa Press|Alamy|\bvia (Getty|AP)\b)/.test(t)) continue

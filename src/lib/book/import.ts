@@ -1,5 +1,5 @@
 // Import a book file into the shelf.
-import { books, putBook, refreshBooks, getContent, updateBook, type BookMeta } from '../books.ts'
+import { books, putBook, refreshBooks, getContent, updateBook, type BookMeta, type BookContent } from '../books.ts'
 import { t } from '../i18n.ts'
 import { finishBook, isMachineName, type RawBook } from './finish.ts'
 import { sniffFormat, contentHash } from './sniff.ts'
@@ -56,9 +56,10 @@ export { sniffFormat, contentHash } from './sniff.ts'
     the one self-healing move a user has was refused by the cure. A
     phantom is reported separately, and the import heals it under its
     own id, keeping its place, progress and marks. */
-async function existingDuplicate(meta: BookMeta): Promise<{ dup: BookMeta | null; phantom: BookMeta | null }> {
+async function existingDuplicate(meta: BookMeta, fresh: BookContent): Promise<{ dup: BookMeta | null; phantom: BookMeta | null }> {
   if (!meta.hash) return { dup: null, phantom: null }
   if (!books.get().loaded) await refreshBooks()
+  const legacyHash = legacyContentHash(fresh)
   let phantom: BookMeta | null = null
   for (const cand of books.get().list) {
     if (cand.words !== meta.words) continue
@@ -77,8 +78,41 @@ async function existingDuplicate(meta: BookMeta): Promise<{ dup: BookMeta | null
     // the fast path works for it from then on.
     const cc = await getContent(cand.id)
     if (cc && contentHash(cc) === meta.hash) { void updateBook(cand.id, { hash: meta.hash }, false); return { dup: cand, phantom: null } }
+    // R3-T3-6: a phantom wearing a PRE-190 fingerprint was recognised
+    // by no branch at all. The recompute court above cannot sit for
+    // it — the content it would recompute FROM is exactly what a
+    // phantom has lost — and its stored hash can never equal the
+    // fresh one, so every re-import of its file minted a twin beside
+    // the corpse and stranded its place, progress, marks and star
+    // forever. The legacy court below is the strongest evidence a
+    // content-less record can offer: the FRESH text, hashed by the
+    // old formula, against the candidate's stored hash, at the same
+    // word count (the gate at the top of this loop). A match names
+    // the same book in its old fingerprint, and the heal below gives
+    // it the text back under its own id, new fingerprint included.
+    if (!cc && cand.hash && cand.hash === legacyHash) phantom ??= cand
   }
   return { dup: null, phantom }
+}
+
+/** The fingerprint formula as it stood before 1.4.190 taught it
+    chapter structure (R2-T3-8): the same cyrb64 pair over the blocks
+    alone, in order, with no chapter-boundary mixes. It survives only
+    as the legacy court in existingDuplicate — never for new records:
+    one generation of stored hashes was minted by it, and a phantom
+    carrying one can be recognised no other way (R3-T3-6). */
+function legacyContentHash(content: BookContent): string {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57
+  const mix = (s: string) => {
+    for (let i = 0; i < s.length; i++) {
+      const ch = s.charCodeAt(i)
+      h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677)
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  }
+  for (const c of content.chapters) for (const b of c.blocks) { mix(b.t); mix('\n') }
+  return `${(h2 >>> 0).toString(16)}:${(h1 >>> 0).toString(16)}:${content.chapters.reduce((n, c) => n + c.blocks.length, 0)}`
 }
 
 export async function importBook(file: File, batch?: string): Promise<BookMeta> {
@@ -120,7 +154,7 @@ export async function importBook(file: File, batch?: string): Promise<BookMeta> 
     // M-6: the same text already on the shelf IS that book — hand it
     // back instead of minting a twin.
     meta.hash = contentHash(content)
-    const { dup, phantom } = await existingDuplicate(meta)
+    const { dup, phantom } = await existingDuplicate(meta, content)
     if (dup) return dup
     if (phantom) {
       // R2-T3-4: heal the phantom under its own id — the fresh content
@@ -139,7 +173,17 @@ export async function importBook(file: File, batch?: string): Promise<BookMeta> 
         temp: phantom.temp,
         cover: meta.cover ?? phantom.cover,
       }
-      await putBook(healed, content)
+      // R3-T3-5: the content is re-keyed WITH the meta. finishBook's
+      // content object carries the FRESH random id, and putBook stores
+      // content by its own keyPath id — the first writing of this heal
+      // passed the object verbatim, so the text landed under an id no
+      // meta references: the heal reported success (its verdict read
+      // the returned meta, never the store), the book stayed
+      // unopenable, and the orphaned text leaked forever, unreachable
+      // by every sweep and delete, which all iterate metas. The store
+      // is the court: the healed book's content lives under the
+      // healed book's id, or the heal did not happen.
+      await putBook(healed, { ...content, id: phantom.id })
       return healed
     }
     await putBook(meta, content)

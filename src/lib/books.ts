@@ -224,7 +224,13 @@ const bookWriteChains = new Map<string, Promise<unknown>>()
 function enqueueBookWrite<T>(id: string, job: () => Promise<T>): Promise<T> {
   const prev = bookWriteChains.get(id) ?? Promise.resolve()
   const runJob = prev.then(job, job)
-  bookWriteChains.set(id, runJob.then(() => undefined, () => undefined))
+  const tail = runJob.then(() => undefined, () => undefined)
+  bookWriteChains.set(id, tail)
+  // The map holds only LIVE chains (R3-T3-4's family): once this tail
+  // settles with nothing newer queued behind it, its entry goes — the
+  // map used to keep one settled promise per book id for the life of
+  // the page.
+  void tail.then(() => { if (bookWriteChains.get(id) === tail) bookWriteChains.delete(id) })
   return runJob
 }
 

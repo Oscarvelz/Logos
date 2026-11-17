@@ -77,6 +77,14 @@ let routeNote: string | null = null
 let lastSubstitution = ''
 const cachedOf = (kind: EngineKind, lang?: PocketLang): boolean =>
   kind === 'phonon' ? (phononCachedFlag ?? false) : (pocketCachedFlags[lang ?? wantedLang()] ?? false)
+/** The per-language cached verdict, for surfaces that must judge a
+ *  voice's own engine and language rather than the store's active one
+ *  (R3-T7-6: the Voices page's "on this device" badge — a voice keeps
+ *  its badge for a model downloaded in its language even when another
+ *  language is active). */
+export function engineCachedFor(kind: EngineKind, lang: PocketLang): boolean {
+  return cachedOf(kind, lang)
+}
 /** Whether an engine's cached verdict (Pocket: for the language in
  *  question) has never been probed — the subscribers' cue to ask for
  *  a first probe rather than let an unprobed answer stand in. */

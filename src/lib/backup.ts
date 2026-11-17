@@ -82,12 +82,37 @@ const blobToB64 = (b: Blob) => new Promise<string>((res, rej) => {
   r.readAsDataURL(b)
 })
 
+/** Whether a file-carried coverB64/blobB64 string may be decoded at
+ *  all (cure R3-T5-2). Export writes these fields exclusively as
+ *  readAsDataURL results — `data:` URLs — but validation proved only
+ *  "a string", and prepare then fetch()ed whatever the string said:
+ *  a string that is not a data URL is resolved as an address, so a
+ *  crafted file made the act of importing it fetch the app's own
+ *  origin or any absolute URL it named, and a `data:text/html`
+ *  payload landed a web page in the cover seat. The gate: the value
+ *  must be a data URL, and a cover's payload must be an image (or
+ *  carry no type, as a typeless Blob's data URL does). Anything else
+ *  is treated the way a failed decode already is — the decoration
+ *  is dropped, never fetched, never stored. */
+function isDecodableDataUrl(s: string, kind: 'image' | 'any'): boolean {
+  if (!s.startsWith('data:')) return false
+  if (kind === 'any') return true
+  const rest = s.slice('data:'.length)
+  const cut = rest.search(/[;,]/)
+  const mediaType = (cut === -1 ? rest : rest.slice(0, cut)).trim().toLowerCase()
+  return mediaType === '' || mediaType.startsWith('image/')
+}
+
 /** What an export actually did (F8 cure): how many books are inside,
  *  and how many shelf books were LEFT OUT because their text record
  *  is missing on this phone. The Settings toast declares both — a
  *  backup that silently omits a book teaches the reader to trust a
- *  file that does not hold what they think it holds. */
-export type ExportReport = { books: number; skipped: number }
+ *  file that does not hold what they think it holds. The clips are
+ *  counted by the same law (cure R3-T5-6): the clip loop below had
+ *  the identical shape and no count at all — a listed clip whose
+ *  record was gone, or whose audio would not encode, vanished from
+ *  the file with no field a report could carry. */
+export type ExportReport = { books: number; skipped: number; clips: number; clipsSkipped: number }
 
 export async function exportBackup(): Promise<ExportReport> {
   await refreshBooks()
@@ -126,23 +151,29 @@ export async function exportBackup(): Promise<ExportReport> {
   // The clips (H-31): every Library item rides in the file — text
   // clips in full (their text is the only copy there is) and audio
   // clips with their blob encoded, imported audio included (its blob
-  // is the app's only copy of a file the user brought in).
+  // is the app's only copy of a file the user brought in). A clip
+  // that cannot ride — its full record gone under a surviving twin,
+  // or its audio refusing to encode — is COUNTED as skipped, the
+  // way F8 counts a book (cure R3-T5-6): the file must never hold
+  // less than the Library shows without saying so.
+  let clipsSkipped = 0
   for (const m of library.get().clips) {
     const full = await getClip(m.id)
-    if (!full) continue
+    if (!full) { clipsSkipped++; continue }
     const { blob, ...meta } = full
     const entry = { ...meta } as ClipMeta & { blobB64?: string }
-    if (blob) { try { entry.blobB64 = await blobToB64(blob) } catch { continue } }
+    if (blob) { try { entry.blobB64 = await blobToB64(blob) } catch { clipsSkipped++; continue } }
     out.clips!.push(entry)
   }
+  const report: ExportReport = { books: out.books.length, skipped, clips: out.clips!.length, clipsSkipped }
   const blob = new Blob([JSON.stringify(out)], { type: 'application/json' })
   const name = `logos-backup-${new Date().toISOString().slice(0, 10)}.json`
   const file = new File([blob], name, { type: 'application/json' })
   if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'Logos backup' }); return { books: out.books.length, skipped } } catch { /* cancelled */ }
+    try { await navigator.share({ files: [file], title: 'Logos backup' }); return report } catch { /* cancelled */ }
   }
   downloadBlob(blob, name, true)
-  return { books: out.books.length, skipped }
+  return report
 }
 
 /**
@@ -169,8 +200,31 @@ const SETTINGS_KNOWN_KEYS = new Set([
   'listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec',
   'bubbleSize', 'voiceOverride', 'favorites', 'defaultVoice',
 ])
-function settingsPatch(raw: unknown): { patch: Partial<Settings>; favoritesWithheld: boolean } {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { patch: {}, favoritesWithheld: false }
+/** Why a backup's favorites were withheld, when they were (cure
+ *  R3-T5-7): the withheld-whole rule fires for two different files —
+ *  a list whose every entry is a ghost, and a list that is simply
+ *  EMPTY. The empty list is also the shape of a reader deliberately
+ *  un-starring every voice, so the two cases must be reportable as
+ *  what they are: the toast may never give the ghost reason for a
+ *  list that named nothing. */
+export type FavoritesKeptReason = 'ghosts' | 'empty' | null
+
+/** Carry a key into a patch object the way load()'s spread carries
+ *  it (cure R3-T5-8): as an OWN data property. Plain assignment is
+ *  not spread — for the key "__proto__" it invokes the prototype
+ *  setter instead of creating a field, so the verbatim loops below
+ *  used to drop that key at the top level and, inside defaultVoice,
+ *  swap the live object's prototype for the file's object for the
+ *  rest of the session. defineProperty gives the key the spread's
+ *  semantics: it lands as inert data, verbatim like any other
+ *  unknown field, and no file-supplied value ever becomes a live
+ *  object's prototype. */
+function setOwnField(o: Record<string, unknown>, k: string, v: unknown) {
+  Object.defineProperty(o, k, { value: v, enumerable: true, writable: true, configurable: true })
+}
+
+function settingsPatch(raw: unknown): { patch: Partial<Settings>; favoritesWithheld: boolean; favoritesKeptReason: FavoritesKeptReason } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { patch: {}, favoritesWithheld: false, favoritesKeptReason: null }
   const r = raw as Record<string, unknown>
   const patch: Partial<Settings> = {}
   if (r.theme === 'dark' || r.theme === 'light' || r.theme === 'system' || r.theme === 'tron' || r.theme === 'cyberpunk') patch.theme = r.theme
@@ -204,10 +258,18 @@ function settingsPatch(raw: unknown): { patch: Partial<Settings>; favoritesWithh
   // favorites end up empty never lands: the phone keeps its stars,
   // and the withholding is reported, not silent.
   let favoritesWithheld = false
+  let favoritesKeptReason: FavoritesKeptReason = null
   if (Array.isArray(r.favorites)) {
     const kept = r.favorites.filter((f): f is string => typeof f === 'string' && VOICE_BY_ID.has(f))
     if (kept.length) patch.favorites = kept
-    else favoritesWithheld = true
+    else {
+      favoritesWithheld = true
+      // An empty list named nothing; a non-empty list that filtered
+      // to nothing named ghosts. The reason is part of the report
+      // (cure R3-T5-7) — the safety rule still fires for both, but
+      // it is never allowed to speak with the wrong mouth.
+      favoritesKeptReason = r.favorites.length === 0 ? 'empty' : 'ghosts'
+    }
   }
   if (r.defaultVoice && typeof r.defaultVoice === 'object' && !Array.isArray(r.defaultVoice)) {
     const dv = r.defaultVoice as Record<string, unknown>
@@ -216,16 +278,22 @@ function settingsPatch(raw: unknown): { patch: Partial<Settings>; favoritesWithh
     if (typeof dv.es === 'string' && VOICE_BY_ID.has(dv.es)) merged.es = dv.es
     // A newer version's extra voice slots ride through verbatim
     // (R2-T5-5) — the rebuild used to drop every key but en/es.
-    for (const k of Object.keys(dv)) if (k !== 'en' && k !== 'es') merged[k] = dv[k]
+    // Carried with spread semantics (setOwnField), never assignment:
+    // this object becomes the live state by reference, so a key
+    // like "__proto__" must land as data, not as its prototype
+    // (cure R3-T5-8).
+    for (const k of Object.keys(dv)) if (k !== 'en' && k !== 'es') setOwnField(merged, k, dv[k])
     patch.defaultVoice = merged as Settings['defaultVoice']
   }
   // Unknown top-level fields ride through verbatim (R2-T5-5): what
   // load() preserves across every restart must also survive the trip
-  // the backup exists for.
+  // the backup exists for. Same spread semantics as load() itself
+  // (setOwnField, cure R3-T5-8): assignment silently dropped the
+  // one key that names the prototype.
   for (const k of Object.keys(r)) {
-    if (!SETTINGS_KNOWN_KEYS.has(k)) (patch as Record<string, unknown>)[k] = r[k]
+    if (!SETTINGS_KNOWN_KEYS.has(k)) setOwnField(patch as Record<string, unknown>, k, r[k])
   }
-  return { patch, favoritesWithheld }
+  return { patch, favoritesWithheld, favoritesKeptReason }
 }
 
 /** An import failure with its true reason, fit to show the user.
@@ -246,20 +314,33 @@ export type ImportReport = {
    *  still merged in — the union below never loses one). */
   keptNewer: number
   pronAdded: number
-  /** Backup pronunciations that did NOT land because the word already
-   *  has a different reading on this phone — the phone's reading
-   *  wins, and this count is how the refusal stops being silent. */
+  /** Backup pronunciations that did NOT land because this phone
+   *  already has a different reading OF THE SAME WORD THAT SPEAKS
+   *  FOR THE SAME LANGUAGE — the phone's reading wins, and this
+   *  count is how the refusal stops being silent. The scope clause
+   *  is T7-09's law, applied to the merge at last (cure R3-T5-3):
+   *  a reading scoped to the other language is a different entry
+   *  and lands; only a phone entry whose scope overlaps the file
+   *  entry's (same language, or either side unscoped) can refuse
+   *  it — so the reason stated here is true of every count. */
   pronKept: number
   /** 'landed' — the backup's Listen draft is the draft now (the phone
    *  had none); 'kept' — the phone already had a draft, so its text
    *  stayed and the backup's did not replace it; 'none' — the file
    *  carried no draft, or the same one. */
   draft: 'landed' | 'kept' | 'none'
-  /** Marks that actually landed — merged by id under the standing
-   *  cap, measured around the merge, not the file's raw count
-   *  (cure R2-T5-3: the count used to be the file's, so marks the
-   *  cap or the dedupe turned away were still announced as in). */
+  /** Marks that actually landed — file-mark ids present after the
+   *  merge that were not on this phone before it (cure R3-T5-5:
+   *  the count used to be the NET change in the store's length, so
+   *  at the 120 cap a file mark that landed by pushing one of the
+   *  phone's own marks out reported as zero landed, and the loss
+   *  was counted nowhere). Counted by id, never by subtraction. */
   marks: number
+  /** This phone's own marks that the standing 120 cap pushed out
+   *  to make room for the file's newer marks during this import —
+   *  counted and told, the way skippedDeleted tells its story
+   *  (cure R3-T5-5). */
+  marksEvicted: number
   /** Library clips written: new ones whole, existing ones only when
    *  the backup supplied a blob the local copy was missing (H-31). */
   clips: number
@@ -274,6 +355,12 @@ export type ImportReport = {
    *  have landed empty (every entry a ghost, or the list itself
    *  empty): the phone kept its own stars (cure R2-T5-4). */
   favoritesKept: boolean
+  /** Which of the two withheld shapes the file carried — 'ghosts'
+   *  (a non-empty list that filtered to nothing) or 'empty' (the
+   *  list itself was empty, the shape of a deliberate un-starring):
+   *  the toast states the case that actually happened, never the
+   *  ghost reason for a list that named nothing (cure R3-T5-7). */
+  favoritesKeptReason: FavoritesKeptReason
 }
 
 // ── Whole-file validation (F6 cure, 2026-11-16) ─────────────────
@@ -325,6 +412,18 @@ function validateBook(raw: unknown, i: number): ValidBackup['books'][number] {
   if (meta.pages !== undefined && !isNum(meta.pages)) damaged(`${at}${label} has an unreadable page count`)
   for (const k of ['fav', 'done', 'temp'] as const) if (meta[k] !== undefined && typeof meta[k] !== 'boolean') damaged(`${at}${label} has an unreadable ${k} flag`)
   if (meta.warn !== undefined && typeof meta.warn !== 'string') damaged(`${at}${label} has an unreadable warning`)
+  // The two fields BookCover dereferences hardest were the two this
+  // proof never looked at (cure R3-T5-1): it renders `author` as a
+  // React child and hands `cover` to URL.createObjectURL, while the
+  // prepare stage replaces cover ONLY when a coverB64 decodes — so
+  // an object in either seat rode into the record verbatim and the
+  // shelf threw on every render of that book. Author is proven as
+  // the string its renderer requires; a raw `cover` member is
+  // refused outright — the file's only cover channel is coverB64,
+  // no producer writes a cover member into a file, and a JSON value
+  // can never be the Blob the seat demands.
+  if (meta.author !== undefined && typeof meta.author !== 'string') damaged(`${at}${label} has an unreadable author`)
+  if (meta.cover !== undefined) damaged(`${at}${label} carries its cover in a shape Logos cannot read — covers ride in a backup as coverB64`)
   if (meta.coverB64 !== undefined && typeof meta.coverB64 !== 'string') damaged(`${at}${label} has an unreadable cover`)
   if (meta.bookmarks !== undefined) {
     if (!Array.isArray(meta.bookmarks) || !meta.bookmarks.every((m) => isObj(m) && isNum(m.ch) && isNum(m.b) && isNum(m.at) && typeof m.text === 'string')) damaged(`${at}${label} has an unreadable bookmark`)
@@ -368,7 +467,28 @@ function validateClip(raw: unknown, i: number): ValidBackup['clips'][number] {
   for (const k of ['fav', 'done', 'rendering'] as const) if (raw[k] !== undefined && typeof raw[k] !== 'boolean') damaged(`${at}${label} has an unreadable ${k} flag`)
   for (const k of ['pos', 'playedAt'] as const) if (raw[k] !== undefined && !isNum(raw[k])) damaged(`${at}${label} has an unreadable ${k}`)
   if (raw.blobB64 !== undefined && typeof raw.blobB64 !== 'string') damaged(`${at}${label} has unreadable audio`)
+  // A raw `blob` member is refused for the same reason a book's raw
+  // `cover` is (R3-T5-1's seam, clip side): the file's only audio
+  // channel is blobB64, no producer writes a blob member into a
+  // file, and the rebuild spreads the meta before the decoded blob
+  // is applied — a JSON value in that seat would ride into the
+  // record the player hands to URL.createObjectURL.
+  if (raw.blob !== undefined) damaged(`${at}${label} carries its audio in a shape Logos cannot read — audio rides in a backup as blobB64`)
   return raw as ValidBackup['clips'][number]
+}
+
+/** One entry per id, the LAST occurrence standing (cure R3-T5-4):
+ *  a file that lists the same book or clip twice used to be counted
+ *  per entry — the report announced 2 restored for a shelf that
+ *  gained 1, because apply wrote the id twice and the last write
+ *  won. Dedupe here, at the door, with that same winner, and every
+ *  count downstream describes records, not lines in the file.
+ *  (Every entry is still validated first: a damaged duplicate
+ *  refuses the file like any other damage.) */
+function lastEntryById<T>(list: T[], idOf: (x: T) => string): T[] {
+  const lastAt = new Map<string, number>()
+  list.forEach((x, i) => lastAt.set(idOf(x), i))
+  return list.filter((x, i) => lastAt.get(idOf(x)) === i)
 }
 
 function validateBackup(data: unknown): ValidBackup {
@@ -378,7 +498,7 @@ function validateBackup(data: unknown): ValidBackup {
   }
   if (data.version !== 1) damaged('its version marker is missing or unreadable')
   if (!Array.isArray(data.books)) damaged('its book list is missing')
-  const books = data.books.map((b, i) => validateBook(b, i))
+  const books = lastEntryById(data.books.map((b, i) => validateBook(b, i)), (b) => b.meta.id)
   let pronounce: PronEntry[] = []
   if (data.pronounce !== undefined) {
     if (!Array.isArray(data.pronounce)) damaged('its pronunciation list is unreadable')
@@ -408,7 +528,7 @@ function validateBackup(data: unknown): ValidBackup {
   let clips: ValidBackup['clips'] = []
   if (data.clips !== undefined) {
     if (!Array.isArray(data.clips)) damaged('its Library list is unreadable')
-    clips = data.clips.map((c, i) => validateClip(c, i))
+    clips = lastEntryById(data.clips.map((c, i) => validateClip(c, i)), (c) => c.id)
   }
   let deletedBooks: string[] = []
   if (Array.isArray(data.deletedBooks)) deletedBooks = data.deletedBooks.filter((x): x is string => typeof x === 'string')
@@ -445,6 +565,10 @@ function mergeBookMeta(local: BookMeta, incoming: BookMeta): { meta: BookMeta; w
   // copy's flag (the winner-takes-the-record rule above would happily
   // carry a backup's temp: true over a phone book that was kept).
   meta.temp = local.temp === true && incoming.temp === true
+  // R3-T3-7: a winning copy that carries no cover must not strip the
+  // phone's cover — the local record's cover survives the merge
+  // whenever the winner brings none of its own.
+  if (meta.cover === undefined && local.cover !== undefined) meta.cover = local.cover
   return { meta, winner }
 }
 
@@ -476,7 +600,12 @@ export async function importBackup(file: File): Promise<ImportReport> {
     if (gone.has(b.meta.id)) { skippedDeleted++; continue }
     const meta = { ...b.meta } as BookMeta & { coverB64?: string }
     if (meta.coverB64) {
-      try { meta.cover = await (await fetch(meta.coverB64)).blob() } catch { /* cover is decoration */ }
+      // Only a data URL is ever fetched (cure R3-T5-2) — a cover is
+      // decoration, and a string that names an address or a web page
+      // is dropped like a failed decode, not fetched into the seat.
+      if (isDecodableDataUrl(meta.coverB64, 'image')) {
+        try { meta.cover = await (await fetch(meta.coverB64)).blob() } catch { /* cover is decoration */ }
+      }
       delete meta.coverB64
     }
     const clean = meta as BookMeta
@@ -516,15 +645,31 @@ export async function importBackup(file: File): Promise<ImportReport> {
   // Pronunciations (F7): the phone's reading of a word wins over the
   // backup's older one — but the keep is counted, and a word the
   // phone does not have lands whole, exactly as the restore promises.
+  // The identity of an entry is (word, scope), not the word alone
+  // (cure R3-T5-3, the backup half of R3-T7-1): T7-09 made an entry a
+  // (word, language) pair — an English reading never speaks for the
+  // Spanish word — but this merge still keyed on the word, so a file's
+  // Spanish reading of "pan" was refused because an English one
+  // existed, and pronKept reported it as a word the phone already had
+  // a reading for. It did not — not in that language. THE RULING for
+  // the seam: two entries are the same entry when their scopes
+  // OVERLAP — an unscoped entry speaks both languages, so it overlaps
+  // every scope; two scoped entries overlap only in their own
+  // language. A file entry is refused only by a held entry (the
+  // phone's, or one this same file already landed) whose scope
+  // overlaps its own and whose reading differs — which is exactly
+  // when the report's reason ("the phone already has a different
+  // reading for this word") is true.
   const prevPron = pronEntries()
-  const haveTo = new Map(prevPron.map((e) => [e.from.toLowerCase(), e.to]))
+  const heldPron: PronEntry[] = [...prevPron]
   const pronAdd: PronEntry[] = []
   let pronKept = 0
+  const scopesOverlap = (a: PronEntry['lang'], b: PronEntry['lang']) => a === undefined || b === undefined || a === b
   for (const e of data.pronounce) {
-    const key = e.from.toLowerCase()
-    const existing = haveTo.get(key)
-    if (existing === undefined) { pronAdd.push(e); haveTo.set(key, e.to) }
-    else if (existing !== e.to) pronKept++
+    const word = e.from.toLowerCase()
+    const clash = heldPron.find((h) => h.from.toLowerCase() === word && scopesOverlap(h.lang, e.lang))
+    if (!clash) { pronAdd.push(e); heldPron.push(e) }
+    else if (clash.to !== e.to) pronKept++
   }
   // The Listen draft (F7): it lands when the phone has none — and
   // lands DURABLY this time (saveLastText, the same persistence the
@@ -543,7 +688,10 @@ export async function importBackup(file: File): Promise<ImportReport> {
   for (const raw of data.clips) {
     const { blobB64, ...meta } = raw
     let blob: Blob | undefined
-    if (blobB64) { try { blob = await (await fetch(blobB64)).blob() } catch { /* audio lost, text/meta still land */ } }
+    // Only a data URL is ever fetched (cure R3-T5-2) — a string that
+    // names an address is not audio; the clip's text and meta still
+    // land, exactly as they do when a decode fails.
+    if (blobB64 && isDecodableDataUrl(blobB64, 'any')) { try { blob = await (await fetch(blobB64)).blob() } catch { /* audio lost, text/meta still land */ } }
     const existing = await getClip(raw.id)
     if (existing) {
       if (!existing.blob && blob) clipWrites.push({ clip: { ...existing, blob, size: blob.size }, before: existing })
@@ -554,18 +702,22 @@ export async function importBackup(file: File): Promise<ImportReport> {
   // Settings (H-5): sanitised field by field by settingsPatch, and
   // pushed through settings.set at apply time so the store, its
   // subscribers and persistence all update together.
-  const { patch, favoritesWithheld } = settingsPatch(data.settingsRaw)
+  const { patch, favoritesWithheld, favoritesKeptReason } = settingsPatch(data.settingsRaw)
   const prevSettings = settings.get()
-  // The marks count is measured around the merge, not read off the
-  // file (R2-T5-3): the dedupe and the standing 120 cap can each
-  // turn a file mark away, and the report tells what landed.
-  const marksBefore = loadMarks().length
+  // The marks counts are measured BY ID around the merge, never by
+  // subtracting store lengths (cure R3-T5-5): the dedupe and the
+  // standing 120 cap can each turn a file mark away, and at the cap
+  // the merge also REMOVES — a length difference nets the two flows
+  // against each other, so file marks that landed by pushing the
+  // phone's own oldest marks out reported as zero landed and the
+  // eviction was counted nowhere.
+  const marksBeforeIds = new Set(loadMarks().map((m) => m.id))
 
   // ── Apply: staged, with rollback. If any write fails here, every
   // write already made is undone from its before-image and the
   // error says the library was put back — a half-restored library
   // claiming success is the F6 disease, and it does not recur.
-  const report: ImportReport = { books: restored, keptNewer, pronAdded: pronAdd.length, pronKept, draft: draftState, marks: 0, clips: clipWrites.length, skippedDeleted, favoritesKept: favoritesWithheld }
+  const report: ImportReport = { books: restored, keptNewer, pronAdded: pronAdd.length, pronKept, draft: draftState, marks: 0, marksEvicted: 0, clips: clipWrites.length, skippedDeleted, favoritesKept: favoritesWithheld, favoritesKeptReason }
   const doneBooks: BookWrite[] = []
   const doneClips: ClipWrite[] = []
   let pronApplied = false
@@ -581,7 +733,12 @@ export async function importBackup(file: File): Promise<ImportReport> {
     // writes are guarded inside marks.ts), so once it runs the
     // restore is complete.
     if (data.marks.length) mergeMarks(data.marks)
-    report.marks = loadMarks().length - marksBefore
+    // Landed = the file's own ids, present now, that were not on
+    // this phone before; evicted = this phone's ids that are gone
+    // now (cure R3-T5-5 — both flows counted, neither netted).
+    const marksAfterIds = new Set(loadMarks().map((m) => m.id))
+    report.marks = [...new Set(data.marks.map((m) => m.id))].filter((id) => marksAfterIds.has(id) && !marksBeforeIds.has(id)).length
+    report.marksEvicted = [...marksBeforeIds].filter((id) => !marksAfterIds.has(id)).length
   } catch (e) {
     if (settingsApplied) { try { settings.set({ ...prevSettings }) } catch { /* rollback is best-effort */ } }
     if (draftApplied) { try { drafts.set({ listen: prevDraft }); saveLastText(prevDraft) } catch { /* best-effort */ } }

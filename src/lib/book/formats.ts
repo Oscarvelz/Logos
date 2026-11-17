@@ -1,6 +1,6 @@
 // Word, FB2, web pages, Markdown, plain text and RTF.
 import type { Block, Pos } from '../books.ts'
-import { isWrappedLines } from '../text.ts'
+import { isWrappedLines, chunkLines } from '../text.ts'
 import { chapterize, type RawBook } from './finish.ts'
 import { parseMarkup, toBlocks, isWebLink } from './html.ts'
 
@@ -81,6 +81,12 @@ export function parseHtml(text: string): RawBook {
 // Lines that open a chapter in plain text: "Capítulo IV", "Chapter 12: …", "Segunda parte", "Prólogo", "I.".
 const ORD = String.raw`(?:\d{1,3}|[IVXLCDM]{1,7}|primer[oa]?|segund[oa]|tercer[oa]?|cuart[oa]|quint[oa]|sext[oa]|s[eé]ptim[oa]|octav[oa]|noven[oa]|d[eé]cim[oa]|one|two|three|four|five|six|seven|eight|nine|ten|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)`
 const CHAPTER_LINE = new RegExp(String.raw`^(?:(?:cap[ií]tulo|chapter|parte|part|libro|book|canto|acto|act)\s+${ORD}\b[\s.:\-—–]*.{0,90}|${ORD}\s+(?:parte|part|libro|book)\b.{0,40}|(?:pr[oó]logo|prologue|ep[ií]logo|epilogue|introducci[oó]n|introduction|prefacio|preface|pr[eé]face|ap[eé]ndice|appendix|conclusi[oó]n|conclusion|dedicatoria|dedication)\b.{0,50}|[IVXLCDM]{1,7}\.?|\d{1,3}\.)$`, 'iu')
+// Cure R3-T8-11: a word-headed chapter line whose ordinal is followed
+// (whitespace only, no separator) by a lowercase letter is a sentence
+// ABOUT a chapter — "Chapter 3 was the hardest part…" — not a
+// heading. A real heading's tail follows a separator (colon, dash) or
+// opens capitalised ("Chapter 3: the storm", "Chapter 3 The Storm").
+const CHAPTER_PROSE_TAIL = new RegExp(String.raw`^(?:cap[ií]tulo|chapter|parte|part|libro|book|canto|acto|act)\s+${ORD}\b\s+[\p{Ll}]`, 'iu')
 
 export function parseText(text: string, markdown: boolean): RawBook {
   let t = text.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ')
@@ -103,7 +109,20 @@ export function parseText(text: string, markdown: boolean): RawBook {
   let para: string[] = []
   const flush = () => {
     if (!para.length) return
-    let s = para.join(wrapped || markdown ? ' ' : '\n').replace(/[ \t]+/g, ' ').trim()
+    // Cure R3-T8-10: in the mode the loop's foot used to flush EVERY
+    // line into its own block (not wrapped, no blank-line paragraphs,
+    // not markdown), the grouping is now text.ts's own chunkLines —
+    // the very grouping the paste door applies. Each chunk becomes
+    // one block: a narrow-wrapped sentence rejoins into the block it
+    // always was (the reader then segments it exactly as it segments
+    // a paste), while list lines, which never glue, still stand
+    // alone as their own blocks.
+    const groups = !wrapped && !blankParas && !markdown ? chunkLines(para) : [para.join(wrapped || markdown ? ' ' : '\n')]
+    for (const g of groups) pushGroup(g)
+    para = []
+  }
+  const pushGroup = (g: string) => {
+    let s = g.replace(/[ \t]+/g, ' ').trim()
     if (markdown) s = s.replace(/(\*\*|__)(.+?)\1/g, '$2').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2').replace(/`([^`]+)`/g, '$1').replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     const links: Block['l'] = []
     if (markdown) {
@@ -122,7 +141,6 @@ export function parseText(text: string, markdown: boolean): RawBook {
       s = out + s.slice(last)
     }
     if (s) blocks.push(links.length ? { k: 'p', t: s, l: links } : { k: 'p', t: s })
-    para = []
   }
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li].trim()
@@ -142,7 +160,13 @@ export function parseText(text: string, markdown: boolean): RawBook {
     if (markdown && /^>\s?/.test(line)) { flush(); blocks.push({ k: 'q', t: line.replace(/^>\s?/, '') }); continue }
     if (markdown && /^([-*+]|\d+\.)\s+/.test(line)) { flush(); blocks.push({ k: 'li', t: line.replace(/^([-*+]|\d+\.)\s+/, '') }); continue }
     const alone = !para.length && (!lines[li + 1]?.trim() || !blankParas)
-    if (!markdown && line.length < 110 && !para.length && CHAPTER_LINE.test(line)) {
+    // Cure R3-T8-10: in the chunk-grouped mode (not wrapped, no
+    // blank-line paragraphs) a heading line can arrive with prose
+    // accumulated before it — this branch flushes first, as it
+    // always did, so the guard no longer demands an empty para
+    // there. In every other mode the old guard stands unchanged.
+    if (!markdown && line.length < 110 && CHAPTER_LINE.test(line) && (!para.length || (!wrapped && !blankParas))) {
+      if (CHAPTER_PROSE_TAIL.test(line)) { para.push(line); continue }
       // Cure R2-T8-8: a BARE numeral on its own line ("1.", "IV") is not
       // heading evidence by itself — a vertical numbered list (number
       // line, item line, number line, …) shattered into a chapter per
@@ -160,6 +184,34 @@ export function parseText(text: string, markdown: boolean): RawBook {
           mass += nx.length
         }
         if (mass < 120) { para.push(line); continue }
+        // Cure R3-T8-12: the mass test cannot tell a chapter body
+        // from a long list item — a numbered list whose items run
+        // long clears 120 chars per item just as easily, and every
+        // numeral headed a chapter. A list betrays itself by
+        // repetition: another bare numeral stands a line or two
+        // away, where a chapter's next numeral stands after a body
+        // of many lines. The test looks both ways (the last item
+        // has no successor to betray it, only a predecessor), a
+        // single very long stretch between numerals (a genuine
+        // one-line chapter) still heads, and a blank line between
+        // numerals breaks the rhythm — stretches in their own
+        // paragraphs are bodies, not items, which is what keeps a
+        // bare-roman book (I. / II. / III., a paragraph apiece)
+        // chaptered under the mass rule alone.
+        const numeralAt = (j: number) => /^(?:[IVXLCDM]{1,7}\.?|\d{1,3}\.)$/iu.test(lines[j].trim())
+        let listRhythm = false
+        for (const dir of [1, -1]) {
+          let between = 0, massBetween = 0
+          for (let j = li + dir; j >= 0 && j < lines.length; j += dir) {
+            const nx = lines[j].trim()
+            if (!nx) break
+            if (numeralAt(j)) { listRhythm = between <= 2 && massBetween < 600; break }
+            if (CHAPTER_LINE.test(nx)) break
+            between++; massBetween += nx.length
+          }
+          if (listRhythm) break
+        }
+        if (listRhythm) { para.push(line); continue }
       }
       flush()
       blocks.push({ k: /^(parte|part|libro|book)\b/i.test(line) || /\b(parte|part|libro|book)$/i.test(line) ? 'h1' : 'h2', t: line })
@@ -169,7 +221,8 @@ export function parseText(text: string, markdown: boolean): RawBook {
       flush(); blocks.push({ k: 'h2', t: line }); continue
     }
     para.push(line)
-    if (!wrapped && !blankParas && !markdown) flush()
+    // (No per-line flush any more — cure R3-T8-10: flush() groups
+    // the accumulated lines through chunkLines in this mode.)
   }
   flush()
   const h = markdown ? blocks.slice(0, 3).find((b) => b.k === 'h1') : undefined
@@ -224,6 +277,21 @@ export type DecodedText = { text: string; warn?: string }
     windows-1252 reading is full of these pairs). */
 const mojibake = (s: string) => (s.match(/Ã[\u0080-\u00ff]|Â[\u0080-\u00bf]/g) ?? []).length
 
+/** The BOM-less UTF-16 shape: NUL bytes massed on one byte parity
+    (Latin text in UTF-16 is half NULs, all on the same side). Used
+    both to guess an undeclared file's encoding and — cure R3-T8-19 —
+    to judge a UTF-16 DECLARATION: bytes that wear no such shape are
+    not UTF-16, whatever the prolog claims. */
+function utf16Shape(bytes: Uint8Array): 'utf-16le' | 'utf-16be' | null {
+  const sample = bytes.subarray(0, Math.min(bytes.length, 8192))
+  let zeroAtOdd = 0, zeroAtEven = 0
+  for (let i = 0; i + 1 < sample.length; i += 2) { if (sample[i] === 0) zeroAtEven++; if (sample[i + 1] === 0) zeroAtOdd++ }
+  const pairs = Math.max(1, Math.floor(sample.length / 2))
+  if (zeroAtOdd > pairs * 0.2 && zeroAtEven < pairs * 0.02) return 'utf-16le'
+  if (zeroAtEven > pairs * 0.2 && zeroAtOdd < pairs * 0.02) return 'utf-16be'
+  return null
+}
+
 /** Decode a book file's bytes, honestly (M-2 cure). The old decoder was
     encoding-blind: it sniffed only a BOM, ignored the encoding an FB2
     declares in its XML prolog or an HTML file in its meta charset, and
@@ -259,24 +327,39 @@ export function decodeTextDetailed(buf: ArrayBuffer): DecodedText {
       // fails the strict UTF-8 check (its high bytes are not valid
       // sequences) and an honest reading shows no mojibake pairs, so a
       // true declaration is never second-guessed.
-      if (!/^utf-?16/i.test(declared)) {
-        let asUtf8: string | null = null
-        try { asUtf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch { /* not valid UTF-8: the declaration stands */ }
-        if (asUtf8 !== null && mojibake(asDeclared) > 0 && mojibake(asUtf8) === 0) {
-          return { text: asUtf8, warn: `This file says its text is ${declared}, but it was really written in UTF-8; Logos read it as UTF-8 so the words come out right.` }
+      let asUtf8: string | null = null
+      try { asUtf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch { /* not valid UTF-8: the declaration stands */ }
+      if (asUtf8 !== null) {
+        const lieWarn = `This file says its text is ${declared}, but it was really written in UTF-8; Logos read it as UTF-8 so the words come out right.`
+        if (/^utf-?16/i.test(declared)) {
+          // Cure R3-T8-19: UTF-16 declarations were EXEMPT from the
+          // lie check, so a UTF-8 file stamped utf-16le (a converter
+          // mislabelling its output — the same sloppiness, one door
+          // over) was shelved as NUL-interleaved garbage with no
+          // warning. A real UTF-16 file wears its shape; bytes that
+          // wear none and read strictly as UTF-8 are UTF-8.
+          if (!utf16Shape(bytes)) return { text: asUtf8, warn: lieWarn }
+        } else {
+          const md = mojibake(asDeclared), mu = mojibake(asUtf8)
+          // Cure R3-T8-13: the R2 rule demanded a perfectly clean
+          // UTF-8 reading (mu === 0), so a book that QUOTES one
+          // "Ã©" — a book about encoding, the genre that writes the
+          // pair on purpose — acquitted the lie and shelved whole
+          // in mojibake. The clean-reading road stands; beside it,
+          // an overwhelming-evidence road: the declared reading is
+          // mojibake throughout (at least 4 pairs) while the UTF-8
+          // reading's own pairs — quotes included — are less than a
+          // third of that. One quoted pair no longer acquits.
+          if (md > 0 && (mu === 0 || (md >= 4 && md > mu * 3))) return { text: asUtf8, warn: lieWarn }
         }
       }
       return { text: asDeclared }
     } catch { /* unknown label: fall through to the guesses */ }
   }
   // BOM-less UTF-16: NUL bytes massed on one byte parity.
-  const sample = bytes.subarray(0, Math.min(bytes.length, 8192))
-  let zeroAtOdd = 0, zeroAtEven = 0
-  for (let i = 0; i + 1 < sample.length; i += 2) { if (sample[i] === 0) zeroAtEven++; if (sample[i + 1] === 0) zeroAtOdd++ }
-  const pairs = Math.max(1, Math.floor(sample.length / 2))
-  if ((zeroAtOdd > pairs * 0.2 && zeroAtEven < pairs * 0.02) || (zeroAtEven > pairs * 0.2 && zeroAtOdd < pairs * 0.02)) {
-    const enc = zeroAtOdd > zeroAtEven ? 'utf-16le' : 'utf-16be'
-    return { text: new TextDecoder(enc).decode(bytes), warn: `This file's text encoding (${enc.toUpperCase()} without a marker) was guessed by Logos. If the words look wrong, save the file as UTF-8 and import it again.` }
+  const shape = utf16Shape(bytes)
+  if (shape) {
+    return { text: new TextDecoder(shape).decode(bytes), warn: `This file's text encoding (${shape.toUpperCase()} without a marker) was guessed by Logos. If the words look wrong, save the file as UTF-8 and import it again.` }
   }
   const utf8 = new TextDecoder('utf-8').decode(bytes)
   const bad = (utf8.match(/\ufffd/g) ?? []).length

@@ -10,7 +10,16 @@ function join(base: string, href: string): string {
   const u = new URL(href, 'https://book.local/' + base)
   let path = u.pathname.slice(1)
   try { path = decodeURIComponent(path) } catch { /* keep */ }
-  return path + (u.hash ? '#' + decodeURIComponent(u.hash.slice(1)) : '')
+  // Cure R3-T8-20: the fragment's decode sat OUTSIDE any try, so a
+  // link whose anchor carries a bare '%' (percent-named anchors
+  // exist; sloppy toolchains emit them) threw URIError out of join,
+  // out of the link callback, out of parseEpub — a valid book
+  // refused over one link's fragment. The fragment now gets the
+  // pathname's discipline: undecodable means keep it raw; the link
+  // then misses its anchor, and nothing else is lost.
+  let frag = ''
+  if (u.hash) { try { frag = '#' + decodeURIComponent(u.hash.slice(1)) } catch { frag = u.hash } }
+  return path + frag
 }
 const byTag = (root: Document | Element, name: string) => Array.from(root.getElementsByTagName('*')).filter((e) => e.localName === name)
 

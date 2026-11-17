@@ -28,6 +28,7 @@
  * per-session there, which is honest degradation, never a crash.
  */
 import { PRESENTATION_SPEEDS } from './engine/clock.ts'
+import { moduleStepCount } from './engine/module-lengths.ts'
 import type { ModuleProgress, PresentationStateFile, SavedScene } from './engine/types.ts'
 
 /** The presentation's own storage key — its one real key (E-state). */
@@ -135,7 +136,19 @@ export function normalizePresentationState(value: unknown): PresentationStateFil
         for (const n of raw.done) {
           if (typeof n === 'number' && Number.isFinite(n) && n >= 0) seen.add(Math.floor(n))
         }
-        progress.done = [...seen].sort((a, b) => a - b)
+        let done = [...seen].sort((a, b) => a - b)
+        // The set is bounded by the module it witnesses (R3-T6-2):
+        // an entry naming a step the module does not have means the
+        // writer was not writing about THIS module — the set's
+        // provenance is broken, so the witness is refused WHOLE.
+        // (Filtering to the in-range subset would manufacture a
+        // fully-walked module out of exactly such a file: 100 claimed
+        // steps of a 37-step module would clamp to a complete walk.)
+        // A module with no registered length keeps the unbounded
+        // reading — the gate judges only what it can know.
+        const total = moduleStepCount(id)
+        if (total !== undefined && done.some((n) => n >= total)) done = []
+        progress.done = done
       }
       if (raw.mode === 'automatic' || raw.mode === 'interactive') progress.mode = raw.mode
       if (typeof raw.userPaused === 'boolean') progress.userPaused = raw.userPaused

@@ -33,7 +33,16 @@ export async function sniffFormat(buf: ArrayBuffer): Promise<string | null> {
   // routed such a text into the PDF parser to die there. A real
   // header is "%PDF-X.Y" followed by a line break — the version and
   // the break are part of the magic now.
-  if (at('%PDF-') && b[5] >= 0x30 && b[5] <= 0x39 && b[6] === 0x2e && b[7] >= 0x30 && b[7] <= 0x39 && (b[8] === 0x0a || b[8] === 0x0d)) return 'pdf'
+  // Cure R3-T8-9: the header need not sit at byte 0 — the spec lets
+  // it live anywhere in the first 1024 bytes, and files that
+  // travelled (a mailer's blank lines, a generator's comment line)
+  // carry it later; an extensionless copy of such a file was refused
+  // as "isn't a book file". The shape demanded is unchanged, only
+  // the seat moves: prose ABOUT the signature still fails the break
+  // test wherever in it the mention sits.
+  for (let off = 0; off < 1024 && off + 9 <= b.length; off++) {
+    if (at('%PDF-', off) && b[off + 5] >= 0x30 && b[off + 5] <= 0x39 && b[off + 6] === 0x2e && b[off + 7] >= 0x30 && b[off + 7] <= 0x39 && (b[off + 8] === 0x0a || b[off + 8] === 0x0d)) return 'pdf'
+  }
   if (at('\x89PNG') || at('\xff\xd8\xff') || (at('RIFF') && at('WEBP', 8))) return 'image'
   if (at('GIF8') && gifShaped(b)) return 'image'
   if (at('BM') && bmpShaped(b)) return 'image'
@@ -51,11 +60,20 @@ export async function sniffFormat(buf: ArrayBuffer): Promise<string | null> {
       // read yet…"). The entry's CONTENT is the signal: only
       // application/epub+zip means EPUB.
       const mtKey = Object.keys(zip.files).find((n) => n.toLowerCase() === 'mimetype')
-      if (mtKey && (await zip.file(mtKey)?.async('text'))?.trim() === 'application/epub+zip') return 'epub'
+      // Cure R3-T8-8: media types are case-insensitive and real
+      // toolchains vary the case ("Application/EPUB+ZIP"); the
+      // comparison folds case like the entry-name lookup above it.
+      if (mtKey && (await zip.file(mtKey)?.async('text'))?.trim().toLowerCase() === 'application/epub+zip') return 'epub'
     } catch { /* not a readable zip: say nothing */ }
     return null
   }
-  const head = new TextDecoder('windows-1252').decode(b.subarray(0, 512)).trimStart()
+  // Cure R3-T3-2: a UTF-8 BOM decodes to "ï»¿" in front of the
+  // markup and trimStart does not remove it, so a BOM'd HTML or FB2
+  // file said nothing at all and formatOf judged it by name alone —
+  // a BOM'd page named .txt shelved as literal tags. The BOM is
+  // skipped before the markup tests, as everywhere else in the app.
+  const bom = b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf ? 3 : 0
+  const head = new TextDecoder('windows-1252').decode(b.subarray(bom, bom + 512)).trimStart()
   if (/^\{\\rtf/i.test(head)) return 'rtf'
   if (/^<\?xml[^>]*>\s*<fictionbook/i.test(head) || /^<fictionbook/i.test(head)) return 'fb2'
   if (/^<!doctype\s+html/i.test(head) || /^<html[\s>]/i.test(head)) return 'html'
@@ -84,7 +102,19 @@ function bmpShaped(b: Uint8Array): boolean {
     declares — a block introducer (image descriptor, extension or
     trailer). The version and canvas alone do NOT suffice: the prose
     "GIF89a is not a picture…" wears both, by spelling. What it
-    cannot wear is the block byte where the format puts it. */
+    cannot wear is the block byte where the format puts it.
+    Cure R3-T8-7 / R3-T3-1: prose CAN wear the block byte after all —
+    in "GIF89a is old, …" the byte at the block offset is the comma,
+    0x2C by value, and a semicolon wears the trailer. So the block
+    itself is now read, not just its introducer: a trailer must
+    end the GIF (only inert NUL padding may follow it — prose
+    after a semicolon is not padding); an extension must carry a
+    known label (and its fixed block size where the spec fixes
+    one); an image descriptor must carry a canvas of its own and
+    be followed — past any local colour table — by an LZW minimum
+    code size, which the spec fixes at 2–8. Prose wears a comma
+    easily; it does not wear a plausible descriptor AND a code
+    size in range. */
 function gifShaped(b: Uint8Array): boolean {
   if (b.length < 14) return false
   const v = String.fromCharCode(b[4], b[5])
@@ -95,7 +125,25 @@ function gifShaped(b: Uint8Array): boolean {
   let next = 13
   if (packed & 0x80) next += 3 * 2 ** ((packed & 0x07) + 1)
   if (next >= b.length) return false
-  return b[next] === 0x2c || b[next] === 0x21 || b[next] === 0x3b
+  const block = b[next]
+  if (block === 0x3b) return b.subarray(next + 1).every((x) => x === 0) // trailer: only NUL padding may follow
+  if (block === 0x21) {
+    // Extension: graphic control, plain text, comment or application.
+    const label = b[next + 1]
+    if (label === 0xf9) return b[next + 2] === 4 // graphic control block is 4 bytes
+    if (label === 0xff) return b[next + 2] === 11 // application block is 11
+    if (label === 0x01) return b[next + 2] === 12 // plain-text header is 12
+    return label === 0xfe // a comment's chain is free-form; its label is witness enough
+  }
+  if (block !== 0x2c) return false
+  // Image descriptor: position, a canvas of its own (nonzero), a
+  // packed byte, then the LZW minimum code size in 2–8.
+  if (next + 10 >= b.length) return false
+  if (dv.getUint16(next + 5, true) === 0 || dv.getUint16(next + 7, true) === 0) return false
+  let after = next + 10
+  if (b[next + 9] & 0x80) after += 3 * 2 ** ((b[next + 9] & 0x07) + 1)
+  if (after >= b.length) return false
+  return b[after] >= 2 && b[after] <= 8
 }
 
 /** Content fingerprint (M-6): a cyrb53 hash over every block's text.

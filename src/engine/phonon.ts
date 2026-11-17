@@ -67,6 +67,56 @@ async function phononEvictDamaged(): Promise<void> {
   } catch { /* ignore */ }
 }
 
+/** Load-failure eviction (R3-T4-1). Certification still measures size,
+ *  not content — a pinned per-file digest, the standard Pocket's probe
+ *  meets, cannot be built here: the true SHA-256 values for the four
+ *  files at the pinned commit exist nowhere in the tree (the size
+ *  table was measured by HEAD, metadata only), and no hash may be
+ *  invented. So a bucket of exact-size garbage still certifies — until
+ *  it is asked to work. What this cure closes is the permanence: a
+ *  load that fails after consuming model files FROM the cache evicts
+ *  exactly the entries it consumed, so the next load downloads them
+ *  fresh (and fresh downloads are parse-guarded before they are
+ *  stored) instead of the loader serving the same unparseable bytes
+ *  on every attempt forever. The progress callback names files
+ *  logically ('weights', 'tokenizer', 'config', 'voice:default');
+ *  the map below is the model file each name fetches.
+ *
+ *  The per-file guard bounds the cure's cost: a file already evicted
+ *  once for a failure is not evicted again until some load succeeds,
+ *  so a device that cannot run the model at all — whose failures are
+ *  not the bytes' fault — loses at most one eviction round, never a
+ *  re-download on every attempt. A successful load (and Delete)
+ *  resets the guard. Declared bound: a load that fails before a
+ *  file's progress reports (e.g. the first fetch itself dies) cannot
+ *  name that file, so garbage in a file no failing load ever reached
+ *  survives until a load does reach it. The digest road stays open
+ *  and declared: pin the four files' true SHA-256 values — measured
+ *  from the files themselves, never invented — and certification can
+ *  measure content the way Pocket's does. */
+const PROGRESS_FILE_TO_MODEL: Record<string, string> = {
+  weights: 'model.q8.gguf',
+  tokenizer: 'tokenizer.json',
+  config: 'config.json',
+  'voice:default': 'default-voice.safetensors',
+}
+const loadCachedFiles = new Map<PhononLang, Set<string>>()
+const failureEvictedFiles = new Set<string>()
+
+/** Evict the model files a failed load consumed from the cache.
+ *  Returns true when anything was evicted. Exported as the seam the
+ *  failure paths in phononEnsure/failStaleLoad act through. */
+export async function phononEvictAfterFailedLoad(consumed: Iterable<string>): Promise<boolean> {
+  const fresh = [...consumed].filter((n) => PHONON_MODEL_FILES.includes(n) && !failureEvictedFiles.has(n))
+  if (!fresh.length) return false
+  for (const n of fresh) failureEvictedFiles.add(n)
+  try {
+    const c = await caches.open(PHONON_CACHE)
+    for (const name of fresh) { try { await c.delete(MODEL + name) } catch { /* ignore */ } }
+  } catch { /* ignore */ }
+  return true
+}
+
 type LangState = { status: 'idle' | 'loading' | 'ready' | 'error'; loaded: number; total: number; fromCache: boolean; error: string | null; loadMs: number | null }
 export type PhononState = { langs: Record<PhononLang, LangState>; active: PhononLang | null; lastRtf: number | null; threads: number | null }
 const blank = (): LangState => ({ status: 'idle', loaded: 0, total: 0, fromCache: false, error: null, loadMs: null })
@@ -112,6 +162,11 @@ let genSeq = 0
  *  ensure-only load dies exactly like a pump-witnessed one (T4-7). */
 function failStaleLoad(lang: PhononLang) {
   const msg = 'The voice model stopped loading.'
+  // A load that wedged on cache-served bytes dies the same way as one
+  // that throws (R3-T4-1): the entries it consumed are evicted, so the
+  // retry downloads instead of wedging on the same bytes again.
+  void phononEvictAfterFailedLoad(loadCachedFiles.get(lang) ?? [])
+  loadCachedFiles.delete(lang)
   loadGen.delete(lang)
   loadSince.delete(lang)
   const settle = loadSettlers.get(lang)
@@ -189,6 +244,7 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
   armLoadWatchdog()
   const gen = ++genSeq
   loadGen.set(lang, gen)
+  loadCachedFiles.set(lang, new Set())
   let settle!: { resolve: () => void; reject: (e: Error) => void }
   const p = new Promise<void>((resolve, reject) => { settle = { resolve, reject }; loadSettlers.set(lang, settle) })
   loads.set(lang, p)
@@ -222,6 +278,13 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
           // status of whatever load replaced it.
           if (loadGen.get(lang) !== gen) return
           loadSince.set(lang, Date.now())
+          // Remember which model files this load is being served from
+          // the cache (R3-T4-1): if the load then fails, those are the
+          // entries the failure eviction removes.
+          if (cached) {
+            const modelName = PROGRESS_FILE_TO_MODEL[file]
+            if (modelName) loadCachedFiles.get(lang)?.add(modelName)
+          }
           // Progress never runs backwards and never passes its own
           // total (M-23): a file that restarts reports a small loaded
           // against the same total, and a server that under-reports
@@ -247,6 +310,11 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
       // A dead generation failing late is inert: no status, no queued
       // jobs, no settler — the timeout already told the truth.
       if (loadGen.get(lang) !== gen) return
+      // The load failed on this generation's watch: evict the model
+      // entries it consumed from the cache (R3-T4-1), so a bucket that
+      // can only fail stops being served — the retry downloads fresh.
+      void phononEvictAfterFailedLoad(loadCachedFiles.get(lang) ?? [])
+      loadCachedFiles.delete(lang)
       const e = err as Error
       if (loads.get(lang) === p) { loads.delete(lang); loadSettlers.delete(lang) }
       loadSince.delete(lang)
@@ -315,6 +383,10 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
     if (loads.get(lang) === p) { loads.delete(lang); loadSettlers.delete(lang) }
     loadSince.delete(lang)
     stopWatchdogIfIdle()
+    // A load succeeded: the bucket has proven itself, so the failure
+    // eviction's guard starts over (R3-T4-1).
+    loadCachedFiles.delete(lang)
+    failureEvictedFiles.clear()
     instances.set(lang, tts)
     setLang(lang, { status: 'ready', loadMs: performance.now() - t0, fromCache: allFromCache })
     phonon.set({ active: lang, threads: tts.threads })
@@ -417,6 +489,7 @@ export const phononBusy = (lang: PhononLang) => inFlight?.lang === lang
 
 export async function phononDelete() {
   phononClear()
+  failureEvictedFiles.clear()
   for (const l of [...instances.keys()]) phononRelease(l)
   phonon.set({ langs: { en: blank(), es: blank() }, active: null })
   try { const { clearCache } = await import('phonon-tts'); await clearCache() } catch { /* ignore */ }
@@ -434,9 +507,14 @@ export async function phononCached(): Promise<boolean> {
     // certifying from model.q8.gguf alone reported "Downloaded" for
     // a model that could only fail — offline, at play time.
     // And presence is not enough (R2-T4-1): each body is measured
-    // against the pinned file's true size (PHONON_MODEL_SIZES), the
-    // same standard Pocket's probe applies — a bucket of same-shape
-    // garbage no longer certifies as a downloaded model.
+    // against the pinned file's true size (PHONON_MODEL_SIZES).
+    // Honestly bounded (R3-T4-1): size is not content — Pocket's
+    // probe hashes what it certifies, this one cannot (no true
+    // digests exist in-tree to pin). Exact-size garbage certifies
+    // here; what it can no longer do is survive a load — the first
+    // load that fails on cache-served entries evicts them
+    // (phononEvictAfterFailedLoad), so the false certification is
+    // never permanent.
     for (const name of PHONON_MODEL_FILES) {
       const res = await c.match(MODEL + name)
       if (!res) return false
@@ -453,8 +531,11 @@ export async function phononCacheBytes(): Promise<number> {
     const cache = await caches.open(PHONON_CACHE)
     for (const req of await cache.keys()) {
       const res = await cache.match(req)
-      const len = Number(res?.headers.get('content-length') ?? 0)
-      bytes += len || (res ? (await res.blob()).size : 0)
+      // The body is the only witness (R3-T4-3): the stored header used
+      // to win whenever present, so a truncated entry under a truthful
+      // header — the interrupted-write shape — counted at full size
+      // in Settings' storage total. Measure what is actually there.
+      bytes += res ? (await res.blob()).size : 0
     }
   } catch { /* ignore */ }
   return bytes

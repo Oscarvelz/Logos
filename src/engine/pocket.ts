@@ -383,22 +383,42 @@ export async function pocketDelete() {
 // blob in the bucket cannot say which language it speaks.
 const DIGEST_KEY = 'logos.pocketDigests'
 type PocketDigest = { file: string; sha: string; bytes?: number }
+/** The session's own copy of each recorded digest (R3-T4-2). The
+ *  registry write below can be refused — quota, a storage partition
+ *  that refuses localStorage while Cache Storage works — and the
+ *  refusal is swallowed, so a digest known only to localStorage could
+ *  be lost in the very session whose probe verified it: the primary
+ *  probe certifies from the manifest directly, never consults the
+ *  registry, and keep.ts then found pocketModelDigest null at stamp
+ *  time and skipped the stamp in silence — no stamp, no note, the
+ *  eviction watch never armed. The memory is written first and
+ *  unconditionally, and readPocketDigests lets it outrank the stored
+ *  registry: it is the digest the passing probe itself used, this
+ *  session, first-hand. Across sessions the registry remains the
+ *  record, re-recorded by the next primary probe as before. */
+const digestMemory = new Map<PocketLang, PocketDigest>()
 function readPocketDigests(): Partial<Record<PocketLang, PocketDigest>> {
+  let stored: Partial<Record<PocketLang, PocketDigest>> = {}
   try {
     const v = localStorage.getItem(DIGEST_KEY)
     const o = v ? JSON.parse(v) as Partial<Record<PocketLang, PocketDigest>> : {}
-    return o && typeof o === 'object' ? o : {}
-  } catch { return {} }
+    stored = o && typeof o === 'object' ? o : {}
+  } catch { /* blocked — the session memory below still answers */ }
+  for (const [lang, d] of digestMemory) stored[lang] = d
+  return stored
 }
 function recordPocketDigest(lang: PocketLang, d: PocketDigest) {
+  digestMemory.set(lang, d)
   try {
-    const all = readPocketDigests()
+    const v = localStorage.getItem(DIGEST_KEY)
+    const o = v ? JSON.parse(v) as Partial<Record<PocketLang, PocketDigest>> : {}
+    const all = o && typeof o === 'object' ? o : {}
     if (all[lang]?.sha === d.sha && all[lang]?.file === d.file) return
     all[lang] = d
     localStorage.setItem(DIGEST_KEY, JSON.stringify(all))
-  } catch { /* blocked — the fallback simply stays honest */ }
+  } catch { /* blocked — the session memory above carries it instead */ }
 }
-function clearPocketDigests() { try { localStorage.removeItem(DIGEST_KEY) } catch { /* blocked */ } }
+function clearPocketDigests() { digestMemory.clear(); try { localStorage.removeItem(DIGEST_KEY) } catch { /* blocked */ } }
 /** The digest the probes currently know for a language, if any —
  *  keep.ts binds its stamps to this identity (M-21). */
 export function pocketModelDigest(lang: PocketLang): string | null {
@@ -518,8 +538,12 @@ export async function pocketCacheBytes(): Promise<number> {
     const cache = await caches.open(CACHE)
     for (const req of await cache.keys()) {
       const res = await cache.match(req)
-      const len = Number(res?.headers.get('content-length') ?? 0)
-      bytes += len || (res ? (await res.blob()).size : 0)
+      // The body is the only witness (R3-T4-3): the stored header used
+      // to win whenever present, so a truncated entry under a truthful
+      // header — the interrupted-write shape pocket-assets' cacheGet
+      // refuses to serve — counted at full size in Settings' storage
+      // total. Measure what is actually there.
+      bytes += res ? (await res.blob()).size : 0
     }
   } catch { /* ignore */ }
   return bytes

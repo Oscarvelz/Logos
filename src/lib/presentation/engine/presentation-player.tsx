@@ -535,26 +535,6 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
       return next
     }
 
-    /** R2-T6-8 — the LIFETIME guard: the seat is re-judged whenever
-     * the subject MOVES, including layout shifts that resize nothing
-     * and scroll nothing (a sheet opening above the subject, a
-     * surface or tab change, content growing over it). The
-     * ResizeObserver sees only sizes and the listeners only scrolls —
-     * both of Oscar's tablet specimens were seats judged against
-     * rects that had silently moved. This guard re-reads the three
-     * rects and re-measures ONLY on a real difference. */
-    const remeasureIfMoved = () => {
-      if (disposed) return
-      const a = readRect(actEl)
-      if (isGone(actEl, a)) return
-      const e = effectEl ? readRect(effectEl) : null
-      const s = subjectEl ? readRect(subjectEl) : null
-      const same = (x: TargetRect | null, y: TargetRect | null) =>
-        (x === null && y === null) || (x !== null && y !== null && rectsEqual(x, y))
-      if (lastGuard && rectsEqual(lastGuard.a, a) && same(lastGuard.e, e) && same(lastGuard.s, s)) return
-      measure()
-    }
-
     /** ONE re-resolution of the step's anchors (P10); true when a live act element was rebound. */
     const tryRebind = (): boolean => {
       if (rebindTried || !resolver) return false
@@ -566,6 +546,35 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
       effectEl = extraElement(step.effectAnchorId)
       subjectEl = extraElement(step.subjectAnchorId)
       return true
+    }
+
+    /** R2-T6-8 — the LIFETIME guard: the seat is re-judged whenever
+     * the subject MOVES, including layout shifts that resize nothing
+     * and scroll nothing (a sheet opening above the subject, a
+     * surface or tab change, content growing over it). The
+     * ResizeObserver sees only sizes and the listeners only scrolls —
+     * both of Oscar's tablet specimens were seats judged against
+     * rects that had silently moved. This guard re-reads the three
+     * rects and re-measures ONLY on a real difference.
+     * R3-T6-6 — the guard can REBIND: when the act element itself is
+     * gone (the stage remounted under the beat), the guard attempts
+     * the entry loop's one re-resolution instead of returning
+     * silently and watching a corpse for the beat's whole life; the
+     * one-attempt discipline (rebindTried) is shared with the loop,
+     * so a beat still earns at most one re-resolution in total. */
+    const remeasureIfMoved = () => {
+      if (disposed) return
+      const a = readRect(actEl)
+      if (isGone(actEl, a)) {
+        if (tryRebind()) measure()
+        return
+      }
+      const e = effectEl ? readRect(effectEl) : null
+      const s = subjectEl ? readRect(subjectEl) : null
+      const same = (x: TargetRect | null, y: TargetRect | null) =>
+        (x === null && y === null) || (x !== null && y !== null && rectsEqual(x, y))
+      if (lastGuard && rectsEqual(lastGuard.a, a) && same(lastGuard.e, e) && same(lastGuard.s, s)) return
+      measure()
     }
 
     const fallToNoTarget = () => {
@@ -714,7 +723,14 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
   // survives snapshot churn and live speed changes (the remainder is
   // simply recomputed at the new rate). ───────────────────────────────
   useEffect(() => {
-    if (!snapshot || snapshot.status !== 'interactive-wait' || !current) {
+    // The opening phase is excluded (R3-T6-6): prepare already stands
+    // beat 1 in interactive-wait BEHIND the opening window, and a gate
+    // stamped there spends the beat's reading time on the window's
+    // control list — the gate can stand open the moment the lesson
+    // starts. Standing down while `opening` stands means the stamp is
+    // taken when the phase lifts (this effect re-runs on that very
+    // snapshot), so beat 1's reading time starts at «Empezar».
+    if (!snapshot || snapshot.opening || snapshot.status !== 'interactive-wait' || !current) {
       setGateOpen(false)
       return
     }
@@ -1114,7 +1130,11 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
             DOM, its λ button a real write before «Empezar». The shield
             is pointer-events only (measurement for readiness still
             reads the stage's geometry); the runner's own seed-mode
-            shield is the same stand-down at the scenario's door. */}
+            shield is the same stand-down at the scenario's door. The
+            wrapper itself is the SAME mount the lesson branch renders
+            (R3-T6-6): at «Empezar» only its pointer-events change, so
+            the stage — and every resolution made against it during
+            this phase — survives the confirm alive. */}
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
           {ScenarioView ? <ScenarioView scenario={scenario} /> : props.children}
         </div>
@@ -1160,8 +1180,19 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
 
   return (
     <div className="lp-player">
-      {/* The fiction stage, rendered from the sealed scenario only. */}
-      {ScenarioView ? <ScenarioView scenario={scenario} /> : props.children}
+      {/* The fiction stage, rendered from the sealed scenario only.
+          It stands inside the SAME shield wrapper the opening branch
+          renders (same parent, same seat in the tree): «Empezar» then
+          changes only the wrapper's pointer-events, never the stage's
+          parent — the stage is mounted ONCE for the whole run
+          (R3-T6-6). Before this, the confirm unmounted the shield
+          subtree and mounted a fresh stage, and every prepare-time
+          resolution — beat 1's above all — pointed at the corpse:
+          the first gesture was heard by a detached element and the
+          focus guard watched a dead subtree. */}
+      <div style={{ position: 'absolute', inset: 0 }}>
+        {ScenarioView ? <ScenarioView scenario={scenario} /> : props.children}
+      </div>
 
       {/* Progress thread — 3px at the top edge, accent-filled per scene.
           P3: it paints only after the captioned-birth latch has fired. */}

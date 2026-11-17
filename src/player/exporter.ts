@@ -62,8 +62,27 @@ export function exportFileName(title: string, format: string): string {
 type ExportOpts = { voice: string | null; speed: number; format: 'mp3' | 'wav'; title?: string; summary?: string; origin?: 'create' | 'listen'; id?: string; url?: string; site?: string }
 const queue: { text: string; opts: ExportOpts }[] = []
 
-/** Render now, or after the current job when one is already running (Listen → Library can stack several). */
-export function queueExport(text: string, opts: ExportOpts): 'started' | 'queued' {
+/** The job rendering now, remembered from its synchronous admission
+ *  until it fully ends — the dedupe door below judges a new tap
+ *  against it and against every waiting job. */
+let currentJob: { text: string; opts: ExportOpts } | null = null
+
+/** What makes two admissions THE SAME job (R3-T7-7): the same text
+ *  under the same rendering choices lands as the same clip — title,
+ *  summary and source ride along because they are written onto it.
+ *  A re-render carries its clip id, and the id names it. */
+function jobKey(text: string, opts: ExportOpts): string {
+  return JSON.stringify([text, opts.voice ?? null, opts.speed, opts.format, opts.title ?? '', opts.summary ?? '', opts.origin ?? 'create', opts.id ?? '', opts.url ?? '', opts.site ?? ''])
+}
+
+/** Render now, or after the current job when one is already running (Listen → Library can stack several).
+ *  A tap that repeats the running or a waiting job exactly is a
+ *  'duplicate' and is NOT admitted (R3-T7-7): the door used to accept
+ *  it without limit, so N identical taps cost N full renders and
+ *  landed as N indistinguishable clips on the shelf. */
+export function queueExport(text: string, opts: ExportOpts): 'started' | 'queued' | 'duplicate' {
+  const key = jobKey(text, opts)
+  if ((currentJob && jobKey(currentJob.text, currentJob.opts) === key) || queue.some((q) => jobKey(q.text, q.opts) === key)) return 'duplicate'
   if (claimed || exportJob.get().status === 'running') { queue.push({ text, opts }); exportJob.set({ queued: queue.length }); return 'queued' }
   void runExport(text, opts)
   return 'started'
@@ -80,6 +99,7 @@ export function isQueued(id: string) { return queue.some((q) => q.opts.id === id
 export async function runExport(text: string, opts: ExportOpts) {
   if (claimed || exportJob.get().status === 'running') return
   claimed = true
+  currentJob = { text, opts }
   try {
     await runExportClaimed(text, opts)
   } finally {
@@ -87,6 +107,7 @@ export async function runExport(text: string, opts: ExportOpts) {
     // every later admission behind a phantom job, whatever road the
     // job inside took out.
     claimed = false
+    currentJob = null
   }
 }
 
@@ -148,6 +169,8 @@ async function runExportClaimed(text: string, opts: ExportOpts) {
     // pick switches per segment language, so a mixed-language book is
     // sung by several voices — the credit below is tallied from what
     // each voice truly rendered, not assumed from the first segment.
+    // Speech samples only: the lead-in and gap silences in each chunk
+    // are rendered by no voice and are never tallied (R3-T7-8).
     const voiceSamples = new Map<string, number>()
     // Keep two requests queued so the worker never idles between sentences.
     const inflight: Promise<{ samples: Float32Array; sampleRate: number }>[] = []
@@ -173,7 +196,15 @@ async function runExportClaimed(text: string, opts: ExportOpts) {
       const chunk = concat(lead ? [lead, body, gap] : [body, gap])
       samples += chunk.length
       const vid = pick(segments[i].lang)
-      voiceSamples.set(vid, (voiceSamples.get(vid) ?? 0) + chunk.length)
+      // The credit counts what the voice SANG (R3-T7-8): the speech
+      // body alone. The chunk also carries the lead-in and the
+      // inter-sentence gap — silence() made locally, rendered by no
+      // voice — and tallying the whole chunk let a voice with many
+      // short sentences out-credit one that sang far more, purely
+      // by harvesting pauses (up to 800 ms ÷ speed per sentence).
+      // The key is set even for a breath segment (empty body), so
+      // the voice keeps its first-use place in the `voices` list.
+      voiceSamples.set(vid, (voiceSamples.get(vid) ?? 0) + body.length)
       if (mp3) await mp3.push(chunk)
       else pcm.push(chunk)
       exportJob.set({ done: i + 1, audioSec: samples / SR })

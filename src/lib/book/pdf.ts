@@ -14,7 +14,12 @@ const lettersOf = (t: string) => foldT(t).replace(/[^a-z\u00f1]/g, '')
 const quality = (t: string) => {
   const toks = t.split(/\s+/).filter(Boolean)
   if (!toks.length) return 0
-  const good = toks.filter((w) => /^[("“'‘¿¡[]*\p{L}{2,}[\p{L}'’-]*[.,;:!?'’"”)\]…]*$/u.test(w) || /^[(\[]?\d+[.,:)\]]?$/.test(w) || /^[aAyYoOeIu][.,]?$/.test(w)).length
+  // Cure R3-T8-22: a lone initial ("J.", "R.") counted as a non-word,
+  // so a line of initials — "J. R. R. Tolkien", the exact shape of a
+  // title-page byline — scored 0.25 and the noise filter below ate
+  // it whole. An initial is a word's shape, not noise's: a single
+  // capital with its period counts as a word here.
+  const good = toks.filter((w) => /^[("“'‘¿¡[]*\p{L}{2,}[\p{L}'’-]*[.,;:!?'’"”)\]…]*$/u.test(w) || /^[(\[]?\d+[.,:)\]]?$/.test(w) || /^[aAyYoOeIu][.,]?$/.test(w) || /^\p{Lu}\.?$/u.test(w)).length
   return good / toks.length
 }
 function lev(a: string, b: string): number {
@@ -213,7 +218,19 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
     for (const l of lines) { const lead = l.text.length - l.text.trimStart().length; l.text = l.text.trim(); if (lead) l.items.forEach((i) => { i.s = Math.max(0, i.s - lead); i.e = Math.max(0, i.e - lead) }) }
     // Scanned page? When the text layer gave (almost) nothing, read the page
     // with OCR instead — and only then; the rest of the pipeline can't tell.
-    if (lines.reduce((n2, l) => n2 + l.text.length, 0) < 30) {
+    // Cure R3-T8-21: trigger and verdict used to judge QUANTITY only.
+    // A page carrying 30+ chars of WRONG layer (a mismatched or
+    // garbled layer) never earned an OCR look at all; and when OCR
+    // joined a layer it could not replace, exact-text dedupe kept
+    // BOTH readings of a line the two disagreed on — the page read
+    // its garbage, then read the page again. Quality is a witness
+    // on both doors now: a layer whose words do not look like words
+    // earns the OCR look at any length, and the decisions below
+    // weigh which reading reads like language, not only how much
+    // of it there is.
+    const layerChars = lines.reduce((n2, l) => n2 + l.text.length, 0)
+    const layerQ = quality(lines.map((l) => l.text).join(' '))
+    if (layerChars < 30 || layerQ < 0.45) {
       try {
         step('Reading scanned pages (OCR)', p - 1, N)
         const o = await ocrLines(page, p)
@@ -227,13 +244,31 @@ export async function parsePdf(buf: ArrayBuffer, step: (s: string, done: number,
           // only when it yields materially more text than the layer
           // holds; otherwise its lines JOIN the layer, minus the ones
           // the layer already carries.
-          const layerChars = lines.reduce((n2, l) => n2 + l.text.length, 0)
           const ocrChars = o.reduce((n2, l) => n2 + l.text.length, 0)
-          if (ocrChars > layerChars * 3 + 30) { lines.length = 0; lines.push(...o) }
+          const ocrQ = quality(o.map((l) => l.text).join(' '))
+          // Takeover roads: the R2 quantity road, now requiring OCR
+          // to read at least as cleanly as what it replaces — and,
+          // for a garbled layer, a quality road: OCR reads like
+          // language (≥0.6) where the layer does not (<0.45) and
+          // carries at least half the layer's bulk.
+          const ocrTakes = (ocrChars > layerChars * 3 + 30 && ocrQ >= layerQ)
+            || (layerQ < 0.45 && ocrQ >= 0.6 && ocrChars >= layerChars * 0.5)
+          if (ocrTakes) { lines.length = 0; lines.push(...o) }
           else {
             const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase()
             const seen = new Set(lines.map((l) => norm(l.text)))
-            for (const l of o) if (!seen.has(norm(l.text))) lines.push(l)
+            for (const l of o) {
+              const n = norm(l.text)
+              if (seen.has(n)) continue
+              // The same line read twice, differently: exact dedupe
+              // kept both, so the page spoke its garbage and then
+              // the correction. A near-duplicate (small edit
+              // distance over a line of any real length) collapses
+              // to the reading that reads like language.
+              const near = lines.findIndex((x) => { const a = norm(x.text); return Math.min(a.length, n.length) > 8 && lev(a, n) <= Math.max(2, Math.floor(Math.min(a.length, n.length) * 0.25)) })
+              if (near >= 0) { if (quality(l.text) > quality(lines[near].text)) lines[near] = l; continue }
+              lines.push(l)
+            }
           }
         }
       } catch { /* the page keeps whatever the text layer had */ }

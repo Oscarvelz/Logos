@@ -379,6 +379,15 @@ export function createScenario(options: ScenarioOptions = {}) {
      * the stage can show the gold dot.
      */
     setLambda(on: boolean): void {
+      // A torn-down scenario's wire is DEAD (R3-T6-3): teardown is the
+      // funnel every exit restores through, and the player keeps this
+      // stage mounted behind the done card — its λ medallion still
+      // rendered, still tappable — with no lesson alive to own a write
+      // and no teardown left to restore one. After teardown the verb
+      // writes nothing: not the real switch, not the ledger, not the
+      // settings copy. (During the lesson the hand is real — the
+      // disarm stands at teardown, not before.)
+      if (tornDown) return
       // The ledger moves first: whatever discipline governs the write,
       // the fiction's truth is now `on`.
       fictionLambda = on
@@ -402,6 +411,9 @@ export function createScenario(options: ScenarioOptions = {}) {
      * not move.
      */
     setLambdaSeeded(on: boolean): void {
+      // The seeded door dies at teardown with the presented one
+      // (R3-T6-3): a discarded scenario absorbs nothing further.
+      if (tornDown) return
       fictionLambda = on
       patchSettings({ bubbleOn: on })
     },

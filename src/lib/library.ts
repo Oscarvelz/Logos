@@ -31,8 +31,17 @@ const DB = 'logos'
 const STORE = 'clips'
 const META_STORE = 'clipmeta'
 
+/** One connection for the page, memoised — the discipline books.ts
+    has always kept and this module never did (R3-T3-4): open() used
+    to mint a fresh connection for EVERY transaction and close none
+    of them, so a long listening session (a tracker tick every 5 s,
+    every pause, every star) accumulated hundreds of live connections
+    to the same database. The memo is dropped when a newer version
+    arrives and that connection closes itself, and after a failed
+    open, so the next caller retries honestly. */
+let dbp: Promise<IDBDatabase> | null = null
 function open(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  dbp ??= new Promise((resolve, reject) => {
     const req = indexedDB.open(DB, 2)
     // R2-T3-6 cure: a blocked upgrade used to hang this promise forever —
     // an older Logos tab still holding the v1 database open wedges the v2
@@ -58,11 +67,12 @@ function open(): Promise<IDBDatabase> {
     }
     req.onsuccess = () => {
       const db = req.result
-      db.onversionchange = () => { try { db.close() } catch { /* already closed */ } }
+      db.onversionchange = () => { try { db.close() } catch { /* already closed */ } dbp = null }
       resolve(db)
     }
-    req.onerror = () => reject(req.error)
+    req.onerror = () => { dbp = null; reject(req.error) }
   })
+  return dbp
 }
 
 async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>, store: string = STORE): Promise<T> {
@@ -107,41 +117,56 @@ const putMetaOnly = async (meta: ClipMeta): Promise<void> => {
 
 export const library = createStore<{ clips: ClipMeta[]; loaded: boolean; loadError: boolean }>({ clips: [], loaded: false, loadError: false })
 
+/** The full store's record ids, for the backfill census below. Keys
+    only, where the platform offers them (every real browser does):
+    a refresh must never materialise the blobs (M-11). A store with
+    no key enumeration falls back to reading the records and using
+    nothing but their ids — the same census, at the old price. */
+async function fullRecordIds(): Promise<string[]> {
+  try {
+    const keys = await tx<IDBValidKey[]>('readonly', (s) => s.getAllKeys() as IDBRequest<IDBValidKey[]>)
+    return keys.map((k) => String(k))
+  } catch {
+    const full = await tx<Clip[]>('readonly', (s) => s.getAll() as IDBRequest<Clip[]>)
+    return full.map((c) => c.id)
+  }
+}
+
 export async function refreshLibrary() {
   try {
     let clips = await tx<ClipMeta[]>('readonly', (s) => s.getAll() as IDBRequest<ClipMeta[]>, META_STORE)
-    if (!clips.length) {
-      // First refresh after the twin store was created (or a library whose
-      // writes predate it): backfill ONCE from the full records, then
-      // never read a blob for a refresh again.
-      const full = await tx<Clip[]>('readonly', (s) => s.getAll() as IDBRequest<Clip[]>)
-      if (full.length) {
-        // R2-T3-9: the backfill used to write the metas of the records
-        // the EARLIER read had seen, in a separate later transaction —
-        // a delete landing between the read and the write was
-        // resurrected as a ghost meta (listed, unplayable, undeletable
-        // except by deleting it a second time). The backfill now
-        // re-reads each record INSIDE the write transaction and writes
-        // only the metas of records still there: readwrite
-        // transactions on these stores serialise, so the delete and
-        // the backfill can no longer interleave — one runs wholly
-        // before the other, and either order ends with the twin
-        // telling the truth. The list below is built from what the
-        // backfill actually wrote, so the shown shelf agrees.
-        const present: ClipMeta[] = []
-        await txBoth((cs, ms) => {
-          for (const c of full) {
-            const g = cs.get(c.id) as IDBRequest<Clip | undefined>
-            g.onsuccess = () => {
-              if (!g.result) return
-              const m = metaOf(g.result)
-              ms.put(m)
-              present.push(m)
-            }
+    // R3-T3-3: the backfill used to run ONLY when the twin read came
+    // back completely empty — the first-refresh-after-the-twin-store
+    // shape it was written for. One ordinary clip write landing
+    // before that refresh closed the gate for good: the twin then
+    // held exactly that clip, the gate never opened again, and every
+    // pre-twin clip stayed invisible on the shelf (and out of every
+    // backup, which iterates the shown list) while its record sat
+    // intact in the store. The gate is now a census, taken on every
+    // refresh: the full store's ids against the twin's, and any
+    // record missing its twin is backfilled, whenever it is noticed.
+    const twinIds = new Set(clips.map((c) => c.id))
+    const missing = (await fullRecordIds()).filter((id) => !twinIds.has(id))
+    if (missing.length) {
+      // R2-T3-9's discipline, unchanged: the backfill re-reads each
+      // record INSIDE the write transaction and writes only the
+      // metas of records still there — a delete landing between the
+      // census and the write is not resurrected as a ghost meta —
+      // and the list is built from what was actually written, so
+      // the shown shelf agrees with the store.
+      const present: ClipMeta[] = []
+      await txBoth((cs, ms) => {
+        for (const id of missing) {
+          const g = cs.get(id) as IDBRequest<Clip | undefined>
+          g.onsuccess = () => {
+            if (!g.result) return
+            const m = metaOf(g.result)
+            ms.put(m)
+            present.push(m)
           }
-        })
-        clips = present
-      }
+        }
+      })
+      clips = [...clips, ...present]
     }
     library.set({ clips: clips.sort((a, b) => b.createdAt - a.createdAt), loaded: true, loadError: false })
   } catch {
@@ -221,7 +246,13 @@ const clipWriteChains = new Map<string, Promise<unknown>>()
 function enqueueClipWrite<T>(id: string, job: () => Promise<T>): Promise<T> {
   const prev = clipWriteChains.get(id) ?? Promise.resolve()
   const runJob = prev.then(job, job)
-  clipWriteChains.set(id, runJob.then(() => undefined, () => undefined))
+  const tail = runJob.then(() => undefined, () => undefined)
+  clipWriteChains.set(id, tail)
+  // The map holds only LIVE chains (R3-T3-4's family): once this tail
+  // settles with nothing newer queued behind it, its entry goes — the
+  // map used to keep one settled promise per clip id for the life of
+  // the page, a small leak riding beside the connection leak.
+  void tail.then(() => { if (clipWriteChains.get(id) === tail) clipWriteChains.delete(id) })
   return runJob
 }
 
