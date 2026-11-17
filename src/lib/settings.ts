@@ -213,10 +213,22 @@ try {
     // legacy flag) always applies — that is the migration itself,
     // not the healing.
     const SHIPPED_PRE140_FAVORITES = ['pk_alba', 'pk_lola']
+    // The proof covers EVERY field the apply branch below mutates —
+    // favorites, both defaults, and the override it clears
+    // (R2-T5-1 cure, 2026-11-17): the first proof checked only the
+    // first two, so a burned-flag device whose owner had since
+    // chosen a Listen override presented the "proven" fingerprint
+    // and the healing silently destroyed the unexamined third
+    // field. A pre-1.4.0 shipped state carries no override the
+    // healing needs to clear (load() has already normalised a
+    // non-string to null), so the proof now requires it null: a
+    // live override is proof the state is NOT the untouched
+    // shipped one, and the pass leaves the whole state standing.
     const provenPre140 = Array.isArray(initial.favorites)
       && initial.favorites.length === SHIPPED_PRE140_FAVORITES.length
       && initial.favorites.every((f, i) => f === SHIPPED_PRE140_FAVORITES[i])
       && initial.defaultVoice.en === 'pk_alba' && initial.defaultVoice.es === 'pk_lola'
+      && initial.voiceOverride === null
     if (!flagIs('logos.mig140') || provenPre140) {
       initial.favorites = [...PHONON_FAVORITES, ...initial.favorites.filter((f) => !PHONON_FAVORITES.includes(f))]
       // Per key, in place (M-26 residue): rebuilding defaultVoice as

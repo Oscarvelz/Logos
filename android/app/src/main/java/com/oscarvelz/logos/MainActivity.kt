@@ -169,6 +169,10 @@ class MainActivity : Activity() {
                     "<p><a style=\"color:#e9bd72\" href=\"$home\">Try again</a></p></body></html>", "text/html", "utf-8", null)
             }
             override fun onPageFinished(v: WebView, url: String?) {
+                // R2-T2-1: a finished load moves the shell's page epoch,
+                // so a backstage drain can never be earned by a reload's
+                // own init push inside the watch window.
+                BubbleService.notePageLoaded()
                 // A bubble visit that arrived while the page was still
                 // loading: land it on the listening area now that the
                 // page can hear the word.

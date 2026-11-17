@@ -58,7 +58,12 @@
  * runner's prepare phase — the clock held, nothing persisted — behind
  * a centred opening window that names the controls and their jobs.
  * Only «Empezar» / "Start" (confirmStart) births the card; «Ahora no»
- * / "Not now" leaves cleanly (abortClean) with the record untouched.
+ * / "Not now" leaves cleanly (abortClean) with the record untouched —
+ * unless the opening was BLOCKED by a required entry miss, when the
+ * same exit finalises the miss onto the record (R2-T6-6): the lesson's
+ * broken door is a fact the index must show, not the learner's
+ * declination. While the window stands, the stage behind it is
+ * shielded (R2-T6-4): no stage control answers a finger yet.
  * THE CARD IS BORN WHERE IT WILL LIVE (Oscar's law, same lane): while
  * its seat is being measured the card stays invisible — the seat comes
  * from geometry.ts's cardSeat() and the card renders only once a seat
@@ -765,10 +770,12 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
   }
 
   /** P1 — the opening window's «Ahora no»: the clean abort (nothing was
-   *  ever written), then the same exit the ✕ confirm already wires. */
+   *  ever written), then the same exit the ✕ confirm already wires.
+   *  On a BLOCKED opening abortClean finalises the entry miss instead
+   *  (R2-T6-6) — the exit then reports the runner's own endReason. */
   const handleNotNow = () => {
     runnerRef.current?.abortClean()
-    notifyExit('abort', null)
+    notifyExit(runnerRef.current?.getSnapshot().endReason ?? 'abort', null)
   }
 
   const handleStayHere = () => {
@@ -1032,8 +1039,16 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
   if (snapshot?.opening) {
     return (
       <div className="lp-player">
-        {/* The fiction stage, rendered from the sealed scenario only. */}
-        {ScenarioView ? <ScenarioView scenario={scenario} /> : props.children}
+        {/* The fiction stage, rendered from the sealed scenario only —
+            and SHIELDED for the whole phase (R2-T6-4): the window is
+            centred and the stage around it would otherwise stay live
+            DOM, its λ button a real write before «Empezar». The shield
+            is pointer-events only (measurement for readiness still
+            reads the stage's geometry); the runner's own seed-mode
+            shield is the same stand-down at the scenario's door. */}
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+          {ScenarioView ? <ScenarioView scenario={scenario} /> : props.children}
+        </div>
 
         <div className="lp-openwin" role="dialog" aria-label={label('beforeStart')}>
           <p className="lp-openwin-t">

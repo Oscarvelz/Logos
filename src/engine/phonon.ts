@@ -18,6 +18,22 @@ export const phononModelIdentity = (): string => MODEL
 /** Every file PhononTTS.load needs out of the bucket — the exact set
  *  named in phononEnsure's load spec below. */
 const PHONON_MODEL_FILES = ['model.q8.gguf', 'tokenizer.json', 'config.json', 'default-voice.safetensors']
+/** Each model file's true size at the pinned commit above (R2-T4-1):
+ *  the content-length the pinned URLs themselves declare (HEAD at
+ *  commit 1191d231…, measured 2026-11-17; the four sum to 75,092,127 —
+ *  the declared PHONON_SIZE_MB). The probe measures bodies against
+ *  this table because the vendored storeBytes mints each entry's
+ *  content-length header from the body it was handed, so a stored
+ *  header can never disagree with its body: header agreement proves
+ *  nothing, and presence alone certified 64 bytes of garbage as a
+ *  ~75 MB model. If MODEL is ever re-pinned, re-measure this table
+ *  from the new commit before shipping. */
+const PHONON_MODEL_SIZES: Record<string, number> = {
+  'model.q8.gguf': 74_553_568,
+  'tokenizer.json': 277_749,
+  'config.json': 4_674,
+  'default-voice.safetensors': 256_136,
+}
 
 /**
  * Cache-integrity pass (T4-4), mirroring Pocket's 1.4.147 rule. The
@@ -36,10 +52,17 @@ async function phononEvictDamaged(): Promise<void> {
     for (const req of await c.keys()) {
       const res = await c.match(req)
       if (!res) continue
+      // A model file is also evicted when its body is not the pinned
+      // file's true size (R2-T4-1) — measured from the body itself,
+      // header or no header, so a same-shape garbage entry is dropped
+      // here and the loader downloads the real file instead of
+      // feeding the GGUF parser bytes that can only fail.
+      const name = PHONON_MODEL_FILES.find((f) => req.url === MODEL + f)
       const declared = Number(res.headers.get('content-length') ?? 0)
-      if (!(declared > 0)) continue
+      if (!(declared > 0) && !name) continue
       const actual = (await res.blob()).size
-      if (actual !== declared) { try { await c.delete(req) } catch { /* ignore */ } }
+      if (declared > 0 && actual !== declared) { try { await c.delete(req) } catch { /* ignore */ } continue }
+      if (name && actual !== PHONON_MODEL_SIZES[name]) { try { await c.delete(req) } catch { /* ignore */ } }
     }
   } catch { /* ignore */ }
 }
@@ -410,7 +433,15 @@ export async function phononCached(): Promise<boolean> {
     // also needs the tokenizer, the config and the default voice, and
     // certifying from model.q8.gguf alone reported "Downloaded" for
     // a model that could only fail — offline, at play time.
-    for (const name of PHONON_MODEL_FILES) if (!(await c.match(MODEL + name))) return false
+    // And presence is not enough (R2-T4-1): each body is measured
+    // against the pinned file's true size (PHONON_MODEL_SIZES), the
+    // same standard Pocket's probe applies — a bucket of same-shape
+    // garbage no longer certifies as a downloaded model.
+    for (const name of PHONON_MODEL_FILES) {
+      const res = await c.match(MODEL + name)
+      if (!res) return false
+      if ((await res.blob()).size !== PHONON_MODEL_SIZES[name]) return false
+    }
     return true
   } catch { /* ignore */ }
   return false

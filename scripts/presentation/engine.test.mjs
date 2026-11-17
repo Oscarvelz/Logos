@@ -1554,9 +1554,12 @@ describe('P1 prepare / confirm / abortClean', () => {
     runner.userAct()
     assert.notEqual(runner.getSnapshot().status, 'done', 'transport verbs do not exit the blocked prepare')
     runner.abortClean()
-    assert.equal(runner.getSnapshot().status, 'aborted')
-    assert.equal(runner.getSnapshot().cleanAbort, true)
-    assert.equal(storage.getItem(PRESENTATION_STATE_KEY), null)
+    // R2-T6-6 re-rule (187): exiting a BLOCKED opening finalises the miss —
+    // the record is written (needs-refresh), never silently discarded.
+    assert.equal(runner.getSnapshot().status, 'done')
+    assert.equal(runner.getSnapshot().endReason, 'required-anchor-miss')
+    const file = JSON.parse(storage.getItem(PRESENTATION_STATE_KEY))
+    assert.equal(file.modules['engine-probe'].state, 'needs-refresh', 'the blocked miss is on record, not discarded')
   })
 
   test('a finish reached during prepare (entry skip chain runs off the end) defers its persist + teardown to confirm', async () => {

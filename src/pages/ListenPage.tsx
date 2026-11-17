@@ -18,7 +18,7 @@ import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
 import { exportJob, queueExport } from '../player/exporter.ts'
 import { navigate } from '../lib/router.ts'
 import { nowReadingFor, posAt } from '../lib/book/nowreading.ts'
-import { updateBook } from '../lib/books.ts'
+import { updateBook, getContent, progressAt, progressPatch } from '../lib/books.ts'
 import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { WebImport } from '../components/webimport.tsx'
 import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
@@ -505,7 +505,17 @@ function ListenHead({ text, lang, playing, remaining }: { text: string; lang: La
     const s = listen.get()
     const seg = s.text === text ? s.segments[s.current] : undefined
     const at = posAt(book, seg?.start ?? 0)
-    void updateBook(book.id, { pos: at }, false).finally(() => { location.hash = `#/book/${encodeURIComponent(book.id)}` })
+    // R2-T3-5: pos never travels alone. M-7's cure made the reader's
+    // saver write the pos+progress+done triple as one truth; this door
+    // wrote { pos } only, so a finished book listened back at a third
+    // kept progress 1 / done true — the shelf called it Finished while
+    // its saved place sat a third in. Same derivation as BookPage's
+    // saver: the pair is computed from the FRESH record and the live
+    // place, with the book's chapters fetched for the word count.
+    void (async () => {
+      const content = await getContent(book.id).catch(() => null)
+      await updateBook(book.id, (cur) => ({ pos: at, ...progressPatch(cur, progressAt(cur, content?.chapters ?? null, at)) }), false)
+    })().finally(() => { location.hash = `#/book/${encodeURIComponent(book.id)}` })
   }
   const [ai, setAi] = useState<{ key: string; title?: string; summary?: string } | null>(null)
   useEffect(() => {

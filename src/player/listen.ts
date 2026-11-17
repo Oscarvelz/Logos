@@ -2,7 +2,7 @@
 // synthesis, a single <audio> element (background + lock-screen friendly),
 // Media Session controls, and a device-voice bridge while the neural voice downloads.
 import { createStore } from '../lib/store.ts'
-import { settings } from '../lib/settings.ts'
+import { settings, loadLastText } from '../lib/settings.ts'
 import { segmentText, speakable, estimateSeconds, pauseAfter, detectLang, type Segment } from '../lib/text.ts'
 import { voiceById, type Lang } from '../lib/voices.ts'
 import { encodeWav, envelope, silence, trimSilence, concat, applyGain, levelGain } from '../lib/audio.ts'
@@ -95,22 +95,63 @@ export function sentenceAt(offs: number[], t: number): number {
  * leaps hours in a quarter second is distrusted and dropped, and the
  * trusted baseline does not move with it — the next honest sample is
  * measured against the last honest one, so a transient glitch can
- * never drag the playhead, and a persistent one is never accumulated
- * into acceptance (the wall stamp refreshes on rejection, so the
- * budget is always per-interval, never a growing allowance).
+ * never drag the playhead.
+ *
+ * Round 2 (R2-T1-1) found the freeze inside that bookkeeping: a
+ * rejection refreshed only the WALL stamp, so the budget stayed
+ * per-interval while the distance from the trusted position was
+ * cumulative — and one honest event produces a super-budget interval:
+ * a mid-track rate DROP, whose last interval was honestly spent at
+ * the old, faster rate but is budgeted at the new, slower one. The
+ * debt then outgrew every later budget and the gate froze for the
+ * rest of the track (the track end's forced sync included, so
+ * advance() replayed from the frozen sentence). Two repairs, neither
+ * touching the anti-teleport spine:
+ *  - setRate() re-anchors the gate: a rate change is a KNOWN honest
+ *    discontinuity, so the first sample at the new rate starts a
+ *    fresh baseline instead of being judged across the change.
+ *  - A rejection re-bases once the accumulated wall time since the
+ *    baseline could HONESTLY cover the distance at the current rate
+ *    (the budget is the whole span's, summed per interval so a rate
+ *    rise mid-span cannot inflate it) — plus, at once, when the
+ *    clock is not advancing past the baseline at all, where no debt
+ *    can grow. A teleport earns acceptance only after as much real
+ *    time as honestly travelling its distance takes — by then it is
+ *    no longer a sprint, and a real glitch clock never sits still
+ *    that long being believed: each of its samples is still judged,
+ *    and the playhead moves only when the span's honesty covers it.
  */
 export class PlayheadGate {
   private base: { url: string; t: number; wall: number } | null = null
-  reset() { this.base = null }
+  /** Wall time and rate of the latest sample, for the span budget. */
+  private last: { wall: number; rate: number } | null = null
+  /** Honest travel earned since the baseline, summed per interval. */
+  private span = 0
+  reset() { this.base = null; this.last = null; this.span = 0 }
   /** The sentence the playhead may move to, or null to distrust this sample. */
   check(url: string, t: number, wall: number, rate: number, clockIdx: number, current: number): number | null {
     const b = this.base
-    if (!b || b.url !== url) { this.base = { url, t, wall }; return clockIdx }
-    if (clockIdx === current) { this.base = { url, t, wall }; return clockIdx }
+    if (!b || b.url !== url) { this.base = { url, t, wall }; this.last = { wall, rate }; this.span = 0; return clockIdx }
+    if (clockIdx === current) { this.base = { url, t, wall }; this.last = { wall, rate }; this.span = 0; return clockIdx }
     const dtWall = Math.max(0, (wall - b.wall) / 1000)
     const budget = dtWall * Math.max(0.25, rate) + 0.35
-    if (Math.abs(t - b.t) <= budget) { this.base = { url, t, wall }; return clockIdx }
-    this.base = { url: b.url, t: b.t, wall }
+    if (Math.abs(t - b.t) <= budget) { this.base = { url, t, wall }; this.last = { wall, rate }; this.span = 0; return clockIdx }
+    // Rejected. Earn toward a re-base: this interval's honest travel at
+    // the rate it was actually played at (the previous sample's rate),
+    // summed — never the whole span at today's rate.
+    if (this.last) this.span += Math.max(0, (wall - this.last.wall) / 1000) * Math.max(0.25, this.last.rate)
+    this.last = { wall, rate }
+    const dist = t - b.t
+    if (dist <= 0 || this.span + 0.35 >= dist) {
+      // The clock is not advancing past the baseline (no debt can
+      // grow), or the span since the baseline honestly covers the
+      // distance: re-base here. This sample still does not move the
+      // playhead — the next one is judged against the new baseline.
+      this.base = { url, t, wall }
+      this.span = 0
+    } else {
+      this.base = { url: b.url, t: b.t, wall }
+    }
     return null
   }
 }
@@ -668,12 +709,13 @@ function finish() {
 // ── Device-voice bridge (speechSynthesis) ──
 
 /** True while this page has a session living in the shell's device
- *  voice (cure H-12/T1-2). Set only by handToShell; cleared when the
- *  page ends the shell's voice (stopShellVoice), when the shell
- *  reports the native session over (applyNativePos), or when a new
- *  session replaces this one. It is the guard that keeps a late or
- *  foreign native-progress report from writing into a session it
- *  does not belong to. */
+ *  voice (cure H-12/T1-2). Set by handToShell — or by ADOPTION
+ *  (R2-T1-2: a fresh page that finds a native session outlived the
+ *  page that handed it over); cleared when the page ends the shell's
+ *  voice (stopShellVoice), when the shell reports the native session
+ *  over (applyNativePos), or when a new session replaces this one.
+ *  It is the guard that keeps a late or foreign native-progress
+ *  report from writing into a session it does not belong to. */
 let shellHanded = false
 
 /** Hand the session to the shell's real device voice (1.4.122): the
@@ -724,8 +766,43 @@ export function handToShell(i: number): boolean {
  * end (the store finishes); a native session that simply stopped
  * reports active:false without done, and the store goes quiet.
  */
+/**
+ * Adoption (cure R2-T1-2). A page reload during a shell-native
+ * session used to orphan it: `shellHanded` is page memory, so the
+ * fresh page started empty, its forced load publish retired the
+ * media card over a still-reading device voice, and every later
+ * nativepos report — even the session's natural `done` — was
+ * refused, so the store never rejoined and never finished.
+ *
+ * The door: a report that arrives with no page-side handoff may be
+ * ADOPTED, under strict conditions that keep the guard's promise —
+ * the store must be INACTIVE (a page with a session of its own is
+ * never written into; stop()/loadText() clear the guard for exactly
+ * that reason), no clip may hold the stage, and the report must be
+ * a live session (active) or a finished one (done). The session is
+ * restored from the persisted last text — the text this app handed
+ * the shell is the text it keeps — and the ordinary report body
+ * below then maps the position and, for `done`, closes the record.
+ * With no persisted text there is nothing honest to restore, and
+ * the report is refused as before.
+ */
+function adoptNativeSession(pos: { active?: boolean; done?: boolean }): boolean {
+  if (!pos.active && !pos.done) return false
+  const s = listen.get()
+  if (s.active) return false
+  const cp = clipPlayer.get()
+  if (cp.key && !cp.key.startsWith('preview:')) return false
+  const text = loadLastText()
+  if (!text.trim()) return false
+  loadText(text)
+  if (!listen.get().active) return false
+  shellHanded = true
+  listen.set({ mode: 'device', playing: false, finished: false, buffering: false, error: null })
+  return true
+}
+
 export function applyNativePos(pos: { idx?: number; total?: number; playing?: boolean; active?: boolean; done?: boolean }): void {
-  if (!shellHanded) return
+  if (!shellHanded && !adoptNativeSession(pos)) return
   const s = listen.get()
   if (!s.active || s.mode !== 'device') return
   if (!pos.active) {
@@ -1117,6 +1194,12 @@ export function endSession() {
 export function setRate(rate: number) {
   settings.set({ listenSpeed: rate })
   if (audio) audio.playbackRate = rate
+  // A rate change is a known honest discontinuity (R2-T1-1): the
+  // interval straddling it was spent at the old rate but would be
+  // budgeted at the new one — after a DROP that mismatch froze the
+  // playhead gate for the rest of the track. Re-anchor: the first
+  // sample at the new rate starts a fresh baseline.
+  playheadGate.reset()
 }
 
 /** The one speed ladder — the Listen sheet and the floating bubble step along it. */
@@ -1415,6 +1498,18 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
     // back onto) the reading's claim without waiting for the
     // reading's store to change.
     clipPlayer.subscribe(() => publish())
+    // Before the fresh page's first word (R2-T1-2): ask the shell
+    // whether a native session outlived the page that handed it
+    // over. If one is live (or just finished), applyNativePos
+    // adopts it into this page's empty store, and the forced
+    // publish below then speaks the ADOPTED truth instead of
+    // retiring the card over a still-reading device voice. An old
+    // shell without the getter answers nothing, exactly as at the
+    // poke listener below.
+    try {
+      const raw = droid.bubbleNativePos?.()
+      if (raw) applyNativePos(JSON.parse(raw) as { idx?: number; total?: number; playing?: boolean; active?: boolean; done?: boolean })
+    } catch { /* an old or confused shell: the load truth stays page-known */ }
     // The fresh page's first word to the shell (H-11): publish the
     // current truth once, on load — for a fresh page that truth is
     // inactive, and the shell retires whatever card a dead page left

@@ -3,6 +3,12 @@
 // reported to the rest of the app through engine.ts.
 import { createStore } from '../lib/store.ts'
 import type { PocketRequest, PocketResponse } from './pocket.worker.ts'
+// The C-2 hash machinery (R2-T4-2): the certification probe below
+// verifies content with the very digest function fetchAsset verifies
+// downloads with, so probe and loader measure by one standard.
+// @ts-expect-error pocket-assets.js is the vendored-assets replacement
+// module (plain JS, no type declarations); only its sha256Hex is used.
+import { sha256Hex } from './pocket-assets.js'
 
 export type PocketLang = 'en' | 'es'
 export const POCKET_LANGUAGE: Record<PocketLang, string> = { en: 'english', es: 'spanish' }
@@ -400,18 +406,34 @@ export function pocketModelDigest(lang: PocketLang): string | null {
 }
 
 /** Measure one cache entry against its manifest identity: the stored
- *  header must agree with the body (the 1.4.147 rule), and the body
- *  must be exactly the declared size — or, when no size is declared,
- *  plainly model-sized. Shared by the primary probe and the offline
- *  fallback so both certify by the same standard. */
-async function entryMatchesModel(cache: Cache, key: { url: string }, expectedBytes?: number): Promise<boolean> {
+ *  header must agree with the body (the 1.4.147 rule), the body must
+ *  be exactly the declared size — or, when no size is declared,
+ *  plainly model-sized — and, whenever the digest is known, the body
+ *  must HASH to it (R2-T4-2). Size alone certified a same-length
+ *  substitution: the digest recorded for the key was used only to
+ *  find the entry, never to verify what was filed under it, while
+ *  keep.ts stamps bind themselves to that same digest. The hash is
+ *  computed with the C-2 machinery (sha256Hex in pocket-assets.js —
+ *  the function fetchAsset verifies downloads with), and only after
+ *  the cheap size bars pass. Shared by the primary probe and the
+ *  offline fallback so both certify by the same standard. */
+async function entryMatchesModel(cache: Cache, key: { url: string }, expectedBytes?: number, expectedSha?: string): Promise<boolean> {
   const res = await cache.match(key as Request)
   if (!res) return false
-  const actual = (await res.blob()).size
+  const buf = await res.arrayBuffer()
+  const actual = buf.byteLength
   const declared = Number(res.headers.get('content-length') ?? 0)
   if (declared > 0 && declared !== actual) return false
-  if (typeof expectedBytes === 'number' && expectedBytes > 0) return actual === expectedBytes
-  return actual > 100_000_000
+  if (typeof expectedBytes === 'number' && expectedBytes > 0) {
+    if (actual !== expectedBytes) return false
+  } else if (actual <= 100_000_000) return false
+  const sha = typeof expectedSha === 'string' ? expectedSha.trim().toLowerCase() : ''
+  if (sha) {
+    let actualSha: string
+    try { actualSha = await sha256Hex(buf) } catch { return false }
+    if (actualSha !== sha) return false
+  }
+  return true
 }
 
 /** Whether a language's model is already on this phone. */
@@ -446,7 +468,7 @@ export async function pocketCached(lang: PocketLang = 'en'): Promise<boolean> {
         // body — reports "downloaded".
         const hitKey = keys.find((k) => k.url.includes(`${file}?v=${sha}`))
         if (!hitKey) return false
-        return await entryMatchesModel(cache, hitKey, m.model?.bytes)
+        return await entryMatchesModel(cache, hitKey, m.model?.bytes, sha)
       }
     } catch { /* offline — fall through to the language-bound fallback */ }
     // Offline fallback (M-18, was T4-10): the old shape loop iterated
@@ -462,7 +484,7 @@ export async function pocketCached(lang: PocketLang = 'en'): Promise<boolean> {
     if (!known) return false
     const hitKey = keys.find((k) => k.url.includes(`${known.file}?v=${known.sha}`))
     if (!hitKey) return false
-    return await entryMatchesModel(cache, hitKey, known.bytes)
+    return await entryMatchesModel(cache, hitKey, known.bytes, known.sha)
   } catch { /* ignore */ }
   return false
 }
