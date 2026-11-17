@@ -170,7 +170,10 @@ export interface CardSeat {
  *     step's effect portion lies below its anchor, the valid seat is
  *     the one above — the non-intersection rule already yields that;
  *     the order is encoded here so it never depends on the focus-half
- *     rule the legacy seat uses).
+ *     rule the legacy seat uses). When neither stands, a SIDE seat
+ *     beside the footprint (right, then left — R2-T6-8) is tried
+ *     before any covering fallback: a seat that covers nothing always
+ *     beats one that covers something.
  *   · if NEITHER candidate is valid, the seat is the side whose
  *     clamped-into-the-viewport placement covers LESS: first by
  *     whether it covers the anchor rect itself (`focus`) — a side
@@ -238,6 +241,33 @@ export function cardSeat(
 
   if (aboveValid) return { left, bottom: viewportH - aboveBottomEdge }
   if (belowValid) return { left, top: belowTop }
+
+  /* SIDE seats (R2-T6-8 — Oscar's tablet finding): before any seat
+   * that COVERS part of the footprint is even considered, a seat
+   * BESIDE it that covers nothing wins — the fallback's own first
+   * principle (a side that avoids the subject beats one that covers
+   * it), extended from the anchor to the whole footprint. A side seat
+   * needs the card's real height: the card stands in the vertical run
+   * beside the footprint, top-aligned with it and clamped into the
+   * viewport, and is valid only if it fits that run whole and never
+   * intersects the expanded footprint. Right side first (the reading
+   * direction), then left. On phone widths neither side can fit a
+   * card, so phone seats are untouched. */
+  if (hasHeight) {
+    const sideTop = Math.min(
+      Math.max(fpTop, VIEW_MARGIN),
+      Math.max(VIEW_MARGIN, bottomLimit - (cardHeight as number)),
+    )
+    const sideRect = (l: number): RectLike => ({ top: sideTop, left: l, width: cardWidth, height: cardHeight as number })
+    const rightLeft = footprint.left + footprint.width + CARD_GAP
+    if (rightLeft + cardWidth <= viewportW - VIEW_MARGIN && !intersects(sideRect(rightLeft), expanded)) {
+      return { left: rightLeft, top: sideTop }
+    }
+    const leftLeft = footprint.left - CARD_GAP - cardWidth
+    if (leftLeft >= VIEW_MARGIN && !intersects(sideRect(leftLeft), expanded)) {
+      return { left: leftLeft, top: sideTop }
+    }
+  }
 
   /* Neither candidate is valid: the lesser-coverage side, clamped. */
   if (!hasHeight) {
