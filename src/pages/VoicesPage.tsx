@@ -4,7 +4,7 @@ import { useStore } from '../lib/store.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
 import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, favoriteIds, favoriteVoices, voiceCardTruth, VoiceSearchGate, type Voice } from '../lib/voices.ts'
 import { clipPlayer, playClip } from '../player/clip.ts'
-import { engine, synthesize } from '../engine/engine.ts'
+import { engine, engineCachedFor, synthesize } from '../engine/engine.ts'
 import { encodeWav, trimSilence, applyGain, levelGain } from '../lib/audio.ts'
 import { speakable } from '../lib/text.ts'
 import { refreshVoices } from '../player/listen.ts'
@@ -98,7 +98,7 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
   // engine.ts), so a claim for the other engine would be a stale-shape
   // read. No claim is made for a voice whose engine isn't the one the
   // store is currently reporting.
-  const onDevice = e.kind === v.engine && e.cached
+  const onDevice = e.kind === v.engine && engineCachedFor(v.engine, v.lang)
 
   const preview = async () => {
     if (cp.key === key) { void playClip(key, ''); return }

@@ -113,13 +113,27 @@ export function sentenceAt(offs: number[], t: number): number {
  *  - A rejection re-bases once the accumulated wall time since the
  *    baseline could HONESTLY cover the distance at the current rate
  *    (the budget is the whole span's, summed per interval so a rate
- *    rise mid-span cannot inflate it) — plus, at once, when the
- *    clock is not advancing past the baseline at all, where no debt
- *    can grow. A teleport earns acceptance only after as much real
- *    time as honestly travelling its distance takes — by then it is
- *    no longer a sprint, and a real glitch clock never sits still
- *    that long being believed: each of its samples is still judged,
- *    and the playhead moves only when the span's honesty covers it.
+ *    rise mid-span cannot inflate it). A teleport earns acceptance
+ *    only after as much real time as honestly travelling its
+ *    distance takes — by then it is no longer a sprint, and a real
+ *    glitch clock never sits still that long being believed: each
+ *    of its samples is still judged, and the playhead moves only
+ *    when the span's honesty covers it.
+ *
+ * Round 3 (R3-T1-3) found the asymmetry inside that second repair:
+ * the re-base clause also fired AT ONCE whenever the distance was
+ * backward (`dist <= 0`) — its stated case, a clock "not advancing
+ * past the baseline at all", is already accepted by the budget
+ * judgment above whenever it is honest, so the clause's only real
+ * effect was to bless a backward teleport of any size: a 20 s leap
+ * back was distrusted in the sample that showed it and believed
+ * 0.25 s later, replaying the stretch already heard — the mirror
+ * image of the 4→12 sprint the gate was founded to forbid. The
+ * honest-travel law is now symmetric: the span must cover the
+ * distance's ABSOLUTE value, whichever way the clock jumped. A
+ * user seek is not harmed by the wait: seekTo moves the store's
+ * current first, so the seek's own samples arrive with
+ * clockIdx === current and re-anchor through that door at once.
  */
 export class PlayheadGate {
   private base: { url: string; t: number; wall: number } | null = null
@@ -142,11 +156,11 @@ export class PlayheadGate {
     if (this.last) this.span += Math.max(0, (wall - this.last.wall) / 1000) * Math.max(0.25, this.last.rate)
     this.last = { wall, rate }
     const dist = t - b.t
-    if (dist <= 0 || this.span + 0.35 >= dist) {
-      // The clock is not advancing past the baseline (no debt can
-      // grow), or the span since the baseline honestly covers the
-      // distance: re-base here. This sample still does not move the
-      // playhead — the next one is judged against the new baseline.
+    if (this.span + 0.35 >= Math.abs(dist)) {
+      // The span since the baseline honestly covers the distance —
+      // in either direction (cure R3-T1-3): re-base here. This
+      // sample still does not move the playhead — the next one is
+      // judged against the new baseline.
       this.base = { url, t, wall }
       this.span = 0
     } else {
@@ -198,7 +212,12 @@ export type ListenState = {
    *  it, and every play door restarted the sentence. A paused
    *  seekTo records it here; play()/resume() hand it to playIndex
    *  as the start fraction, and playIndex clears it as it consumes
-   *  it. Always 0 on the device road (whole sentences only). */
+   *  it. Always 0 on the device road (whole sentences only). The
+   *  fraction belongs to ONE sentence — the one it was scrubbed
+   *  into, kept in `seekFracFor` below (cure R3-T1-7): the device
+   *  roads clear it as they take the session (their sentences are
+   *  whole), and no consumer may spend or show it against any
+   *  other sentence the playhead later reaches. */
   seekFrac: number
 }
 
@@ -206,6 +225,14 @@ export const listen = createStore<ListenState>({
   active: false, text: '', segments: [], voices: [], current: 0, playing: false,
   buffering: false, mode: null, rendered: [], error: null, finished: false, cushion: null, sleepLeft: null, sleepMins: null, seekFrac: 0,
 })
+
+/** The sentence `seekFrac` was recorded against (cure R3-T1-7), or
+ *  -1 when no fraction stands. The fraction is a bare number in the
+ *  store; this is its identity. Only seekTo's paused branch records
+ *  one (with its sentence); playIndex consumes it; the device roads
+ *  and every session reset clear both together. A fraction whose
+ *  sentence is no longer current is never spent or shown. */
+let seekFracFor = -1
 
 const LISTEN_PRIORITY = 1000
 let audio: HTMLAudioElement | null = null
@@ -340,12 +367,16 @@ function resetCache() {
   fellBack.clear()
 }
 
-/** Prepare a new listening session from text (does not start playback). */
-export function loadText(text: string) {
-  stop()
+/** Prepare a new listening session from text (does not start playback).
+ *  `keepShellVoice` is the adoption restore's alone (cure R3-T1-1):
+ *  the text is loaded because the shell's voice is still reading it,
+ *  so the load must not carry stop()'s shell order with it. */
+export function loadText(text: string, opts?: { keepShellVoice?: boolean }) {
+  stop(opts?.keepShellVoice ? { shell: false } : undefined)
   setSleepTimer(null)
   resetCache()
   session++
+  seekFracFor = -1
   const segments = segmentText(text, settings.get().langMode)
   listen.set({
     active: segments.length > 0, text, segments, voices: segments.map((seg) => voiceFor(sentenceLang(seg, settings.get().langMode))),
@@ -551,8 +582,11 @@ export async function play(from?: number) {
   // starting at the sentence the listener scrubbed into starts at
   // the fraction they scrubbed to, through EVERY play door — this
   // one is the door they all share (the panel's play, the bubble's
-  // logosandroid-play), not only resume()'s fast path.
-  await playIndex(idx, idx === s.current ? (s.seekFrac ?? 0) : 0)
+  // logosandroid-play), not only resume()'s fast path. The fraction
+  // is spent only on the sentence it was recorded against (cure
+  // R3-T1-7): a playhead the device voice advanced meanwhile does
+  // not inherit another sentence's scrub.
+  await playIndex(idx, idx === s.current && seekFracFor === idx ? (s.seekFrac ?? 0) : 0)
 }
 
 async function playIndex(i: number, startFrac = 0, startWord?: { w: number; words: string[] }) {
@@ -567,6 +601,7 @@ async function playIndex(i: number, startFrac = 0, startWord?: { w: number; word
   // The start fraction (a live seek's, or a paused scrub's recorded
   // seekFrac handed in by play()) is consumed by this start — clear
   // the record so a later plain start never replays it (cure T1-7).
+  seekFracFor = -1
   listen.set({ current: i, playing: true, mode: 'neural', finished: false, error: null, buffering: stalled, seekFrac: 0 })
   updateMediaSession()
   if (!neuralUsable()) ensureModel().catch((e) => { if (my === token) listen.set({ playing: false, buffering: false, error: (e as Error).message }) })
@@ -742,7 +777,14 @@ export function handToShell(i: number): boolean {
   ++token
   quietPause()
   shellHanded = true
-  listen.set({ current: i, playing: true, mode: 'device', finished: false, buffering: false, error: null })
+  // The device voice reads whole sentences: a paused scrub's
+  // recorded fraction has no meaning on this road and is dropped
+  // here, honestly, as seekTo's device branch drops a seek's
+  // fraction (cure R3-T1-7) — left standing, it would ride the
+  // native advances and be spent later on a sentence never
+  // scrubbed.
+  seekFracFor = -1
+  listen.set({ current: i, playing: true, mode: 'device', finished: false, buffering: false, error: null, seekFrac: 0 })
   updateMediaSession()
   d.bubbleNative(s.text, '', i)
   return true
@@ -797,7 +839,12 @@ function adoptNativeSession(pos: { active?: boolean; done?: boolean }): boolean 
   if (cp.key && !cp.key.startsWith('preview:')) return false
   const text = loadLastText()
   if (!text.trim()) return false
-  loadText(text)
+  // The restore loads the text WITHOUT stop()'s shell order (cure
+  // R3-T1-1): the shell's voice is the thing being adopted — a stop
+  // order here would kill the session in the act of adopting it,
+  // and a shell that honoured it would leave the adopted store
+  // claiming a playing session over silence.
+  loadText(text, { keepShellVoice: true })
   if (!listen.get().active) return false
   shellHanded = true
   listen.set({ mode: 'device', playing: false, finished: false, buffering: false, error: null })
@@ -818,7 +865,8 @@ export function applyNativePos(pos: { idx?: number; total?: number; playing?: bo
       let idx = typeof pos.idx === 'number' && Number.isFinite(pos.idx) ? pos.idx : s.current
       if (pos.total && pos.total > 0 && pos.total !== n) idx = Math.floor((idx * n) / pos.total)
       idx = n ? Math.max(0, Math.min(n - 1, idx)) : idx
-      listen.set({ current: idx, playing: false, finished: true, buffering: false })
+      seekFracFor = -1
+      listen.set({ current: idx, playing: false, finished: true, buffering: false, seekFrac: 0 })
     } else if (s.playing) listen.set({ playing: false })
     updateMediaSession()
     return
@@ -829,7 +877,14 @@ export function applyNativePos(pos: { idx?: number; total?: number; playing?: bo
   if (pos.total && pos.total > 0 && pos.total !== n) idx = Math.floor((idx * n) / pos.total)
   idx = Math.max(0, Math.min(n - 1, idx))
   const patch: Partial<ListenState> = {}
-  if (idx !== s.current) patch.current = idx
+  if (idx !== s.current) {
+    patch.current = idx
+    // A native advance moves the playhead off any sentence a
+    // recorded fraction belonged to: the fraction dies with the
+    // move (cure R3-T1-7), never rides along to the new sentence.
+    patch.seekFrac = 0
+    seekFracFor = -1
+  }
   if (typeof pos.playing === 'boolean' && pos.playing !== s.playing) patch.playing = pos.playing
   if (Object.keys(patch).length) { listen.set(patch); updateMediaSession() }
 }
@@ -856,7 +911,11 @@ async function playDevice(i: number) {
   if (handToShell(i)) return
   const my = ++token
   quietPause()
-  listen.set({ current: i, playing: true, mode: 'device', finished: false, buffering: false, error: null })
+  // The browser device voice also reads whole sentences: the
+  // recorded fraction is dropped as the session takes this road
+  // (cure R3-T1-7, the handToShell discipline).
+  seekFracFor = -1
+  listen.set({ current: i, playing: true, mode: 'device', finished: false, buffering: false, error: null, seekFrac: 0 })
   updateMediaSession()
   if (neuralUsable()) prefetch(i + 1)
   const seg = s.segments[i]
@@ -931,6 +990,7 @@ export function resume() {
     stopClipPlayer()
     // The element already stands where a rendered paused seek put
     // it (seekTo set its time), so the recorded fraction is spent.
+    seekFracFor = -1
     listen.set({ playing: true, seekFrac: 0 })
     audio.playbackRate = settings.get().listenSpeed
     audio.play().catch(() => listen.set({ playing: false }))
@@ -1029,6 +1089,7 @@ export function seekTo(idx: number, frac: number) {
     // the landing is the sentence's own beginning.
     if (s.playing) { void playDevice(idx); return }
     token++
+    seekFracFor = -1
     listen.set({ current: idx, finished: false, seekFrac: 0, buffering: false })
     updateMediaSession()
     return
@@ -1039,7 +1100,7 @@ export function seekTo(idx: number, frac: number) {
     audio.currentTime = track!.offs[idx - track!.start] + frac * r.duration
     if (idx !== s.current) { listen.set({ current: idx }); updateMediaSession() }
     if (s.finished) listen.set({ finished: false })
-    if (s.seekFrac) listen.set({ seekFrac: 0 })
+    if (s.seekFrac) { seekFracFor = -1; listen.set({ seekFrac: 0 }) }
     updatePosition()
     return
   }
@@ -1052,6 +1113,11 @@ export function seekTo(idx: number, frac: number) {
   // included — starts from it.
   token++
   cancelDevice()
+  // The one door that RECORDS a fraction (cure T1-7) — and the one
+  // that stamps its sentence (cure R3-T1-7): the fraction is this
+  // sentence's, and every consumer checks the stamp before
+  // spending or showing it.
+  seekFracFor = frac > 0 ? idx : -1
   listen.set({ current: idx, finished: false, mode: r ? 'neural' : s.mode, buffering: false, seekFrac: frac })
   if (r) {
     const a = el()
@@ -1228,14 +1294,20 @@ export function skipPrev() {
   prev()
 }
 
-export function stop() {
+export function stop(opts?: { shell?: boolean }) {
   token++
   cancelDevice()
   // A session in the shell ends there too (1.4.124, widened 1.4.128):
   // handed over OR taken over, the shell's voice stops with the
   // page's session — the mode flag only knows the roads the page
-  // itself took, and a chain takeover is not one of them.
-  stopShellVoice()
+  // itself took, and a chain takeover is not one of them. The one
+  // caller that must NOT speak that order is the adoption restore
+  // (cure R3-T1-1): it loads the persisted text precisely because
+  // the shell's voice is still reading it, and the widened law —
+  // written for a user loading new text — ordered the shell to stop
+  // the very session being adopted, in the act of adopting it. It
+  // passes { shell: false }; every other stop keeps the law whole.
+  if (opts?.shell !== false) stopShellVoice()
   if (audio) {
     quietPause()
     audio.removeAttribute('src')
@@ -1251,6 +1323,7 @@ export function endSession() {
   setSleepTimer(null)
   resetCache()
   session++
+  seekFracFor = -1
   listen.set({ active: false, segments: [], voices: [], rendered: [], current: 0, finished: false, error: null, seekFrac: 0 })
   if ('mediaSession' in navigator) navigator.mediaSession.metadata = null
 }
@@ -1384,8 +1457,12 @@ export function sentenceProgress(): number {
   // A paused scrub's recorded landing is the position while paused
   // (cure T1-7): the progress bar and the panel must show where the
   // listener actually put the playhead, not the sentence's start,
-  // until sound resumes and the audio clock takes over again.
-  if (!s.playing && (s.seekFrac ?? 0) > 0) return Math.min(1, s.seekFrac)
+  // until sound resumes and the audio clock takes over again. Only
+  // on the sentence the scrub belonged to (cure R3-T1-7): a
+  // playhead that has since moved — the native voice advancing
+  // under a standing fraction was the specimen — shows its own
+  // honest place, never another sentence's half.
+  if (!s.playing && (s.seekFrac ?? 0) > 0 && seekFracFor === s.current) return Math.min(1, s.seekFrac)
   // The browser device voice reports its own place (cure T1-17):
   // the boundary-fed fraction of the sentence it is reading, so the
   // word highlight follows the voice instead of sitting on word one
@@ -1462,6 +1539,26 @@ export function installMediaSession() {
 
 // Starting a Library clip or a voice preview pauses listening (never two at once).
 onClipPlay(() => { if (listen.get().playing) pause() })
+
+// The browser's media card is handed BACK when a clip leaves the
+// stage (cure R3-T1-8). T1-12 cured the shell publisher — the
+// single writer there republishes the reading's truth the moment
+// the clip stops — but the browser's navigator.mediaSession
+// metadata had no such return: playClip writes the clip's title
+// and artist, updateMediaSession writes the reading's, and nothing
+// re-asserted the reading's when a clip ended over a paused
+// session, so the card kept wearing the finished clip's name until
+// the reading's store happened to change. The clip's stage changes
+// are the trigger, as at the shell publisher: while any clip or
+// preview is actually sounding, its own metadata stands; the
+// moment none is, the reading's truth is re-asserted (and
+// updateMediaSession itself still refuses to overwrite a sounding
+// clip, so the two writers cannot fight).
+clipPlayer.subscribe(() => {
+  const cp = clipPlayer.get()
+  if (cp.key && cp.playing) return
+  updateMediaSession()
+})
 
 /** What the off-thread visualizer needs: the playing sentence's envelope and the raw playhead. */
 export function vizSnapshot(): { key: string; env: Float32Array | null; time: number; rate: number; running: boolean } {
@@ -1556,7 +1653,14 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
       // session (refreshVoices — the bubble voice wheel's door) was
       // deduped away and the shell card kept naming the old voice
       // until the sentence or the play state happened to move.
-      const key = `${on}|${s.current}|${s.active}|${s.finished}|${book?.title ?? ''}|${v?.id ?? ''}`
+      // Round 3 (R3-T1-6) found the same omission one field over:
+      // the sentence text itself — the payload's standing text —
+      // was unkeyed, so a different pasted text standing paused at
+      // the same sentence in the same voice produced the identical
+      // key and published nothing, and the card kept wearing the
+      // old text's first sentence. The sentence rides the key now;
+      // every field the payload carries is keyed.
+      const key = `${on}|${s.current}|${s.active}|${s.finished}|${book?.title ?? ''}|${v?.id ?? ''}|${sentence}`
       if (key === last) return
       last = key
       // Shell 17+ gets the book's title and the artist line separately, so its media card heads

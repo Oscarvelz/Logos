@@ -138,11 +138,12 @@ const lineEndsOpen = (l: string) => /\b(?:the|a|an|of|to|in|on|at|by|for|with|fr
  * of standalone lines? Width alone also convicts a tidy list of long
  * items, whose lines cluster at one width exactly like a wrap column
  * (cure R2-T8-5), so a wrap verdict additionally needs wrap EVIDENCE
- * a list does not leave: the LAST line is a short remainder (the text
- * ran out mid-column), or at least two lines end mid-phrase. This
- * function is shared verbatim by intake (splitParaSentences, per
- * paragraph) and book import (formats.ts parseText, per document),
- * so the same text is judged the same way at both doors.
+ * of continuation a list does not leave: most non-final lines ending
+ * mid-phrase, or a short last line that runs on from the line above
+ * (cure R3-T8-18 — the evidence legs are spelled out at the return).
+ * This function is shared verbatim by intake (splitParaSentences,
+ * per paragraph) and book import (formats.ts parseText, per
+ * document), so the same text is judged the same way at both doors.
  */
 export function isWrappedLines(lines: string[]): boolean {
   const long = lines.filter((l) => l.trim().length > 40)
@@ -151,8 +152,26 @@ export function isWrappedLines(lines: string[]): boolean {
   const wrapAt = widths[Math.floor(widths.length * 0.8)] ?? 0
   if (!(wrapAt < 110)) return false
   if (long.filter((l) => l.trimEnd().length >= wrapAt - 12).length <= long.length * 0.5) return false
-  const lastLen = lines[lines.length - 1].trimEnd().length
-  return lastLen < wrapAt - 12 || lines.filter(lineEndsOpen).length >= 2
+  // Cure R3-T8-18: the two evidence legs convicted a tidy list — a
+  // short last item plus two items ending on a glue word ("…of the",
+  // "…in the") is exactly what an innocent list leaves behind. Wrap
+  // evidence is about CONTINUATION, so both legs now ask for it: the
+  // short last line counts only when it runs on from the line above
+  // (that line ends mid-phrase, or the last line opens lowercase — a
+  // fresh item opens as itself, capitalised), and scattered open
+  // ends count only when they are the column's habit rather than
+  // its accident — at least half the non-final lines ending
+  // mid-phrase. A real wrap column breaks at its width wherever the
+  // words fall, so most of its breaks land mid-phrase and its
+  // remainder continues the line above; a list's items end complete,
+  // each opening as its own sentence-shaped unit.
+  const nonFinal = lines.slice(0, -1)
+  const openEnds = nonFinal.filter(lineEndsOpen).length
+  const lastLine = lines[lines.length - 1]
+  const lastContinues = lineEndsOpen(nonFinal[nonFinal.length - 1] ?? '')
+    || /^[a-zà-ÿ]/u.test(lastLine.trim().replace(/^["'“‘«(]+/u, ''))
+  const lastLen = lastLine.trimEnd().length
+  return (lastLen < wrapAt - 12 && lastContinues) || openEnds * 2 >= nonFinal.length
 }
 
 /**
@@ -170,11 +189,51 @@ function splitParaSentences(para: string): Span[] {
   const lines = para.split('\n')
   if (isWrappedLines(lines)) return splitSentences(para)
   const spans: Span[] = []
+  for (const c of lineChunks(lines)) {
+    for (const s of splitSentences(c.text)) spans.push({ start: c.start + s.start, end: c.start + s.end })
+  }
+  return spans
+}
+
+/**
+ * The line grouping splitParaSentences applies below the wrap
+ * verdict: consecutive lines that flow into one another form one
+ * chunk; every other line stands alone. Exported for book import
+ * (formats.ts parseText) so the SAME text is grouped the same way at
+ * both doors (cure R3-T8-10: below the wrap verdict's width evidence
+ * the doors diverged — the paste door glued continuations into
+ * sentences while import flushed every line into its own block, so a
+ * narrow-wrapped sentence imported as one block per line, each read
+ * with a paragraph's pause, its severed halves never rejoining).
+ */
+export function chunkLines(lines: string[]): string[] {
+  return lineChunks(lines).map((c) => c.text)
+}
+
+/** Cure R3-T8-4: lineEndsOpen judges a line-final word's SHAPE, but
+ * two of its words close clauses in another ROLE — demonstrative
+ * "that" ("He said only that") and the phrasal particle "in" ("…
+ * finally gave in") — and a complete sentence ending on either glued
+ * to the next line's sentence and read as one run-on. A capital
+ * continuation glues only when the open-ended reading is the
+ * plausible one: "that" with a demonstrative licenser before it
+ * (only / just / all / after / before + that) does not glue, and
+ * "in" does not glue into a line opening with a subject pronoun —
+ * a new sentence's subject, where a preposition's continuation
+ * would be its object, a noun phrase. The lowercase road never
+ * needed the open-end evidence and is untouched. */
+const SUBJECT_OPEN = /^(?:she|he|it|they|we|you|él|ella|ellos|ellas|nosotros|esto|eso)\b/iu
+const capitalGlues = (prev: string, next: string): boolean => {
+  if (!lineEndsOpen(prev)) return false
+  if (/\b(?:only|just|all|after|before)\s+that$/i.test(prev)) return false
+  if (/\bin$/i.test(prev) && SUBJECT_OPEN.test(next)) return false
+  return true
+}
+
+function lineChunks(lines: string[]): { start: number; text: string }[] {
+  const chunks: { start: number; text: string }[] = []
   let chunkStart = 0
   let chunk = lines[0]
-  const flush = () => {
-    for (const s of splitSentences(chunk)) spans.push({ start: chunkStart + s.start, end: chunkStart + s.end })
-  }
   // Cure R2-T8-4: the lowercase glue had no list exception, so a
   // lowercase shopping list ("buy milk / buy eggs / …") glued into one
   // segment verbatim — F8-9's disease for exactly the lists people
@@ -185,37 +244,60 @@ function splitParaSentences(para: string): Span[] {
   // nobody hard-wraps prose narrower than that; a shorter line is a
   // complete item). Genuinely wrapped prose (capital opening, long
   // lines flowing lowercase) still joins.
-  const proseShaped = /^\p{Lu}/u.test(lines[0].trim())
+  // Cure R3-T8-5: the shape test read line 1 raw, so prose opening
+  // with a quotation mark or a digit was judged not-prose and NO
+  // continuation glued — not even lowercase ones. Opening quotes are
+  // stripped for the test, and a digit opening counts when a
+  // lowercase word follows ("3 days later we crossed…" is a
+  // narrative opening; a digit-led list's later lines open with
+  // digits themselves, which the continuation test refuses).
+  const firstLine = lines[0].trim().replace(/^["'“”‘’«»(]+/u, '')
+  const proseShaped = /^\p{Lu}/u.test(firstLine) || /^\d+\s+[a-zà-ÿ]/u.test(firstLine)
+  // Cure R2-T8-6: the glue only recognised LOWERCASE continuations,
+  // so narrow-wrapped prose whose next line opens with a capital —
+  // a proper noun ("…crossed over to / Santander…") or "I" ("She
+  // told me that / I should wait…") — still split mid-sentence. A
+  // capital continuation glues too, but only on mid-phrase evidence:
+  // the previous line must end bare on a word that cannot close a
+  // phrase (lineEndsOpen — a terminal period or comma after the word
+  // defeats the match, so a completed sentence never glues), judged
+  // by ROLE where shape alone convicts (capitalGlues, cure R3-T8-4).
+  // List items end on phrase-complete words ("Item one", "…papers
+  // today"), so lists keep standing per line.
+  const glue: boolean[] = []
+  {
+    let prevLen = lines[0].trim().length
+    let prevTrim = lines[0].trim()
+    for (let i = 1; i < lines.length; i++) {
+      const t = lines[i].trim()
+      const continuation = /^[a-zà-ÿ]/u.test(t) || (/^\p{Lu}/u.test(t) && capitalGlues(prevTrim, t))
+      glue.push(proseShaped && prevLen >= 14 && continuation)
+      prevLen = t.length
+      prevTrim = t
+    }
+  }
+  // Cure R3-T8-18, second half: pairwise glue alone still joined a
+  // tidy list's middle items — two of its items ended on glue words,
+  // so their joins glued while every other join stood apart. Wrapped
+  // prose glues at MOST of its joins (its breaks are one text
+  // flowing); a list glues at a minority, by accident. When glue is
+  // not the paragraph's habit — fewer than half its joins — no join
+  // glues: the paragraph is lines, not a wrap.
+  const glueDominant = glue.filter(Boolean).length * 2 >= glue.length
   let off = lines[0].length + 1
-  let prevLen = lines[0].trim().length
-  let prevTrim = lines[0].trim()
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i]
-    const t = line.trim()
-    // Cure R2-T8-6: the glue only recognised LOWERCASE continuations,
-    // so narrow-wrapped prose whose next line opens with a capital —
-    // a proper noun ("…crossed over to / Santander…") or "I" ("She
-    // told me that / I should wait…") — still split mid-sentence. A
-    // capital continuation glues too, but only on mid-phrase evidence:
-    // the previous line must end bare on a word that cannot close a
-    // phrase (lineEndsOpen — a terminal period or comma after the word
-    // defeats the match, so a completed sentence never glues). List
-    // items end on phrase-complete words ("Item one", "…papers
-    // today"), so lists keep standing per line.
-    const continuation = /^[a-zà-ÿ]/u.test(t) || (/^\p{Lu}/u.test(t) && lineEndsOpen(prevTrim))
-    if (proseShaped && prevLen >= 14 && continuation) {
+    if (glueDominant && glue[i - 1]) {
       chunk += `\n${line}` // a continuation is the same sentence, wrapped
     } else {
-      flush()
+      chunks.push({ start: chunkStart, text: chunk })
       chunkStart = off
       chunk = line
     }
     off += line.length + 1
-    prevLen = t.length
-    prevTrim = t
   }
-  flush()
-  return spans
+  chunks.push({ start: chunkStart, text: chunk })
+  return chunks
 }
 
 function splitSentences(p: string): Span[] {
@@ -227,9 +309,46 @@ function splitSentences(p: string): Span[] {
     const endPunct = m.index + m[1].length + m[2].length
     const before = p.slice(start, m.index)
     const lastWord = (before.match(/([\p{L}.]+)$/u)?.[1] ?? '').toLowerCase()
+    // What follows the period, judged once for every guard below: the
+    // next word with any opening quotes stripped (an opener hiding
+    // behind a quote still opens), its capital, and whether a ¿/¡
+    // opens there — by orthography those can only OPEN a sentence.
+    let nextTok = '', capNext = false, punctOpener = false, stripped = ''
+    if (m[1] === '.') {
+      const rest = p.slice(m.index + m[0].length)
+      stripped = rest.replace(/^["'“‘«(]+/u, '')
+      nextTok = stripped.match(/^[\p{L}]+/u)?.[0] ?? ''
+      capNext = /^\p{Lu}/u.test(nextTok)
+      // The ¿/¡ test reads the UNstripped rest (the standing R2-T8-1
+      // shape): an opener hiding behind a quote is rescued by its
+      // own closing punctuation, which is a boundary in its own
+      // right — splitting before the quote as well would orphan the
+      // quoted question from its verb ("…etc. "¿Y el postre?"
+      // preguntó." stays two segments, not three).
+      punctOpener = /^[¿¡]/.test(rest)
+    }
     // Skip abbreviations, single initials ("J. R. R."), and decimals.
-    if (m[1] === '.' && /^\p{L}$/u.test(lastWord)) continue
-    if (m[1] === '.' && ABBREV.has(lastWord)) {
+    if (m[1] === '.' && /^\p{L}$/u.test(lastWord)) {
+      // Cure R3-T8-2: this skip was unconditional, so a sentence
+      // ENDING on a single letter — a grade, an option ("He got an
+      // A. She smiled.") — welded into the next sentence forever.
+      // An initial still never splits mid-chain ("J. R. R. …": the
+      // next initial follows) or before what cannot open a sentence;
+      // a starter after it is a true end, judged by the same gate
+      // the abbreviations below use ("I" is an opener too — the
+      // pronoun opens sentences and never continues a name).
+      const nextIsInitial = /^\p{L}\./u.test(stripped)
+      const opensSentence = punctOpener || nextTok === 'I'
+        || (capNext && SENTENCE_STARTERS.has(nextTok.toLowerCase()))
+      if (nextIsInitial || !opensSentence) continue
+    }
+    // Cure R3-T8-1: the dotted initialisms are a CLASS, not a list —
+    // F8-4 stocked five (u.s, u.s.a, d.c, ee.uu, ph.d) and every other
+    // member (U.K., U.N., E.U., a.k.a., P.O. …) split before any
+    // capital noun, severing the commonest initialisms in English
+    // books mid-name. The shape — single letters joined by dots —
+    // takes the same gate as the listed members.
+    if (m[1] === '.' && (ABBREV.has(lastWord) || /^(?:\p{L}\.)+\p{L}$/u.test(lastWord))) {
       // Cure F8-5: the guard is no longer unconditional. Titles take
       // the name-safe gate below (cure R2-T8-3). Every other abbreviation —
       // dotted initialism ("U.S.") or plain ("etc.", months, "fig.") —
@@ -243,17 +362,15 @@ function splitSentences(p: string): Span[] {
       // guard's own cases, so both classes now share the one gate: a
       // capital alone never ends the sentence after an abbreviation;
       // a capital that opens sentences does.
-      const rest = p.slice(m.index + m[0].length)
-      // Cure R2-T8-1, other half: the token test used to read the next
-      // word straight off the text, so an opener that is not a letter —
-      // a Spanish "¿"/"¡" (which by orthography can only OPEN a
-      // sentence, never continue one) or an opening quote hiding the
-      // word behind it ("etc. "She went home…" merged) — left the
-      // token empty and the gate could never fire.
-      const stripped = rest.replace(/^["'“‘«(]+/u, '')
-      const nextTok = stripped.match(/^[\p{L}]+/u)?.[0] ?? ''
-      const capNext = /^\p{Lu}/u.test(nextTok)
-      const punctOpener = /^[¿¡]/.test(rest)
+      // (The next-token evidence is computed once, above — cure
+      // R2-T8-1's half included: the token test reads through opening
+      // quotes, so a word hiding behind one still fires the gate.)
+      // Cure R3-T8-3: "e.g." and "i.e." can never END a sentence —
+      // they exist to introduce what follows — yet the starter gate
+      // fired on them when the example opened with a starter word
+      // ("…, i.e. The Hague, …" severed). They skip unconditionally,
+      // like the initials chain; no gate is consulted.
+      if (lastWord === 'e.g' || lastWord === 'i.e' || lastWord === 'p.ej') continue
       if (TITLES.has(lastWord)) {
         // Cure R2-T8-3: titles skipped this gate unconditionally, so a
         // title word at a TRUE sentence end ("Main St. It was quiet.",
@@ -330,8 +447,12 @@ function capLength(p: string, s: Span, soft: number): Span[] {
         // sawing the token in half and pronouncing a sentence break
         // inside it. Emit the token whole: run to its end (the next
         // space, or the span's own end) — long, but one unit.
-        const nx = p.indexOf(' ', a + HARD_MAX)
-        return nx > 0 && nx < s.end ? nx : s.end
+        // Cure R3-T8-6: the run hunted a SPACE only — a token followed
+        // by a NEWLINE (a glued chunk's line break) overran its true
+        // end and swallowed the next word into its segment. The end
+        // of a token is any whitespace.
+        const ws = p.slice(a + HARD_MAX, s.end).search(/\s/)
+        return ws >= 0 ? a + HARD_MAX + ws : s.end
       })()
     }
     pieces.push({ start: a, end: cut })

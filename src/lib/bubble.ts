@@ -300,6 +300,49 @@ export function initBubble() {
     if (!s.active || !s.segments.length) return ''
     return `${titleOf(true, s.text) || 'Logos'}|${s.segments.length}`
   }
+  // Execute ONE collected press against its stamp. Returns true
+  // when the press had to go down the recovery road (its verb
+  // re-fires ~900 ms later, once the session is restored), false
+  // when it was fully handled in this breath.
+  const runCollected = (cmd: string, stamp: string): boolean => {
+    const forThisSession = () => {
+      if (!stamp) return true
+      if (clipOwns()) return false // a stamped press names a reading; a clip stage is never its session
+      const here = pageCtx()
+      return !here || here === stamp
+    }
+    // A stored PAUSE (1.4.89): against a dead page, silence is already
+    // the truth. The one thing it must never do is summon playback —
+    // the recovery used to 'fulfil' it by playing the session, and his
+    // pause became a play, visit after visit. (Pause stays exempt
+    // from the stamp check, as shell-side: its door can only silence.)
+    if (cmd === 'pause') { if (listen.get().playing) pauseFromShell(); return false }
+    if (cmd === 'play') {
+      if (listen.get().active || clipOwns()) { if (forThisSession()) dispatchEvent(new Event('logosandroid-play')); return false }
+      void recoverSession().then((ok) => {
+        if (ok) setTimeout(() => { if (forThisSession()) dispatchEvent(new Event('logosandroid-play')) }, 900)
+      })
+      return true
+    }
+    if (cmd === 'slower' || cmd === 'faster' || listen.get().active || clipOwns()) {
+      if (forThisSession()) dispatchEvent(new Event(`logosandroid-${cmd}`))
+      return false
+    }
+    void recoverSession().then((ok) => {
+      // prev/next re-fire at the recovered session; so do mark, save and
+      // voice (1.4.109, audit E-2): they act on the session the recovery
+      // just restored — the very one the panel was showing when the
+      // press was stored. T2-19: that identity is now CHECKED at the
+      // moment of the re-fire, not assumed — the recovery ranks its
+      // candidates by recency and can restore a different book, clip
+      // or draft than the stamped one, and a verb fired into the
+      // wrong session is worse than a verb dropped.
+      if (ok && (cmd === 'prev' || cmd === 'next' || cmd === 'mark' || cmd === 'save' || cmd === 'voice')) {
+        setTimeout(() => { if (forThisSession()) dispatchEvent(new Event(`logosandroid-${cmd}`)) }, 900)
+      }
+    })
+    return true
+  }
   const collectPending = () => {
     try {
       const cmd = d.bubblePendingCmd?.()
@@ -312,42 +355,21 @@ export function initBubble() {
       // then there is nothing to judge and the shell-side audit at
       // the take stands alone, as it did before.
       const stamp = d.bubblePendingCtx?.() ?? ''
-      const forThisSession = () => {
-        if (!stamp) return true
-        if (clipOwns()) return false // a stamped press names a reading; a clip stage is never its session
-        const here = pageCtx()
-        return !here || here === stamp
-      }
-      // A stored PAUSE (1.4.89): against a dead page, silence is already
-      // the truth. The one thing it must never do is summon playback —
-      // the recovery used to 'fulfil' it by playing the session, and his
-      // pause became a play, visit after visit. (Pause stays exempt
-      // from the stamp check, as shell-side: its door can only silence.)
-      if (cmd === 'pause') { if (listen.get().playing) pauseFromShell(); return }
-      if (cmd === 'play') {
-        if (listen.get().active || clipOwns()) { if (forThisSession()) dispatchEvent(new Event('logosandroid-play')); return }
-        void recoverSession().then((ok) => {
-          if (ok) setTimeout(() => { if (forThisSession()) dispatchEvent(new Event('logosandroid-play')) }, 900)
-        })
-        return
-      }
-      if (cmd === 'slower' || cmd === 'faster' || listen.get().active || clipOwns()) {
-        if (forThisSession()) dispatchEvent(new Event(`logosandroid-${cmd}`))
-        return
-      }
-      void recoverSession().then((ok) => {
-        // prev/next re-fire at the recovered session; so do mark, save and
-        // voice (1.4.109, audit E-2): they act on the session the recovery
-        // just restored — the very one the panel was showing when the
-        // press was stored. T2-19: that identity is now CHECKED at the
-        // moment of the re-fire, not assumed — the recovery ranks its
-        // candidates by recency and can restore a different book, clip
-        // or draft than the stamped one, and a verb fired into the
-        // wrong session is worse than a verb dropped.
-        if (ok && (cmd === 'prev' || cmd === 'next' || cmd === 'mark' || cmd === 'save' || cmd === 'voice')) {
-          setTimeout(() => { if (forThisSession()) dispatchEvent(new Event(`logosandroid-${cmd}`)) }, 900)
-        }
-      })
+      const deferred = runCollected(cmd, stamp)
+      // One surfacing drains the queue (R3-T2-2): the collector
+      // used to take exactly one press per door — a ghost resume
+      // offers only focus + visibility, so a burst of three
+      // stranded its tail in the shell queue past the twenty-second
+      // law, to die unexecuted at some much later take. Now the
+      // door re-opens itself until the Bridge answers empty: a
+      // press handled in this breath chains at once; a press that
+      // went down the recovery road chains just after its own
+      // re-fire, so the next press is judged against the session
+      // the recovery restored (and finds it active, taking the
+      // direct road instead of recovering twice). Presses still
+      // queued shell-side stay unspent until their take — the
+      // audits run at the take, as they always have.
+      setTimeout(collectPending, deferred ? 950 : 60)
     } catch { /* ignore */ }
   }
   setTimeout(collectPending, 700)

@@ -56,11 +56,25 @@ export function initResumeTracking() {
           try { localStorage.setItem(KEY, JSON.stringify({ ...r, done: true, at: Date.now() })) } catch { /* full */ }
         }
       }
-    } else {
-      // Not finished: re-arm the edge, so a replay of the same text
-      // that finishes again annotates its own fresh record too.
-      lastDoneKey = ''
+      // A finished session has no resume place to save (cure
+      // R3-T1-2). The handler used to FALL THROUGH from this
+      // annotation to the fresh-record save below: any finishing
+      // set in which `current` also moved — applyNativePos's done
+      // branch is exactly that set, and the done-first adoption
+      // shape creates the record from nothing — overwrote the
+      // annotation in the same pass with a fresh, un-done record,
+      // and the finished text was offered back as a mid-text
+      // resume. T1-15's law is now structural: while `finished`
+      // stands, this handler annotates and returns; the fresh save
+      // below only ever runs for a session still in progress.
+      // lastIdx follows the finish so a later replay's first move
+      // is judged against the sentence the reading ended on.
+      lastIdx = s.current
+      return
     }
+    // Not finished: re-arm the edge, so a replay of the same text
+    // that finishes again annotates its own fresh record too.
+    lastDoneKey = ''
     if (s.current === lastIdx) return
     lastIdx = s.current
     if (s.current === 0 && !s.playing) return

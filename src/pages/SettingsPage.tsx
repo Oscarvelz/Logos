@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.190'
+const VERSION = '1.4.191'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -33,7 +33,7 @@ function BackupCard() {
   const file = useRef<HTMLInputElement>(null)
   const run = async () => {
     setBusy('out')
-    try { const r = await exportBackup(); const base = r.books === 1 ? t('Backup saved · 1 book inside') : t('Backup saved · {n} books inside', { n: r.books }); toast(r.skipped ? `${base} ${t('· {s} left out — their text is missing on this phone', { s: r.skipped })}` : base) }
+    try { const r = await exportBackup(); const base = r.books === 1 ? t('Backup saved · 1 book inside') : t('Backup saved · {n} books inside', { n: r.books }); const leftOut = [r.skipped ? t('· {s} left out — their text is missing on this phone', { s: r.skipped }) : '', r.clipsSkipped ? t('· {s} Library items left out — their records are missing on this phone', { s: r.clipsSkipped }) : ''].filter(Boolean).join(' '); toast(leftOut ? `${base} ${leftOut}` : base) }
     catch { toast(t('The backup could not be made')) }
     setBusy('')
   }
@@ -63,7 +63,16 @@ function BackupCard() {
       else if (r.clips > 1) notes.push(t('{n} Library items came with it', { n: r.clips }))
       if (r.marks === 1) notes.push(t('1 mark landed'))
       else if (r.marks > 1) notes.push(t('{n} marks landed', { n: r.marks }))
-      if (r.favoritesKept) notes.push(t('Your favorites were kept — the backup’s list named voices this phone no longer has'))
+      // Room at the cap is made by pushing the phone's own oldest
+      // marks out — a loss this import caused, told like every other
+      // (cure R3-T5-5).
+      if (r.marksEvicted === 1) notes.push(t('1 of this phone’s marks was pushed out to make room — the list keeps the newest 120'))
+      else if (r.marksEvicted > 1) notes.push(t('{n} of this phone’s marks were pushed out to make room — the list keeps the newest 120', { n: r.marksEvicted }))
+      // The withheld reason is the case that actually happened: a
+      // list of ghosts, or a list that was simply empty — the empty
+      // case is stated as the safety rule it is, never as ghosts
+      // (cure R3-T5-7).
+      if (r.favoritesKept) notes.push(r.favoritesKeptReason === 'empty' ? t('Your favorites were kept — the backup’s list was empty, and an empty list never clears this phone’s stars') : t('Your favorites were kept — the backup’s list named voices this phone no longer has'))
       toast(notes.length ? `${msg} · ${notes.join(' · ')}` : msg)
     }
     // A BackupImportError carries its true reason (a damaged book, a
@@ -244,12 +253,21 @@ export function SettingsPage() {
   const [pron, setPron] = useState<PronEntry[]>(() => pronEntries())
   const [pFrom, setPFrom] = useState('')
   const [pTo, setPTo] = useState('')
+  const [pLang, setPLang] = useState<'en' | 'es'>(() => settings.get().uiLang)
   const savePron = (list: PronEntry[]) => { setPron(list); savePronEntries(list) }
   const addPron = () => {
     const from = pFrom.trim()
     const to = pTo.trim()
     if (!from || !to) return
-    savePron([...pron.filter((x) => x.from.toLowerCase() !== from.toLowerCase()), { from, to }])
+    // An entry is born WITH its language (R3-T7-1), and adding one
+    // replaces only the entry for the same word in the SAME language.
+    // The old filter keyed on the word alone: adding an English
+    // reading silently deleted the word's Spanish twin and left a
+    // single unscoped entry behind — which then fired in both
+    // languages (R3-T7-3), so "pan" fixed for English rewrote the
+    // Spanish for bread. The language is chosen in the form below,
+    // starting from the app's own language.
+    savePron([...pron.filter((x) => !(x.from.toLowerCase() === from.toLowerCase() && x.lang === pLang)), { from, to, lang: pLang }])
     setPFrom(''); setPTo('')
     toast(t('“{from}” will be read as “{to}”', { from, to }))
   }
@@ -334,18 +352,22 @@ export function SettingsPage() {
       <SetCard present="set-pron" icon={<Mic size={19} />} title={t('Pronunciation')} sub={t('Words said your way — names, places, terms of art.')}>
       <div className="list">
         <div className="list-row col">
-          <div className="grow"><div className="t">{t('Say it your way')}</div><div className="d" data-present="set-pron-scope">{t('Applies to listening and to exported audio, in every book. Codes and links are already named, not spelled out.')}</div></div>
+          <div className="grow"><div className="t">{t('Say it your way')}</div><div className="d" data-present="set-pron-scope">{t('Applies to listening and to exported audio, in every book — each entry in the language you give it. Codes and links are already named, not spelled out.')}</div></div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
             <input className="text-input" data-present="set-pron-from" style={{ height: 44, width: '100%' }} placeholder={t('Word in the book')} value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <span className="d">{t('Language')}</span>
+              <Seg present="set-pron-lang" presentLang={st.uiLang} value={pLang} label={t('Language')} onChange={(v: 'en' | 'es') => setPLang(v)} options={[{ value: 'en', label: 'English' }, { value: 'es', label: 'Español' }]} />
+            </div>
             <div className="row" style={{ gap: 8 }}>
               <input className="text-input" data-present="set-pron-to" style={{ height: 44, flex: 1, minWidth: 0, width: 'auto' }} placeholder={t('Say it as')} value={pTo} onChange={(e) => setPTo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPron() }} />
               <button className="btn primary" data-present="set-pron-add" onClick={addPron} disabled={!pFrom.trim() || !pTo.trim()}><Plus size={17} /> {t('Add')}</button>
             </div>
           </div>
         </div>
-        {pron.map((e) => (
-          <div className="list-row" data-present="set-pron-entry" key={e.from}>
-            <div className="grow"><div className="t">{e.from}</div><div className="d">{t('read as “{to}”', { to: e.to })}</div></div>
+        {pron.map((e, i) => (
+          <div className="list-row" data-present="set-pron-entry" key={`${e.from.toLowerCase()}|${e.lang ?? 'all'}|${i}`}>
+            <div className="grow"><div className="t">{e.from}</div><div className="d">{t('read as “{to}”', { to: e.to })} · {e.lang ? t(e.lang === 'es' ? 'Spanish' : 'English') : t('Both languages')}</div></div>
             <button className="btn sm ghost" data-present="set-pron-remove" aria-label={t('Remove {from}', { from: e.from })} onClick={() => savePron(pron.filter((x) => x !== e))}><X size={16} /></button>
           </div>
         ))}

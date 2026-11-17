@@ -435,7 +435,22 @@ object NativeSpeaker {
 
     fun next() {
         if (!active) return
-        idx = min(idx + 1, sentences.size - 1)
+        // At the last sentence, SKIP takes the completion road
+        // (R3-T2-7): advance() stepping PAST the end is the
+        // session's natural completion — the speaker stops with
+        // natural = true, the page's nativepos witness reports the
+        // reading done, and the book can be marked finished. The
+        // clamp this replaces re-spoke the final sentence forever,
+        // so a book the device voice was driving could never be
+        // finished or moved past from the card's or the
+        // headphones' SKIP — the step dead-ended at the book's
+        // edge. (prev() at the first sentence keeps its clamp by
+        // design: a player's prev at the start restarts the
+        // sentence; only the end was a dead end. The sentence-step
+        // itself, rather than a book-to-book skip, remains the
+        // declared residual of the shell road.)
+        if (idx >= sentences.size - 1) { advance(); return }
+        idx++
         if (playing) speakCurrent() else notifyUi()
     }
 

@@ -430,7 +430,7 @@ function BookInfo({ meta, chapters, ch, progress, onGo, onSearch, onType, onList
     if (!text.trim()) { toast(t('This book has no readable text')); return }
     const st = settings.get()
     const r = queueExport(text, { voice: null, speed: st.exportSpeed, format: st.format, title: meta.title, origin: 'listen' })
-    toast(r === 'started' ? t('Making the audiobook in the background — find it in Library when it’s ready') : t('Queued — the audiobook starts after the audio being made now'), undefined, 6000)
+    toast(r === 'started' ? t('Making the audiobook in the background — find it in Library when it’s ready') : r === 'duplicate' ? t('Already making that audio — find it in your Library when it’s ready') : t('Queued — the audiobook starts after the audio being made now'), undefined, 6000)
   }
   return (
     <aside className="bk-info" data-present="book-info" aria-label={t('About this book')}>

@@ -94,12 +94,32 @@ function matchCase(matched: string, to: string): string {
   if (letters.length > 1 && letters === letters.toUpperCase() && letters !== letters.toLowerCase()) {
     return to.toUpperCase()
   }
-  const first = matched.charAt(0)
-  const rest = matched.slice(1)
-  if (first && first === first.toUpperCase() && first !== first.toLowerCase() && rest === rest.toLowerCase()) {
-    return to.charAt(0).toUpperCase() + to.slice(1)
-  }
+  if (isCapitalizedName(matched)) return to.charAt(0).toUpperCase() + to.slice(1)
   return to
+}
+
+/** A capitalized NAME shape (R3-T7-4): opens with an uppercase letter,
+ *  carries at least one lowercase letter, and never runs two uppercase
+ *  letters together after the first — "Tomato", "McDonald", "O'Brien",
+ *  "MacArthur" all wear it. T7-07's original test demanded an
+ *  all-lowercase tail, so exactly the names this dictionary exists
+ *  for — internal capitals — took the entry verbatim and lost the
+ *  capital a sentence opening is owed. A camel shape with an
+ *  uppercase run ("IPhone") still has no honest mapping and takes
+ *  the entry as written, as does any lowercase-opening match. */
+function isCapitalizedName(matched: string): boolean {
+  const up = (c: string) => c === c.toUpperCase() && c !== c.toLowerCase()
+  const lo = (c: string) => c === c.toLowerCase() && c !== c.toUpperCase()
+  if (!up(matched.charAt(0))) return false
+  if (matched.length === 1) return true
+  let hasLower = false
+  let prevUpper = true
+  for (const ch of matched.slice(1)) {
+    if (lo(ch)) { hasLower = true; prevUpper = false }
+    else if (up(ch)) { if (prevUpper) return false; prevUpper = true }
+    else prevUpper = false
+  }
+  return hasLower
 }
 
 /** Replace each dictionary word (whole word, any case) with how it
@@ -119,7 +139,16 @@ export function applyPron(text: string, lang?: Lang): string {
   const byLower = new Map<string, PronEntry>()
   for (const e of [...list].sort((a, b) => b.from.length - a.from.length)) {
     const from = e.from.trim()
-    if (from && !byLower.has(from.toLowerCase())) byLower.set(from.toLowerCase(), e)
+    if (!from) continue
+    const key = from.toLowerCase()
+    const held = byLower.get(key)
+    // A twin scoped to THIS segment's language outranks the unscoped
+    // twin for the same word, whichever was stored first (R3-T7-2):
+    // every scoped entry in `list` passed the language filter above,
+    // so its scope IS this segment's language. The old first-stored
+    // rule let insertion order decide which reading spoke — the
+    // Spanish entry was dead whenever the unscoped one came first.
+    if (!held || (held.lang === undefined && e.lang !== undefined)) byLower.set(key, e)
   }
   if (!byLower.size) return text
   const alt = [...byLower.values()].map((e) => esc(e.from.trim())).join('|')
@@ -166,8 +195,9 @@ const isUpperCased = (c: string): boolean => c === c.toUpperCase() && c !== c.to
  *  neighbour instead of bounding it (R2-T7-3 — judged here, not in
  *  the boundary regex, because the regex's case-insensitive flag folds
  *  \p{Ll} and \p{Lu} together and the distinction IS the case):
- *  before the match, a '.' after an uppercase letter is an
- *  abbreviation chain (U.S.A), and a '.' after a lowercase letter
+ *  before the match, a '.' after a LONE uppercase initial is an
+ *  abbreviation chain (U.S.A — a whole uppercase word there is a
+ *  caps sentence end instead, R3-T7-5), and a '.' after a lowercase letter
  *  joins a continuation that starts lowercase or with a digit
  *  (example.com) — but a continuation starting uppercase opens a new
  *  sentence and is NOT joined (end.Next: an entry on "Next" fires).
@@ -180,9 +210,21 @@ function joinedByPeriod(full: string, start: number, end: number): boolean {
   if (start >= 2 && full[start - 1] === '.') {
     const before = full[start - 2]
     if (isLetter(before)) {
-      if (isUpperCased(before)) return true
-      const first = full[start]
-      if (isLowerCased(first) || /\p{N}/u.test(first)) return true
+      if (isUpperCased(before)) {
+        // An abbreviation chain joins only at a LONE initial (U.S.A,
+        // a.k.a): the letter run ending at the period is one letter
+        // long. A whole uppercase WORD before the period is a
+        // sentence that ended in ALL-CAPS prose (THE END.NEXT) —
+        // the period bounds there, and the opening word fires
+        // (R3-T7-5). The old any-uppercase rule read every caps
+        // sentence end as a chain and swallowed the next word.
+        let run = 1
+        while (start - 2 - run >= 0 && isLetter(full[start - 2 - run])) run++
+        if (run === 1) return true
+      } else {
+        const first = full[start]
+        if (isLowerCased(first) || /\p{N}/u.test(first)) return true
+      }
     }
   }
   if (full[end] === '.' && end + 1 < full.length) {

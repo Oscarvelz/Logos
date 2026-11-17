@@ -73,9 +73,12 @@ class BubbleService : Service() {
          *  and presses queue in the order he made them. A repeat of
          *  the press at the queue's tail coalesces (a double-tap
          *  stored twice would step twice — the old slot's one honest
-         *  behaviour, kept); the queue is capped so a pathological
-         *  burst cannot grow it without bound, and a press crowded
-         *  out at the cap leaves its receipt in pendingDropNote. */
+         *  behaviour, kept) — but only while that tail is a live
+         *  press: a stale or foreign tail is replaced by the fresh
+         *  press, never merged with it (R3-T2-3, at the store
+         *  below); the queue is capped so a pathological burst
+         *  cannot grow it without bound, and a press crowded out at
+         *  the cap leaves its receipt among the drop notes. */
         private val pendingLock = Any()
         /** Every stored press carries its own number (T2-10
          *  completion): a drain or an escalation may only ever name
@@ -90,9 +93,42 @@ class BubbleService : Service() {
         /** The stamp of the press most recently collected, for the page
          *  to read alongside the command (Bridge.bubblePendingCtx). */
         @Volatile var lastTakenCtx: String = ""
-        /** Why the last stored press was dropped at collection, if it
-         *  was: the receipt the Bridge writes to the Settings line. */
-        @Volatile var pendingDropNote: String? = null
+        /** Why stored presses were dropped at collection, if any
+         *  were: the receipts the Bridge writes to the Settings
+         *  line. They ACCUMULATE until surfaced (R3-T2-5): drops
+         *  cluster exactly when the machinery is busiest — a peek
+         *  condemning two heads in one loop, a crowding-out followed
+         *  by a stale take — and the single slot this replaces let
+         *  each new death overwrite the previous one, so all but the
+         *  last reason were the silences T2-21 outlawed. A small
+         *  queue keeps the first reasons verbatim; past its cap a
+         *  count stands for the rest, so no drop is ever invisible. */
+        private val dropNotes = ArrayDeque<String>()
+        private var dropNotesOverflow = 0
+        private const val DROP_NOTES_CAP = 4
+
+        /** Leave a drop's reason for the Settings line (T2-21). */
+        fun recordDropNote(reason: String) {
+            synchronized(pendingLock) {
+                if (dropNotes.size >= DROP_NOTES_CAP) dropNotesOverflow++
+                else dropNotes.addLast(reason)
+            }
+        }
+
+        /** Take every accumulated drop reason, folded into the one
+         *  line the Settings surface shows, and clear the queue —
+         *  the Bridge's surfacing door (MainActivity.bubblePendingCmd).
+         *  Null when nothing has dropped since the last surfacing. */
+        fun takeDropNote(): String? {
+            synchronized(pendingLock) {
+                if (dropNotes.isEmpty() && dropNotesOverflow == 0) return null
+                val line = dropNotes.joinToString("; ")
+                val extra = dropNotesOverflow
+                dropNotes.clear()
+                dropNotesOverflow = 0
+                return if (extra > 0) "$line; and $extra more" else line
+            }
+        }
 
         /** Store a press for a sleeping page, stamped with its moment
          *  AND its context (M-9): the session the press was made
@@ -102,10 +138,35 @@ class BubbleService : Service() {
          *  merely trusted from queue time. */
         fun storePendingCmd(cmd: String) {
             synchronized(pendingLock) {
-                if (pendingQueue.lastOrNull()?.cmd == cmd) return
+                // Coalescing judges the tail it merges into (R3-T2-3):
+                // a repeat of the tail's verb is a double-tap only
+                // while the tail is a LIVE press — inside its twenty
+                // seconds and stamped against the context that is
+                // current now (the take's own audits, applied at the
+                // store). A stale tail or a foreign one is a corpse
+                // of the verb, not the verb itself: the fresh press
+                // REPLACES it, carrying its own moment and its own
+                // stamp. The blind coalescing this replaces swallowed
+                // a second "next" pressed 25 s after the first,
+                // whole — the woken page then collected the FIRST
+                // press and dropped it as stale, so two presses
+                // executed zero times between them; the single slot
+                // the queue replaced would have executed the fresh
+                // one. The context variant needed no clock: a press
+                // against session B coalesced into session A's tail
+                // and died at the take wearing A's stamp.
+                val tail = pendingQueue.lastOrNull()
+                if (tail != null && tail.cmd == cmd) {
+                    val now = System.currentTimeMillis()
+                    val cur = currentContext()
+                    val stale = now - tail.at > 20_000
+                    val foreign = tail.ctx.isNotEmpty() && cur.isNotEmpty() && tail.ctx != cur
+                    if (!stale && !foreign) return
+                    pendingQueue.removeLast()
+                }
                 if (pendingQueue.size >= PENDING_CAP) {
                     pendingQueue.removeFirst()
-                    pendingDropNote = "a stored press was crowded out"
+                    recordDropNote("a stored press was crowded out")
                 }
                 pendingQueue.addLast(PendingPress(++nextPressId, cmd, System.currentTimeMillis(), currentContext()))
             }
@@ -154,28 +215,39 @@ class BubbleService : Service() {
          *  recovery case the stored press exists for, and there the
          *  stamp travels with the command (see lastTakenCtx) for the
          *  page's own execution-time check. Every drop leaves its
-         *  reason in pendingDropNote, so the death is a receipt, not
-         *  a silence (T2-21). */
+         *  reason among the drop notes, so the death is a receipt,
+         *  not a silence (T2-21).
+         *
+         *  The take LOOPS (R3-T2-2): a condemned head is dropped
+         *  with its receipt and the press standing behind it is
+         *  judged in the same call — the peek below has always done
+         *  this, and the take's old stop-at-the-corpse shape let a
+         *  stale head eat a surfacing's only take whole, stranding
+         *  a fresh, valid press behind it until some later door.
+         *  The Bridge's answer is now the first press that PASSES
+         *  the audits, or nothing when the queue has drained. */
         fun takePendingCmd(): String? {
-            // Pop and audit in ONE synchronized step (T2-14): the
+            // Pop and audit in ONE synchronized step (T2-14): each
             // head press is removed as it is judged, so no second
             // taker — main thread or JavaBridge thread — can ever
             // read the same press and deliver it twice.
             synchronized(pendingLock) {
-                val press = pendingQueue.removeFirstOrNull() ?: return null
-                if (System.currentTimeMillis() - press.at > 20_000) {
-                    pendingDropNote = "a stored press went stale"
-                    return null
-                }
-                if (press.cmd != "pause" && press.ctx.isNotEmpty()) {
-                    val cur = currentContext()
-                    if (cur.isNotEmpty() && cur != press.ctx) {
-                        pendingDropNote = "a stored press's session had moved on"
-                        return null
+                while (true) {
+                    val press = pendingQueue.removeFirstOrNull() ?: return null
+                    if (System.currentTimeMillis() - press.at > 20_000) {
+                        recordDropNote("a stored press went stale")
+                        continue
                     }
+                    if (press.cmd != "pause" && press.ctx.isNotEmpty()) {
+                        val cur = currentContext()
+                        if (cur.isNotEmpty() && cur != press.ctx) {
+                            recordDropNote("a stored press's session had moved on")
+                            continue
+                        }
+                    }
+                    lastTakenCtx = press.ctx
+                    return press.cmd
                 }
-                lastTakenCtx = press.ctx
-                return press.cmd
             }
         }
 
@@ -195,14 +267,14 @@ class BubbleService : Service() {
                     val press = pendingQueue.firstOrNull() ?: return null
                     if (System.currentTimeMillis() - press.at > 20_000) {
                         pendingQueue.removeFirst()
-                        pendingDropNote = "a stored press went stale"
+                        recordDropNote("a stored press went stale")
                         continue
                     }
                     if (press.cmd != "pause" && press.ctx.isNotEmpty()) {
                         val cur = currentContext()
                         if (cur.isNotEmpty() && cur != press.ctx) {
                             pendingQueue.removeFirst()
-                            pendingDropNote = "a stored press's session had moved on"
+                            recordDropNote("a stored press's session had moved on")
                             continue
                         }
                     }
@@ -328,6 +400,14 @@ class BubbleService : Service() {
         fun isLocked(c: Context) = prefs(c).getBoolean("lock", false)
         fun setLocked(c: Context, on: Boolean) { prefs(c).edit().putBoolean("lock", on).apply() }
 
+        /** The one lock over a catch's three facts — its text, its
+         *  manual flag and its uncommitted dedupe key (R3-T2-4):
+         *  deliver() writes the three under it, the Bridge's pull
+         *  (takeClip, below) snapshots and clears them under it, and
+         *  the key's commit and the catch's expiry take it too, so
+         *  no road ever sees the three mid-handover from the other. */
+        private val clipLock = Any()
+
         /** A clipboard text waiting for the page to pull it through the bridge. */
         /** When the waiting catch was stored (T2-13): the setter
          *  stamps every non-null store, so the Bridge can enforce
@@ -358,12 +438,14 @@ class BubbleService : Service() {
          *  process reaper and an already-heard text stays heard. */
         @Volatile private var pendingKey: String? = null
         fun confirmClipPulled(c: Context) {
-            val k = pendingKey ?: return
-            pendingKey = null
-            lastKey = k
-            // commit(), not apply(): the whole point is surviving a
-            // process death that may come a breath after the pull.
-            prefs(c).edit().putString("lastClipKey", k).commit()
+            synchronized(clipLock) {
+                val k = pendingKey ?: return
+                pendingKey = null
+                lastKey = k
+                // commit(), not apply(): the whole point is surviving a
+                // process death that may come a breath after the pull.
+                prefs(c).edit().putString("lastClipKey", k).commit()
+            }
         }
         /** The committed dedupe key, from memory or — after a
          *  restart — from prefs (T2-7). */
@@ -373,8 +455,40 @@ class BubbleService : Service() {
          *  out at the Bridge): its uncommitted key dies with it, so
          *  the text can be copied and delivered fresh (T2-7/T2-13). */
         fun expireClip() {
-            clipText = null
-            pendingKey = null
+            synchronized(clipLock) {
+                clipText = null
+                pendingKey = null
+            }
+        }
+
+        /** Pull the waiting catch, whole (R3-T2-4) — the Bridge's
+         *  bubbleClip door lives here now. The snapshot, the clear
+         *  and the key's commit are ONE step under clipLock, the
+         *  same lock deliver() writes the catch's three facts under,
+         *  so the key committed is always the key of the text that
+         *  was actually pulled. The race this replaces ran the pull
+         *  on the JavaBridge thread as separate statements against
+         *  deliver()'s main-thread writes: a deliver(B) landing
+         *  mid-pull of catch A lost B's text in place (the pull
+         *  nulled it) and committed B's key unheard — B never
+         *  played, its delivery watch read the null as "confirmed"
+         *  and stood down, and B was deduped forever: T2-7's harm,
+         *  re-homed into its own cure's commit door. The expiry law
+         *  (T2-13) is judged inside the same step, from the catch's
+         *  own birth stamp. */
+        fun takeClip(c: Context): String {
+            synchronized(clipLock) {
+                val t = clipText ?: return ""
+                if (System.currentTimeMillis() - clipTextAt > 20_000) {
+                    expireClip()
+                    noteTry(c, s("a stored catch went stale", "una captura guardada caducó"))
+                    return ""
+                }
+                val m = clipManual
+                clipText = null
+                confirmClipPulled(c)
+                return JSONObject().put("t", t).put("m", m).toString()
+            }
         }
         /** Latest player state pushed by the page (JSON: playing, active, title, sub). */
         var nowJson = ""
@@ -403,15 +517,15 @@ class BubbleService : Service() {
          *  road (the page collects it through the Bridge) instead of
          *  being spent unheard.
          *
-         *  WIRING DEBT, stated plainly: the stamp's only honest
-         *  source is the activity's page-load boundary —
-         *  MainActivity's onPageFinished must call notePageLoaded().
-         *  Until that line lands there, this counter never moves,
-         *  the drain's extra conjunct is always true, and the drain
-         *  behaves exactly as it did before this cure: inert, never
-         *  weaker. Once wired, an over-eager stamp can only ever
-         *  stand a drain down (the safe direction — collection, not
-         *  loss); it can never earn one. */
+         *  The stamp's source is the activity's page-load boundary:
+         *  MainActivity's onPageFinished calls notePageLoaded()
+         *  (landed in 187 — the wiring debt this comment once
+         *  carried is paid). An over-eager stamp can only ever stand
+         *  a watch down (the safe direction — collection, not loss);
+         *  it can never earn one. Since R3-T2-1 the panel road
+         *  consults the same counter: pokeOrWake's liveness watch
+         *  and the toggle's pageAnswered() both demand an unchanged
+         *  generation before any push may be read as receipt. */
         @Volatile var pageEpoch = 0L
             private set
         fun notePageLoaded() { pageEpoch++ }
@@ -823,12 +937,19 @@ class BubbleService : Service() {
                     noteTry(c, s("a stored catch went stale", "una captura guardada caducó"))
                 }
             }
-            pendingKey = key
+            // The catch's three facts land as ONE step (R3-T2-4):
+            // its uncommitted key, its text and its manual flag are
+            // written under clipLock — the lock the Bridge's pull
+            // snapshots and clears them under — so a pull can never
+            // pair one catch's text with another's key or flag.
+            synchronized(clipLock) {
+                pendingKey = key
+                clipText = text
+                clipManual = manual
+            }
             deliveries++
             lastDeliveryAt = System.currentTimeMillis()
             noteTry(c, s("read ${text.length} chars via $trySource", "leídos ${text.length} caracteres vía ${if (trySource == "the blink") "el parpadeo" else "el panel"}"))
-            clipText = text
-            clipManual = manual
             onDelivery?.invoke()
             val p = poke
             if (p != null) p("clip")
@@ -892,17 +1013,28 @@ class BubbleService : Service() {
     private var lastCt = 0
     // The panel's own session belief (M-8): the identity of the session
     // whose sentence coordinates it has accepted (title + total), the
-    // sentence window that came with them, and the session most
-    // recently replaced — a straggler push from that one, arriving
-    // just after the panel moved on, is recognised and its index
-    // refused. These are session truth, not view state: they survive
-    // the panel closing and reopening, like lastCi/lastCt do.
+    // sentence window that came with them, and the sessions it has
+    // replaced — a straggler push from any of them, arriving just
+    // after the panel moved on, is recognised and its index refused.
+    // These are session truth, not view state: they survive the
+    // panel closing and reopening, like lastCi/lastCt do.
     private var sessKey = ""
     private var sessTp = ""
     private var sessTc = ""
     private var sessTn = ""
-    private var prevSessKey = ""
-    private var prevSessAt = 0L
+    /** The replaced sessions, oldest first, each with the moment it
+     *  was displaced (R3-T2-6). The memory this replaces was ONE
+     *  session deep: after two quick changes (A → B → C inside the
+     *  window) a straggler from A matched neither the live session
+     *  nor the remembered B, so it was accepted AS a session change
+     *  and crowned over C — and C's own next push, now matching the
+     *  "previous" slot, was refused as the straggler, so for up to
+     *  ten seconds the panel believed the dead session and
+     *  disbelieved the living one, scrub arithmetic included. The
+     *  set is bounded at eight: sessions change on human timescales,
+     *  and entries leave as they age out of the window anyway. */
+    private val replacedSess = LinkedHashMap<String, Long>()
+    private val replacedSessCap = 8
     private var playingNow = false
     private var lastInvite = 0L
     private var lastDeliverySeen = 0
@@ -1303,9 +1435,25 @@ class BubbleService : Service() {
             // toggle's escalation already fell back to store + wake.
             val myWatch = ++pokeWatchSeq
             val pokedAt = nowAt
+            val epochAtPoke = pageEpoch
             handler.postDelayed({
                 if (NativeSpeaker.active) return@postDelayed
-                if (nowAt > pokedAt) return@postDelayed // the page pushed since MY poke: it heard
+                // Receipt demands the generation too (R3-T2-1): a
+                // push is evidence of hearing only from the page
+                // that was poked. A load finishing inside the window
+                // means the answering push is a NEW page's restore
+                // push, which manufactures exactly this evidence —
+                // pulse advanced, content reset — for a poke that
+                // died with the old JS context, above all when the
+                // house itself ordered the reload (a wantReload
+                // arrival, ghostCheck, recoverWeb). backstageServe's
+                // drain has required the unchanged generation since
+                // 187; the panel road — the primary one — now does
+                // too. On a changed generation the watch falls
+                // through: the press is stored below, and the wake
+                // brings a page that collects it through the Bridge,
+                // stamp-checked.
+                if (pageEpoch == epochAtPoke && nowAt > pokedAt) return@postDelayed // the page pushed since MY poke: it heard
                 // My poke went unheard, and my press is owed to the
                 // store even if a newer press has taken over the
                 // watch (R2-T2-3): the supersede check used to retire
@@ -2276,7 +2424,17 @@ class BubbleService : Service() {
             // corpse moves none of it.
             val beforeAt = nowAt
             val beforePush = nowJson
+            val epochAtPress = pageEpoch
             fun pageAnswered(): Boolean {
+                // A load finishing since the press retires every
+                // witness below (R3-T2-1): the pushes since then are
+                // a NEW page's restore pushes, whose reset playing
+                // bit and changed content counterfeit both tests for
+                // a poke that died with the old JS context. The rungs
+                // then do their honest work — the intent is stored,
+                // the page is woken — and the fresh page collects
+                // the intent through the Bridge, stamp-checked.
+                if (pageEpoch != epochAtPress) return false
                 if (nowAt <= beforeAt) return false // no push landed: silence
                 if (runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(before) == intended) return true
                 return nowJson != beforePush // it pushed SOMETHING different: it heard, and acted
@@ -3054,10 +3212,11 @@ class BubbleService : Service() {
      *  · bounds — an index outside its own total cannot belong;
      *  · identity — a push claiming a different session (title or
      *  total changed) is a session change and is accepted as one,
-     *  EXCEPT a push from the session just replaced, arriving within
-     *  seconds of the change: that is a straggler, and its index is
-     *  refused (the rest of the push — its playing bit, its title —
-     *  still lands; only the coordinates are disbelieved);
+     *  EXCEPT a push from any session this panel recently replaced,
+     *  arriving within seconds of its displacement: that is a
+     *  straggler, and its index is refused (the rest of the push —
+     *  its playing bit, its title — still lands; only the
+     *  coordinates are disbelieved);
      *  · same session, same index, different sentence — the push's
      *  index and its own text disagree with the sentence the panel
      *  holds at that index: foreign, refused;
@@ -3079,8 +3238,23 @@ class BubbleService : Service() {
             sessTp = j.optString("tp"); sessTc = tc; sessTn = j.optString("tn")
             return
         }
-        if (key == prevSessKey && System.currentTimeMillis() - prevSessAt < 10_000) return
-        prevSessKey = sessKey; prevSessAt = System.currentTimeMillis()
+        // Straggler judgement consults EVERY recently replaced
+        // session (R3-T2-6): an unrecognised key is not crowned
+        // merely for being unrecognised — if this panel displaced
+        // that session inside the window, the push is a straggler
+        // from it, however many changes stand between. Entries
+        // older than the window are pruned as they are consulted.
+        val nowMs = System.currentTimeMillis()
+        val rit = replacedSess.entries.iterator()
+        while (rit.hasNext()) { if (nowMs - rit.next().value >= 10_000) rit.remove() }
+        if (replacedSess.containsKey(key)) return
+        if (sessKey.isNotEmpty()) {
+            // The displaced session joins the replaced set, most
+            // recent last; the set stays bounded (see its declaration).
+            replacedSess.remove(sessKey)
+            replacedSess[sessKey] = nowMs
+            while (replacedSess.size > replacedSessCap) replacedSess.remove(replacedSess.keys.first())
+        }
         sessKey = key
         lastCt = ct; lastCi = ci
         sessTp = j.optString("tp"); sessTc = tc; sessTn = j.optString("tn")

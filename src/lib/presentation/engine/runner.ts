@@ -511,11 +511,18 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
   // past and seed the steps before its resume point, so upgrading
   // never visibly erases progress the old law credited; landings and
   // jumps from here on add nothing until a walk completes the step.
+  // Both seedings are bounded by THIS module's length (R3-T6-2): the
+  // grandfather branch always clamped its word-taking to the module,
+  // and the explicit-done branch now stands under the same discipline
+  // — the runner knows its script's length even where the state
+  // layer's registry has not been fed, so a stored set naming steps
+  // the module does not have seeds only the steps it can witness.
   const doneSteps = new Set<number>(
-    progress.done ??
+    (progress.done ??
       (typeof progress.step === 'number' && progress.step > 0
         ? Array.from({ length: Math.min(progress.step, flat.length) }, (_, i) => i)
-        : []),
+        : [])
+    ).filter((n) => n >= 0 && n < flat.length),
   )
 
   function loadState(): PresentationStateFile {
@@ -1047,6 +1054,15 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
 
     // The step takes the stage: this run has PRESENTED it (H-28).
     presentedSteps.add(step.globalIndex)
+    // Presentation strikes the step's skip-log entry (R3-T6-4): the
+    // log is the record's standing witness that this step was once
+    // skipped and never since presented — the finish rule bars `seen`
+    // while any entry stands, and a lived presentation is the one act
+    // that answers it. (Seeding never passes through here: a seeded
+    // step was built, not presented, and strikes nothing.)
+    if (progress.skips.some((s) => s.step === step.globalIndex)) {
+      progress = { ...progress, skips: progress.skips.filter((s) => s.step !== step.globalIndex) }
+    }
     markPlace(step)
     if (mode === 'automatic') {
       status = userPaused ? 'paused' : 'playing'
@@ -1132,22 +1148,48 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     // machinery-passed as an optional miss during the walk). A run that
     // reached the end over un-presented steps, carrying no P17
     // disqualifier, completes as in-progress at the end beat below.
+    //
+    // THE FINISH JUDGES THE RECORD TOO (R3-T6-1/4/5): the run-local
+    // tallies above are only half the evidence — the record carries
+    // two witnesses of its own, and the finish now opens both.
+    // COVERAGE: a finish earns 'seen' only when every step is either
+    // presented by this run or witnessed complete by the record's
+    // done set — a «Watch» landing or an unearned resume point walks
+    // a tail over steps no run ever presented and no walk completed,
+    // and lands in-progress at the end beat whatever its startedAt.
+    // THE SKIP LOG: an entry still standing names a step that was
+    // skipped and never presented since (presentation strikes its
+    // entry — attemptEnter), so it disqualifies exactly as a run-local
+    // skip does, across runs: P17's bar is a property of the module's
+    // history, not of one run's memory. And a standing needs-refresh
+    // is never SOFTENED by any finish branch — the in-progress landing
+    // below keeps the flag, and keeps its seededRequiredMiss account,
+    // whenever the record carries them; only a clean full play clears
+    // either, as the fall-through already ruled.
     const presentedEveryStep = flat.every((f) => presentedSteps.has(f.globalIndex))
-    const cleanFullPlay = startedAt === 0 && !hadRequiredMiss && presentedEveryStep
-    const disqualified = hadRequiredMiss || seededRequiredMissRun || runSkipCount > 0
-    if (!disqualified && startedAt === 0 && !presentedEveryStep && flat.length > 0) {
-      // The run reached the end over steps it never presented — a
-      // chapters jump to the last beat and one tap. It did not walk
+    const coveredEveryStep = flat.every(
+      (f) => presentedSteps.has(f.globalIndex) || doneSteps.has(f.globalIndex),
+    )
+    const outstandingSkips = progress.skips.length > 0
+    const cleanFullPlay = startedAt === 0 && !hadRequiredMiss && presentedEveryStep && !outstandingSkips
+    const disqualified = hadRequiredMiss || seededRequiredMissRun || runSkipCount > 0 || outstandingSkips
+    if (!disqualified && !coveredEveryStep && flat.length > 0) {
+      // The run reached the end over steps it never presented and no
+      // walk ever completed — a chapters jump to the last beat and one
+      // tap, a «Watch» landing, an unearned resume. It did not walk
       // the module: it completes as in-progress, resumable at the end
-      // beat, never as seen.
+      // beat, never as seen. A standing needs-refresh is NOT softened
+      // into in-progress here (R3-T6-5): the flag, and the account
+      // that explains it, ride through the landing untouched.
       const last = flat[flat.length - 1]
       progress = {
-        state: 'in-progress',
+        state: progress.state === 'needs-refresh' ? 'needs-refresh' : 'in-progress',
         step: last.globalIndex,
         scene: last.scene.id,
         stepId: last.step.id,
         verifiedAgainst: script.verifiedAgainst ?? appVersion,
         skips: progress.skips,
+        seededRequiredMiss: progress.seededRequiredMiss,
       }
     } else {
       let nextState: ModuleProgress['state']
@@ -1160,8 +1202,16 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
         verifiedAgainst: script.verifiedAgainst ?? appVersion,
         skips: progress.skips,
         // The seeded-miss flag stands while it is the reason for the flag;
-        // a clean finish clears it from the record.
-        seededRequiredMiss: seededRequiredMissRun ? true : undefined,
+        // a clean finish clears it from the record. While the flag
+        // STANDS (any needs-refresh landing), its account stands with
+        // it — a finish that keeps the flag keeps the reason it is
+        // flagged (R3-T6-5); only a 'seen' landing clears the account.
+        seededRequiredMiss:
+          nextState === 'seen'
+            ? undefined
+            : seededRequiredMissRun || progress.seededRequiredMiss
+              ? true
+              : undefined,
       }
     }
     // The last-used mark clears when the module completes (Brizna's

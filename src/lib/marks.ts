@@ -23,16 +23,37 @@ export type LooseMark = {
 }
 
 const KEY = 'logos.marks.v1'
-// Deliberately NOT given the bubble.ts clipKey cure (F8-1/T2-1): this
-// formula is the persisted identity stored inside every LooseMark
-// (logos.marks.v1) and every SessionResume record. Changing it would
-// orphan all existing marks at once — playLooseMark could never match
-// them again — while the collision harm here is only a false-positive
-// jump inside a same-length, middle-edited near-copy of the same draft,
-// never a swallowed delivery. Revisit only with a dual-accept
-// (new + legacy) check at every reader: here, resume.ts, bubble.ts
-// recoverSession, continue.tsx and ListenPage.tsx.
-export const textKey = (t: string) => `${t.length}:${t.slice(0, 48)}:${t.slice(-48)}`
+// The fingerprint (cure R3-T1-4). This formula used to be
+// `${length}:${first 48}:${last 48}` — the class this app convicted
+// in T1-13 (nowreading) and F8-1/T2-1 (the clipboard) — and Round 3
+// proved the conviction applies here too: a corrected re-paste of
+// the same length, same opening and closing, one paragraph fixed in
+// the middle, inherited the previous text's resume record whole —
+// its offer, its sentence index (naming different words past the
+// edit), and its finished state. The key is now two independent
+// 32-bit hashes (cyrb64, the keyOf/renderKey pattern) over EVERY
+// character: a collision needs both to agree on the same length.
+// The old formula survives as `legacyTextKey` for exactly one
+// reader: playLooseMark dual-accepts it, because a LooseMark is
+// the user's own data — a moment they chose to keep — and changing
+// the key must not orphan the marks already stored. SessionResume
+// records get no dual-accept: a resume record is a pointer, never
+// a vault (the T1-13 doctrine), so a pre-cure record simply stops
+// matching the readers' comparisons and is overwritten by the next
+// session that earns one.
+export const legacyTextKey = (t: string) => `${t.length}:${t.slice(0, 48)}:${t.slice(-48)}`
+export const textKey = (t: string) => {
+  let h1 = 0xdeadbeef
+  let h2 = 0x41c6ce57
+  for (let i = 0; i < t.length; i++) {
+    const ch = t.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return 'k' + (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0') + '-' + t.length
+}
 
 export function loadMarks(): LooseMark[] {
   try { return JSON.parse(localStorage.getItem(KEY) ?? '[]') as LooseMark[] } catch { return [] }
@@ -90,7 +111,11 @@ export async function markAndToast() {
 /** Jump back to a loose mark: only while its text is still the Listen draft. */
 export function playLooseMark(m: LooseMark): boolean {
   const text = drafts.get().listen
-  if (!text.trim() || textKey(text) !== m.key) return false
+  // Dual-accept (cure R3-T1-4): a mark stored before the key change
+  // carries the legacy fingerprint and is still honoured — the mark
+  // is the user's data. New marks carry the strong key, against
+  // which a middle-edited near-copy no longer matches.
+  if (!text.trim() || (textKey(text) !== m.key && legacyTextKey(text) !== m.key)) return false
   loadText(text)
   if (m.idx > 0) seek(m.idx)
   void play(m.idx)
