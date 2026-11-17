@@ -143,6 +143,18 @@ export interface ModuleProgress {
   scene?: string
   /** Step id at `step`. */
   stepId?: string
+  /**
+   * The global indices of the steps actually COMPLETED in this
+   * module — presented on the stage and passed during a lived walk,
+   * accumulated across runs (T6-15). The resume point above is only
+   * a place to re-enter: landings (a search «Watch», a chapters
+   * jump, a resume) move it without walking anything, so overall
+   * progress credits THIS set, never the point. Written only by the
+   * runner's lived-walk bookkeeping; a record with no `done` at all
+   * predates the field and is taken at its word by the reader (its
+   * point was credited as walked by the law that wrote it).
+   */
+  done?: number[]
   verifiedAgainst: string
   skips: PresentationSkip[]
   /** The mode this module's progress was last recorded in. */

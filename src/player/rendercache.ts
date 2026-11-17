@@ -9,8 +9,9 @@
 // or the same book reopened next week, hits the same entry. A voice
 // change or a pronunciation-dictionary edit changes the spoken string
 // or the voice, and correctly misses. Storage is capped (~60 MB, the
-// oldest entries go first) — a cache, never a vault: every failure here
-// is silent and the engine simply renders, exactly as before.
+// oldest entries go first) — a cache, never a vault: a failed READ
+// simply misses and the engine renders, exactly as before; a failed
+// census no longer blocks SAVING (cure T1-18, below).
 import { envelope } from '../lib/audio.ts'
 
 const DB_NAME = 'logos-renders'
@@ -65,8 +66,20 @@ function tx<T>(mode: IDBTransactionMode, run: (st: IDBObjectStore) => IDBRequest
  *  Changing the key orphans entries saved under the old one — they
  *  simply miss, re-render once, and age out through the sweep; a
  *  cache, never a vault. */
-export function renderKey(spoken: string, voice: string): string {
-  const s = voice + '\n' + spoken
+export function renderKey(spoken: string, voice: string, pauseMs = 0): string {
+  // The pause is part of the key (cure T1-14). render() appends the
+  // sentence pause to the samples BEFORE encoding and saving, so the
+  // pause is baked into the cached audio — yet the old key carried
+  // neither the Sentence Pause setting nor the segment's place, so
+  // changing the setting never reached a cached sentence (it silently
+  // half-applied, to never-rendered text only), and the same spoken
+  // string mid-paragraph (pause ×0.4) and at a paragraph end (×2.2)
+  // shared one entry and both places got whichever pause baked first.
+  // The key now carries the exact pause that will be baked. Changing
+  // the key orphans entries saved under the old one — they miss,
+  // re-render once, and age out through the sweep (the T1-11
+  // doctrine: a cache, never a vault).
+  const s = voice + '\n' + spoken + '\n' + Math.round(pauseMs)
   let h1 = 0xdeadbeef
   let h2 = 0x41c6ce57
   for (let i = 0; i < s.length; i++) {
@@ -179,6 +192,15 @@ function enqueueLedger(fn: () => Promise<void>): Promise<void> {
 /** The ledger's current word on the store's size (-1 = not counted yet). */
 export function renderCacheLedgerBytes(): number { return totalBytes }
 
+/** True while the opening census is failing (cure T1-18): saves still
+ *  land in that state — the witness exists so the failure is a known,
+ *  probe-checkable fact, never a silent one. */
+let censusFailed = false
+export function renderCacheCensusFailed(): boolean { return censusFailed }
+/** When the next census retry becomes due after a failure, so a
+ *  broken store is not re-scanned in full on every sentence. */
+let censusRetryAt = 0
+
 /** Settles when every queued put/drop/sweep has landed (probes, tests). */
 export function flushRenderCache(): Promise<void> { return ledgerChain }
 
@@ -188,8 +210,11 @@ export function putPersistedRender(key: string, blob: Blob): void {
   void enqueueLedger(async () => {
     const d = await db()
     if (!d) return
-    if (totalBytes < 0) totalBytes = await loadTotal(d)
-    if (totalBytes < 0) return
+    if (totalBytes < 0 && Date.now() >= censusRetryAt) {
+      totalBytes = await loadTotal(d)
+      censusFailed = totalBytes < 0
+      if (censusFailed) censusRetryAt = Date.now() + 30_000
+    }
     // What this put replaces, so the ledger counts the store, not
     // the traffic: an overwritten sentence changes the total by
     // the difference, never by the whole new size again.
@@ -197,6 +222,20 @@ export function putPersistedRender(key: string, blob: Blob): void {
     const rec: Rec = { key, blob, at: Date.now(), size: blob.size }
     const ok = await tx('readwrite', (st) => st.put(rec))
     if (ok === null) return
+    // A failed census no longer kills the save (cure T1-18). The old
+    // code returned BEFORE this write whenever loadTotal errored, so
+    // for as long as the error persisted — a locked or corrupted
+    // store does not heal between sentences — the saved-processing
+    // cache was silently dead while playback continued normally (the
+    // 1.4.112 complaint, re-created inside the cache's own error
+    // path), and every put paid a full cursor re-scan for the
+    // privilege. Now the record lands regardless; only the BUDGET
+    // waits for a census — while the ledger is unknown the sweep
+    // cannot judge it honestly, so it stands down, the failure is
+    // carried on renderCacheCensusFailed(), and the census retries
+    // at most once per 30 s instead of once per sentence. When one
+    // lands, loadTotal re-derives the whole truth from the store.
+    if (totalBytes < 0) return
     totalBytes += blob.size - (prev?.size ?? 0)
     if (totalBytes <= BUDGET) return
     // Sweep oldest-first down to the soft floor.

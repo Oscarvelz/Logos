@@ -504,6 +504,19 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
   let lastUsedModule: string | null = null
 
   let progress: ModuleProgress = readProgress()
+  // The completed-steps set (T6-15): the steps this module's lived
+  // walks have actually finished, seeded from the record and grown
+  // only by the forward-advance rule in attemptEnter. A record with
+  // no `done` predates the field — take the old law's word for the
+  // past and seed the steps before its resume point, so upgrading
+  // never visibly erases progress the old law credited; landings and
+  // jumps from here on add nothing until a walk completes the step.
+  const doneSteps = new Set<number>(
+    progress.done ??
+      (typeof progress.step === 'number' && progress.step > 0
+        ? Array.from({ length: Math.min(progress.step, flat.length) }, (_, i) => i)
+        : []),
+  )
 
   function loadState(): PresentationStateFile {
     if (!storage) {
@@ -534,6 +547,7 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       mode: stored.mode,
       userPaused: stored.userPaused,
       seededRequiredMiss: stored.seededRequiredMiss,
+      done: stored.done,
     }
   }
 
@@ -545,7 +559,10 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     if (opening) return
     // P14: every persisted record carries the CURRENT mode and paused
     // state, so a resumed start can restore them over host defaults.
-    progress = { ...progress, mode, userPaused }
+    // The done set rides the same funnel (T6-15): folded from the
+    // run-local set here, at the single persistence point, so no
+    // rebuild path (finish, landing, re-mark) can drop it.
+    progress = { ...progress, mode, userPaused, done: [...doneSteps].sort((a, b) => a - b) }
     stateFile = loadState()
     stateFile = withLastUsed(
       {
@@ -960,6 +977,17 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       return
     }
 
+    // A step is COMPLETED when a lived walk leaves it for the very
+    // next step after presenting it (T6-15): the forward advance is
+    // the only honest witness — landings, chapter jumps and resumes
+    // move the place without completing anything, and seeding never
+    // passes through here at all. The optional-miss path below also
+    // lands here first (the missed step takes `current`, counts as
+    // passed, and completes when the walk moves on past it).
+    if (current && step.globalIndex === current.globalIndex + 1 && presentedSteps.has(current.globalIndex)) {
+      doneSteps.add(current.globalIndex)
+    }
+
     current = step
     endReason = undefined
     notice = undefined
@@ -1066,6 +1094,9 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     // the built frontier covers it, and no later entry re-seeds it (a
     // toggle act performed twice would unbuild the fiction).
     builtThrough = Math.max(builtThrough, current.globalIndex + 1)
+    // And it is COMPLETED (T6-15): this is the one witness overall
+    // progress trusts — a step the walk itself presented and passed.
+    doneSteps.add(current.globalIndex)
     pushReturn(current.globalIndex)
     pointer = current.globalIndex + 1
     current = null
@@ -1082,6 +1113,13 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     pointer = flat.length
     current = null
     resolution = null
+    // The final step completes here (T6-15): a finished run has no
+    // "next step" for the advance rule to witness, so the finish
+    // itself is the witness — but only for a step this run actually
+    // presented (a landing straight onto the end beat completes
+    // nothing).
+    const lastFlat = flat[flat.length - 1]
+    if (lastFlat && presentedSteps.has(lastFlat.globalIndex)) doneSteps.add(lastFlat.globalIndex)
     // P17 finish rule: 'seen' ONLY with no disqualifier — a clean full
     // play, no required miss (walked), no seeded required miss, and a
     // run-local skip count of zero. ANY skip (required or optional,

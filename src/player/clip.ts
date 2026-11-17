@@ -84,9 +84,25 @@ export function pauseClip() { audio?.pause() }
 export function resumeClip() { if (audio && audio.src) void audio.play().catch(() => { /* stays paused */ }) }
 
 /** Step the loaded clip along its own timeline (the bubble's prev/next on a
- *  recording, 1.4.156: it has no sentences to step, so the keys walk time). */
+ *  recording, 1.4.156: it has no sentences to step, so the keys walk time).
+ *
+ *  A forward step that would reach the end does NOT land on it (cure
+ *  T1-16). The old clamp was inclusive — Math.min(duration, …) — so a
+ *  +30 s jump with 10 s left landed exactly on the end, `ended`
+ *  fired, and the library's end hook marked the clip {done: true,
+ *  pos: 0}: a navigation gesture silently converted "nearly
+ *  finished, place saved" into "finished, place erased", and the
+ *  clip vanished from Continue. An overrunning step now stops a
+ *  breath before the end and pauses there — the place is preserved
+ *  and nothing is marked done; pressing play finishes the clip
+ *  honestly, by the listener's own hand. */
 export function stepClip(sec: number) {
-  if (audio && isFinite(audio.duration) && audio.duration > 0) {
-    audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + sec))
+  if (!audio || !isFinite(audio.duration) || audio.duration <= 0) return
+  const target = audio.currentTime + sec
+  if (sec > 0 && target >= audio.duration) {
+    audio.currentTime = Math.max(0, audio.duration - 0.25)
+    audio.pause()
+    return
   }
+  audio.currentTime = Math.max(0, Math.min(audio.duration, target))
 }

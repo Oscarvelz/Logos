@@ -533,8 +533,12 @@ export interface OverallProgress {
  * settled in Cadence:
  * - a completed module (seen) counts whole — fraction 1;
  * - a module under way counts the fraction of itself already walked:
- *   its recorded resume point over its total length (the recorded step
- *   over the script's total steps — the same point Resume re-enters);
+ *   its COMPLETED steps over its total length — the record's `done`
+ *   set, written only by lived walks (T6-15). The resume point is a
+ *   place, not a measure: a landing on it (a search «Watch», a
+ *   chapters jump) walks nothing and credits nothing. A legacy
+ *   record with no `done` set is taken at its word — its resume
+ *   point, which the law that wrote it credited as walked;
  * - a needs-refresh module counts by that same walked fraction: its
  *   record carries a place, and what was walked was truly walked (it
  *   also counts among the modules under way);
@@ -559,8 +563,11 @@ export function overallProgress(state: PresentationStateFile): OverallProgress {
     // in-progress or needs-refresh: the fraction of itself already walked.
     inProgress += 1
     const totalSteps = entry.script ? flattenSteps(entry.script).length : 0
-    if (totalSteps > 0 && typeof progress.step === 'number' && progress.step > 0) {
-      walked += Math.min(progress.step, totalSteps) / totalSteps
+    if (totalSteps > 0) {
+      const walkedCount = Array.isArray(progress.done)
+        ? progress.done.length
+        : (typeof progress.step === 'number' && progress.step > 0 ? progress.step : 0)
+      if (walkedCount > 0) walked += Math.min(walkedCount, totalSteps) / totalSteps
     }
   }
   const total = MODULE_CATALOGUE.length

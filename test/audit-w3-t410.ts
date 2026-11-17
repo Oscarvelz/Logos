@@ -10,7 +10,12 @@ Object.defineProperty(globalThis,'navigator',{value:{hardwareConcurrency:4,devic
 ;(globalThis as any).self = globalThis
 
 // Cache bucket containing ONLY the English model entry, body exactly 5 bytes.
-const enKey = 'https://hf/model.onnx?v=aaaa'
+// Re-pinned in 1.4.189: since the C-2 cure, certification HASHES the
+// cached body against the digest in its key — a label like 'aaaa' is
+// not a digest and certifies nothing. The key and the manifest now
+// carry the body's real SHA-256 (of bytes [1,2,3,4,5]).
+const EN_SHA = '74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0'
+const enKey = `https://hf/model.onnx?v=${EN_SHA}`
 const bucket = {
   keys: async () => [{ url: enKey }],
   match: async (req: any) => {
@@ -26,8 +31,8 @@ let offline = false
   if (offline) throw new Error('offline')
   const lang = String(url).includes('/es/') ? 'es' : 'en'
   const body = lang === 'en'
-    ? { model: { file: 'model.onnx', sha256: 'aaaa', bytes: 5 } }
-    : { model: { file: 'model.onnx', sha256: 'bbbb', bytes: 5 } }
+    ? { model: { file: 'model.onnx', sha256: EN_SHA, bytes: 5 } }
+    : { model: { file: 'model.onnx', sha256: 'b'.repeat(64), bytes: 5 } }
   return { json: async () => body }
 }
 

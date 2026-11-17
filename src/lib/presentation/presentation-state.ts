@@ -6,7 +6,7 @@
  * exception, Fence 0's E-λ; the presentation's own bookkeeping is E-state).
  * The shape, exactly as designed:
  *
- *   { modules: { <moduleId>: { state, step?, scene?, stepId?,
+ *   { modules: { <moduleId>: { state, step?, scene?, stepId?, done?,
  *                              verifiedAgainst, skips: [...],
  *                              mode?, userPaused?, seededRequiredMiss? } },
  *     speed: <the user's remembered speed, one per user>,
@@ -48,6 +48,20 @@ export function defaultPresentationStorage(): PresentationStorage {
       const probe = 'logos-presentation-probe'
       local.setItem(probe, '1')
       local.getItem(probe)
+      // The probe cleans up after itself (T6-13): the one-key law in
+      // this file's header is accounting Fence 0 relies on, and a
+      // probe key left behind made it false — ordinary app use wrote
+      // `logos-presentation-probe=1` into the user's real storage
+      // forever. The removal also sweeps the key earlier versions
+      // already left there. removeItem is reached structurally: the
+      // PresentationStorage interface stays get/set only, so injected
+      // stores (tests, hosts) are untouched.
+      try {
+        ;(local as { removeItem?: (key: string) => void }).removeItem?.(probe)
+      } catch {
+        // A host that can write but not remove is pathological; the
+        // probe has still proven what it came to prove.
+      }
       return local
     }
   } catch {
@@ -113,6 +127,16 @@ export function normalizePresentationState(value: unknown): PresentationStateFil
       if (typeof raw.step === 'number' && Number.isFinite(raw.step)) progress.step = raw.step
       if (typeof raw.scene === 'string') progress.scene = raw.scene
       if (typeof raw.stepId === 'string') progress.stepId = raw.stepId
+      if (Array.isArray(raw.done)) {
+        // The completed-steps set (T6-15): whole, non-negative,
+        // deduped, in order — a damaged list degrades to the honest
+        // subset rather than breaking the record.
+        const seen = new Set<number>()
+        for (const n of raw.done) {
+          if (typeof n === 'number' && Number.isFinite(n) && n >= 0) seen.add(Math.floor(n))
+        }
+        progress.done = [...seen].sort((a, b) => a - b)
+      }
       if (raw.mode === 'automatic' || raw.mode === 'interactive') progress.mode = raw.mode
       if (typeof raw.userPaused === 'boolean') progress.userPaused = raw.userPaused
       if (typeof raw.seededRequiredMiss === 'boolean') progress.seededRequiredMiss = raw.seededRequiredMiss
@@ -139,6 +163,46 @@ export function normalizePresentationState(value: unknown): PresentationStateFil
   }
 
   return out
+}
+
+/* ── The first-run offer's answer ───────────────────────────────────
+ * The offer (presentation-search.tsx) has its own real key: the
+ * learner's answer, nothing else. It lives here, beside the state
+ * file's own key, so the pending rule is testable without the React
+ * tree — and so it is stated once. */
+
+/** The offer's own key: set only when the offer is answered. */
+export const PRESENTATION_OFFER_KEY = 'logos.presentation.offer.v1'
+
+/**
+ * The offer stands until it is ANSWERED either way — and only an
+ * answer consumes it (T6-14). The old rule also required an
+ * untouched state file, so any earlier contact with the system —
+ * opening a module from Settings, a search «Watch» — permanently
+ * suppressed an offer the learner had never seen, let alone
+ * answered. And where `localStorage.getItem` throws
+ * (storage-blocked WebViews, where the lessons themselves run fine
+ * on the in-memory fallback) the old guard answered "not pending":
+ * the offer could never appear there at all. An unreadable key is
+ * an unanswered offer.
+ */
+export function offerPending(): boolean {
+  try {
+    return !localStorage.getItem(PRESENTATION_OFFER_KEY)
+  } catch {
+    return true
+  }
+}
+
+/** Record the offer's answer. Never throws (private mode). */
+export function answerOffer(): void {
+  try {
+    localStorage.setItem(PRESENTATION_OFFER_KEY, 'done')
+  } catch {
+    // The offer hides for the session regardless (the component's
+    // own state); a host that cannot record the answer will simply
+    // be offered again next time — the honest degradation.
+  }
 }
 
 /** Read + sanitise the state file (missing/corrupt → the empty state). */
@@ -234,6 +298,12 @@ export function withWatchLanding(
       stepId: point.stepId,
       verifiedAgainst,
       skips: [],
+      // A landing completes nothing (T6-15): the record carries an
+      // empty done set, so overall progress credits the watched
+      // scene's module with zero walked steps until a lived walk
+      // actually completes some — the old shape let the landing
+      // point itself masquerade as walked fraction.
+      done: [],
     })
   }
   const further =

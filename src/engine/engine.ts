@@ -354,7 +354,19 @@ export async function removeLegacyEngine() {
  */
 export async function removeKokoroCaches() {
   if (ls.get('logos.kokoroRemoved') === '1') return
-  try { await caches.delete('transformers-cache') } catch { /* unsupported */ }
-  try { await caches.delete('kokoro-voices') } catch { /* unsupported */ }
-  ls.set('logos.kokoroRemoved', '1')
+  // T4-17 cure: the done flag is earned, not assumed. It used to be set
+  // unconditionally after two deletes whose rejections were swallowed
+  // by their own try/catch, so one transient failure (storage blocked,
+  // a WebView hiccup) closed the gate forever while the buckets it
+  // exists to reclaim stayed on the phone. A delete that RESOLVES
+  // counts — true or false, the bucket is gone either way; a rejection
+  // leaves the flag unset, and the next launch tries again. No Cache
+  // Storage at all means there is nothing to reclaim on this device,
+  // which is done by definition.
+  if (typeof caches === 'undefined') { ls.set('logos.kokoroRemoved', '1'); return }
+  let allGone = true
+  for (const bucket of ['transformers-cache', 'kokoro-voices']) {
+    try { await caches.delete(bucket) } catch { allGone = false }
+  }
+  if (allGone) ls.set('logos.kokoroRemoved', '1')
 }

@@ -38,30 +38,42 @@ export function normalizeUrl(raw: string): string | null {
   } catch { return null }
 }
 
-const JUNK_FAMILIES = [/cookie/i, /privacy|terms of/i, /subscribe|newsletter|sign (up|in)|log ?in|suscr[ií]b|bolet[ií]n|inicia sesi[oó]n/i, /advertis|sponsored|publicidad/i, /all rights reserved|todos los derechos/i, /follow us|share (this|on)|click here|download (the|our) app|s[ií]guenos|haz clic/i]
+// Cure R2-T8-16: the third family used to lump the subscription pitch
+// (subscribe / newsletter) together with the account pitch (sign up /
+// log in) as ONE family, so a long paragraph that was nothing but a
+// subscription pitch — both halves of that genre in its own words —
+// counted as a single family and sailed past the two-family bar as
+// article body. The two genres are separate families now: a pitch
+// that works both of them is boilerplate-shaped, while a real
+// paragraph mentioning one of them in passing still counts once.
+const JUNK_FAMILIES = [/cookie/i, /privacy|terms of/i, /subscribe|newsletter|suscr[ií]b|bolet[ií]n/i, /sign (up|in)|log ?in|inicia sesi[oó]n/i, /advertis|sponsored|publicidad/i, /all rights reserved|todos los derechos/i, /follow us|share (this|on)|click here|download (the|our) app|s[ií]guenos|haz clic/i]
 /** Boilerplate-shaped: junk terms from at least two different families. */
 const junkHeavy = (t: string) => JUNK_FAMILIES.filter((re) => re.test(t)).length >= 2
 
 /**
  * A page's own title, with only the site-name suffix removed (cure
  * F8-10). The old stripper blindly cut any trailing dash-phrase of
- * 2–40 chars, so "The End - Part Two" lost its real ending. Now: a
- * pipe suffix ("Article | Site Name") is the site's, and a dash
- * suffix is removed only when it actually names the site the page
- * came from — anything else is the title's own words and stays.
+ * 2–40 chars, so "The End - Part Two" lost its real ending. Now a
+ * suffix — dash OR pipe — is removed only when it actually names the
+ * site the page came from; anything else is the title's own words
+ * and stays. (The pipe branch originally skipped the site check —
+ * cure R2-T8-15: "Faith | Hope | Love" lost "| Love", "Part One |
+ * The Beginning" lost its second half.)
  */
 function cleanTitle(raw: string, u?: URL): string {
   const title = (raw ?? '').trim()
   if (!title) return ''
+  const namesSite = (tail: string): boolean => {
+    if (!u) return false
+    const host = u.hostname.replace(/^(www|m|mobile|amp)\./, '').split('.')[0].toLowerCase()
+    const t = tail.toLowerCase().replace(/[^a-z0-9]+/g, '')
+    return !!host && !!t && (t === host || t.startsWith(host) || host.startsWith(t))
+  }
   const pipe = title.lastIndexOf(' | ')
-  if (pipe > 0) return title.slice(0, pipe).trim()
+  if (pipe > 0 && namesSite(title.slice(pipe + 3))) return title.slice(0, pipe).trim()
   if (u) {
     const m = title.match(/^(.*?)\s[–—-]\s([^\s–—-][^–—-]{1,40})$/)
-    if (m) {
-      const host = u.hostname.replace(/^(www|m|mobile|amp)\./, '').split('.')[0].toLowerCase()
-      const tail = m[2].toLowerCase().replace(/[^a-z0-9]+/g, '')
-      if (host && tail && (tail === host || tail.startsWith(host) || host.startsWith(tail))) return m[1].trim()
-    }
+    if (m && namesSite(m[2])) return m[1].trim()
   }
   return title
 }

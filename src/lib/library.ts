@@ -275,7 +275,16 @@ export async function importAudio(file: File): Promise<ClipMeta> {
     a.preload = 'metadata'; a.onloadedmetadata = () => done(a.duration); a.onerror = () => done(0); a.src = u
     setTimeout(() => done(a.duration), 6000)
   })
-  const ext = (file.name.split('.').pop() ?? '').toLowerCase().slice(0, 5) || (file.type.split('/')[1] ?? 'audio')
+  // L-1 cure: the format is the file's REAL extension — the part after
+  // a dot that is actually there. The old read took split('.').pop(),
+  // which for an extensionless name returns the whole name, so a file
+  // called "mysong" was stamped format "myson" and carried the lie
+  // into its label and its download names. No dot (or a suffix that
+  // is not extension-shaped) → the type the device reported, or the
+  // honest generic word.
+  const dotAt = file.name.lastIndexOf('.')
+  const rawExt = dotAt > 0 ? file.name.slice(dotAt + 1).toLowerCase() : ''
+  const ext = (/^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : '') || (file.type.split('/')[1] ?? '') || 'audio'
   return saveClip({ title: file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || 'Audio', text: '', voice: '', lang: '', duration, format: ext, blob: file, kind: 'audio', source: 'import' })
 }
 
@@ -285,10 +294,24 @@ export function trackPlayback() {
   if (tracking) return
   tracking = true
   let lastSaved = 0, lastKey: string | null = null, wasPlaying = false
+  // L-1 cure: a clip whose length was never measured at import
+  // (metadata failed or timed out → duration 0) used to wear that 0
+  // forever — its card computed "0:00 left" and a 0% bar from it
+  // however much of it had actually played. The player learns the
+  // true length the moment the audio loads; the first time it reports
+  // one for a clip still stamped 0, the record is healed with the
+  // real number, once per clip per session (the patch itself checks
+  // the fresh record, so a length learned any other way is never
+  // overwritten).
+  const durHealed = new Set<string>()
   clipPlayer.subscribe(() => {
     const p = clipPlayer.get()
     if (!p.key?.startsWith('clip:')) return
     const id = p.key.slice(5)
+    if (p.duration > 0 && Number.isFinite(p.duration) && !durHealed.has(id)) {
+      durHealed.add(id)
+      void updateClip(id, (cur) => (cur.duration ? {} : { duration: p.duration }), false)
+    }
     const now = Date.now()
     const paused = wasPlaying && !p.playing
     if (p.key !== lastKey) { lastKey = p.key; lastSaved = 0; if (p.playing) void updateClip(id, { playedAt: now }, false) }
