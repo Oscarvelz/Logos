@@ -260,7 +260,7 @@ function StageListen({ scenario }: { scenario: Scenario }) {
         <button type="button" className="pstage-chip" data-present="listen-back-to-book">Back to the book</button>
       )}
 
-      <div className="pstage-card">
+      <div className="pstage-card pstage-listen-editor">
         <textarea
           data-present="listen-editor"
           className="pstage-editor"
@@ -535,6 +535,7 @@ function StageLibrary({ scenario }: { scenario: Scenario }) {
           {clips.length > 0 && shownClips.length === 0 && (
             <p className="pstage-note" data-present="lib-saved-nomatch">Nothing matches that search.</p>
           )}
+          <div className="pstage-clips">
           {shownClips.map((c) => (
             <div key={c.id} className="pstage-card pstage-clip" data-present="lib-clip-card" data-clip-kind={c.kind}>
               {ui.selecting && (
@@ -566,6 +567,7 @@ function StageLibrary({ scenario }: { scenario: Scenario }) {
               <button type="button" className="pstage-iconbtn" data-present="lib-clip-more" aria-label="More">•••</button>
             </div>
           ))}
+          </div>
           {ui.menu === 'clip' && (
             <div className="pstage-sheet">
               <button type="button" className="pstage-sheet-btn" data-present="lib-menu-open-listen">Open in Listen</button>
@@ -853,7 +855,7 @@ function StageCreate({ scenario }: { scenario: Scenario }) {
   }, [scenario, ui.fx])
   const words = draft.trim() ? draft.trim().split(/\s+/).length : 0
   return (
-    <div>
+    <div className="create-page">
       <div className="pstage-eyebrow" data-present="create-head">● CREATE</div>
       <h2 className="pstage-title">Make an audio file</h2>
       <div className="pstage-card">
@@ -938,7 +940,7 @@ const STAGE_SETTING_INDEX: { anchor: string; title: string; sub: string; keys: s
   { anchor: 'set-card-language', title: 'Language', sub: 'The app’s own words — everything on screen.', keys: 'english español spanish idioma lenguaje inglés' },
   { anchor: 'set-presentations', title: 'Presentations', sub: 'Learn the whole app, guided, at your pace', keys: 'lessons tour guided learn presentaciones lecciones aprender guía' },
   { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy clips library copia respaldo exportar importar archivo biblioteca' },
-  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.187 · private, on-device text-to-speech', keys: 'version about acerca versión' },
+  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.188 · private, on-device text-to-speech', keys: 'version about acerca versión' },
 ]
 
 function StageSettings({ scenario }: { scenario: Scenario }) {
@@ -1120,8 +1122,8 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
 
       <div className="pstage-card" data-present="set-about">
         <strong>About Logos</strong>
-        <p className="pstage-note">Version 1.4.187 · private, on-device text-to-speech</p>
-        <p className="pstage-note" data-present="set-version">Version 1.4.187</p>
+        <p className="pstage-note">Version 1.4.188 · private, on-device text-to-speech</p>
+        <p className="pstage-note" data-present="set-version">Version 1.4.188</p>
       </div>
     </div>
   )

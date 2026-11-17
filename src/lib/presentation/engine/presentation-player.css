@@ -109,10 +109,11 @@
 /* The card: ~370px on phones, beside the focus (positioned inline).
    Its frame is the built border stack (see the file header): the
    theme-mixed border, the inner top light, the two-storey shadow.
-   Its seat changes glide on the one motion clock; its appearance is
-   the lp-in fade, AT its seat — the card is born where it will live
-   (the component renders it only once a seat exists), so the fade is
-   an arrival, never a journey. */
+   Its appearance is the lp-in fade, AT its seat — the card is born
+   where it will live (the component renders it only once a seat
+   exists), so the fade is an arrival, never a journey; and a seat
+   CHANGE is another arrival, never a journey either (R2-T6-8: no
+   gliding between seats — the path crossed the subject). */
 .lp-card {
   position: fixed;
   z-index: 115;
@@ -127,10 +128,11 @@
     inset 0 1px 0 var(--sheen),
     0 26px 55px -22px color-mix(in srgb, var(--accent) 30%, transparent),
     var(--shadow);
-  transition:
-    top var(--lp-dur) var(--lp-ease),
-    bottom var(--lp-dur) var(--lp-ease),
-    left var(--lp-dur) var(--lp-ease);
+  /* NO position transition (R2-T6-8): the card used to glide between
+     seats on this clock, and the straight path between two legal
+     seats crosses whatever lies between — on Oscar's tablet, the
+     subject the caption was explaining. Every seat is a birth: the
+     lp-in fade is the only motion, exactly as at the first seat. */
   animation: lp-in var(--lp-dur) var(--lp-ease);
 }
 

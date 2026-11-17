@@ -53,7 +53,12 @@
 .pstage-desk { display: none; }
 @media (min-width: 1100px) {
   .pstage { padding-left: 226px; }
-  .pstage-body { max-width: 860px; }
+  /* R2-T6-8 (tablet truth): NO cap — the stage spans the real content
+     width beside its rail, as the real app does. The old 860px cap
+     (and the 560px phone cap above it) made every tablet lesson play
+     inside a centred column that exists in no real layout — Oscar's
+     "false screen". The wide arrangements themselves stand below. */
+  .pstage-body { max-width: none; }
   .pstage-rail { display: flex; flex-direction: column; gap: 4px; position: absolute; left: 0; top: 0; bottom: 0; width: 210px; padding: 18px 12px; background: var(--glass); border-right: 1px solid var(--line); z-index: 3; }
   .pstage-rail button { background: none; border: none; text-align: left; color: var(--muted); font-size: 14px; font-weight: 650; padding: 10px 12px; border-radius: 10px; cursor: pointer; }
   .pstage-rail button.on { color: var(--accent); background: var(--surface-2); }
@@ -121,6 +126,46 @@
 .bk-mark { background: var(--accent-soft); border-radius: 4px; padding: 0 2px; }
 .bk-toc-i.cur { color: var(--accent); font-weight: 700; }
 .pstage-sheet-btn.accent { color: var(--accent-ink); background: var(--accent); border-color: transparent; font-weight: 700; }
+
+/* ── R2-T6-8 — TABLET TRUTH: the stage wears the real app's wide
+   arrangements, surface by surface, at the real app's own
+   breakpoints (styles.css: .listen-grid ≥1100, .voice-grid ≥640 /
+   ≥1180, .clips ≥840, .create-grid ≥1100). Below those widths
+   nothing in this section applies and the phone stage is untouched. */
+.pstage-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.pstage-grid .pstage-card { margin-bottom: 0; }
+@media (min-width: 640px) { .pstage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1180px) { .pstage-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.pstage-clips { display: grid; gap: 12px; }
+.pstage-clips .pstage-card { margin-bottom: 0; }
+@media (min-width: 840px) { .pstage-clips { grid-template-columns: 1fr 1fr; } }
+
+@media (min-width: 1100px) {
+  /* Listen: the real listen-grid — editor/reader in the main column,
+     Continue + player + desk in the side column. Column-definite
+     auto-placement keeps the DOM (and the phone) exactly as it was. */
+  .listen-page { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr); gap: 16px; align-items: start; }
+  .listen-page > .pstage-eyebrow, .listen-page > .listen-head { grid-column: 1 / -1; }
+  .listen-page > .pstage-listen-editor, .listen-page > .pstage-reader, .listen-page > [data-present='listen-back-to-book'] { grid-column: 1; }
+  .listen-page > .continue-card, .listen-page > .pstage-player, .listen-page > .pstage-desk { grid-column: 2; }
+  .listen-page > .pstage-desk { margin-top: 0; }
+  /* Create: the real create-grid — text in the wide column, the
+     options in the narrow one. */
+  .create-page { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(340px, 1fr); gap: 16px; align-items: start; }
+  .create-page > .pstage-eyebrow, .create-page > .pstage-title { grid-column: 1 / -1; }
+  .create-page > .pstage-card { margin-bottom: 0; }
+  /* Settings: the real page caps at 1180, centred (its .set-cols
+     live inside that measure). */
+  [data-stage-surface='settings'] > div { max-width: 1180px; margin: 0 auto; }
+}
+@media (min-width: 1500px) {
+  /* The real app's third ladder (styles.css .listen-grid ≥1500):
+     main | 440px player side | 380px desk column. The desk stays
+     one stacked item — display:contents would un-box the
+     desk-tablet anchor and turn AD13's beats into misses. */
+  .listen-page { grid-template-columns: minmax(0, 1fr) 440px 380px; }
+  .listen-page > .pstage-desk { grid-column: 3; }
+}
 
 [data-stage-surface][hidden] { display: none !important; }
 [data-stage-tab][hidden] { display: none !important; }

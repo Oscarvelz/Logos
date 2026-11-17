@@ -323,6 +323,11 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
   const [savedScene, setSavedScene] = useState<string | null>(null)
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
   const [miniInset, setMiniInset] = useState(0)
+  /** The card's measured height AS STATE (R2-T6-8): a caption taller
+   *  than the last one must re-render and RE-SEAT — as a ref it
+   *  changed silently and a seat validated against a shorter card
+   *  rendered a taller one over the footprint. */
+  const [cardHeight, setCardHeight] = useState<number | undefined>(undefined)
   /** CAPTIONED-BIRTH LATCH (P3): true once this run's first captioned,
    *  seated beat has arrived. Before it, presented steps advance
    *  stage-only — card, veil, ring and thread paint nothing. */
@@ -474,7 +479,11 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
     let effectEl = extraElement(step.effectAnchorId)
     let subjectEl = extraElement(step.subjectAnchorId)
 
-    actEl.scrollIntoView?.({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center', inline: 'center' })
+    // The frame is a CUT, never a glide (R2-T6-8): a smooth scroll
+    // travels the subject under a seat judged against its pre-scroll
+    // rect — both of Oscar's tablet specimens were stale-rect seats
+    // born exactly that way. Instant, always.
+    actEl.scrollIntoView?.({ behavior: 'auto', block: 'center', inline: 'center' })
 
     let disposed = false
     let loopFrame = 0
@@ -483,6 +492,12 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
     let observer: ResizeObserver | null = null
     let listenersOn = false
     let rebindTried = false
+    let guardTimer = 0
+    let mutObserver: MutationObserver | null = null
+    /** The last rects the guard saw (R2-T6-8): re-measure fires only
+     *  on a real difference, so the guard can never loop on the
+     *  renders it causes. */
+    let lastGuard: { a: TargetRect; e: TargetRect | null; s: TargetRect | null } | null = null
 
     const readRect = (el: AnchorElementLike): TargetRect => {
       const box = el.getBoundingClientRect!()
@@ -498,17 +513,46 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
       if (isGone(actEl, next)) return null
       setRect(next)
       setLastRect(next)
+      let eBox: TargetRect | null = null
+      let sBox: TargetRect | null = null
       if (effectEl) {
         const box = readRect(effectEl)
         if (isGone(effectEl, box)) setEffectRect(null)
-        else setEffectRect(box)
+        else {
+          setEffectRect(box)
+          eBox = box
+        }
       }
       if (subjectEl) {
         const box = readRect(subjectEl)
         if (isGone(subjectEl, box)) setSubjectRect(null)
-        else setSubjectRect(box)
+        else {
+          setSubjectRect(box)
+          sBox = box
+        }
       }
+      lastGuard = { a: next, e: eBox, s: sBox }
       return next
+    }
+
+    /** R2-T6-8 — the LIFETIME guard: the seat is re-judged whenever
+     * the subject MOVES, including layout shifts that resize nothing
+     * and scroll nothing (a sheet opening above the subject, a
+     * surface or tab change, content growing over it). The
+     * ResizeObserver sees only sizes and the listeners only scrolls —
+     * both of Oscar's tablet specimens were seats judged against
+     * rects that had silently moved. This guard re-reads the three
+     * rects and re-measures ONLY on a real difference. */
+    const remeasureIfMoved = () => {
+      if (disposed) return
+      const a = readRect(actEl)
+      if (isGone(actEl, a)) return
+      const e = effectEl ? readRect(effectEl) : null
+      const s = subjectEl ? readRect(subjectEl) : null
+      const same = (x: TargetRect | null, y: TargetRect | null) =>
+        (x === null && y === null) || (x !== null && y !== null && rectsEqual(x, y))
+      if (lastGuard && rectsEqual(lastGuard.a, a) && same(lastGuard.e, e) && same(lastGuard.s, s)) return
+      measure()
     }
 
     /** ONE re-resolution of the step's anchors (P10); true when a live act element was rebound. */
@@ -549,6 +593,16 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
       window.addEventListener('scroll', onMove, true)
       window.addEventListener('resize', onMove)
       listenersOn = true
+      if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined' && document.body) {
+        mutObserver = new MutationObserver(() => remeasureIfMoved())
+        mutObserver.observe(document.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['hidden', 'style', 'class'],
+        })
+      }
+      guardTimer = window.setInterval(remeasureIfMoved, 600)
     }
 
     if (reducedMotion()) {
@@ -604,6 +658,8 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
       cancelAnimationFrame(moveFrame)
       window.clearTimeout(settle)
       observer?.disconnect()
+      mutObserver?.disconnect()
+      window.clearInterval(guardTimer)
       if (listenersOn) {
         window.removeEventListener('scroll', onMove, true)
         window.removeEventListener('resize', onMove)
@@ -614,17 +670,21 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
 
   // The card's height, kept measured for the footprint seat (P11): a
   // ResizeObserver on the card element keeps cardHeightRef at the last
-  // measured height across beats (undefined only before the first card).
+  // measured height across beats (undefined only before the first card)
+  // AND publishes it as state (R2-T6-8) whenever it changes materially,
+  // so the seat is re-judged against the card that will actually render.
   useEffect(() => {
     const el = cardRef.current
     if (!el) return
-    const initial = el.getBoundingClientRect().height
-    if (initial > 0) cardHeightRef.current = initial
+    const publish = (height: number) => {
+      if (!(height > 0)) return
+      if (cardHeightRef.current !== undefined && Math.abs(height - cardHeightRef.current) <= 1) return
+      cardHeightRef.current = height
+      setCardHeight(height)
+    }
+    publish(el.getBoundingClientRect().height)
     if (typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(() => {
-      const height = el.getBoundingClientRect().height
-      if (height > 0) cardHeightRef.current = height
-    })
+    const ro = new ResizeObserver(() => publish(el.getBoundingClientRect().height))
     ro.observe(el)
     return () => ro.disconnect()
   }, [snapshot?.status, born])
@@ -886,19 +946,28 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
   // while no seat exists — the focus not yet measured, the viewport not
   // yet known — the card is NOT RENDERED AT ALL. Its first visible frame
   // is already home; it never appears at a provisional seat and travels.
-  // Later seats glide on the card's one motion clock (--lp-dur/--lp-ease).
+  // R2-T6-8: later seats are births too — the card does not GLIDE
+  // between seats, because the straight path between two legal seats
+  // crosses whatever lies between (on Oscar's tablet it crossed the
+  // subject itself). A new seat simply replaces the old, in place.
   // The seat (P11): computed against the FOOTPRINT when the beat carries
   // an effect/subject region beyond the act rect — the card never sits
-  // on the place the lesson is about to change — with the card's last
-  // measured height as the fit input. A plain act-only beat passes no
-  // footprint, and geometry keeps its legacy focus-half seat.
+  // on the place the lesson is about to change — with the card's
+  // measured height as the fit input. R2-T6-8: a beat that DECLARES
+  // regions (effect/subject anchors in its script) is judged against
+  // the footprint even when a region has not measured yet — the legacy
+  // focus-half seat on such a beat could park the card exactly where
+  // the lesson was about to act. Only a beat declaring no regions at
+  // all keeps the legacy seat.
   const seat = cardSeat(
     focus,
     viewport.w,
     viewport.h,
     miniInset,
-    effectRect || subjectRect ? footprint : undefined,
-    cardHeightRef.current,
+    effectRect || subjectRect || current?.step.effectAnchorId || current?.step.subjectAnchorId
+      ? footprint
+      : undefined,
+    cardHeight,
   )
   const cardStyle: React.CSSProperties = {}
   if (seat) {
