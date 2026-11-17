@@ -225,13 +225,14 @@ class BubbleService : Service() {
          *  was poked is drained — if the head has moved on (the page
          *  collected it itself through the Bridge, or a newer press
          *  leads now), this is a no-op. The drained press's stamp
-         *  still travels to lastTakenCtx, as a taken press's does. */
+         *  does NOT travel to lastTakenCtx (R2-T2-5): the Bridge
+         *  take is that slot's only writer, so the page never judges
+         *  its own press against a drained press's context. */
         fun drainPokedCmd(id: Long) {
             synchronized(pendingLock) {
                 val head = pendingQueue.firstOrNull() ?: return
                 if (head.id != id) return
                 pendingQueue.removeFirst()
-                lastTakenCtx = head.ctx
             }
         }
 
@@ -390,6 +391,30 @@ class BubbleService : Service() {
         fun s(en: String, es: String): String = if (uiLang == "es") es else en
         /** When the page last pushed state — the watchdog's pulse. */
         @Volatile var nowAt = 0L
+
+        /** The page generation (R2-T2-1): how many times a page has
+         *  finished loading in this process. backstageServe's drain
+         *  watch compares the generation at poke time against the
+         *  generation at verdict time — a load that finished inside
+         *  the window means the answering push came from a NEW page
+         *  that never received the poked event, however faithfully
+         *  its restore push matches the press's session stamp, so
+         *  the drain stands down and the press travels the recovery
+         *  road (the page collects it through the Bridge) instead of
+         *  being spent unheard.
+         *
+         *  WIRING DEBT, stated plainly: the stamp's only honest
+         *  source is the activity's page-load boundary —
+         *  MainActivity's onPageFinished must call notePageLoaded().
+         *  Until that line lands there, this counter never moves,
+         *  the drain's extra conjunct is always true, and the drain
+         *  behaves exactly as it did before this cure: inert, never
+         *  weaker. Once wired, an over-eager stamp can only ever
+         *  stand a drain down (the safe direction — collection, not
+         *  loss); it can never earn one. */
+        @Volatile var pageEpoch = 0L
+            private set
+        fun notePageLoaded() { pageEpoch++ }
 
         /** True until the page pushes its first state in this process.
          *  The honest never-pushed test (T2-5): nowJson is a non-null
@@ -676,7 +701,14 @@ class BubbleService : Service() {
          *  and the wake escalates to a ghost visit, whose arriving
          *  page collects the press through the Bridge as it wakes.
          *  The clip poke needs no such guard: clipText is not spent
-         *  by poking, only by the page's pull. */
+         *  by poking, only by the page's pull.
+         *
+         *  The return tells the truth about the serve (R2-T2-4):
+         *  true only when something was actually served — a poked
+         *  press or a poked clip. An empty queue with no catch
+         *  standing returns false, so callers who asked for a wake
+         *  (ghostWake and its watches) get their ghost visit instead
+         *  of a success reported for work not done. */
         fun backstageServe(c: Context? = null): Boolean {
             val p = poke ?: return false
             if (!Backstage.active) return false
@@ -684,6 +716,7 @@ class BubbleService : Service() {
             if (press != null) {
                 val pokedAt = nowAt
                 val beforePush = nowJson
+                val epochAtPoke = pageEpoch
                 p(press.cmd)
                 Handler(Looper.getMainLooper()).postDelayed({
                     // The drain is earned by THIS press's own evidence
@@ -698,7 +731,24 @@ class BubbleService : Service() {
                     // the press by its number, never its verb: a newer
                     // same-verb press at the head is not the press that
                     // was poked and is never eaten for it.
-                    val heard = nowAt > pokedAt && nowJson != beforePush &&
+                    //
+                    // The generation conjunct (R2-T2-1): the three
+                    // witnesses above are still not receipt — a page
+                    // that RELOADED inside the window restores the
+                    // same session and its restore push moves content
+                    // (playing bit, sub, fraction all reset) while its
+                    // context stamp EQUALS the press's, so all three
+                    // pass for a page that never received the event,
+                    // and its own Bridge collectors — timed from its
+                    // script's start — may land after this watch and
+                    // find the press already spent. So the drain also
+                    // requires that no page load finished inside the
+                    // window: the generation at verdict time must be
+                    // the generation at poke time. A stood-down drain
+                    // loses nothing — the press stays stored and the
+                    // escalation below (or the page's own collectors)
+                    // delivers it through the Bridge, stamp-checked.
+                    val heard = pageEpoch == epochAtPoke && nowAt > pokedAt && nowJson != beforePush &&
                         (press.ctx.isEmpty() || currentContext() == press.ctx)
                     if (heard) {
                         drainPokedCmd(press.id)
@@ -706,9 +756,21 @@ class BubbleService : Service() {
                         runCatching { c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(c, 0, 0).toBundle()) }
                     }
                 }, 1200)
+                return true
             }
-            else if (clipText != null) p("clip")
-            return true
+            if (clipText != null) { p("clip"); return true }
+            // Nothing was served (R2-T2-4): an empty queue and no
+            // catch standing means this call poked nothing and woke
+            // nothing, and it must not report otherwise. The old
+            // unconditional true stood ghostWake's unforced callers
+            // down — above all the stall watch, whose whole medicine
+            // is the visit and the reload it earns — in exactly the
+            // regime that watch exists for: a backstage page frozen
+            // busy-not-playing, with nobody's press stored and no
+            // catch standing. Success now means a serve: a poked
+            // press or a poked clip. Anything less, the visit is
+            // the caller's.
+            return false
         }
 
         fun deliver(c: Context, text: String, manual: Boolean) {
@@ -732,7 +794,35 @@ class BubbleService : Service() {
             // the page took the text (confirmClipPulled). A delivery
             // whose pull fails therefore dedupes nothing — copying
             // the text again is a new delivery, as it should be.
-            if (!manual && (key == committedClipKey(c) || key == pendingKey)) return
+            //
+            // The pending leg carries the twenty-second law too
+            // (R2-T2-2): the promise above held only while a pull
+            // could still land — pendingKey was retired solely by a
+            // successful pull or by expireClip, and expireClip ran
+            // only at the pull door, so a catch whose page could not
+            // pull for a long stretch (offline, an evicted service-
+            // worker cache: no pull, no visit) left its key standing
+            // for hours, and a fresh copy of the same text died at
+            // this door in silence — no delivery, no receipt, and
+            // when the page finally did pull, the original catch was
+            // stale and expired into nothing. The law the pull door
+            // enforces is now enforced here as well: the pending key
+            // is honoured only while its catch is inside its twenty
+            // seconds (clipTextAt is the catch's birth stamp — the
+            // setter lays it in the same breath that stores the
+            // catch, and the pair is retired together everywhere).
+            // Past the law, the stale catch and its uncommitted key
+            // are retired through the same door and with the same
+            // receipt the Bridge's stale branch uses, and the fresh
+            // copy falls through as the new delivery it is.
+            if (!manual) {
+                if (key == committedClipKey(c)) return
+                if (key == pendingKey) {
+                    if (System.currentTimeMillis() - clipTextAt <= 20_000) return
+                    expireClip()
+                    noteTry(c, s("a stored catch went stale", "una captura guardada caducó"))
+                }
+            }
             pendingKey = key
             deliveries++
             lastDeliveryAt = System.currentTimeMillis()
@@ -1182,8 +1272,9 @@ class BubbleService : Service() {
      *  retired the activity behind the service (the keys go silent), remember
      *  the press and bring Logos forward so the page collects it as it wakes. */
     // The poke watch's generation (T2-11): every live poke bumps
-    // it, so a watch armed by an earlier press stands down when a
-    // newer press has taken over the page's attention.
+    // it. It owns only the WAKE now (R2-T2-3): the newest press's
+    // watch speaks for the burst, but every watch keeps its own
+    // store duty — a generation mismatch no longer retires a press.
     private var pokeWatchSeq = 0
 
     private fun pokeOrWake(cmd: String, force: Boolean = false) {
@@ -1213,10 +1304,24 @@ class BubbleService : Service() {
             val myWatch = ++pokeWatchSeq
             val pokedAt = nowAt
             handler.postDelayed({
-                if (myWatch != pokeWatchSeq) return@postDelayed // a newer press owns the watch now
                 if (NativeSpeaker.active) return@postDelayed
-                if (nowAt > pokedAt) return@postDelayed // the page pushed: it heard
+                if (nowAt > pokedAt) return@postDelayed // the page pushed since MY poke: it heard
+                // My poke went unheard, and my press is owed to the
+                // store even if a newer press has taken over the
+                // watch (R2-T2-3): the supersede check used to retire
+                // the whole watch at this door — no store, no wake,
+                // no receipt — so a burst of presses against a hung
+                // renderer (he taps again, as a dead panel invites)
+                // stored only the LAST press, and the rest, poked
+                // into the corpse, evaporated. Now every watch whose
+                // poke went unheard hands its own press to the store;
+                // the watches fire in the order they were armed, so
+                // the queue receives the burst in the order he made
+                // it (T2-14's law), and only the newest watch owns
+                // the wake and its receipt — one visit per burst,
+                // every press replayed.
                 storePendingCmd(cmd)
+                if (myWatch != pokeWatchSeq) return@postDelayed // a newer press owns the wake now
                 noteTry(this, s("panel key visited Logos", "la tecla del panel visitó Logos"))
                 ghostWake()
             }, 1200)

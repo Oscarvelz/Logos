@@ -6,7 +6,7 @@
 // clip's words and an imported file's audio exist ONLY as clips, so the
 // old "they can always be re-made" rationale was false for both and the
 // clips are inside now, as the "whole library in one file" promise says.
-import { books, refreshBooks, getBookCover, getContent, putBook, deleteBook, type BookMeta, type BookContent } from './books.ts'
+import { books, refreshBooks, getBook, getBookCover, getContent, putBook, deleteBook, type BookMeta, type BookContent } from './books.ts'
 import { settings, saveLastText, type Settings } from './settings.ts'
 import { drafts } from './drafts.ts'
 import { pronEntries, savePronEntries, isValidPronEntry, type PronEntry } from './pronounce.ts'
@@ -278,6 +278,35 @@ function validateBook(raw: unknown, i: number): ValidBackup['books'][number] {
   return { meta: meta as BookMeta & { coverB64?: string }, content: content as unknown as BookContent }
 }
 
+const CLIP_KINDS = ['audio', 'text']
+const CLIP_SOURCES = ['listen', 'create', 'import']
+function validateClip(raw: unknown, i: number): ValidBackup['clips'][number] {
+  const at = `Library item ${i + 1}`
+  if (!isObj(raw)) damaged(`${at} is not a Library entry`)
+  const label = typeof raw.title === 'string' && raw.title ? ` (“${raw.title}”)` : ''
+  if (typeof raw.id !== 'string' || !raw.id) damaged(`${at}${label} has no id`)
+  if (typeof raw.title !== 'string') damaged(`${at} has no title`)
+  // The Library renders a text clip's word count from its text and
+  // searches every clip's text; the player and the audio maker read
+  // it too. A clip whose text is missing or not a string restores
+  // "successfully" and then throws in the Library's render — the
+  // poison this whole-file proof exists to keep out (R2-T5-2 cure,
+  // 2026-11-17: the clips stage used to check three fields of a
+  // seventeen-field record while the books stage checks twenty).
+  // Clips are now proven the way books are: every field their
+  // consumers dereference, typed as the Clip record declares it.
+  if (typeof raw.text !== 'string') damaged(`${at}${label} has no words — its text is missing or unreadable`)
+  if (typeof raw.voice !== 'string' || typeof raw.lang !== 'string' || typeof raw.format !== 'string') damaged(`${at}${label} is missing its voice, language or format`)
+  if (!isNum(raw.createdAt) || !isNum(raw.duration) || !isNum(raw.size)) damaged(`${at}${label} has unreadable numbers in its details`)
+  if (raw.kind !== undefined && (typeof raw.kind !== 'string' || !CLIP_KINDS.includes(raw.kind))) damaged(`${at}${label} has an unreadable kind`)
+  if (raw.source !== undefined && (typeof raw.source !== 'string' || !CLIP_SOURCES.includes(raw.source))) damaged(`${at}${label} has an unreadable source`)
+  for (const k of ['summary', 'url', 'site'] as const) if (raw[k] !== undefined && typeof raw[k] !== 'string') damaged(`${at}${label} has an unreadable ${k}`)
+  for (const k of ['fav', 'done', 'rendering'] as const) if (raw[k] !== undefined && typeof raw[k] !== 'boolean') damaged(`${at}${label} has an unreadable ${k} flag`)
+  for (const k of ['pos', 'playedAt'] as const) if (raw[k] !== undefined && !isNum(raw[k])) damaged(`${at}${label} has an unreadable ${k}`)
+  if (raw.blobB64 !== undefined && typeof raw.blobB64 !== 'string') damaged(`${at}${label} has unreadable audio`)
+  return raw as ValidBackup['clips'][number]
+}
+
 function validateBackup(data: unknown): ValidBackup {
   if (!isObj(data) || data.app !== 'logos') throw new BackupImportError('That file is not a Logos backup.')
   if (isNum(data.version) && data.version > 1) {
@@ -309,10 +338,7 @@ function validateBackup(data: unknown): ValidBackup {
   let clips: ValidBackup['clips'] = []
   if (data.clips !== undefined) {
     if (!Array.isArray(data.clips)) damaged('its Library list is unreadable')
-    data.clips.forEach((c, i) => {
-      if (!isObj(c) || typeof c.id !== 'string' || !c.id || typeof c.title !== 'string' || !isNum(c.createdAt)) damaged(`Library item ${i + 1} is incomplete`)
-    })
-    clips = data.clips as ValidBackup['clips']
+    clips = data.clips.map((c, i) => validateClip(c, i))
   }
   if (data.settings !== undefined && !isObj(data.settings)) damaged('its settings block is unreadable')
   let deletedBooks: string[] = []
@@ -383,10 +409,21 @@ export async function importBackup(file: File): Promise<ImportReport> {
     const clean = meta as BookMeta
     const local = shelf.get(b.meta.id)
     if (!local) { bookWrites.push({ meta: clean, content: b.content, before: null }); restored++; continue }
+    // The merge and the rollback must work from the FULL local
+    // record, never from the shelf list: since M-11 the list is the
+    // blob-free bookmeta twin, so a `local` taken from it is
+    // coverless by construction — a winner-'local' write then
+    // overwrote the books record without its cover, and every
+    // rollback "put back" the book minus its cover while claiming
+    // the library was restored exactly as it was (R2-T3-3 cure,
+    // 2026-11-17). getBook reads the real record, cover included;
+    // the twin remains only as the fallback if the record vanished
+    // between the refresh and this read.
+    const localFull = (await getBook(local.id)) ?? local
     const localContent = await getContent(local.id)
-    const { meta: merged, winner } = mergeBookMeta(local, clean)
+    const { meta: merged, winner } = mergeBookMeta(localFull, clean)
     if (winner === 'backup') {
-      bookWrites.push({ meta: merged, content: b.content, before: { meta: local, content: localContent } })
+      bookWrites.push({ meta: merged, content: b.content, before: { meta: localFull, content: localContent } })
       restored++
     } else {
       keptNewer++
@@ -394,8 +431,8 @@ export async function importBackup(file: File): Promise<ImportReport> {
       // bookmark union (or a done/fav the phone lacked) changed the
       // meta, or the phone's own text is missing and the backup's
       // rescues it — the progress itself is never rewritten.
-      const grew = (merged.bookmarks?.length ?? 0) > (local.bookmarks?.length ?? 0) || merged.done !== local.done || merged.fav !== local.fav
-      if (grew || !localContent) bookWrites.push({ meta: merged, content: localContent ?? b.content, before: { meta: local, content: localContent } })
+      const grew = (merged.bookmarks?.length ?? 0) > (localFull.bookmarks?.length ?? 0) || merged.done !== localFull.done || merged.fav !== localFull.fav
+      if (grew || !localContent) bookWrites.push({ meta: merged, content: localContent ?? b.content, before: { meta: localFull, content: localContent } })
     }
   }
   // Pronunciations (F7): the phone's reading of a word wins over the

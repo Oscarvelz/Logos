@@ -140,6 +140,24 @@ export function parseText(text: string, markdown: boolean): RawBook {
     if (markdown && /^([-*+]|\d+\.)\s+/.test(line)) { flush(); blocks.push({ k: 'li', t: line.replace(/^([-*+]|\d+\.)\s+/, '') }); continue }
     const alone = !para.length && (!lines[li + 1]?.trim() || !blankParas)
     if (!markdown && line.length < 110 && !para.length && CHAPTER_LINE.test(line)) {
+      // Cure R2-T8-8: a BARE numeral on its own line ("1.", "IV") is not
+      // heading evidence by itself — a vertical numbered list (number
+      // line, item line, number line, …) shattered into a chapter per
+      // item. A bare numeral heads a chapter only when a real body
+      // follows it: at least ~120 chars of prose before the next
+      // heading line. A book genuinely chaptered by bare numerals
+      // (I. / II. / III. with pages between) clears that easily; a
+      // list item never does, so the numeral stays in the text as the
+      // list marker it is.
+      if (/^(?:[IVXLCDM]{1,7}\.?|\d{1,3}\.)$/iu.test(line)) {
+        let mass = 0
+        for (let j = li + 1; j < lines.length && mass < 120; j++) {
+          const nx = lines[j].trim()
+          if (nx && CHAPTER_LINE.test(nx)) break
+          mass += nx.length
+        }
+        if (mass < 120) { para.push(line); continue }
+      }
       flush()
       blocks.push({ k: /^(parte|part|libro|book)\b/i.test(line) || /\b(parte|part|libro|book)$/i.test(line) ? 'h1' : 'h2', t: line })
       continue
@@ -226,7 +244,27 @@ export function decodeTextDetailed(buf: ArrayBuffer): DecodedText {
   const declared = /<\?xml[^>]*?encoding\s*=\s*["']([\w.:-]+)["']/i.exec(head)?.[1]
     ?? /<meta[^>]*?charset\s*=\s*["']?([\w.:-]+)/i.exec(head)?.[1]
   if (declared && !/^utf-?8$/i.test(declared)) {
-    try { return { text: new TextDecoder(declared).decode(bytes) } } catch { /* unknown label: fall through to the guesses */ }
+    try {
+      const asDeclared = new TextDecoder(declared).decode(bytes)
+      // Cure R2-T8-12: a declaration can LIE — sloppy converters stamp
+      // encoding="iso-8859-1" over UTF-8 bytes, and the old branch
+      // shelved the resulting mojibake with no warning: the one road
+      // M-2 left unguarded. The lie is detectable: if the bytes are
+      // strictly valid UTF-8 and the declared reading carries the
+      // mojibake signature while the UTF-8 reading is clean, the file
+      // is UTF-8 — read it as UTF-8 and say so. An honest legacy file
+      // fails the strict UTF-8 check (its high bytes are not valid
+      // sequences) and an honest reading shows no mojibake pairs, so a
+      // true declaration is never second-guessed.
+      if (!/^utf-?16/i.test(declared)) {
+        let asUtf8: string | null = null
+        try { asUtf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch { /* not valid UTF-8: the declaration stands */ }
+        if (asUtf8 !== null && mojibake(asDeclared) > 0 && mojibake(asUtf8) === 0) {
+          return { text: asUtf8, warn: `This file says its text is ${declared}, but it was really written in UTF-8; Logos read it as UTF-8 so the words come out right.` }
+        }
+      }
+      return { text: asDeclared }
+    } catch { /* unknown label: fall through to the guesses */ }
   }
   // BOM-less UTF-16: NUL bytes massed on one byte parity.
   const sample = bytes.subarray(0, Math.min(bytes.length, 8192))

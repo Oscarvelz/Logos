@@ -84,17 +84,31 @@ export function contentHash(content: BookContent): string {
     and a temp duplicate was worse: playing the new copy let the sweep
     delete the old one with its progress and bookmarks. Books imported
     before fingerprints existed are matched by loading their content and
-    hashing it (and the fingerprint is backfilled onto their meta). */
-async function existingDuplicate(meta: BookMeta): Promise<BookMeta | null> {
-  if (!meta.hash) return null
+    hashing it (and the fingerprint is backfilled onto their meta).
+    R2-T3-4: a hash match is only a duplicate when the candidate's
+    CONTENT is still there. The hashed path used to return the candidate
+    unchecked, so a meta-only phantom (content lost to a partial failure
+    or a quota casualty) trapped every re-import of its file forever —
+    the one self-healing move a user has was refused by the cure. A
+    phantom is reported separately, and the import heals it under its
+    own id, keeping its place, progress and marks. */
+async function existingDuplicate(meta: BookMeta): Promise<{ dup: BookMeta | null; phantom: BookMeta | null }> {
+  if (!meta.hash) return { dup: null, phantom: null }
   if (!books.get().loaded) await refreshBooks()
+  let phantom: BookMeta | null = null
   for (const cand of books.get().list) {
     if (cand.words !== meta.words) continue
-    if (cand.hash) { if (cand.hash === meta.hash) return cand; continue }
+    if (cand.hash) {
+      if (cand.hash !== meta.hash) continue
+      const cc = await getContent(cand.id)
+      if (cc) return { dup: cand, phantom: null }
+      phantom ??= cand
+      continue
+    }
     const cc = await getContent(cand.id)
-    if (cc && contentHash(cc) === meta.hash) { void updateBook(cand.id, { hash: meta.hash }, false); return cand }
+    if (cc && contentHash(cc) === meta.hash) { void updateBook(cand.id, { hash: meta.hash }, false); return { dup: cand, phantom: null } }
   }
-  return null
+  return { dup: null, phantom }
 }
 
 export async function importBook(file: File, batch?: string): Promise<BookMeta> {
@@ -136,8 +150,28 @@ export async function importBook(file: File, batch?: string): Promise<BookMeta> 
     // M-6: the same text already on the shelf IS that book — hand it
     // back instead of minting a twin.
     meta.hash = contentHash(content)
-    const dup = await existingDuplicate(meta)
+    const { dup, phantom } = await existingDuplicate(meta)
     if (dup) return dup
+    if (phantom) {
+      // R2-T3-4: heal the phantom under its own id — the fresh content
+      // lands in the record that kept the reader's place, progress,
+      // bookmarks and cover, instead of a twin minting beside it.
+      const healed: BookMeta = {
+        ...meta,
+        id: phantom.id,
+        addedAt: phantom.addedAt,
+        openedAt: phantom.openedAt,
+        pos: phantom.pos,
+        progress: phantom.progress,
+        done: phantom.done,
+        bookmarks: phantom.bookmarks,
+        fav: phantom.fav,
+        temp: phantom.temp,
+        cover: meta.cover ?? phantom.cover,
+      }
+      await putBook(healed, content)
+      return healed
+    }
     await putBook(meta, content)
     return meta
   } finally {

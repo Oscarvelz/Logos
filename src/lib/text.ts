@@ -42,6 +42,13 @@ const TITLES = new Set([
 const SENTENCE_STARTERS = new Set([
   'he', 'she', 'it', 'they', 'we', 'the', 'this', 'that', 'there', 'then', 'but', 'and', 'however', 'when', 'after', 'before', 'in', 'on', 'at', 'as', 'if', 'so', 'now', 'here',
   'él', 'ella', 'ello', 'esto', 'eso', 'pero', 'entonces', 'luego', 'cuando', 'después', 'sin',
+  // Cure R2-T8-1: the Spanish articles — the commonest sentence openers
+  // in Spanish prose ("…etc. El tren llegó…") — were missing, so the
+  // gate welded every such pair into one segment. A capitalised article
+  // after an abbreviation is a sentence opening in practice; the
+  // mid-sentence capitals that continue ("EE. UU. Mexicanos…") are not
+  // articles and still join.
+  'el', 'la', 'los', 'las', 'un', 'una',
 ])
 
 // Segments follow the text's own shape: one sentence each. A sentence is only
@@ -104,7 +111,8 @@ type Span = { start: number; end: number }
  * way: hard-wrapped prose (most long lines ending near one width) joins
  * its lines and splits by punctuation exactly as before; otherwise each
  * line stands as its own unit — except a line flowing into a lowercase
- * continuation, which is wrapped prose whatever the widths say.
+ * continuation of a prose-shaped paragraph, which is wrapped prose
+ * whatever the widths say (conditions in the body, cure R2-T8-4).
  */
 function splitParaSentences(para: string): Span[] {
   if (!para.includes('\n')) return splitSentences(para)
@@ -112,7 +120,18 @@ function splitParaSentences(para: string): Span[] {
   const long = lines.filter((l) => l.trim().length > 40)
   const widths = long.map((l) => l.trimEnd().length).sort((a, b) => a - b)
   const wrapAt = widths[Math.floor(widths.length * 0.8)] ?? 0
+  // Cure R2-T8-5: the width verdict alone also convicts a tidy list of
+  // long items — an agenda's lines cluster at one width exactly like a
+  // wrap column, and the whole list became one segment. Real wrap
+  // leaves evidence a list does not: its LAST line is a short remainder
+  // (the paragraph ran out mid-column), or its lines end mid-phrase on
+  // words that cannot close one (articles, prepositions, conjunctions).
+  // A run of full-width, phrase-complete lines is a list, however
+  // uniform its widths.
+  const endsOpen = (l: string) => /\b(?:the|a|an|of|to|in|on|at|by|for|with|from|and|or|but|el|la|los|las|un|una|de|del|en|con|por|para|y|o|que)$/i.test(l.trim())
+  const lastLen = lines[lines.length - 1].trimEnd().length
   const wrapped = long.length >= 6 && wrapAt < 110 && long.filter((l) => l.trimEnd().length >= wrapAt - 12).length > long.length * 0.5
+    && (lastLen < wrapAt - 12 || lines.filter(endsOpen).length >= 2)
   if (wrapped) return splitSentences(para)
   const spans: Span[] = []
   let chunkStart = 0
@@ -120,10 +139,22 @@ function splitParaSentences(para: string): Span[] {
   const flush = () => {
     for (const s of splitSentences(chunk)) spans.push({ start: chunkStart + s.start, end: chunkStart + s.end })
   }
+  // Cure R2-T8-4: the lowercase glue had no list exception, so a
+  // lowercase shopping list ("buy milk / buy eggs / …") glued into one
+  // segment verbatim — F8-9's disease for exactly the lists people
+  // paste. The glue now asks for prose shape first: the paragraph must
+  // OPEN with a capital (a sentence beginning — a list opens as
+  // itself, lowercase from its first line), and the line being
+  // continued must be long enough to be a wrap remainder (≥14 chars —
+  // nobody hard-wraps prose narrower than that; a shorter line is a
+  // complete item). Genuinely wrapped prose (capital opening, long
+  // lines flowing lowercase) still joins.
+  const proseShaped = /^\p{Lu}/u.test(lines[0].trim())
   let off = lines[0].length + 1
+  let prevLen = lines[0].trim().length
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i]
-    if (/^[a-zà-ÿ]/u.test(line.trim())) {
+    if (proseShaped && prevLen >= 14 && /^[a-zà-ÿ]/u.test(line.trim())) {
       chunk += `\n${line}` // a lowercase continuation is the same sentence, wrapped
     } else {
       flush()
@@ -131,6 +162,7 @@ function splitParaSentences(para: string): Span[] {
       chunk = line
     }
     off += line.length + 1
+    prevLen = line.trim().length
   }
   flush()
   return spans
@@ -162,8 +194,19 @@ function splitSentences(p: string): Span[] {
       // capital alone never ends the sentence after an abbreviation;
       // a capital that opens sentences does.
       if (TITLES.has(lastWord)) continue
-      const nextTok = p.slice(m.index + m[0].length).match(/^[\p{L}]+/u)?.[0] ?? ''
-      if (!(/^\p{Lu}/u.test(nextTok) && SENTENCE_STARTERS.has(nextTok.toLowerCase()))) continue
+      const rest = p.slice(m.index + m[0].length)
+      // Cure R2-T8-1, other half: the token test used to read the next
+      // word straight off the text, so an opener that is not a letter —
+      // a Spanish "¿"/"¡" (which by orthography can only OPEN a
+      // sentence, never continue one) or an opening quote hiding the
+      // word behind it ("etc. "She went home…" merged) — left the
+      // token empty and the gate could never fire.
+      const opensSentence = /^[¿¡]/.test(rest)
+        || (() => {
+          const nextTok = rest.replace(/^["'“‘«(]+/u, '').match(/^[\p{L}]+/u)?.[0] ?? ''
+          return /^\p{Lu}/u.test(nextTok) && SENTENCE_STARTERS.has(nextTok.toLowerCase())
+        })()
+      if (!opensSentence) continue
     }
     if (m[1] === '.' && /\d$/.test(before) && /^\d/.test(p.slice(m.index + 1))) continue
     // A bare list number ("2.") belongs to the sentence that follows it.

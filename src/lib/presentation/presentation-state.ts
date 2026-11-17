@@ -238,13 +238,19 @@ export function withWatchLanding(
   }
   const further =
     existing.state !== 'seen' && typeof existing.step === 'number' && existing.step > point.step
+  // The merge starts from the WHOLE existing record and names only the
+  // fields it means to change (the anti-Vela discipline, R2-T6-7): a
+  // field-by-field rebuild here silently dropped the 186 fields —
+  // `mode`, `userPaused` and `seededRequiredMiss` — from every record a
+  // «Watch» landing touched. The spread carries them, and the skip log,
+  // exactly as they stand.
   const merged: ModuleProgress = {
+    ...existing,
     state: existing.state === 'unseen' ? 'in-progress' : existing.state,
     step: further ? existing.step : point.step,
     scene: further ? existing.scene : point.scene,
     stepId: further ? existing.stepId : point.stepId,
     verifiedAgainst: existing.verifiedAgainst || verifiedAgainst,
-    skips: existing.skips,
   }
   return withModuleProgress(state, moduleId, merged)
 }

@@ -47,6 +47,14 @@ let dbp: Promise<IDBDatabase> | null = null
 function open(): Promise<IDBDatabase> {
   dbp ??= new Promise((resolve, reject) => {
     const req = indexedDB.open(DB, 2)
+    // R2-T3-6 cure: a blocked upgrade used to hang this promise forever —
+    // a leftover tab still holding the v1 database open wedges the v2
+    // open, the memoised dbp never settled, and the shelf spun silently
+    // (M-9's law: a database failure surfaces, never renders as silence
+    // or as an empty library). The block is named on the store the shelf
+    // already renders; when the other tab closes, the open lands and the
+    // next refresh clears the word.
+    req.onblocked = () => { books.set({ loaded: true, loadError: true }) }
     req.onupgradeneeded = () => {
       const db = req.result
       if (!db.objectStoreNames.contains('books')) db.createObjectStore('books', { keyPath: 'id' })
@@ -66,7 +74,14 @@ function open(): Promise<IDBDatabase> {
         }
       }
     }
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      const db = req.result
+      // Close this connection when a newer version arrives, so this tab
+      // is never the wedge for the next upgrade; the memo is dropped so
+      // the next caller reopens at the new version.
+      db.onversionchange = () => { try { db.close() } catch { /* already closed */ } dbp = null }
+      resolve(db)
+    }
     req.onerror = () => { dbp = null; reject(req.error) }
   })
   return dbp

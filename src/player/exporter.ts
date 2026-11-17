@@ -28,6 +28,16 @@ export const exportJob = createStore<ExportState>({ status: 'idle', done: 0, tot
 
 let ctrl: AbortController | null = null
 
+/** Admission claim (R2-T7-1): held from a job's synchronous admission
+ *  until it fully ends. The store's 'running' status is only set after
+ *  the pre-flight (the getClip await + segmentation), so the admission
+ *  gates consult this claim alongside the status — without it, a second
+ *  admission inside the getClip window passed both gates and ran a
+ *  second render over this one store and the one `ctrl` above: progress
+ *  and result stomped, Cancel reached only the second render, and both
+ *  jobs could reach saveClip. */
+let claimed = false
+
 export function titleFrom(text: string): string {
   const first = text.trim().split(/\n/)[0].replace(/\s+/g, ' ')
   return first.length > 64 ? `${first.slice(0, 61).replace(/\s+\S*$/, '')}…` : first || 'Untitled'
@@ -53,7 +63,7 @@ const queue: { text: string; opts: ExportOpts }[] = []
 
 /** Render now, or after the current job when one is already running (Listen → Library can stack several). */
 export function queueExport(text: string, opts: ExportOpts): 'started' | 'queued' {
-  if (exportJob.get().status === 'running') { queue.push({ text, opts }); exportJob.set({ queued: queue.length }); return 'queued' }
+  if (claimed || exportJob.get().status === 'running') { queue.push({ text, opts }); exportJob.set({ queued: queue.length }); return 'queued' }
   void runExport(text, opts)
   return 'started'
 }
@@ -67,7 +77,19 @@ function next() {
 export function isQueued(id: string) { return queue.some((q) => q.opts.id === id) }
 
 export async function runExport(text: string, opts: ExportOpts) {
-  if (exportJob.get().status === 'running') return
+  if (claimed || exportJob.get().status === 'running') return
+  claimed = true
+  try {
+    await runExportClaimed(text, opts)
+  } finally {
+    // Released on every exit — including a pre-flight rejection (today
+    // that rejection propagates unhandled; the claim must not leak with
+    // it and wedge every later admission behind a phantom job).
+    claimed = false
+  }
+}
+
+async function runExportClaimed(text: string, opts: ExportOpts) {
   const st = settings.get()
   // M-41: re-rendering an existing clip renders at THE CLIP's speed —
   // the clip record's `sp` is the owner (the Playback office's contract);

@@ -266,14 +266,26 @@ export interface PresentationRunner {
    * NO place / last-used / progress writes — a resume cancelled here
    * leaves the previously recorded resume point byte-identical.
    * endReason 'abort', snapshot `cleanAbort: true`.
+   * The one exception (P17's honesty discipline, R2-T6-6): if the
+   * opening was BLOCKED by a required entry miss, the exit finalises
+   * that miss onto the record instead (done, needs-refresh, the skip
+   * logged) — the miss is the lesson's fact, and the blocked window
+   * offers no other exit.
    */
   abortClean: () => void
   /**
    * P14 backgrounding: the app went hidden mid-run — record whether the
-   * lesson was playing, pause the clock, persist mode/paused.
+   * lesson was playing (Automatic) and whether the clock itself was
+   * running (any mode), pause the clock, persist mode/paused.
    */
   handleHidden: () => void
-  /** The app is visible again: resume the clock ONLY if it was playing when hidden. */
+  /**
+   * The app is visible again: resume the clock ONLY if it was running
+   * when it hid. A user-paused or window-held lesson stays still; an
+   * Interactive lesson's own clock waits (the «Show me» dwell, the
+   * reveal wait) were running, so they revive and can complete —
+   * the lesson still never advances past a wait on its own.
+   */
   handleVisible: () => void
   pause: () => void
   resume: () => void
@@ -403,6 +415,25 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
   let blockedNotice: string | undefined
   /** Set only by abortClean(), carried on its snapshot. */
   let cleanAbortFlag = false
+  /* ── R2-T6-4: the opening shield ─────────────────────────────────── */
+  /**
+   * True while the opening phase holds the scenario in seed-mode: from
+   * the end of prepare's seeding until confirmStart (or an exit). The
+   * runner's own verbs all stand down while `opening` stands — but the
+   * STAGE's own λ button is not a runner verb: it calls
+   * scenario.stage.setLambda directly, and before this shield that was
+   * a live presented-path write during the phase, before «Empezar» was
+   * ever tapped (a kill in that window left the real switch flipped,
+   * and a polite tap inverted Q2's own tap beat). Held in seed-mode,
+   * any such act absorbs into the fiction ledger only; confirmStart
+   * restores the ledger to the value seeding left (`openingLedger`)
+   * before releasing the shield, so the lesson starts from exactly
+   * the state its entry built — and the stage's λ keeps its real hand
+   * the moment the lesson is confirmed (the T6-11 cure stands).
+   */
+  let openingShieldHeld = false
+  /** The fiction ledger's value as entry seeding left it. */
+  let openingLedger: boolean | null = null
   /* ── P16 two-phase + dwell ───────────────────────────────────────── */
   /** True while a scheduled perform has not yet fired. */
   let performPending = false
@@ -418,6 +449,17 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
    * cannot re-fire a toggle and unbuild the fiction.
    */
   const livedPerformed = new Set<string>()
+  /**
+   * The steps this run has actually PRESENTED (canon's H-28 cure,
+   * restored by R2-T6-1 — the lane runner the 186 merge took as its
+   * base never carried it, and the merge dropped it silently): a step
+   * enters the set when it takes the stage resolved in `attemptEnter`,
+   * or when the machinery passes it as an optional miss during a lived
+   * walk. Entry seeding and chapters jumps never add to it — seeded
+   * steps were built, not presented — so a run that reaches the end
+   * over un-presented steps cannot earn a clean full play.
+   */
+  let presentedSteps = new Set<number>()
   /* ── P17 run-local skip tally ────────────────────────────────────── */
   let runSkipCount = 0
   let runSkipChapters: BilingualText[] = []
@@ -425,8 +467,31 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
   let seededRequiredMissRun = false
   /* ── P12 reveal wait ─────────────────────────────────────────────── */
   let revealTries = 0
+  /**
+   * True while the clock stands RESUMED for an opening-phase reveal
+   * wait (R2-T6-3): prepare holds the clock, and a wait registered on
+   * a paused clock never arms — the retry could never fire, the entry
+   * beat could never seat, «Empezar» could never enable. During the
+   * phase the reveal retry is the only wait that can be pending (the
+   * entry beat has not seated, so nothing else is armed), so the clock
+   * resumes for it alone; the next attemptEnter re-pauses the moment
+   * the attempt lands — seat, skip or block — before any perform or
+   * advance wait is armed on it.
+   */
+  let openingRevealResumed = false
   /* ── P14 backgrounding ───────────────────────────────────────────── */
   let hiddenWasPlaying = false
+  /**
+   * Whether the presentation clock was RUNNING when the app hid — any
+   * mode (R2-T6-2). Automatic's was-playing is the narrow case; an
+   * Interactive lesson's clock is just as alive (the «Show me» dwell
+   * and the reveal wait run on it), and pausing it on hide with no
+   * record stranded those waits forever. `hiddenOutstanding` keeps a
+   * double hide (visibilitychange + pagehide) from overwriting the
+   * first hide's record with the already-paused second one.
+   */
+  let hiddenClockWasRunning = false
+  let hiddenOutstanding = false
   /** True while the stay-here window is open: the clock is held, verbs stand down. */
   let stayWindowOpen = false
   /** True while the ✕ confirmation window is open: same hold, same stand-down. */
@@ -571,6 +636,42 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     if (!port || !scenarioLive) return
     scenarioLive = false
     port.teardown(reason)
+  }
+
+  /** Engage the opening shield (R2-T6-4): seed-mode held across the phase. */
+  function engageOpeningShield(): void {
+    const stage = port?.scenario?.stage
+    if (!stage) return
+    try {
+      stage.beginLambdaSeed()
+      openingLedger = stage.lambdaOn()
+      openingShieldHeld = true
+    } catch {
+      openingShieldHeld = false
+    }
+  }
+
+  /**
+   * Release the opening shield. With `restoreLedger`, a ledger the
+   * stage's own hand moved during the phase is first put back to the
+   * value entry seeding left — while seed-mode still stands, so the
+   * restoration itself is absorbed and never writes the real switch.
+   */
+  function releaseOpeningShield(restoreLedger: boolean): void {
+    if (!openingShieldHeld) return
+    openingShieldHeld = false
+    const stage = port?.scenario?.stage
+    const seeded = openingLedger
+    openingLedger = null
+    if (!stage) return
+    try {
+      if (restoreLedger && seeded !== null && stage.lambdaOn() !== seeded) {
+        stage.setLambda(seeded)
+      }
+      stage.endLambdaSeed()
+    } catch {
+      // Seed-mode is scenario-local; teardown clears it regardless.
+    }
   }
 
   /** Point progress at the step on stage: resume re-enters exactly there. */
@@ -724,6 +825,16 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
         const flatStep = flat[builtThrough]
         builtThrough += 1
         if (!flatStep) break
+        // R2-T6-5: a step already PERFORMED this run is never re-performed
+        // by seeding. `builtThrough` advances only when a step COMPLETES,
+        // so a performed-but-not-completed step stands in front of the
+        // frontier — inside «Show me»'s result dwell, and in Automatic
+        // between the perform and the advance. A chapters jump landing
+        // past it re-seeded it through the port, and a toggle-shaped act
+        // (the λ tap above all) inverted the very state its performance
+        // had just taught. Its fiction stands exactly as its performance
+        // left it; the frontier simply walks past.
+        if (livedPerformed.has(stepKey(flatStep))) continue
         const record = anchorById(flatStep.step.anchorId)
         let preconditionFailed = false
         if (record?.precondition && options.performPrecondition) {
@@ -809,6 +920,14 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
   }
 
   function attemptEnter(): void {
+    // R2-T6-3: an opening-phase reveal retry fired on a clock resumed
+    // for that wait alone (below). The attempt has landed now — restore
+    // the phase's held stillness BEFORE anything below arms a perform
+    // or advance wait on the clock.
+    if (openingRevealResumed) {
+      openingRevealResumed = false
+      clock.pause()
+    }
     const step = flat[pointer]
     if (!step) {
       finishCompleted()
@@ -829,6 +948,15 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
         cancelReveal = null
         attemptEnter()
       })
+      if (opening) {
+        // The opening hold has the clock paused, and a wait on a paused
+        // clock never arms — left so, the retry could never fire and
+        // the phase deadlocked (R2-T6-3). Resume the clock for the
+        // wait: in this phase it is the only wait that can be pending,
+        // and the attempt it fires re-pauses on landing (above).
+        openingRevealResumed = true
+        clock.resume()
+      }
       return
     }
 
@@ -843,7 +971,11 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
         // Skip + log; the scene continues at the next step. The skipped step
         // counts as passed for place purposes: resume lands after it. It
         // also counts as passed for the built frontier: its act can never
-        // be performed, so seeding never owes it either.
+        // be performed, so seeding never owes it either. And it counts as
+        // walked for the presented set (H-28): the machinery passed it
+        // DURING a lived walk, in order — unlike a seeded step, which no
+        // walk ever met.
+        presentedSteps.add(step.globalIndex)
         builtThrough = Math.max(builtThrough, step.globalIndex + 1)
         pointer = step.globalIndex + 1
         persistProgress()
@@ -885,6 +1017,8 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       return
     }
 
+    // The step takes the stage: this run has PRESENTED it (H-28).
+    presentedSteps.add(step.globalIndex)
     markPlace(step)
     if (mode === 'automatic') {
       status = userPaused ? 'paused' : 'playing'
@@ -955,20 +1089,42 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     // a resumed tail of a healthy record still completes to 'seen' (it
     // carries no disqualifier), a resumed tail never CLEARS a
     // pre-existing needs-refresh, and a genuinely clean full replay does.
-    const cleanFullPlay = startedAt === 0 && !hadRequiredMiss
+    // H-28 (restored, R2-T6-1) composes into the same rule: FULL also
+    // means PRESENTED — every step took the stage in this run (or was
+    // machinery-passed as an optional miss during the walk). A run that
+    // reached the end over un-presented steps, carrying no P17
+    // disqualifier, completes as in-progress at the end beat below.
+    const presentedEveryStep = flat.every((f) => presentedSteps.has(f.globalIndex))
+    const cleanFullPlay = startedAt === 0 && !hadRequiredMiss && presentedEveryStep
     const disqualified = hadRequiredMiss || seededRequiredMissRun || runSkipCount > 0
-    let nextState: ModuleProgress['state']
-    if (disqualified) nextState = 'needs-refresh'
-    else if (cleanFullPlay) nextState = 'seen'
-    else if (progress.state === 'needs-refresh') nextState = 'needs-refresh'
-    else nextState = 'seen'
-    progress = {
-      state: nextState,
-      verifiedAgainst: script.verifiedAgainst ?? appVersion,
-      skips: progress.skips,
-      // The seeded-miss flag stands while it is the reason for the flag;
-      // a clean finish clears it from the record.
-      seededRequiredMiss: seededRequiredMissRun ? true : undefined,
+    if (!disqualified && startedAt === 0 && !presentedEveryStep && flat.length > 0) {
+      // The run reached the end over steps it never presented — a
+      // chapters jump to the last beat and one tap. It did not walk
+      // the module: it completes as in-progress, resumable at the end
+      // beat, never as seen.
+      const last = flat[flat.length - 1]
+      progress = {
+        state: 'in-progress',
+        step: last.globalIndex,
+        scene: last.scene.id,
+        stepId: last.step.id,
+        verifiedAgainst: script.verifiedAgainst ?? appVersion,
+        skips: progress.skips,
+      }
+    } else {
+      let nextState: ModuleProgress['state']
+      if (disqualified) nextState = 'needs-refresh'
+      else if (cleanFullPlay) nextState = 'seen'
+      else if (progress.state === 'needs-refresh') nextState = 'needs-refresh'
+      else nextState = 'seen'
+      progress = {
+        state: nextState,
+        verifiedAgainst: script.verifiedAgainst ?? appVersion,
+        skips: progress.skips,
+        // The seeded-miss flag stands while it is the reason for the flag;
+        // a clean finish clears it from the record.
+        seededRequiredMiss: seededRequiredMissRun ? true : undefined,
+      }
     }
     // The last-used mark clears when the module completes (Brizna's
     // pattern): a finished module returns to its floor in the index.
@@ -1025,8 +1181,13 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       blockedNotice = undefined
       finishDeferred = false
       cleanAbortFlag = false
+      openingRevealResumed = false
+      releaseOpeningShield(false)
       hiddenWasPlaying = false
+      hiddenClockWasRunning = false
+      hiddenOutstanding = false
       livedPerformed.clear()
+      presentedSteps = new Set()
       runSkipCount = 0
       runSkipChapters = []
       runSkipChapterIds = new Set()
@@ -1085,10 +1246,21 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       // endHold cannot resurrect it.
       if (userPaused) clock.pause()
       clock.beginHold()
+      // R2-T6-3: the snapshot shows the phase from the moment it begins.
+      // (The reveal branch below returns without an emit by design —
+      // mid-run the previous beat stands — but in prepare there IS no
+      // previous beat: without this emit the creation snapshot, with
+      // opening=false, stood for the whole phase and the player never
+      // rendered the window at all.)
+      emit()
       // ENTRY SEEDING: the recorded place's fiction is built BEFORE the
       // first presented beat — the earlier scenes' scenario acts replay
       // silently, in order, so the beat lands on the stage it teaches.
       seedBefore(startAt)
+      // R2-T6-4: with the entry's fiction built, the shield goes up —
+      // seed-mode held across the whole opening phase, so the stage's
+      // own controls cannot write the real switch before «Empezar».
+      engageOpeningShield()
       pointer = startAt
       enterCurrent()
     },
@@ -1096,6 +1268,11 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     confirmStart() {
       if (!opening) return
       opening = false
+      openingRevealResumed = false
+      // R2-T6-4: the shield comes down as the lesson is confirmed —
+      // the ledger restored to its seeded value first, so a stage tap
+      // behind the window cannot invert the lesson's own teaching.
+      releaseOpeningShield(true)
       clock.endHold()
       if (blockedOpening) {
         // The entry beat's required miss, finalised the way start()
@@ -1121,7 +1298,9 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
 
     abortClean() {
       const wasOpening = opening
+      const wasBlocked = blockedOpening
       stopPending()
+      openingRevealResumed = false
       if (stayWindowOpen || closeWindowOpen) {
         stayWindowOpen = false
         closeWindowOpen = false
@@ -1130,6 +1309,18 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       if (wasOpening) {
         opening = false
         clock.endHold()
+      }
+      releaseOpeningShield(false)
+      if (wasBlocked) {
+        // R2-T6-6: a BLOCKED opening's exit is not the clean abort.
+        // The entry miss is a fact about the lesson, not the learner's
+        // declination — and «Ahora no» is the only exit the window
+        // renders — so leaving by it finalises the miss exactly as
+        // confirmStart would: needs-refresh on the record, the skip
+        // already in the log. (An UNBLOCKED «Ahora no» still writes
+        // nothing, byte-identical, below.)
+        finalizeBlockedOpening()
+        return
       }
       blockedOpening = false
       blockedNotice = undefined
@@ -1144,26 +1335,40 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
 
     handleHidden() {
       if (status !== 'playing' && status !== 'paused' && status !== 'interactive-wait') return
-      // Playing = Automatic, running, not user-paused, no window/hold.
-      hiddenWasPlaying =
-        mode === 'automatic' &&
-        status === 'playing' &&
-        !userPaused &&
-        !stayWindowOpen &&
-        !closeWindowOpen &&
-        !opening &&
-        !clock.holdOpen &&
-        !clock.speedChoiceOpen
+      if (!hiddenOutstanding) {
+        hiddenOutstanding = true
+        // Playing = Automatic, running, not user-paused, no window/hold.
+        hiddenWasPlaying =
+          mode === 'automatic' &&
+          status === 'playing' &&
+          !userPaused &&
+          !stayWindowOpen &&
+          !closeWindowOpen &&
+          !opening &&
+          !clock.holdOpen &&
+          !clock.speedChoiceOpen
+        // The clock's own truth, for BOTH modes: was it running when the
+        // app hid? (A held or user-paused clock reads paused here, so
+        // those lessons stay still across the cycle, as they must.)
+        hiddenClockWasRunning = !clock.paused
+      }
       clock.pause()
       persistProgress() // carries mode + userPaused (suppressed while opening)
     },
 
     handleVisible() {
       const wasPlaying = hiddenWasPlaying
+      const clockWasRunning = hiddenClockWasRunning
       hiddenWasPlaying = false
-      // Resume ONLY a lesson that was playing when it hid: a user-paused
-      // lesson stays paused, an Interactive lesson never auto-advances.
-      if (wasPlaying) clock.resume()
+      hiddenClockWasRunning = false
+      hiddenOutstanding = false
+      // Resume ONLY a clock that was running when it hid: a user-paused
+      // lesson stays paused, a window-held lesson stays held. For
+      // Automatic that is exactly the was-playing discipline; for
+      // Interactive it revives the lesson's own pending waits (the
+      // «Show me» dwell, a reveal wait) so they can complete — the
+      // lesson then waits for the learner again, as it should.
+      if (wasPlaying || clockWasRunning) clock.resume()
     },
 
     pause() {
