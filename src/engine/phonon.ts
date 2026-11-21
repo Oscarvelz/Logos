@@ -93,7 +93,11 @@ async function phononEvictDamaged(): Promise<void> {
  *  survives until a load does reach it. The digest road stays open
  *  and declared: pin the four files' true SHA-256 values — measured
  *  from the files themselves, never invented — and certification can
- *  measure content the way Pocket's does. */
+ *  measure content the way Pocket's does. Round 4 amended the cure
+ *  twice, below: the guard now arms only on evictions the bucket
+ *  confirms (R4-T4-1), and the two failure doors evict only when the
+ *  failure implicates the bytes, not merely when the load consumed
+ *  them (R4-T4-2). */
 const PROGRESS_FILE_TO_MODEL: Record<string, string> = {
   weights: 'model.q8.gguf',
   tokenizer: 'tokenizer.json',
@@ -102,19 +106,87 @@ const PROGRESS_FILE_TO_MODEL: Record<string, string> = {
 }
 const loadCachedFiles = new Map<PhononLang, Set<string>>()
 const failureEvictedFiles = new Set<string>()
+/** Whether the load currently in flight for a language has finished
+ *  being SERVED its parse inputs — every one of weights/tokenizer/
+ *  config reported with a real total fully arrived, or served whole
+ *  from the cache (a cache hit reports loaded == total in one report,
+ *  fetch.js). phononEnsure's progress callback maintains it; the two
+ *  failure doors below judge by it (R4-T4-2). */
+const loadServiceComplete = new Map<PhononLang, boolean>()
+const PARSE_INPUT_FILES = ['weights', 'tokenizer', 'config']
 
 /** Evict the model files a failed load consumed from the cache.
  *  Returns true when anything was evicted. Exported as the seam the
- *  failure paths in phononEnsure/failStaleLoad act through. */
+ *  failure paths in phononEnsure/failStaleLoad act through.
+ *
+ *  The guard arms on EVIDENCE, not intent (R4-T4-1): the first shape
+ *  of this cure marked each file evicted BEFORE attempting the
+ *  deletes and swallowed every failure, so a delete that never
+ *  landed — caches.open refused in a storage-blocked partition,
+ *  delete() resolving without removing — left the garbage in the
+ *  bucket AND the guard refusing every later eviction until a load
+ *  succeeded, which with the garbage in place it never could: the
+ *  permanence the cure exists to close, restored by its own guard.
+ *  Now a file joins failureEvictedFiles only when the bucket itself
+ *  confirms the entry is gone (the delete landed, or a follow-up
+ *  match finds nothing); a file whose eviction did not land stays
+ *  unguarded, so the next failed load attempts it again, and the
+ *  return value reports what actually left the bucket. */
 export async function phononEvictAfterFailedLoad(consumed: Iterable<string>): Promise<boolean> {
   const fresh = [...consumed].filter((n) => PHONON_MODEL_FILES.includes(n) && !failureEvictedFiles.has(n))
   if (!fresh.length) return false
-  for (const n of fresh) failureEvictedFiles.add(n)
-  try {
-    const c = await caches.open(PHONON_CACHE)
-    for (const name of fresh) { try { await c.delete(MODEL + name) } catch { /* ignore */ } }
-  } catch { /* ignore */ }
-  return true
+  let cache: Cache
+  try { cache = await caches.open(PHONON_CACHE) } catch { return false }
+  let evictedAny = false
+  for (const name of fresh) {
+    const url = MODEL + name
+    try { await cache.delete(url) } catch { /* the witness below decides, not the attempt */ }
+    let gone = false
+    try { gone = !(await cache.match(url)) } catch { /* an unreadable bucket proves nothing */ }
+    if (gone) {
+      failureEvictedFiles.add(name)
+      evictedAny = true
+    }
+  }
+  return evictedAny
+}
+
+/** The failure doors' shared judgment (R4-T4-2): eviction is reserved
+ *  for failures the bytes can plausibly have caused. The first shape
+ *  evicted the whole consumed-from-cache set on ANY failure, through
+ *  both doors — a WASM compile failure, an out-of-memory, a voice
+ *  registration error, and above all the watchdog's: a load served
+ *  entirely from cache reports its progress in one burst and then
+ *  parses 75 MB in silence, so on a slow phone the 120 s clock ran
+ *  out during an innocent parse and failStaleLoad evicted four
+ *  healthy entries for the crime of having been served before an
+ *  unrelated silence. The doors now judge by WHERE the failure sits:
+ *
+ *  - 'rejected' (PhononTTS.load threw): the rejection implicates the
+ *    bytes only when it arrived after service completed — raised
+ *    while parsing or validating the very files that were served
+ *    (Model.load, parseConfig, the GGUF check). A rejection during
+ *    service (a fetch, a cache read, the module compile the loader
+ *    runs before downloading) is raised before/outside parsing and
+ *    leaves the entries standing.
+ *  - 'silent' (the watchdog): silence implicates the bytes only
+ *    when service never completed — the load wedged while its files
+ *    were still arriving. Silence after service completed is the
+ *    parse phase, where a slow phone and a wedged parser look alike
+ *    from outside; the load still dies honestly (failStaleLoad's
+ *    settlement is untouched), but the bucket keeps its entries.
+ *
+ *  Declared trades: a post-service rejection from the environment
+ *  (an OOM inside Model.load) still evicts — bounded, as before, to
+ *  one round per success-cycle by the per-file guard; and a parser
+ *  that wedges on garbage instead of rejecting is retried against
+ *  the same entries (each attempt still fails honestly) rather than
+ *  evicted on silence. The digest road remains the cure that would
+ *  judge content directly; it stays Oscar's, unbuilt here. */
+export async function phononEvictForFailure(consumed: Iterable<string>, door: 'rejected' | 'silent', serviceComplete: boolean): Promise<boolean> {
+  const implicates = door === 'rejected' ? serviceComplete : !serviceComplete
+  if (!implicates) return false
+  return phononEvictAfterFailedLoad(consumed)
 }
 
 type LangState = { status: 'idle' | 'loading' | 'ready' | 'error'; loaded: number; total: number; fromCache: boolean; error: string | null; loadMs: number | null }
@@ -162,11 +234,14 @@ let genSeq = 0
  *  ensure-only load dies exactly like a pump-witnessed one (T4-7). */
 function failStaleLoad(lang: PhononLang) {
   const msg = 'The voice model stopped loading.'
-  // A load that wedged on cache-served bytes dies the same way as one
-  // that throws (R3-T4-1): the entries it consumed are evicted, so the
-  // retry downloads instead of wedging on the same bytes again.
-  void phononEvictAfterFailedLoad(loadCachedFiles.get(lang) ?? [])
+  // The load dies either way; whether its cache-served entries die
+  // with it is judged by where the silence fell (R4-T4-2): a wedge
+  // mid-service implicates the consumed bytes as before (R3-T4-1),
+  // but silence after service completed is the parse phase — a slow
+  // phone parsing healthy bytes — and evicts nothing.
+  void phononEvictForFailure(loadCachedFiles.get(lang) ?? [], 'silent', loadServiceComplete.get(lang) ?? false)
   loadCachedFiles.delete(lang)
+  loadServiceComplete.delete(lang)
   loadGen.delete(lang)
   loadSince.delete(lang)
   const settle = loadSettlers.get(lang)
@@ -245,11 +320,19 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
   const gen = ++genSeq
   loadGen.set(lang, gen)
   loadCachedFiles.set(lang, new Set())
+  loadServiceComplete.set(lang, false)
   let settle!: { resolve: () => void; reject: (e: Error) => void }
   const p = new Promise<void>((resolve, reject) => { settle = { resolve, reject }; loadSettlers.set(lang, settle) })
   loads.set(lang, p)
   const t0 = performance.now()
   const files: Record<string, [number, number, boolean]> = {}
+  // This load's fully-served files, judged from the RAW reports
+  // (R4-T4-2): a file counts when a cache hit served it whole
+  // (loaded > 0 on a cached report — fetch.js reports the whole body
+  // in one report) or when a real total arrived in full. A report
+  // with no total proves nothing about completion, so a null-total
+  // download never completes a file here.
+  const servedDone = new Set<string>()
   // This load's published progress (M-23): monotonic within the load,
   // reset by construction every time a load starts.
   let shownLoaded = 0
@@ -285,6 +368,11 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
             const modelName = PROGRESS_FILE_TO_MODEL[file]
             if (modelName) loadCachedFiles.get(lang)?.add(modelName)
           }
+          // Track service completion for the failure doors' judgment
+          // (R4-T4-2): this load has been served its parse inputs
+          // once every one of them has arrived whole.
+          if ((cached && loaded > 0) || (typeof total === 'number' && total > 0 && loaded >= total)) servedDone.add(file)
+          if (PARSE_INPUT_FILES.every((f) => servedDone.has(f))) loadServiceComplete.set(lang, true)
           // Progress never runs backwards and never passes its own
           // total (M-23): a file that restarts reports a small loaded
           // against the same total, and a server that under-reports
@@ -310,11 +398,17 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
       // A dead generation failing late is inert: no status, no queued
       // jobs, no settler — the timeout already told the truth.
       if (loadGen.get(lang) !== gen) return
-      // The load failed on this generation's watch: evict the model
-      // entries it consumed from the cache (R3-T4-1), so a bucket that
-      // can only fail stops being served — the retry downloads fresh.
-      void phononEvictAfterFailedLoad(loadCachedFiles.get(lang) ?? [])
+      // The load failed on this generation's watch: the model entries
+      // it consumed from the cache are evicted (R3-T4-1) — but only
+      // when the rejection implicates them (R4-T4-2): a rejection
+      // raised after service completed was raised parsing the served
+      // bytes, so a bucket that can only fail stops being served and
+      // the retry downloads fresh; a rejection during service (a
+      // fetch, a cache read, the module compile) says nothing about
+      // the bytes and leaves them standing.
+      void phononEvictForFailure(loadCachedFiles.get(lang) ?? [], 'rejected', loadServiceComplete.get(lang) ?? false)
       loadCachedFiles.delete(lang)
+      loadServiceComplete.delete(lang)
       const e = err as Error
       if (loads.get(lang) === p) { loads.delete(lang); loadSettlers.delete(lang) }
       loadSince.delete(lang)
@@ -367,6 +461,7 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
         if (loadGen.get(lang) !== gen) return
         if (loads.get(lang) === p) { loads.delete(lang); loadSettlers.delete(lang) }
         loadSince.delete(lang)
+        loadServiceComplete.delete(lang)
         stopWatchdogIfIdle()
         setLang(lang, { status: 'error', error: msg })
         failQueued(lang, msg)
@@ -386,6 +481,7 @@ export function phononEnsure(lang: PhononLang): Promise<void> {
     // A load succeeded: the bucket has proven itself, so the failure
     // eviction's guard starts over (R3-T4-1).
     loadCachedFiles.delete(lang)
+    loadServiceComplete.delete(lang)
     failureEvictedFiles.clear()
     instances.set(lang, tts)
     setLang(lang, { status: 'ready', loadMs: performance.now() - t0, fromCache: allFromCache })
@@ -535,6 +631,10 @@ export async function phononCacheBytes(): Promise<number> {
       // to win whenever present, so a truncated entry under a truthful
       // header — the interrupted-write shape — counted at full size
       // in Settings' storage total. Measure what is actually there.
+      // (The price of measuring on every call is paid by the caller:
+      // engine.ts's modelCacheBytes files the measured total under
+      // the engine landscape and re-measures only when it changes —
+      // R4-T4-3. This counter itself never trusts a memory.)
       bytes += res ? (await res.blob()).size : 0
     }
   } catch { /* ignore */ }

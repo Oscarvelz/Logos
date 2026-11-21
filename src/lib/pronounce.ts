@@ -156,7 +156,16 @@ export function applyPron(text: string, lang?: Lang): string {
   // truly begins or ends — and several marks JOIN rather than divide.
   // An apostrophe or underscore is part of a word ("don't", "O'Brien",
   // my_word are single words, so don/brien/word must not fire inside
-  // them). A hyphen or slash between word characters joins one lexeme
+  // them). An apostrophe joins only where a letter continues the word
+  // through it, though: a possessive ENDS its word — "Saoirse's" and
+  // "James'" are the name plus a mark hung on it, and the name is
+  // this dictionary's whole purpose — so a trailing 's or a trailing
+  // bare apostrophe is a boundary, judged by the second after-guard
+  // below (R4-T7-5). ("It's" and "let's" wear the possessive's shape
+  // and are judged boundaries too — English writes the two alike,
+  // and a contraction of a dictionary NAME is not a shape that
+  // exists; the possessive of one is everyday.)
+  // A hyphen or slash between word characters joins one lexeme
   // ("well-known", "and/or" — the natural home of exactly the names
   // this dictionary exists for, "Anne-Marie"). A '.' or ',' between
   // digits is inside one number (3.14, 3,000, 1.4.186). Those joins
@@ -174,7 +183,8 @@ export function applyPron(text: string, lang?: Lang): string {
       `(?<![\\p{L}\\p{N}][-/])` + // hyphen/slash joiner before ("…well-KNOWN", "and/OR")
       `(?<!\\p{N}[.,])` + // digit-grouping separator before ("3.14", "3,000")
       `(${alt})` +
-      `(?![\\p{L}\\p{N}'’_])` + // a word character after: inside a word
+      `(?![\\p{L}\\p{N}_])` + // a word character after: inside a word
+      `(?![’'](?![sS](?![\\p{L}\\p{N}'’_]))[\\p{L}\\p{N}])` + // an apostrophe JOIN after ("don't", "we're"): a letter through the apostrophe continues this word — except a possessive 's (an s with a boundary beyond it), which bounds the word instead (R4-T7-5)
       `(?![-/][\\p{L}\\p{N}])` + // hyphen/slash joiner after ("WELL-known", "AND/or")
       `(?![.,]\\p{N})`, // digit-grouping separator after ("3.14", "3,000")
       'giu',

@@ -333,6 +333,40 @@ function clearDeletedBookTraces(id: string): void {
   } catch { /* traces are best-effort; the book itself is already gone */ }
 }
 
+/** Reap content rows no book owns (R4-T3-6 cure). The pre-fix
+    (187–190) phantom heal wrote a book's text under a FRESH id while
+    its meta kept the old one; the 191 heal restored the text under
+    the book's own id but reaped nothing, and deleteBook deletes
+    content by the meta's id only — so one full book text per legacy
+    victim leaked forever, unreachable by every door. The census
+    here is cheap (the blob-free twin for the id set, keys for the
+    content store), and each candidate is RE-JUDGED inside its own
+    delete transaction against the authoritative `books` store, so
+    a book written between the census and the reap keeps its text:
+    putBook writes meta and content in ONE transaction, so a
+    committed content row's meta is never still in flight. The
+    now-reading book's text is never reaped, whatever its meta's
+    state — Listen may be holding it. Hygiene only: callers swallow
+    failures, a missed reap is a leak, never a loss. */
+export async function reapOrphanContent(): Promise<void> {
+  const owned = new Set<string>()
+  const contentIds: string[] = []
+  await runBoth('readonly', (_t, _bs, cs, ms) => {
+    const gm = ms.getAll() as IDBRequest<BookMeta[]>
+    gm.onsuccess = () => { for (const m of gm.result ?? []) owned.add(m.id) }
+    const gk = (typeof cs.getAllKeys === 'function' ? cs.getAllKeys() : cs.getAll()) as IDBRequest<unknown[]>
+    gk.onsuccess = () => { for (const k of gk.result ?? []) contentIds.push(typeof k === 'string' ? k : (k as BookContent).id) }
+  })
+  const nr = nowReadingId()
+  for (const id of contentIds) {
+    if (owned.has(id) || id === nr) continue
+    await runBoth('readwrite', (_t, bs, cs) => {
+      const g = bs.get(id) as IDBRequest<BookMeta | undefined>
+      g.onsuccess = () => { if (!g.result) cs.delete(id) }
+    })
+  }
+}
+
 /** The book open in the reader right now — the reader floor. Opening a book
     to READ never sets nowReading (only Listen playback does), so without
     this the temp sweep below had no deterministic way to know which book

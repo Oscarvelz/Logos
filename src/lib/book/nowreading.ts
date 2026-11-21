@@ -70,8 +70,30 @@ export function nowReadingId(): string | null {
 
 /** The book behind this Listen text, if it came from one. */
 export function nowReadingFor(text: string): NowReading | null {
+  const key = keyOf(text)
   const n = readRecord()
-  return n && n.key === keyOf(text) ? n : null
+  if (n && n.key === key) return n
+  // The non-durable mirror shadows storage for the SESSION's book
+  // (cure R2-T1-3) — the right law for "what is being read now",
+  // but this door answers a different question: "whose text is
+  // THIS?" A text the mirror does not name may still belong to the
+  // book the durable record names — an older stamp, yet the only
+  // witness for that text. Judged by the mirror alone, the delete
+  // purge (books.ts clearDeletedBookTraces) spared a deleted
+  // book's draft whole: its pointer leg read storage directly and
+  // named the book, its draft leg asked here and — the mirror
+  // standing for a newer book whose stamp never landed — heard
+  // nothing, so the pointer was removed and the text stayed,
+  // playable, in the Listen box (cure R4-T1-3). When the first
+  // witness does not name the text, ask storage directly before
+  // answering that no book stands behind it.
+  if (mirror && !mirrorDurable) {
+    try {
+      const stored = JSON.parse(localStorage.getItem(KEY) ?? 'null') as NowReading | null
+      if (stored && stored.key === key) return stored
+    } catch { /* unreadable — the first witness stands */ }
+  }
+  return null
 }
 
 /** Book position of a character offset in the Listen text. */

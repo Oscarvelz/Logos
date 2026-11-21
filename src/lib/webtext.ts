@@ -15,7 +15,17 @@ export type WebText = { title: string; text: string; site: string; url: string; 
 // "and/&/y …" qualifier now belongs to the section's name on both
 // lists. (A connector is required: "Notes on the text" is a real
 // section and still does not match.)
-const STOP_SECTIONS = /^(references|notes|footnotes|citations|sources|bibliography|external links|see also|further reading|related (articles|posts|stories)|more (stories|from)|you may also like|read (more|next)|recommended|comments?|share this( article)?|about the author|referencias|notas|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n|lectura adicional|art[ií]culos relacionados|comentarios|fuentes|data safety|ratings and reviews|what[’']s new|app support|similar apps|more by .{1,40}|flag as inappropriate|seguridad de los datos|calificaciones y opiniones|valoraciones y reseñas|asistencia de la app|apps similares)(\s+(and|&|y)\s+.{1,40})?\s*:?$/i
+// Cure R4-T8-7: the qualifier was ONE narrow shape — a connector
+// plus at most 40 characters — so the comma form ("References,
+// notes", the commonest real-world shape) and the long qualified
+// heading ("References and notes on the history of the manuscript
+// tradition in Europe", 59 characters of tail) both slipped it and
+// imported the whole citation apparatus as body. The qualifier is
+// the connector family itself — a comma or a conjunction — with a
+// tail long enough for a real heading (120 chars; headings are one
+// line, and a tail longer than that is a paragraph wearing a
+// heading's clothes, judged by the other rules).
+const STOP_SECTIONS = /^(references|notes|footnotes|citations|sources|bibliography|external links|see also|further reading|related (articles|posts|stories)|more (stories|from)|you may also like|read (more|next)|recommended|comments?|share this( article)?|about the author|referencias|notas|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n|lectura adicional|art[ií]culos relacionados|comentarios|fuentes|data safety|ratings and reviews|what[’']s new|app support|similar apps|more by .{1,40}|flag as inappropriate|seguridad de los datos|calificaciones y opiniones|valoraciones y reseñas|asistencia de la app|apps similares)(\s*(,|and|&|y)\s+.{1,120})?\s*:?$/i
 
 // Cure R2-T8-10: the bare-domain form blessed ANY dotted token —
 // "e.g", "U.S.A", "Ph.D", "word.word" all became addresses, and the
@@ -79,7 +89,18 @@ export function normalizeUrl(raw: string): string | null {
 // family and the navigation crumbs "skip to / read more / leer más"
 // form a family of their own), because finish() applies the
 // two-family standard at every length; see there.
-const JUNK_FAMILIES = [/cookie/i, /privacy|terms of/i, /subscribe|newsletter|suscr[ií]b|bolet[ií]n/i, /sign (up|in)|log ?in|inicia sesi[oó]n/i, /advertis|sponsored|publicidad/i, /all rights reserved|todos los derechos/i, /follow us|share (this|on)|click here|download (the|our) app|s[ií]guenos|haz clic|comparte/i, /skip to|read more|leer m[aá]s/i]
+// Cure R4-T8-8: two of the families' broadest terms were topic
+// shapes, not boilerplate shapes, and together they convicted an
+// ordinary mergers explainer ("The terms of the deal were simple:
+// each share on the new index…") — "terms of" is how English talks
+// about ANY agreement, and "share on" is a plain verb phrase. A
+// family must name the boilerplate's own phrases: the privacy
+// family now wants the legal instruments themselves (privacy, the
+// terms OF SERVICE / OF USE, terms and conditions), and the share
+// family wants the button's object — "share this", or "share on"
+// followed by the platform it names (a closed list of the places
+// share buttons point), never the verb alone.
+const JUNK_FAMILIES = [/cookie/i, /privacy|terms of (service|use)|terms and conditions/i, /subscribe|newsletter|suscr[ií]b|bolet[ií]n/i, /sign (up|in)|log ?in|inicia sesi[oó]n/i, /advertis|sponsored|publicidad/i, /all rights reserved|todos los derechos/i, /follow us|share (this|on (facebook|twitter|x|pinterest|linkedin|whatsapp|telegram|reddit|email))|click here|download (the|our) app|s[ií]guenos|haz clic|comparte/i, /skip to|read more|leer m[aá]s/i]
 /** Boilerplate-shaped: junk terms from at least two different families. */
 const junkHeavy = (t: string) => JUNK_FAMILIES.filter((re) => re.test(t)).length >= 2
 
@@ -106,7 +127,19 @@ function cleanTitle(raw: string, u?: URL): string {
     // "port". A tail names the site when it IS the host's name, or
     // carries it whole at its head ("bbcnews" on bbc) — never when
     // it is merely a prefix of a longer host word.
-    return !!host && !!t && (t === host || t.startsWith(host))
+    // Cure R4-T8-10: the surviving leg — t.startsWith(host) — has
+    // the mirror disease: on news.example.com the title "Morning
+    // Edition - Newspaper" lost " - Newspaper" because "newspaper"
+    // BEGINS with "news". Carrying the host whole at the head means
+    // the host is a WORD of the tail, not the first letters of a
+    // longer word: after the host's letters the tail must break (a
+    // space, a mark, or the end), judged on the raw tail before
+    // normalisation erases the boundary. Declared trade: a site
+    // whose name is one unbroken longer word (a "NewsDaily") keeps
+    // its suffix in titles — keeping a suffix never loses title
+    // words; stripping one did.
+    const raw = tail.trim().toLowerCase()
+    return !!host && !!t && (t === host || (raw.startsWith(host) && !/[a-z0-9]/.test(raw.charAt(host.length))))
   }
   const pipe = title.lastIndexOf(' | ')
   if (pipe > 0 && namesSite(title.slice(pipe + 3))) return title.slice(0, pipe).trim()
@@ -147,15 +180,33 @@ function tidyLine(s: string): string {
 // twins — is never article body, at any article length. These stop
 // the import outright; the softer stop sections (Notes, Comments,
 // Recommended…) keep the old rule below.
-const HARD_STOP_SECTIONS = /^(references|footnotes|citations|bibliography|external links|see also|further reading|referencias|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n)(\s+(and|&|y)\s+.{1,40})?\s*:?$/i
+const HARD_STOP_SECTIONS = /^(references|footnotes|citations|bibliography|external links|see also|further reading|referencias|bibliograf[ií]a|enlaces externos|v[eé]ase tambi[eé]n)(\s*(,|and|&|y)\s+.{1,120})?\s*:?$/i
 
 /** Paragraph blocks → clean listening text (title first, then paragraphs). */
 function finish(blocks: { text: string; heading?: boolean }[], title: string): string {
   const out: { t: string; heading?: boolean }[] = []
   const seen = new Set<string>()
   const tnorm = title.toLowerCase().replace(/\W+/g, '')
-  for (const b of blocks) {
-    const t = tidyLine(b.text)
+  // Cure R4-T8-9: the crumb rule below deleted any non-heading block
+  // of ≤3 words with no capital start — but that is the exact shape
+  // of a list's real items ("bread and butter", "rice and beans"
+  // vanished from an imported list while their capitalised twin
+  // survived). Brevity and case are shape; a crumb's ROLE is where
+  // it stands — navigation lives at the document's edges, before
+  // the first substantial paragraph and after the last one, while
+  // the same words BETWEEN substantial paragraphs are content (a
+  // list item, a verse line, a caption). The rule now applies only
+  // outside the substantial span; a page with no substantial block
+  // at all keeps the old everywhere rule (safe direction: a page of
+  // crumbs is a menu, not an article).
+  const tidied = blocks.map((b) => ({ t: tidyLine(b.text), heading: b.heading }))
+  let firstSub = -1, lastSub = -1
+  tidied.forEach((b, i) => {
+    if (!b.heading && b.t && b.t.split(' ').length > 6) { if (firstSub < 0) firstSub = i; lastSub = i }
+  })
+  for (let bi = 0; bi < tidied.length; bi++) {
+    const b = tidied[bi]
+    const t = b.t
     if (!t) continue
     const words = t.split(' ').length
     if (b.heading || (words <= 6 && !/[.!?…:"”»]$/.test(t))) {
@@ -167,7 +218,7 @@ function finish(blocks: { text: string; heading?: boolean }[], title: string): s
       // heading, as before.
       if (STOP_SECTIONS.test(t)) { if (HARD_STOP_SECTIONS.test(t) || out.length > 3) break; else continue }
       if (t.toLowerCase().replace(/\W+/g, '') === tnorm) continue
-      if (!b.heading && words <= 3 && !/^[A-ZÁÉÍÓÚÑ]/.test(t)) continue
+      if (!b.heading && words <= 3 && !/^[A-ZÁÉÍÓÚÑ]/.test(t) && !(bi > firstSub && bi < lastSub)) continue
     }
     // Cure F8-12: the junk test used to stop at 160 chars, so a long
     // GDPR/consent paragraph — exactly the boilerplate that runs long —

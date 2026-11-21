@@ -56,12 +56,22 @@ export function Sheet({ open, onClose, title, children, present }: { open: boole
 // Oscar (1.4.87): nothing is deleted by a single tap. Every file deletion
 // in the app asks first, in this one window, so the question always looks
 // the same wherever it is asked. Resolves true only on an explicit Delete.
-type ConfirmReq = { title: string; body?: string; resolve: (ok: boolean) => void }
+type ConfirmReq = { title: string; body?: string; okLabel: string; danger: boolean; resolve: (ok: boolean) => void }
 const confirmStore = createStore<{ req: ConfirmReq | null }>({ req: null })
 export function confirmDelete(title: string, body?: string): Promise<boolean> {
   return new Promise((resolve) => {
     confirmStore.get().req?.resolve(false)
-    confirmStore.set({ req: { title, body, resolve } })
+    confirmStore.set({ req: { title, body, okLabel: 'Delete', danger: true, resolve } })
+  })
+}
+/** A question, not a warning (Oscar, 1.4.192): the same one window, with a
+ *  primary affirmative instead of the red Delete — for the asks that guard
+ *  a replacement rather than a removal. Resolves true only on the explicit
+ *  affirmative; Cancel, the scrim and Escape all resolve false. */
+export function confirmAsk(title: string, body: string | undefined, okLabel: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    confirmStore.get().req?.resolve(false)
+    confirmStore.set({ req: { title, body, okLabel, danger: false, resolve } })
   })
 }
 export function ConfirmHost() {
@@ -73,7 +83,9 @@ export function ConfirmHost() {
       {req.body && <p className="keepask-body">{req.body}</p>}
       <div className="row" style={{ gap: 8 }}>
         <button className="btn ghost grow" onClick={() => done(false)}>{t('Cancel')}</button>
-        <button className="btn danger grow" onClick={() => done(true)}><Trash2 size={16} /> {t('Delete')}</button>
+        {req.danger
+          ? <button className="btn danger grow" onClick={() => done(true)}><Trash2 size={16} /> {t(req.okLabel)}</button>
+          : <button className="btn primary grow" onClick={() => done(true)}>{t(req.okLabel)}</button>}
       </div>
     </Sheet>
   )

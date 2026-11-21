@@ -542,7 +542,11 @@ export async function pocketCacheBytes(): Promise<number> {
       // to win whenever present, so a truncated entry under a truthful
       // header — the interrupted-write shape pocket-assets' cacheGet
       // refuses to serve — counted at full size in Settings' storage
-      // total. Measure what is actually there.
+      // total. Measure what is actually there. (The price of
+      // measuring on every call is paid by the caller: engine.ts's
+      // modelCacheBytes files the measured total under the engine
+      // landscape and re-measures only when it changes — R4-T4-3.
+      // This counter itself never trusts a memory.)
       bytes += res ? (await res.blob()).size : 0
     }
   } catch { /* ignore */ }

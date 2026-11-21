@@ -340,6 +340,54 @@ class BubbleService : Service() {
             if (j.optBoolean("playing") == c) cmdPlaying = null
         }
 
+        // ── The stored pause's witness (R4-T2-1) ───────────────────
+        // notePagePaused stores its "pause" unconditionally — the
+        // store IS the 1.4.120 handover: a page that never heard the
+        // poke must find the stop waiting when it is resurrected.
+        // But nothing retired the stored copy when the page HAD
+        // heard: the poke paused it, Oscar resumed the session by
+        // hand in the app, and any collection door firing inside the
+        // twenty seconds executed the stored echo against the
+        // session he had just restarted — his newest word was play,
+        // and the queue answered with his older pause. The witness
+        // below is the retirement door. It arms when a pause is
+        // stored; a push reporting silence marks the pause ANSWERED
+        // (the page heard and obeyed — its own belief is now
+        // "paused"); a later push reporting playing, with the
+        // witness answered, can only be his hand resuming (a page
+        // that answered cannot resurrect itself playing — recovery
+        // restores the paused session it saved), so the stored
+        // pause is retired on the spot. A page that never answered —
+        // dead, hung, still believing "playing" — never triggers the
+        // retirement: its resurrection collects the pause and is
+        // silenced, exactly the handover the store exists for.
+        @Volatile private var pauseWitnessArmed = false
+        @Volatile private var pauseWitnessAnswered = false
+
+        /** Arm the witness: a pause was just stored (notePagePaused,
+         *  or wakeForPending's store road). */
+        fun armPauseWitness() {
+            pauseWitnessAnswered = false
+            pauseWitnessArmed = true
+        }
+
+        /** Judge the push that just landed (bubbleNow calls this
+         *  for every push): silence answers a standing pause; sound
+         *  after an answer retires it. The witness disarms itself
+         *  once no pause stands — a fresh catch (deliver) or his own
+         *  play press (NativeSpeaker.resume) clears the queue by
+         *  their own doors, and the next judge call tidies up. */
+        fun judgePushForPause() {
+            if (!pauseWitnessArmed) return
+            if (!hasPendingPause()) { pauseWitnessArmed = false; pauseWitnessAnswered = false; return }
+            val playing = runCatching { JSONObject(nowJson).optBoolean("playing") }.getOrDefault(false)
+            if (!playing) { pauseWitnessAnswered = true; return }
+            if (pauseWitnessAnswered) {
+                clearPendingPause()
+                pauseWitnessArmed = false; pauseWitnessAnswered = false
+            }
+        }
+
         /** Whether sound is flowing, judged at THIS moment: the
          *  device voice answers for itself while it drives; else a
          *  still-unconfirmed commanded state outranks the snapshot;
@@ -529,6 +577,52 @@ class BubbleService : Service() {
         @Volatile var pageEpoch = 0L
             private set
         fun notePageLoaded() { pageEpoch++ }
+
+        /** The page incarnation (R4-T2-2): bumped at every load
+         *  START (MainActivity's onPageStarted), where pageEpoch
+         *  moves at load FINISH. A push is recorded under the
+         *  incarnation current when it lands, so the latch below can
+         *  answer the question the epoch alone could not: did a push
+         *  land while the page that was poked was still the page —
+         *  even if a reload has since replaced it? The old verdict
+         *  sampled only at +1200 ms (epoch unchanged AND a push
+         *  landed), so a press the poked page genuinely heard and
+         *  answered was stored anyway whenever a house reload
+         *  completed inside the window, and the fresh page collected
+         *  and executed it a second time — one press, two leaps, on
+         *  every non-idempotent verb the watch serves. A new page's
+         *  pushes can never satisfy an old incarnation's watch: its
+         *  first push already records under the new number, because
+         *  the number moved when its load STARTED, before any of its
+         *  script ran. R3-T2-1's counterfeit stays dead; the hearing
+         *  is now remembered instead of re-derived at verdict time. */
+        @Volatile var pageIncarnation = 0L
+            private set
+        fun notePageLoading() { pageIncarnation++ }
+
+        /** When the latest push landed, by incarnation (R4-T2-2).
+         *  Only the newest few incarnations are kept: a watch
+         *  verdicts 1.2 s after its poke, and incarnations turn
+         *  over on page loads, not on breaths. */
+        private val pushLatchLock = Any()
+        private val pushTimesByIncarnation = HashMap<Long, Long>()
+
+        /** Record a push (MainActivity's bubbleNow, the only push
+         *  door): it landed now, under the incarnation that sent it. */
+        fun notePushTime() {
+            synchronized(pushLatchLock) {
+                pushTimesByIncarnation[pageIncarnation] = System.currentTimeMillis()
+                val floor = pageIncarnation - 3
+                val it = pushTimesByIncarnation.keys.iterator()
+                while (it.hasNext()) { if (it.next() < floor) it.remove() }
+            }
+        }
+
+        /** Did a push land under THIS incarnation after `after` —
+         *  the poked page's own answer, remembered across any
+         *  reload that followed it? */
+        fun pushedUnder(incarnation: Long, after: Long): Boolean =
+            synchronized(pushLatchLock) { (pushTimesByIncarnation[incarnation] ?: 0L) > after }
 
         /** True until the page pushes its first state in this process.
          *  The honest never-pushed test (T2-5): nowJson is a non-null
@@ -753,6 +847,10 @@ class BubbleService : Service() {
         fun notePagePaused() {
             nativeGen++ // his stop also ends the delivery chain (1.4.125)
             noteCommanded(false) // the tap-time truth (M-6): silence was commanded
+            // The store's witness (R4-T2-1): if the page hears this
+            // poke and later reports playing again by his hand, the
+            // stored copy retires instead of ambushing his resume.
+            armPauseWitness()
             storePendingCmd("pause")
             runCatching { poke?.invoke("pause") }
         }
@@ -795,6 +893,7 @@ class BubbleService : Service() {
         fun wakeForPending(c: Context, cmd: String) {
             if (cmd == "pause") nativeGen++ // a stored stop ends the chain too (1.4.125)
             if (NativeSpeaker.active) { NativeSpeaker.handle(cmd); return }
+            if (cmd == "pause") armPauseWitness() // the stored stop's witness (R4-T2-1)
             storePendingCmd(cmd)
             if (backstageServe(c)) return
             runCatching { c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("logos.ghost", true), android.app.ActivityOptions.makeCustomAnimation(c, 0, 0).toBundle()) }
@@ -1018,23 +1117,51 @@ class BubbleService : Service() {
     // after the panel moved on, is recognised and its index refused.
     // These are session truth, not view state: they survive the
     // panel closing and reopening, like lastCi/lastCt do.
+    //
+    // One seat per DRIVER (R4-T2-4): the page and the device voice
+    // segment the same text differently, so one session wears two
+    // coordinate sets — and a single crown let each displace the
+    // other. While the device voice held the stage, its pushes
+    // crowned the native key and displaced the page's key into the
+    // replaced set; when a short native stint ended, the page's own
+    // pushes were refused as stragglers in their own session, and
+    // the scrub divided by whichever total had been crowned last.
+    // Now each driver keeps its own seat — its own key, index,
+    // total, sentence window and replaced set — and the working
+    // fields (lastCi/lastCt and the sess* mirror) wear the seat of
+    // the driver that holds the stage: refreshPanel feeds the
+    // device voice's panelJson only while it drives, the page's
+    // pushes otherwise. A takeover changes which seat is crowned;
+    // it never displaces the other seat, and no index is ever
+    // paired with the other segmentation's total.
+    private class SessSeat {
+        var key = ""
+        var ci = -1
+        var ct = 0
+        var tp = ""
+        var tc = ""
+        var tn = ""
+        /** The sessions this seat has replaced, oldest first, each
+         *  with the moment it was displaced (R3-T2-6; per seat since
+         *  R4-T2-4). The memory this replaces was ONE session deep:
+         *  after two quick changes (A → B → C inside the window) a
+         *  straggler from A matched neither the live session nor the
+         *  remembered B, so it was accepted AS a session change and
+         *  crowned over C — and C's own next push, now matching the
+         *  "previous" slot, was refused as the straggler, so for up
+         *  to ten seconds the panel believed the dead session and
+         *  disbelieved the living one, scrub arithmetic included.
+         *  The set is bounded at eight: sessions change on human
+         *  timescales, and entries leave as they age out anyway. */
+        val replaced = LinkedHashMap<String, Long>()
+    }
+    private val pageSeat = SessSeat()
+    private val nativeSeat = SessSeat()
+    private val replacedSessCap = 8
     private var sessKey = ""
     private var sessTp = ""
     private var sessTc = ""
     private var sessTn = ""
-    /** The replaced sessions, oldest first, each with the moment it
-     *  was displaced (R3-T2-6). The memory this replaces was ONE
-     *  session deep: after two quick changes (A → B → C inside the
-     *  window) a straggler from A matched neither the live session
-     *  nor the remembered B, so it was accepted AS a session change
-     *  and crowned over C — and C's own next push, now matching the
-     *  "previous" slot, was refused as the straggler, so for up to
-     *  ten seconds the panel believed the dead session and
-     *  disbelieved the living one, scrub arithmetic included. The
-     *  set is bounded at eight: sessions change on human timescales,
-     *  and entries leave as they age out of the window anyway. */
-    private val replacedSess = LinkedHashMap<String, Long>()
-    private val replacedSessCap = 8
     private var playingNow = false
     private var lastInvite = 0L
     private var lastDeliverySeen = 0
@@ -1435,25 +1562,31 @@ class BubbleService : Service() {
             // toggle's escalation already fell back to store + wake.
             val myWatch = ++pokeWatchSeq
             val pokedAt = nowAt
-            val epochAtPoke = pageEpoch
+            val incarnationAtPoke = pageIncarnation
             handler.postDelayed({
                 if (NativeSpeaker.active) return@postDelayed
-                // Receipt demands the generation too (R3-T2-1): a
-                // push is evidence of hearing only from the page
-                // that was poked. A load finishing inside the window
-                // means the answering push is a NEW page's restore
-                // push, which manufactures exactly this evidence —
-                // pulse advanced, content reset — for a poke that
-                // died with the old JS context, above all when the
-                // house itself ordered the reload (a wantReload
-                // arrival, ghostCheck, recoverWeb). backstageServe's
-                // drain has required the unchanged generation since
-                // 187; the panel road — the primary one — now does
-                // too. On a changed generation the watch falls
-                // through: the press is stored below, and the wake
-                // brings a page that collects it through the Bridge,
+                // Receipt is judged by incarnation (R4-T2-2): a
+                // push counts only if it landed while the poked
+                // page was still the page — the latch remembers the
+                // hearing even when a house reload has since
+                // replaced that page. The epoch verdict this
+                // replaces (R3-T2-1) sampled only at verdict time —
+                // generation unchanged AND a push landed — so a
+                // press the poked page genuinely heard, answered
+                // and acted on was stored anyway whenever a reload
+                // completed inside the window, and the fresh page
+                // collected it and executed it a SECOND time: a
+                // jump leapt twice, a rate stepped twice, a mark
+                // landed twice. The counterfeit R3-T2-1 killed stays
+                // dead: a NEW page's pushes record under the new
+                // incarnation from its load's first breath, so a
+                // restore push can never satisfy this watch — only
+                // the poked page's own answer can. On silence from
+                // the poked incarnation the watch falls through:
+                // the press is stored below, and the wake brings a
+                // page that collects it through the Bridge,
                 // stamp-checked.
-                if (pageEpoch == epochAtPoke && nowAt > pokedAt) return@postDelayed // the page pushed since MY poke: it heard
+                if (pushedUnder(incarnationAtPoke, pokedAt)) return@postDelayed // the poked page pushed after my poke: it heard
                 // My poke went unheard, and my press is owed to the
                 // store even if a newer press has taken over the
                 // watch (R2-T2-3): the supersede check used to retire
@@ -1489,16 +1622,38 @@ class BubbleService : Service() {
      *  copy (stamped with its session, expiring at its pull door —
      *  T2-13/T2-19); what the seek lacked is the keys' liveness
      *  discipline: poke, watch for a push, and on silence wake the
-     *  page so it comes and pulls the fraction itself. */
+     *  page so it comes and pulls the fraction itself.
+     *
+     *  The watch's receipt is the poked page's OWN push (R4-T2-3):
+     *  the pulse alone used to satisfy it, so a reload completing
+     *  inside the window answered the watch with the new page's
+     *  restore push — while the poke itself had died with the old
+     *  context, and the fresh page pulls bubbleSeek only inside its
+     *  seek listener, which never fired: one scrub, silently lost.
+     *  Now a reload inside the window earns a re-poke into the NEW
+     *  page, whose listener pulls the fraction and lands it under
+     *  the Bridge's own stamp audits. */
     private fun pokeSeekOrWake() {
         if (poke == null) { ghostWake(); return }
         poke?.invoke("seek")
         val myWatch = ++seekWatchSeq
         val pokedAt = nowAt
+        val incarnationAtPoke = pageIncarnation
         handler.postDelayed({
             if (myWatch != seekWatchSeq) return@postDelayed // a newer seek owns the watch now
             if (NativeSpeaker.active) return@postDelayed
-            if (nowAt > pokedAt) return@postDelayed // the page pushed: it heard
+            if (pushedUnder(incarnationAtPoke, pokedAt)) return@postDelayed // the poked page pushed after my poke: it heard
+            if (pageIncarnation != incarnationAtPoke) {
+                // A new page answered — a restore push, not a
+                // hearing: the poke died with the old context.
+                // Poke the NEW page: its seek listener pulls the
+                // fraction, judged there by the Bridge's stamp
+                // audits (T2-13/T2-19). One re-poke; if this page
+                // dies too, the fraction dies at its pull door with
+                // its receipt — never swallowed in silence.
+                poke?.invoke("seek")
+                return@postDelayed
+            }
             noteTry(this, s("panel seek visited Logos", "la búsqueda del panel visitó Logos"))
             ghostWake()
         }, 1200)
@@ -3221,43 +3376,62 @@ class BubbleService : Service() {
      *  index and its own text disagree with the sentence the panel
      *  holds at that index: foreign, refused;
      *  · a scrub in flight owns the counts until it commits — a push
-     *  landing mid-gesture never re-bases the gesture's arithmetic.
+     *  landing mid-gesture never re-bases the gesture's arithmetic;
+     *  · one seat per driver (R4-T2-4): the judgement runs against
+     *  the pushing driver's own seat, and the crown copies that seat
+     *  whole — a takeover is not a displacement in either seat, and
+     *  an index is never paired with the other segmentation's total.
      *  A refused index leaves the panel's last accepted coordinates
      *  standing: ignored, never obeyed. */
-    private fun acceptIndex(j: JSONObject?) {
+    private fun acceptIndex(j: JSONObject?, native: Boolean) {
         if (j == null) return
         if (scrubMode == 1 || scrubTarget >= 0) return
         val ct = j.optInt("ct", 0)
         val ci = j.optInt("ci", -1)
         if (ct <= 0 || ci < 0 || ci >= ct) return
+        val seat = if (native) nativeSeat else pageSeat
         val key = j.optString("title") + "|" + ct
         val tc = j.optString("tc")
-        if (key == sessKey) {
-            if (ci == lastCi && sessTc.isNotEmpty() && tc.isNotEmpty() && tc != sessTc) return
-            lastCi = ci
-            sessTp = j.optString("tp"); sessTc = tc; sessTn = j.optString("tn")
-            return
+        if (key == seat.key) {
+            if (ci == seat.ci && seat.tc.isNotEmpty() && tc.isNotEmpty() && tc != seat.tc) return
+            seat.ci = ci
+            seat.tp = j.optString("tp"); seat.tc = tc; seat.tn = j.optString("tn")
+        } else {
+            // Straggler judgement consults EVERY session this seat
+            // recently replaced (R3-T2-6): an unrecognised key is
+            // not crowned merely for being unrecognised — if this
+            // seat displaced that session inside the window, the
+            // push is a straggler from it, however many changes
+            // stand between. Entries older than the window are
+            // pruned as they are consulted. The judgement is the
+            // seat's own (R4-T2-4): a takeover by the other driver
+            // never enters this seat's replaced set, so neither
+            // driver's pushes are stragglers for having been
+            // interrupted by the other's stint.
+            val nowMs = System.currentTimeMillis()
+            val rit = seat.replaced.entries.iterator()
+            while (rit.hasNext()) { if (nowMs - rit.next().value >= 10_000) rit.remove() }
+            if (seat.replaced.containsKey(key)) return
+            if (seat.key.isNotEmpty()) {
+                // The displaced session joins the seat's replaced
+                // set, most recent last; the set stays bounded (see
+                // its declaration).
+                seat.replaced.remove(seat.key)
+                seat.replaced[seat.key] = nowMs
+                while (seat.replaced.size > replacedSessCap) seat.replaced.remove(seat.replaced.keys.first())
+            }
+            seat.key = key
+            seat.ct = ct; seat.ci = ci
+            seat.tp = j.optString("tp"); seat.tc = tc; seat.tn = j.optString("tn")
         }
-        // Straggler judgement consults EVERY recently replaced
-        // session (R3-T2-6): an unrecognised key is not crowned
-        // merely for being unrecognised — if this panel displaced
-        // that session inside the window, the push is a straggler
-        // from it, however many changes stand between. Entries
-        // older than the window are pruned as they are consulted.
-        val nowMs = System.currentTimeMillis()
-        val rit = replacedSess.entries.iterator()
-        while (rit.hasNext()) { if (nowMs - rit.next().value >= 10_000) rit.remove() }
-        if (replacedSess.containsKey(key)) return
-        if (sessKey.isNotEmpty()) {
-            // The displaced session joins the replaced set, most
-            // recent last; the set stays bounded (see its declaration).
-            replacedSess.remove(sessKey)
-            replacedSess[sessKey] = nowMs
-            while (replacedSess.size > replacedSessCap) replacedSess.remove(replacedSess.keys.first())
-        }
-        sessKey = key
-        lastCt = ct; lastCi = ci
-        sessTp = j.optString("tp"); sessTc = tc; sessTn = j.optString("tn")
+        // Crown the seat: this push's driver holds the stage
+        // (refreshPanel feeds the device voice's panelJson only
+        // while it drives, the page's pushes otherwise), so its
+        // coordinates become the panel's working ones — index and
+        // total always from the same segmentation.
+        sessKey = seat.key
+        lastCt = seat.ct; lastCi = seat.ci
+        sessTp = seat.tp; sessTc = seat.tc; sessTn = seat.tn
     }
 
     private fun refreshPanel() {
@@ -3267,8 +3441,9 @@ class BubbleService : Service() {
         val j = if (native) NativeSpeaker.panelJson() else rawJ
         // The scrub counts in sentences: remember where the reading stands,
         // in the driver's own numbers (page push or device voice alike) —
-        // validated against the panel's own session first (M-8).
-        acceptIndex(j)
+        // validated against the pushing driver's own seat first (M-8,
+        // R4-T2-4).
+        acceptIndex(j, native)
         val playing = j?.optBoolean("playing") ?: false
         handler.post {
             // Update in place, and only what changed (M-7): pushes

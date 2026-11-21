@@ -1,5 +1,5 @@
 // Import a book file into the shelf.
-import { books, putBook, refreshBooks, getContent, updateBook, type BookMeta, type BookContent } from '../books.ts'
+import { books, putBook, refreshBooks, getBook, getContent, updateBook, reapOrphanContent, type BookMeta, type BookContent } from '../books.ts'
 import { t } from '../i18n.ts'
 import { finishBook, isMachineName, type RawBook } from './finish.ts'
 import { sniffFormat, contentHash } from './sniff.ts'
@@ -56,17 +56,51 @@ export { sniffFormat, contentHash } from './sniff.ts'
     the one self-healing move a user has was refused by the cure. A
     phantom is reported separately, and the import heals it under its
     own id, keeping its place, progress and marks. */
-async function existingDuplicate(meta: BookMeta, fresh: BookContent): Promise<{ dup: BookMeta | null; phantom: BookMeta | null }> {
-  if (!meta.hash) return { dup: null, phantom: null }
+async function existingDuplicate(meta: BookMeta, fresh: BookContent): Promise<{ dup: BookMeta | null; phantoms: BookMeta[] }> {
+  if (!meta.hash) return { dup: null, phantoms: [] }
   if (!books.get().loaded) await refreshBooks()
   const legacyHash = legacyContentHash(fresh)
-  let phantom: BookMeta | null = null
+  let dup: BookMeta | null = null
+  const phantoms: BookMeta[] = []
+  // R4-T3-2 cure: the census NEVER returns early. The old loop crowned
+  // the first content-less match (`phantom ??=`) and returned the
+  // moment a candidate with content matched — discarding any phantom
+  // already crowned, so a second phantom of the same text, and any
+  // phantom standing beside a healthy copy, could never be healed by
+  // any number of re-imports. Now every candidate is judged: the
+  // first healthy match is the duplicate handed back, and EVERY
+  // phantom of this text is collected for the heal.
+  // R4-T3-3 cure: no word-count gate fronts the fingerprint courts.
+  // The stored `words` used to skip a candidate before any hash was
+  // compared, so one drifted count (an older build's arithmetic, a
+  // damaged meta) hid a phantom from all three courts at once and
+  // the re-import minted a twin beside the corpse. A fingerprint
+  // match — either formula — is judged on the fingerprint alone.
+  // The word count survives only as a cost filter for the recompute
+  // court over hashed strangers (below), where it can hide nothing a
+  // fingerprint could have named.
   for (const cand of books.get().list) {
-    if (cand.words !== meta.words) continue
     if (cand.hash && cand.hash === meta.hash) {
       const cc = await getContent(cand.id)
-      if (cc) return { dup: cand, phantom: null }
-      phantom ??= cand
+      if (cc) { dup ??= cand } else phantoms.push(cand)
+      continue
+    }
+    if (cand.hash && cand.hash === legacyHash) {
+      // R3-T3-6: a phantom wearing a PRE-190 fingerprint is recognised
+      // by no other branch — the recompute court cannot sit for it
+      // (the content it would recompute FROM is exactly what a
+      // phantom has lost) and its stored hash can never equal the
+      // fresh one. The legacy court is the strongest evidence a
+      // content-less record can offer: the FRESH text, hashed by the
+      // old formula, against the candidate's stored hash. A match
+      // names the same book in its old fingerprint, and the heal
+      // gives it the text back under its own id, new fingerprint
+      // included. With content present, the recompute court judges
+      // instead — the content itself outranks any stored fingerprint.
+      const cc = await getContent(cand.id)
+      if (cc) {
+        if (contentHash(cc) === meta.hash) { void updateBook(cand.id, { hash: meta.hash }, false); dup ??= cand }
+      } else phantoms.push(cand)
       continue
     }
     // No fingerprint — or one minted before the fingerprint learned
@@ -75,24 +109,18 @@ async function existingDuplicate(meta: BookMeta, fresh: BookContent): Promise<{ 
     // be allowed to wave the candidate past. The content itself is
     // the court of appeal: recompute with the current formula, and
     // a match backfills the new fingerprint onto the candidate, so
-    // the fast path works for it from then on.
+    // the fast path works for it from then on. A fingerprint-less
+    // candidate is judged here with NO word gate (that population
+    // is legacy and shrinking); a hashed stranger keeps the word
+    // count as a mere cost filter before its content is loaded.
+    // Declared bound: a content-less record carrying NO fingerprint
+    // at all holds no evidence of its text — no court can name it,
+    // and none ever could.
+    if (cand.hash && cand.words !== meta.words) continue
     const cc = await getContent(cand.id)
-    if (cc && contentHash(cc) === meta.hash) { void updateBook(cand.id, { hash: meta.hash }, false); return { dup: cand, phantom: null } }
-    // R3-T3-6: a phantom wearing a PRE-190 fingerprint was recognised
-    // by no branch at all. The recompute court above cannot sit for
-    // it — the content it would recompute FROM is exactly what a
-    // phantom has lost — and its stored hash can never equal the
-    // fresh one, so every re-import of its file minted a twin beside
-    // the corpse and stranded its place, progress, marks and star
-    // forever. The legacy court below is the strongest evidence a
-    // content-less record can offer: the FRESH text, hashed by the
-    // old formula, against the candidate's stored hash, at the same
-    // word count (the gate at the top of this loop). A match names
-    // the same book in its old fingerprint, and the heal below gives
-    // it the text back under its own id, new fingerprint included.
-    if (!cc && cand.hash && cand.hash === legacyHash) phantom ??= cand
+    if (cc && contentHash(cc) === meta.hash) { void updateBook(cand.id, { hash: meta.hash }, false); dup ??= cand }
   }
-  return { dup: null, phantom }
+  return { dup, phantoms }
 }
 
 /** The fingerprint formula as it stood before 1.4.190 taught it
@@ -113,6 +141,55 @@ function legacyContentHash(content: BookContent): string {
   }
   for (const c of content.chapters) for (const b of c.blocks) { mix(b.t); mix('\n') }
   return `${(h2 >>> 0).toString(16)}:${(h1 >>> 0).toString(16)}:${content.chapters.reduce((n, c) => n + c.blocks.length, 0)}`
+}
+
+/** One import's census-and-write at a time (R4-T3-5): a simple
+    promise chain every importBook queues its verdict phase behind.
+    The tail never rejects, so one failed import cannot wedge the
+    imports behind it. */
+let importWriteTail: Promise<unknown> = Promise.resolve()
+function withImportWriteLock<T>(job: () => Promise<T>): Promise<T> {
+  const run = importWriteTail.then(job, job)
+  importWriteTail = run.then(() => undefined, () => undefined)
+  return run
+}
+
+/** Heal one phantom under its own id (R2-T3-4): the fresh content
+    lands in the record that kept the reader's place, progress,
+    bookmarks and cover, instead of a twin minting beside it.
+    R4-T3-1 cure: the preserved fields and the cover are read from
+    the phantom's FULL record (getBook), never from the census's
+    candidate — the list carries the blob-free bookmeta twin (M-11),
+    whose cover is undefined BY CONSTRUCTION, so the old heal's
+    `meta.cover ?? phantom.cover` stripped the surviving cover from
+    any book re-imported in a coverless format. R4-T3-4 cure: the
+    healed book lands `temp: false` — a re-import is a deliberate
+    recovery deed, and the backup door ruled the same deed a keeping
+    (L-4: a restore lands temp:false); the old heal preserved
+    temp:true verbatim and the next sweep deleted the just-recovered
+    book. R3-T3-5: the content is re-keyed WITH the meta (putBook
+    stores content by its own keyPath id) — the healed book's
+    content lives under the healed book's id, or the heal did not
+    happen. Returns null when the record vanished between the census
+    and the heal: nothing left to heal. */
+async function healPhantom(phantom: BookMeta, meta: BookMeta, content: BookContent): Promise<BookMeta | null> {
+  const full = await getBook(phantom.id)
+  if (!full) return null
+  const healed: BookMeta = {
+    ...meta,
+    id: full.id,
+    addedAt: full.addedAt,
+    openedAt: full.openedAt,
+    pos: full.pos,
+    progress: full.progress,
+    done: full.done,
+    bookmarks: full.bookmarks,
+    fav: full.fav,
+    temp: false,
+    cover: meta.cover ?? full.cover,
+  }
+  await putBook(healed, { ...content, id: full.id })
+  return healed
 }
 
 export async function importBook(file: File, batch?: string): Promise<BookMeta> {
@@ -154,40 +231,39 @@ export async function importBook(file: File, batch?: string): Promise<BookMeta> 
     // M-6: the same text already on the shelf IS that book — hand it
     // back instead of minting a twin.
     meta.hash = contentHash(content)
-    const { dup, phantom } = await existingDuplicate(meta, content)
-    if (dup) return dup
-    if (phantom) {
-      // R2-T3-4: heal the phantom under its own id — the fresh content
-      // lands in the record that kept the reader's place, progress,
-      // bookmarks and cover, instead of a twin minting beside it.
-      const healed: BookMeta = {
-        ...meta,
-        id: phantom.id,
-        addedAt: phantom.addedAt,
-        openedAt: phantom.openedAt,
-        pos: phantom.pos,
-        progress: phantom.progress,
-        done: phantom.done,
-        bookmarks: phantom.bookmarks,
-        fav: phantom.fav,
-        temp: phantom.temp,
-        cover: meta.cover ?? phantom.cover,
+    // R4-T3-5 cure: dedupe is check-then-act across awaits, so two
+    // imports of the same file in flight at once (share-intake's
+    // importMany fired from a mount effect, racing the reader's own
+    // pick of the same file — importMany itself sequences a batch
+    // but nothing guarded re-entry) both passed the check before
+    // either write landed, and each minted its own id: identical
+    // twins the per-book write queue cannot merge, since the twins
+    // take different chains. The census-and-write phase now runs
+    // under one import lock: a second import of the same text
+    // re-judges the shelf AFTER the first import's write has landed
+    // and finds the duplicate (or the phantom) waiting. Parsing
+    // stays outside the lock — only the verdict and the write are
+    // serialised.
+    return await withImportWriteLock(async () => {
+      const { dup, phantoms } = await existingDuplicate(meta, content)
+      let landed: BookMeta | null = dup
+      // R4-T3-2: heal EVERY phantom of this text, each under its own
+      // id — beside a healthy copy too (the copy is what comes back;
+      // the corpses are healed on the way past).
+      for (const phantom of phantoms) {
+        const healed = await healPhantom(phantom, meta, content)
+        if (healed && !landed) landed = healed
       }
-      // R3-T3-5: the content is re-keyed WITH the meta. finishBook's
-      // content object carries the FRESH random id, and putBook stores
-      // content by its own keyPath id — the first writing of this heal
-      // passed the object verbatim, so the text landed under an id no
-      // meta references: the heal reported success (its verdict read
-      // the returned meta, never the store), the book stayed
-      // unopenable, and the orphaned text leaked forever, unreachable
-      // by every sweep and delete, which all iterate metas. The store
-      // is the court: the healed book's content lives under the
-      // healed book's id, or the heal did not happen.
-      await putBook(healed, { ...content, id: phantom.id })
-      return healed
-    }
-    await putBook(meta, content)
-    return meta
+      if (!landed) {
+        await putBook(meta, content)
+        landed = meta
+      }
+      // R4-T3-6: an import that just proved what this text is also
+      // reaps the content rows no book owns (the pre-fix heal's
+      // orphans). Hygiene only — a failure here never fails an import.
+      try { await reapOrphanContent() } catch { /* a missed reap is a leak, never a loss */ }
+      return landed
+    })
   } finally {
     books.set({ importing: null })
   }

@@ -22,7 +22,7 @@ import { t } from './i18n.ts'
 import { playClip, clipPlayer, pauseClip, resumeClip, seekClip } from '../player/clip.ts'
 import { loadSessionResume } from './resume.ts'
 import { estimateSeconds } from './text.ts'
-import { toast } from '../components/ui.tsx'
+import { toast, confirmAsk } from '../components/ui.tsx'
 
 type DroidBubble = {
   bubbleState?: () => string
@@ -89,6 +89,10 @@ export const clipKey = (t: string) => `${t.length}:${clipHash(t, 0)}:${clipHash(
 const fmtRate = (r: number) => `${Math.round(r * 100) / 100}×`
 const fmtClock = (sec: number) => { const v = isFinite(sec) && sec > 0 ? sec : 0; return `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, '0')}` }
 let lastClip = (() => { try { return localStorage.getItem('logos.bubble.lastClip') ?? '' } catch { return '' } })()
+// The replace question (Oscar, 1.4.192): while it stands open, later
+// arrivals wait outside — the question names the copy that opened it,
+// and the next arrival after his answer reads the clipboard afresh.
+let clipAskOpen = false
 function seenClip(t: string) {
   lastClip = clipKey(t)
   try { localStorage.setItem('logos.bubble.lastClip', lastClip) } catch { /* ignore */ }
@@ -507,12 +511,25 @@ export function initBubble() {
   // re-analysed the whole text (keywords, names) on every player tick, and the
   // main thread paid for it everywhere: switches and the nav felt drunk.
   let last = ''
-  let titleForText = ''
+  let titleForText: string | null = null
+  let titleForActive = false
   let titleCached = ''
   const titleOf = (active: boolean, text: string): string => {
-    const k = `${text.length}:${text.slice(0, 64)}`
-    if (k === titleForText) return titleCached
-    titleForText = k
+    // The cache is keyed by the text ITSELF, compared whole (cure
+    // R4-T1-2). The old key — length + first 64 chars — collided
+    // across two texts that share a head and a length but earn
+    // different true titles deeper in (describeText reads names
+    // and keywords across the whole text): the panel then named
+    // session B with session A's title — and pageCtx stamps its
+    // stored presses with this very title, so a press stored
+    // against A passed the identity check against B and its verb
+    // ('next', 'save', 'mark') landed on the wrong reading. A
+    // whole-string comparison is exact: two texts share a cached
+    // title only when they are the same text, so the T2-19 stamp
+    // now judges by the true title on both of its sides.
+    if (text === titleForText && active === titleForActive) return titleCached
+    titleForText = text
+    titleForActive = active
     const book = active ? nowReadingFor(text) : null
     titleCached = book?.title ?? (text.trim() ? describeText(text.slice(0, 12000), detectLang(text.slice(0, 2000)).lang).title : '')
     return titleCached
@@ -661,8 +678,8 @@ export function initBubble() {
     if (!want && !settings.get().bubbleAuto) return
     // The stage lock: an automatic arrival read honours it; a hand ask (want) lands.
     if (!want) { try { if (d.bubbleLock?.()) return } catch { /* old shell */ } }
-    void readClipboard().then((t) => {
-      const text = t.trim()
+    void readClipboard().then((rawClip) => {
+      const text = rawClip.trim()
       if (!text) return
       if (!want && clipKey(text) === lastClip) return
       // The draft gate keeps the automatic road from re-playing what
@@ -671,6 +688,35 @@ export function initBubble() {
       // Oscar re-copies a text the dedupe reads as no news, and only
       // his finger on the paste icon can say "again".
       if (!want && text === drafts.get().listen.trim()) { seenClip(text); return }
+      if (!want) {
+        // Oscar (1.4.192): arriving in the main app with a fresh copy
+        // used to take the stage silently — and what it displaced could
+        // be something important, mid-listen. The automatic road now
+        // ASKS before it replaces, whenever something is at stake: a
+        // live session whose text differs, or a draft in the box that
+        // differs. A hand ask (want) still lands at once — his finger
+        // asked — and an empty stage has nothing to lose, so nothing
+        // is asked there either. "No" marks the copy seen, so the same
+        // text does not ask again at every arrival; a new copy asks
+        // anew.
+        const s = listen.get()
+        const draft = drafts.get().listen.trim()
+        const atStake = (s.active && clipKey(s.text) !== clipKey(text)) || (!s.active && !!draft && draft !== text)
+        if (atStake) {
+          if (clipAskOpen) return
+          clipAskOpen = true
+          void confirmAsk(
+            t('Replace with the copied text?'),
+            t('You copied a new text. If you replace, what is loaded now is set aside — its card will bring it back where you left it.'),
+            t('Replace'),
+          ).then((ok) => {
+            clipAskOpen = false
+            if (ok) playClipboardText(text)
+            else seenClip(text)
+          })
+          return
+        }
+      }
       playClipboardText(text)
     }).catch(() => { /* clipboard blocked */ })
   })

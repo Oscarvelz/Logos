@@ -41,9 +41,49 @@ export type EngineState = {
 }
 
 export { POCKET_SIZE_MB, PHONON_SIZE_MB, pocketCacheBytes }
+/** Settings' storage figure, and the price of its truth (R4-T4-3).
+ *  The two counters beneath this door measure every model body on
+ *  every call — deliberately: a stored content-length header can
+ *  outlive the body it was minted from, so the body is the only
+ *  witness the counters trust (R3-T4-3), and a truncated entry counts
+ *  its real bytes whenever either counter is asked. But Settings
+ *  asks through THIS door on mount, on every engine-status change
+ *  and again 6 s after ready, and at production sizes each asking
+ *  re-read ~177 MB (Pocket) + ~75 MB (Phonon) of cache bodies end to
+ *  end. So the measured total is filed under the engine landscape —
+ *  both engines' per-language statuses plus the cached verdicts this
+ *  module maintains — and a refresh under an unchanged landscape
+ *  answers from the filing, reading nothing. Any event that can
+ *  change what is stored changes the landscape first: a load moves
+ *  a status (and its save is verified before 'ready'), a Delete
+ *  resets the statuses, an eviction surfaces as a status or a cached
+ *  verdict flip at the 60 s recheck. Declared bound: a body swapped
+ *  behind every probe's and status's back — same entry, same header,
+ *  no load, no verdict change — is reported at its last measured
+ *  size until the landscape next moves; the counters themselves
+ *  never share this bound, and the certification probes, which read
+ *  and hash the real bodies on their own cadence, are what notice
+ *  such a swap and move the landscape. */
+let measuredCacheBytes: { landscape: string; total: number } | null = null
 export async function modelCacheBytes(): Promise<number> {
+  const landscape = cacheLandscape()
+  if (measuredCacheBytes && measuredCacheBytes.landscape === landscape) return measuredCacheBytes.total
   const [a, b] = await Promise.all([pocketCacheBytes(), phononCacheBytes()])
-  return a + b
+  const total = a + b
+  measuredCacheBytes = { landscape, total }
+  return total
+}
+/** The landscape a storage measurement belongs to: every fact this
+ *  module already tracks whose change can mean the buckets changed.
+ *  (The cached flags are declared below; this runs only after the
+ *  module has finished evaluating.) */
+function cacheLandscape(): string {
+  const p = pocket.get().langs
+  const q = phonon.get().langs
+  return [
+    p.en.status, p.es.status, q.en.status, q.es.status,
+    pocketCachedFlags.en, pocketCachedFlags.es, phononCachedFlag,
+  ].join('|')
 }
 
 const ls = {
