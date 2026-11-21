@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Loader2, Pause, Play, Search, Star } from 'lucide-react'
+import { Check, ChevronDown, Loader2, Pause, Play, Search, Star } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
 import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, favoriteIds, voiceCardTruth, VoiceSearchGate, type Voice } from '../lib/voices.ts'
@@ -12,20 +12,13 @@ import { FavStar, Avatar, toast, voiceHue } from '../components/ui.tsx'
 import { pickerGroups, type PickGroup } from '../components/chrome.tsx'
 import { t } from '../lib/i18n.ts'
 
-type Filter = 'all' | 'fav' | 'en' | 'es' | 'pocket'
-const FILTERS: { value: Filter; label: string }[] = [
-  { value: 'all', label: 'All voices' },
-  { value: 'fav', label: 'Favorites' },
-  { value: 'en', label: 'English' },
-  { value: 'es', label: 'Español' },
-  { value: 'pocket', label: 'Pocket' },
-]
-
 const livePreviews = new Map<string, Blob>()
 
 export function VoicesPage() {
   const st = useStore(settings)
-  const [filter, setFilter] = useState<Filter>('all')
+  // 1.4.200: one section open at a time, all folded at first — the
+  // picker's own accordion law, Oscar's word.
+  const [openKey, setOpenKey] = useState<string | null>(null)
   // M-47: search runs through the shared gate — debounced, and a stale
   // earlier result can never land over a newer query.
   const [query, setQuery] = useState('')
@@ -44,16 +37,23 @@ export function VoicesPage() {
   // picker (Oscar's word: the picker looks better organized and
   // distributed) — one grouping for the whole app, built by the
   // picker's own pickerGroups: Favorites, Pocket, then one section
-  // per accent. The page's filters narrow the same sections (a
-  // language filter passes through as the picker's own lang gate);
-  // search shows its results as one flat grid, like the picker's
-  // search state.
+  // per accent.
+  // 1.4.200 (Oscar's word, from his phone): the horizontal filter
+  // chips at the top are GONE — the sections themselves do that work
+  // now — and each section retraces or opens with a tap, the
+  // picker's accordion exactly: all folded when the page opens, one
+  // open at a time, the head's meta line saying what waits inside
+  // (the count, or the default's name in gold). An empty Favorites
+  // keeps its section, whose body teaches the star. Search keeps
+  // its flat grid, like the picker's search state.
   const searching = found != null
-  let groups: PickGroup[] = pickerGroups(st.favorites, filter === 'en' || filter === 'es' ? filter : undefined, null)
-  if (filter === 'fav') groups = groups.filter((g) => g.key === 'fav')
-  if (filter === 'pocket') groups = groups.filter((g) => g.key === 'pocket')
-  if (searching) groups = [{ key: 'search', title: 'Search', sub: '', list: found }]
-  const total = groups.reduce((n, g) => n + g.list.length, 0)
+  let groups: PickGroup[] = pickerGroups(st.favorites, undefined, null)
+  if (favoriteIds(st.favorites).size === 0) groups = [{ key: 'fav', title: 'Favorites', sub: 'Your starred voices', list: [] }, ...groups]
+  const toggleGroup = (key: string, el: HTMLElement) => {
+    const next = openKey === key ? null : key
+    setOpenKey(next)
+    if (next) setTimeout(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }), 420)
+  }
   return (
     <div className="page wide">
       <div className="page-head" data-present="voices-head">
@@ -69,32 +69,40 @@ export function VoicesPage() {
             style={{ height: 36, borderRadius: 999, border: '1px solid var(--line)', background: 'var(--surface)', padding: '0 12px', outline: 'none' }} />
         </span>
       </div>
-      <div className="filter-row" role="tablist">
-        {FILTERS.map((f) => (
-          <button key={f.value} role="tab" aria-selected={filter === f.value} className={`chip ${filter === f.value ? 'accent' : ''}`} data-present="voices-filter" data-filter={f.value} onClick={() => setFilter(f.value)}>{t(f.label)}</button>
-        ))}
-      </div>
-      {total === 0 && <div className="card empty" data-present="voices-empty-fav"><h3>{t('No favorites yet')}</h3><p>{t('Tap the star on any voice.')}</p></div>}
-      <div data-present="voices-grid">
-        {groups.map((g) => (
-          <section key={g.key} className="voices-sec" data-group={g.key}>
-            {!searching && (
-              <header className="voices-sec-head">
-                <span className="vgroup-stack" aria-hidden>
-                  {g.list.slice(0, 3).map((v) => { const [a, b] = voiceHue(v.id); return <i key={v.id} style={{ background: `linear-gradient(135deg, hsl(${a} 62% 56%), hsl(${b} 58% 32%))` }} /> })}
-                </span>
-                <span className="vgroup-text">
-                  <span className="vgroup-title">{g.key === 'fav' && <Star size={14} fill="var(--accent)" color="var(--accent)" />}{t(g.title)}{g.key !== 'fav' && g.key !== 'pocket' && <span className="vgroup-sub">{t(g.sub)}</span>}</span>
-                  <span className="vgroup-meta">{g.key === 'fav' ? t('Your starred voices') : <>{g.list.length === 1 ? t('{n} voice', { n: 1 }) : t('{n} voices', { n: g.list.length })}{g.key === 'pocket' ? t(' · Classic engine') : ''}</>}</span>
-                </span>
-              </header>
-            )}
-            <div className="voice-grid">
-              {g.list.map((v) => <VoiceCard key={v.id} voice={v} />)}
-            </div>
-          </section>
-        ))}
-      </div>
+      {searching ? (
+        <div data-present="voices-grid">
+          {found.length === 0
+            ? <div className="card empty"><h3>{t('No voices found')}</h3><p>{t('Try another name.')}</p></div>
+            : <div className="voice-grid">{found.map((v) => <VoiceCard key={v.id} voice={v} />)}</div>}
+        </div>
+      ) : (
+        <div className="vgroups" data-present="voices-grid">
+          {groups.map((g) => {
+            const isOpen = openKey === g.key
+            const lang = g.list[0]?.lang
+            const def = !isOpen && lang ? g.list.find((v) => v.id === st.defaultVoice[lang]) : undefined
+            return (
+              <section key={g.key} className={`vgroup ${isOpen ? 'open' : ''}`} data-group={g.key}>
+                <button className="vgroup-head" data-present="voices-section-head" data-group={g.key} aria-expanded={isOpen} onClick={(e) => toggleGroup(g.key, e.currentTarget.parentElement as HTMLElement)}>
+                  <span className="vgroup-stack" aria-hidden>
+                    {g.list.slice(0, 3).map((v) => { const [a, b] = voiceHue(v.id); return <i key={v.id} style={{ background: `linear-gradient(135deg, hsl(${a} 62% 56%), hsl(${b} 58% 32%))` }} /> })}
+                  </span>
+                  <span className="vgroup-text">
+                    <span className="vgroup-title">{g.key === 'fav' && <Star size={14} fill="var(--accent)" color="var(--accent)" />}{t(g.title)}{g.key !== 'fav' && g.key !== 'pocket' && <span className="vgroup-sub">{t(g.sub)}</span>}</span>
+                    <span className="vgroup-meta">{def ? <>{t('Default · ')}<b>{def.name}</b></> : g.key === 'fav' ? t('Your starred voices') : <>{g.list.length === 1 ? t('{n} voice', { n: 1 }) : t('{n} voices', { n: g.list.length })}{g.key === 'pocket' ? t(' · Classic engine') : ''}</>}</span>
+                  </span>
+                  <ChevronDown size={20} className="vgroup-chev" />
+                </button>
+                <div className="vgroup-body"><div>
+                  {g.key === 'fav' && g.list.length === 0
+                    ? <div className="card empty" data-present="voices-empty-fav"><h3>{t('No favorites yet')}</h3><p>{t('Tap the star on any voice.')}</p></div>
+                    : <div className="voice-grid">{g.list.map((v) => <VoiceCard key={v.id} voice={v} />)}</div>}
+                </div></div>
+              </section>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

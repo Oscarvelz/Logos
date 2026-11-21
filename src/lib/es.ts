@@ -480,6 +480,10 @@ export const ES: Record<string, string> = {
   '{n} voice': '{n} voz',
   '{n} voices': '{n} voces',
   ' · Classic engine': ' · Motor clásico',
+  // 1.4.200: the Voices page accordion's meta + search-empty strings.
+  'Default · ': 'Predeterminada · ',
+  'No voices found': 'No se encontraron voces',
+  'Try another name.': 'Prueba con otro nombre.',
   'Remove {name} from favorites': 'Quitar a {name} de favoritas',
   'Add {name} to favorites': 'Añadir a {name} a favoritas',
   'Getting the neural voice ready…': 'Preparando la voz neuronal…',

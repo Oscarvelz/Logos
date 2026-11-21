@@ -2874,26 +2874,27 @@ class BubbleService : Service() {
             cv.drawRoundRect(front, rad, rad, fill)
             cv.drawRoundRect(front, rad, rad, p)
         }) { readClip(true) }
-        pasteB.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(12) }
+        pasteB.layoutParams = LinearLayout.LayoutParams(dp(25), dp(25)).apply { leftMargin = dp(10) }
         clipRow.addView(pasteB)
         val listenB = footBtn(s("Go to the listening area", "Ir a la zona de escucha"), s("Listen", "Escuchar"), { cv, ink, cx, cy, r ->
-            val p = inkPaint(ink)
-            // The band: a half-arc over the top.
-            cv.drawArc(android.graphics.RectF(cx - r, cy - r * 0.92f, cx + r, cy + r * 0.92f), 180f, 180f, false, p)
-            // The cups: two filled capsules hanging from the band's
-            // ends (1.4.151 — the first drawing's bare line pads read
-            // as a horseshoe at panel size; a cup with a body to it
-            // reads as headphones at a glance).
-            val fill = android.graphics.Paint(p).apply { style = android.graphics.Paint.Style.FILL }
-            val w = r * 0.54f; val h = r * 0.92f; val rad = w * 0.5f
-            val top = cy - r * 0.06f
-            cv.drawRoundRect(android.graphics.RectF(cx - r - w / 2, top, cx - r + w / 2, top + h), rad, rad, fill)
-            cv.drawRoundRect(android.graphics.RectF(cx + r - w / 2, top, cx + r + w / 2, top + h), rad, rad, fill)
+            // 1.4.200 (Oscar's word): the headphones are retired —
+            // they invite the wrong reading (a headset key) for a
+            // key whose deed is going to the listening area. The key
+            // now wears the listening area's own symbol, the sound
+            // wave the app's nav draws for Listen: five bars of
+            // uneven height, round-capped.
+            val p = inkPaint(ink).apply { strokeWidth = r * 0.34f }
+            val heights = floatArrayOf(0.62f, 1.18f, 1.72f, 1.06f, 0.58f)
+            for (i in heights.indices) {
+                val x = cx + (i - 2) * r * 0.46f
+                val h = heights[i] * r * 0.5f
+                cv.drawLine(x, cy - h, x, cy + h, p)
+            }
         }) {
             collapsePanel()
             runCatching { startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("logos.listen", true)) }
         }
-        listenB.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(8) }
+        listenB.layoutParams = LinearLayout.LayoutParams(dp(25), dp(25)).apply { leftMargin = dp(6) }
         clipRow.addView(listenB)
         val eyeB = footBtn(s("Hide bubble", "Ocultar burbuja"), s("Hide", "Ocultar"), { cv, ink, cx, cy, r ->
             val p = inkPaint(ink)
@@ -2906,7 +2907,7 @@ class BubbleService : Service() {
             p.style = android.graphics.Paint.Style.FILL
             cv.drawCircle(cx, cy, r * 0.18f, p)
         }) { showHideHint() }
-        eyeB.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(8) }
+        eyeB.layoutParams = LinearLayout.LayoutParams(dp(25), dp(25)).apply { leftMargin = dp(6) }
         clipRow.addView(eyeB)
         // The copy queue's key (1.4.198): a playlist glyph wearing
         // the line's count; its tap opens the line itself over the
@@ -2924,7 +2925,7 @@ class BubbleService : Service() {
                 cv.drawCircle(left - r * 0.02f, y, 1.1f * dens, dot)
             }
         }) { toggleQueueList() }
-        queueWrap.addView(queueB, FrameLayout.LayoutParams(dp(30), dp(30)))
+        queueWrap.addView(queueB, FrameLayout.LayoutParams(dp(25), dp(25)))
         val queueBadge = TextView(this).apply {
             text = ""
             visibility = View.INVISIBLE
@@ -2936,7 +2937,7 @@ class BubbleService : Service() {
         queueWrap.addView(queueBadge)
         queueBtnV = queueWrap
         queueBadgeV = queueBadge
-        queueWrap.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(8) }
+        queueWrap.layoutParams = LinearLayout.LayoutParams(dp(25), dp(25)).apply { leftMargin = dp(6) }
         clipRow.addView(queueWrap)
         card.addView(clipRow)
         // The reader's grip: two small gold ticks hugging the panel's free
