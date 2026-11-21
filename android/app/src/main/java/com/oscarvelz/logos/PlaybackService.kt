@@ -7,9 +7,13 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.view.KeyEvent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -179,12 +183,45 @@ class PlaybackService : Service() {
      *  The session itself is released in onDestroy, as before. */
     fun forceStop() {
         cardUp = false
+        dropFocus()
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         wake?.let { if (it.isHeld) it.release() }
         stopSelf()
     }
     private var session: MediaSession? = null
     private var wake: PowerManager.WakeLock? = null
+
+    // Audio focus (1.4.194): Logos never asked for it, so the system's
+    // media router had no reason to crown this session — headset keys
+    // went to whichever app last held focus, or nowhere. Focus now
+    // follows the sound, the same law as the wake lock and the
+    // session's own sleep: claimed while a reading sounds, let go
+    // when it stops or the card retires. It is held for ROUTING —
+    // ducking and loss manners stay with the voices themselves.
+    private var focusHeld = false
+    private var focusReq: AudioFocusRequest? = null
+
+    private fun claimFocus() {
+        if (focusHeld) return
+        val am = getSystemService(AudioManager::class.java) ?: return
+        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build())
+            .setOnAudioFocusChangeListener { }
+            .build()
+        focusReq = req
+        focusHeld = am.requestAudioFocus(req) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+
+    private fun dropFocus() {
+        if (!focusHeld) return
+        focusHeld = false
+        val am = getSystemService(AudioManager::class.java) ?: return
+        focusReq?.let { runCatching { am.abandonAudioFocusRequest(it) } }
+        focusReq = null
+    }
 
     override fun onBind(i: Intent?): IBinder? = null
 
@@ -228,6 +265,26 @@ class PlaybackService : Service() {
                     val a = onAction
                     if (a != null) a("seekto") else BubbleService.wakeForPending(this@PlaybackService, "seekto")
                 }
+                // Headset keys, read ourselves (1.4.194). The
+                // framework's default mapping only honours NEXT and
+                // PREVIOUS when the session declares SKIP — over a
+                // pasted text it does not (the card's own law), so the
+                // double/triple press every headset sends for
+                // adelantar/atrasar died on the floor. On a headset,
+                // next/previous IS the leap gesture: it takes the
+                // Settings seconds, like the card's arrow buttons.
+                // The card's SKIP buttons keep their own law — this
+                // door is only for keys that arrive as key events.
+                override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
+                    val ev = mediaButtonIntent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                    if (ev != null && ev.action == KeyEvent.ACTION_DOWN) {
+                        when (ev.keyCode) {
+                            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_MEDIA_NEXT -> { act("jumpfwd"); return true }
+                            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { act("jumpback"); return true }
+                        }
+                    }
+                    return super.onMediaButtonEvent(mediaButtonIntent)
+                }
                 // The session's own jump actions (1.4.176): the card
                 // buttons that wear the arrow face — see build().
                 override fun onCustomAction(action: String, extras: Bundle?) {
@@ -270,7 +327,7 @@ class PlaybackService : Service() {
                 } else act(intent.action!!)
                 return START_NOT_STICKY
             }
-            "stop" -> { cardUp = false; stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf(); return START_NOT_STICKY }
+            "stop" -> { cardUp = false; dropFocus(); stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf(); return START_NOT_STICKY }
         }
         val playing = intent?.getBooleanExtra("playing", false) ?: false
         val finished = intent?.getBooleanExtra("finished", false) ?: false
@@ -283,6 +340,7 @@ class PlaybackService : Service() {
         if (!playing && text.isBlank()) {
             // Nothing loaded any more: put the notification away (after the start Android requires).
             cardUp = false
+            dropFocus()
             startForeground(1, build(false, "", artist, ""), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
             stopForeground(STOP_FOREGROUND_REMOVE); wake?.let { if (it.isHeld) it.release() }; stopSelf()
             return START_NOT_STICKY
@@ -293,7 +351,7 @@ class PlaybackService : Service() {
         cardUp = true
         lastBook = book; lastArtist = artist; lastText = text; lastFinished = finished
         startForeground(1, build(playing, book, artist, text, finished), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        if (playing) wake?.acquire(3 * 60 * 60 * 1000L) else wake?.let { if (it.isHeld) it.release() }
+        if (playing) { wake?.acquire(3 * 60 * 60 * 1000L); claimFocus() } else { wake?.let { if (it.isHeld) it.release() }; dropFocus() }
         return START_NOT_STICKY
     }
 
@@ -696,6 +754,7 @@ class PlaybackService : Service() {
 
     override fun onDestroy() {
         cardUp = false
+        dropFocus()
         if (instance === this) instance = null
         wake?.let { if (it.isHeld) it.release() }
         session?.release()

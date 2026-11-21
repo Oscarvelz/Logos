@@ -1,3 +1,12 @@
+## 1.4.194 — Headset leaps: the keys now reach the reading
+
+Oscar's order: from the floating window he could not advance or rewind the audio with his headsets. The investigation read the whole key road before touching anything, and the destination end was innocent — onRewind/onFastForward and act()'s routing to the shell voice or the page all stand. The keys died at the delivery end, at two confirmed doors:
+
+- **No audio focus was ever requested** — zero AudioManager use in the shell. The system's media router crowns the focus holder; Logos never claimed the crown, so in the bubble posture (app backgrounded, the shell's own voice speaking) headset keys went to another app's session or to none.
+- **No onMediaButtonEvent of our own** — the framework's default mapping honours NEXT/PREVIOUS only when the session declares SKIP. Over a pasted text it does not (the card's settled law), so the double/triple press — the gesture headsets actually send for adelantar/atrasar — was dropped silently; over a book it stepped one sentence instead of leaping.
+
+The cure, in PlaybackService only: focus is claimed while a reading sounds and let go when it stops or the card retires — the same law as the wake lock and the session's sleep (held for routing; ducking and loss manners stay with the voices). And the callback now reads key events itself: FAST_FORWARD and NEXT leap forward by the Settings seconds, REWIND and PREVIOUS leap back, on the key's down-stroke only; every other key keeps the framework's road. Declared: on a headset, next/previous IS the leap — the card's own SKIP buttons and the panel's buttons keep their settled semantics untouched; only keys arriving as key events take this door. The paused case keeps its standing shape: a sleeping session takes no keys, as before. Bench honesty: shell work has no bench — Android CI is the compile gate and Oscar's headsets on his phone are the judge.
+
 ## 1.4.193 — The Ring: the notification finally shows where the reading is
 
 Oscar's order, with his screenshot of the system card: the buttons worked, but nothing anywhere showed the audio's progress — "it is as if it did not exist." He refused the typical advancing ball and asked for something supremely Logos, theme-adaptive. A design study (three concepts rendered as real sheets) and a platform study (fourteen sources) preceded the build; he chose **A · THE RING, "por mucho."**
