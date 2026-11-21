@@ -800,6 +800,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .badge { font-size: 11px; font-weight: 800; letter-spacing: .04em; padding: 2px 7px; border-radius: 6px; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line); }
 .badge.gold { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
 .voice-actions { display: flex; align-items: center; gap: 2px; }
+/* 1.4.199: the Voices page's sections wear the picker's own head
+   (stack + serif title + region + count), and a card's badges get
+   their own row — a badge never wraps word-by-word again (Oscar's
+   screenshot: "On / this / device" stacked inside the name row). */
+.voices-sec { margin-top: 26px; }
+.voices-sec + .voices-sec { border-top: 1px solid var(--line); padding-top: 24px; }
+.voices-sec-head { display: flex; align-items: center; gap: 14px; padding: 0 6px 12px; }
+.voices-sec-head .vgroup-stack i { box-shadow: 0 0 0 2.5px var(--bg), inset 0 1px 0 rgba(255,255,255,.28); }
+.voice-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.voice-card .badge { white-space: nowrap; flex: none; }
 .default-flag { position: absolute; top: -7px; left: 18px; height: 15px; display: inline-flex; align-items: center; font-size: 8px; line-height: 1; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; padding: 0 6px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 3px var(--bg); }
 .filter-row { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 12px; margin: 0 -18px; padding-left: 18px; padding-right: 18px; scrollbar-width: none; }
 .filter-row::-webkit-scrollbar { display: none; }

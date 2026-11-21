@@ -241,10 +241,10 @@ export function MiniPlayer() {
   )
 }
 
-type PickGroup = { key: string; title: string; sub: string; list: Voice[] }
+export type PickGroup = { key: string; title: string; sub: string; list: Voice[] }
 
 /** Picker sections: Favorites, Pocket, then one per accent. */
-function pickerGroups(favorites: string[], lang?: Lang | 'auto', activeId?: string | null): PickGroup[] {
+export function pickerGroups(favorites: string[], lang?: Lang | 'auto', activeId?: string | null): PickGroup[] {
   const want = (v: Voice) => !lang || lang === 'auto' || v.lang === lang
   const ph = (l: Lang, a: string) => VOICES.filter((v) => v.engine === 'phonon' && v.lang === l && v.accent === a && want(v))
     .sort((x, y) => (x.gender === y.gender ? x.name.localeCompare(y.name) : x.gender === 'Female' ? -1 : 1))

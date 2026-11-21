@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Loader2, Pause, Play, Search } from 'lucide-react'
+import { Check, Loader2, Pause, Play, Search, Star } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
-import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, favoriteIds, favoriteVoices, voiceCardTruth, VoiceSearchGate, type Voice } from '../lib/voices.ts'
+import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, favoriteIds, voiceCardTruth, VoiceSearchGate, type Voice } from '../lib/voices.ts'
 import { clipPlayer, playClip } from '../player/clip.ts'
 import { engine, engineCachedFor, synthesize } from '../engine/engine.ts'
 import { encodeWav, trimSilence, applyGain, levelGain } from '../lib/audio.ts'
 import { speakable } from '../lib/text.ts'
 import { refreshVoices } from '../player/listen.ts'
-import { FavStar, Avatar, toast } from '../components/ui.tsx'
+import { FavStar, Avatar, toast, voiceHue } from '../components/ui.tsx'
+import { pickerGroups, type PickGroup } from '../components/chrome.tsx'
 import { t } from '../lib/i18n.ts'
 
 type Filter = 'all' | 'fav' | 'en' | 'es' | 'pocket'
@@ -37,15 +38,22 @@ export function VoicesPage() {
     return () => g.cancel()
   }, [query])
   // M-44: the favorites list and every star read the ONE post-gate truth
-  // (favoriteVoices/favoriteIds), never the raw stored ids.
-  const favOrder = favoriteVoices(st.favorites)
-  const favSet = favoriteIds(st.favorites)
-  const rank = (id: string) => { const i = favOrder.findIndex((v) => v.id === id); return i < 0 ? Infinity : i }
-  const list = (found ?? VOICES)
-    .filter((v) => filter === 'all' || (filter === 'fav' ? favSet.has(v.id) : filter === 'pocket' ? v.engine === 'pocket' : v.lang === filter))
-    .map((v, i) => ({ v, i }))
-    .sort((a, b) => rank(a.v.id) - rank(b.v.id) || a.i - b.i)
-    .map((x) => x.v)
+  // (favoriteVoices/favoriteIds), never the raw stored ids — pickerGroups
+  // builds its Favorites section from that same favoriteVoices.
+  // 1.4.199: the page wears the SAME organization as the Listen voice
+  // picker (Oscar's word: the picker looks better organized and
+  // distributed) — one grouping for the whole app, built by the
+  // picker's own pickerGroups: Favorites, Pocket, then one section
+  // per accent. The page's filters narrow the same sections (a
+  // language filter passes through as the picker's own lang gate);
+  // search shows its results as one flat grid, like the picker's
+  // search state.
+  const searching = found != null
+  let groups: PickGroup[] = pickerGroups(st.favorites, filter === 'en' || filter === 'es' ? filter : undefined, null)
+  if (filter === 'fav') groups = groups.filter((g) => g.key === 'fav')
+  if (filter === 'pocket') groups = groups.filter((g) => g.key === 'pocket')
+  if (searching) groups = [{ key: 'search', title: 'Search', sub: '', list: found }]
+  const total = groups.reduce((n, g) => n + g.list.length, 0)
   return (
     <div className="page wide">
       <div className="page-head" data-present="voices-head">
@@ -66,9 +74,26 @@ export function VoicesPage() {
           <button key={f.value} role="tab" aria-selected={filter === f.value} className={`chip ${filter === f.value ? 'accent' : ''}`} data-present="voices-filter" data-filter={f.value} onClick={() => setFilter(f.value)}>{t(f.label)}</button>
         ))}
       </div>
-      {list.length === 0 && <div className="card empty" data-present="voices-empty-fav"><h3>{t('No favorites yet')}</h3><p>{t('Tap the star on any voice.')}</p></div>}
-      <div className="voice-grid" data-present="voices-grid">
-        {list.map((v) => <VoiceCard key={v.id} voice={v} />)}
+      {total === 0 && <div className="card empty" data-present="voices-empty-fav"><h3>{t('No favorites yet')}</h3><p>{t('Tap the star on any voice.')}</p></div>}
+      <div data-present="voices-grid">
+        {groups.map((g) => (
+          <section key={g.key} className="voices-sec" data-group={g.key}>
+            {!searching && (
+              <header className="voices-sec-head">
+                <span className="vgroup-stack" aria-hidden>
+                  {g.list.slice(0, 3).map((v) => { const [a, b] = voiceHue(v.id); return <i key={v.id} style={{ background: `linear-gradient(135deg, hsl(${a} 62% 56%), hsl(${b} 58% 32%))` }} /> })}
+                </span>
+                <span className="vgroup-text">
+                  <span className="vgroup-title">{g.key === 'fav' && <Star size={14} fill="var(--accent)" color="var(--accent)" />}{t(g.title)}{g.key !== 'fav' && g.key !== 'pocket' && <span className="vgroup-sub">{t(g.sub)}</span>}</span>
+                  <span className="vgroup-meta">{g.key === 'fav' ? t('Your starred voices') : <>{g.list.length === 1 ? t('{n} voice', { n: 1 }) : t('{n} voices', { n: g.list.length })}{g.key === 'pocket' ? t(' · Classic engine') : ''}</>}</span>
+                </span>
+              </header>
+            )}
+            <div className="voice-grid">
+              {g.list.map((v) => <VoiceCard key={v.id} voice={v} />)}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   )
@@ -140,7 +165,8 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
       {claim.flag === 'reading' && <span className="default-flag">{t('Now reading · {l}', { l: v.lang === 'en' ? t('English') : 'Español' })}</span>}
       <Avatar voice={v} playing={playing} />
       <div className="grow" style={{ minWidth: 0 }}>
-        <div className="voice-name">{v.name} <span className="badge" title={t(ACCENT_LABEL[v.accent])}>{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}{onDevice && <span className="badge">{t('On this device')}</span>}</div>
+        <div className="voice-name">{v.name}</div>
+        <div className="voice-badges"><span className="badge" title={t(ACCENT_LABEL[v.accent])}>{v.accent}</span>{v.engine === 'pocket' && <span className="badge">Pocket</span>}{onDevice && <span className="badge">{t('On this device')}</span>}</div>
         <div className="voice-tag">{t(v.tagline)}</div>
         {claim.makeDefault && (
           <button className="btn sm ghost" data-present="voice-card:make-default" data-voice-id={v.id} style={{ height: 32, padding: '0 8px', marginLeft: -8, marginTop: 2, fontSize: 13, color: 'var(--text-2)' }}
