@@ -3,15 +3,23 @@
 // phonon.ts with a fake Cache Storage:
 //   node ~/workspace/vela-work/run-ts-test.mjs test/cure-waveD-phonon.ts
 //
-// R3-T4-1's honest shape: certification still measures size, not
+// R3-T4-1's honest shape WAS: certification measures size, not
 // content (no true digests exist in-tree to pin — none invented), so
-// leg A asserts the DECLARED bound — exact-size garbage still
-// certifies at probe time. The cure is that the false certification is
-// no longer permanent: the first load that fails on those entries
-// evicts them through phononEvictAfterFailedLoad (the seam
-// phononEnsure's catch and failStaleLoad act through — the WASM
-// loader itself cannot run in this bench, so the wiring is verified
-// by reading and the eviction effect is proven here).
+// leg A asserted the DECLARED bound — exact-size garbage certifies at
+// probe time — and the cure was that the false certification was not
+// permanent: the first load that fails on those entries evicts them
+// through phononEvictAfterFailedLoad (the seam phononEnsure's catch
+// and failStaleLoad act through — the WASM loader itself cannot run
+// in this bench, so the wiring is verified by reading and the
+// eviction effect is proven here).
+//
+// 1.4.195 CLOSED the declared bound: the four files' true SHA-256
+// values were measured from the pinned commit and now stand in
+// PHONON_MODEL_SHA256, and the integrity pass hashes every model
+// body that passes the size bars. Leg A now asserts the closure —
+// exact-size garbage no longer certifies; it is evicted at probe
+// time. Legs B–E keep proving the failure-eviction machinery, which
+// remains the second line for failures the bytes do not explain.
 
 type Entry = { body: Uint8Array; hdr: number | null }
 let entries = new Map<string, Entry>()
@@ -45,16 +53,19 @@ const seedExactGarbage = () => {
   for (const [f, n] of Object.entries(SIZES)) entries.set(MODEL + f, { body: garbage(n), hdr: n })
 }
 
-// A. DECLARED BOUND — the probe-time measurement is still size: the
-//    garbage certifies until a load fails on it. (The digest road
-//    that would close this leg needs the files' true SHA-256 values,
-//    which exist nowhere in-tree; none was invented.)
+// A. THE BOUND, CLOSED (1.4.195) — the probe-time measurement is now
+//    size AND content: exact-size garbage is evicted by the digest
+//    pass and does not certify. (Before 1.4.195 this leg asserted the
+//    opposite, honestly: no true digests existed in-tree to pin.)
 seedExactGarbage()
-check('A (declared bound): exact-size garbage still certifies at probe time', (await phononCached()) === true)
+check('A (1.4.195): exact-size garbage does NOT certify at probe time', (await phononCached()) === false)
+check('A (1.4.195): the digest pass evicted the garbage', entries.size === 0)
 
 // B. THE CURE — a load that fails after consuming all four entries
 //    from the cache evicts them; the bucket stops certifying and the
-//    next load must download fresh.
+//    next load must download fresh. (Re-seeded: leg A's digest pass
+//    already evicted the first seeding on sight.)
+seedExactGarbage()
 check('B: the failure eviction fires for the consumed set', (await phononEvictAfterFailedLoad(ALL)) === true)
 check('B: all four garbage entries are gone', entries.size === 0)
 check('B: phononCached() === false after the eviction', (await phononCached()) === false)

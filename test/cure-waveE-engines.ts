@@ -146,7 +146,13 @@ check('T4-2 B2: the entries stand', phononEntries.size === 4)
 await resetPhonon()
 check('T4-2 C1: silence-after-service evicts nothing', (await phononEvictForFailure(ALL, 'silent', true)) === false)
 check('T4-2 C2: the healthy entries stand', phononEntries.size === 4)
-check('T4-2 C3: and the bucket still certifies them', (await phononCached()) === true)
+// (1.4.195 re-scope: this leg used to assert the bucket still
+// certifies the standing entries. Certification now judges content
+// against the pinned digests, and this scenario's bodies are
+// right-sized mock bytes — so the honest pin-world assertion is the
+// refusal: the failure eviction spared them (C2), and the digest
+// pass, not the failure machinery, is what denies them.)
+check('T4-2 C3: certification judges content now — right-sized mock bytes do not certify (1.4.195)', (await phononCached()) === false)
 
 // Silent + service incomplete: the load wedged while its files were
 // still arriving — the consumed bytes stay implicated, as before.

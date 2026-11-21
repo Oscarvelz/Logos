@@ -4,6 +4,10 @@
 // Same shape as pocket.ts: per-language status, a priority queue, cancel.
 import { createStore } from '../lib/store.ts'
 import { voiceById } from '../lib/voices.ts'
+// @ts-expect-error pocket-assets.js is a plain-JS module (no type
+// declarations); its sha256Hex is the house digest function, so the
+// two engines' certifications measure content by one standard.
+import { sha256Hex } from './pocket-assets.js'
 
 export type PhononLang = 'en' | 'es'
 export const PHONON_SIZE_MB = 75
@@ -34,6 +38,21 @@ const PHONON_MODEL_SIZES: Record<string, number> = {
   'config.json': 4_674,
   'default-voice.safetensors': 256_136,
 }
+/** Each model file's true SHA-256 at the pinned commit (1.4.195,
+ *  Oscar's delegated ruling): measured on 2026-11-21 from the files
+ *  themselves at commit 1191d231… — never invented — and cross-checked
+ *  against the size table above, which the same downloads matched to
+ *  the byte. With these pinned, certification measures CONTENT the way
+ *  Pocket's does: a body of the right size but the wrong bytes is
+ *  evicted by the integrity pass below and never certifies. If MODEL
+ *  is ever re-pinned, re-measure this table from the new commit's
+ *  files before shipping, exactly as the sizes demand. */
+const PHONON_MODEL_SHA256: Record<string, string> = {
+  'model.q8.gguf': '96fa067813244e0c6c5997b98ec2596b65ec8574b14916b48e97db056ff97e27',
+  'tokenizer.json': 'a5e8c6060bf927ed367314f21355148fdf4acff6fadb94e49c86bc7182449433',
+  'config.json': 'e312ab694d5ec1f79ccea520a2eeec989969ce07e9b4189ae7e9ad8e035ef82e',
+  'default-voice.safetensors': 'dc537478eaadc1a5257fcda2e3501ab81e14c111a5d95a5838f350db2afd0f1a',
+}
 
 /**
  * Cache-integrity pass (T4-4), mirroring Pocket's 1.4.147 rule. The
@@ -60,9 +79,20 @@ async function phononEvictDamaged(): Promise<void> {
       const name = PHONON_MODEL_FILES.find((f) => req.url === MODEL + f)
       const declared = Number(res.headers.get('content-length') ?? 0)
       if (!(declared > 0) && !name) continue
-      const actual = (await res.blob()).size
+      const blob = await res.blob()
+      const actual = blob.size
       if (declared > 0 && actual !== declared) { try { await c.delete(req) } catch { /* ignore */ } continue }
-      if (name && actual !== PHONON_MODEL_SIZES[name]) { try { await c.delete(req) } catch { /* ignore */ } }
+      if (name && actual !== PHONON_MODEL_SIZES[name]) { try { await c.delete(req) } catch { /* ignore */ } continue }
+      // Content, at last (1.4.195): a model file whose size is right
+      // but whose bytes hash to anything but the pinned digest is
+      // evicted here too — exact-size garbage no longer certifies.
+      // The hash is computed only after the cheap size bars pass, the
+      // same ordering Pocket's probe keeps.
+      if (name) {
+        let digest = ''
+        try { digest = await sha256Hex(await blob.arrayBuffer()) } catch { /* a body that cannot be hashed cannot certify */ }
+        if (digest !== PHONON_MODEL_SHA256[name]) { try { await c.delete(req) } catch { /* ignore */ } }
+      }
     }
   } catch { /* ignore */ }
 }
@@ -93,7 +123,12 @@ async function phononEvictDamaged(): Promise<void> {
  *  survives until a load does reach it. The digest road stays open
  *  and declared: pin the four files' true SHA-256 values — measured
  *  from the files themselves, never invented — and certification can
- *  measure content the way Pocket's does. Round 4 amended the cure
+ *  measure content the way Pocket's does. (1.4.195 CLOSED that road:
+ *  the four digests were measured from the pinned commit's files and
+ *  now stand in PHONON_MODEL_SHA256; the integrity pass hashes every
+ *  model body that passes the size bars, so certification measures
+ *  content here too. The eviction machinery below remains as the
+ *  second line, for failures the bytes do not explain.) Round 4 amended the cure
  *  twice, below: the guard now arms only on evictions the bucket
  *  confirms (R4-T4-1), and the two failure doors evict only when the
  *  failure implicates the bytes, not merely when the load consumed
@@ -610,7 +645,10 @@ export async function phononCached(): Promise<boolean> {
     // here; what it can no longer do is survive a load — the first
     // load that fails on cache-served entries evicts them
     // (phononEvictAfterFailedLoad), so the false certification is
-    // never permanent.
+    // never permanent. (1.4.195: the digests now exist in-tree —
+    // PHONON_MODEL_SHA256 — and phononEvictDamaged, which runs at
+    // this probe's head, evicts a body whose hash disagrees, so a
+    // digest-bad file reads as absent here and cannot certify.)
     for (const name of PHONON_MODEL_FILES) {
       const res = await c.match(MODEL + name)
       if (!res) return false

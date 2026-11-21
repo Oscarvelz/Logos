@@ -112,8 +112,64 @@ function refuseIfShort(url, total, delivered) {
         throw new Error(`Truncated download fetching ${url}: content-length promised ${total} bytes, the body delivered ${delivered}. Refusing to use or cache these bytes.`);
 }
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
-export function expectedSha256(version) {
+// The pinned Pocket model digests (1.4.195, Oscar's delegated ruling):
+// the upstream manifest's `sha256` fields are 16-hex PREFIXES, not full
+// digests — so the C-2 machinery, fed the manifest's own value, could
+// never verify a model byte in production (expectedSha256 returned
+// null for a prefix, and the probe in pocket.ts compared a full hash
+// against a prefix and could never certify). These full digests were
+// measured on 2026-11-21 from the canonical upstream files themselves
+// (thewh1teagle/pocket-tts-onnx), cross-checked against the manifest's
+// prefixes and byte counts, which agree. They live HERE, in the
+// shipped code — never in the travelling manifest. If upstream ever
+// publishes a new model, the prefix stops matching, every door below
+// fails closed, and a future release re-pins deliberately, the same
+// way these were measured.
+const PINNED_MODEL_SHA256 = [
+    "010c6701d007277e6b37440b909de098200802fddbe70f74e890763b5dd43745", // en — 176,992,315 B
+    "fd31ae98160932edb15c22e4a3539912a1010c691615fff0bc05c9135e18dd81", // es — 173,604,779 B
+];
+/** The pinned full digest a digest-shaped value names, when it is a
+ *  prefix of (or equal to) one of the pinned models — null when the
+ *  value is not digest-shaped or names no pinned model. Shared with
+ *  pocket.ts, whose probe and load gate judge by the same pins. */
+export function pinnedModelDigest(version) {
     const v = typeof version === "string" ? version.trim().toLowerCase() : "";
+    if (!/^[0-9a-f]{8,64}$/.test(v))
+        return null;
+    return PINNED_MODEL_SHA256.find((p) => p.startsWith(v)) ?? null;
+}
+/** The pinned full digest a model download must hash to, when the
+ *  manifest's prefix names one of the pinned models — null when the
+ *  asset is not a pinned model at all. A model.onnx fetch whose prefix
+ *  names NO pinned model is refused outright (fail closed): upstream
+ *  moved, and this version of Logos does not follow it silently. */
+export function pinnedModelSha256(url, version) {
+    if (typeof url !== "string" || !url.endsWith("/model.onnx"))
+        return null;
+    const v = typeof version === "string" ? version.trim().toLowerCase() : "";
+    if (!/^[0-9a-f]{8,64}$/.test(v))
+        return null;
+    const pin = pinnedModelDigest(v);
+    if (pin)
+        return pin;
+    // Refuse here only the values the pin can judge: a well-formed
+    // full digest, or a clean prefix-length one (the manifest's
+    // grammar). A malformed shape (32–63 hex, a labelled digest) is
+    // not the pin's to judge — it falls through to expectedSha256's
+    // malformed-digest law, which refuses it just as loudly.
+    if (SHA256_HEX.test(v) || /^[0-9a-f]{8,31}$/.test(v))
+        throw new Error(`The voice model offered at ${url} is not the model this version of Logos is pinned to (digest ${version}). Refusing to download or trust these bytes.`);
+    return null;
+}
+export function expectedSha256(version, url) {
+    const v = typeof version === "string" ? version.trim().toLowerCase() : "";
+    // For a model.onnx fetch the PIN judges first: even a full-length
+    // digest is only ever the pinned one — anything else is refused
+    // inside pinnedModelSha256, never merely compared against itself.
+    const pinned = pinnedModelSha256(url, version);
+    if (pinned)
+        return pinned;
     if (SHA256_HEX.test(v))
         return v;
     // R2-T4-4: a version that PRESENTS as a digest — it carries a
@@ -163,7 +219,7 @@ export async function fetchAsset(url, onProgress, version) {
         return local;
     }
     const key = keyFor(url, version);
-    const expected = expectedSha256(version);
+    const expected = expectedSha256(version, url);
     const hit = await cacheGet(key);
     if (hit) {
         // Say it is a cache hit before reading the body, not after. Waiting until

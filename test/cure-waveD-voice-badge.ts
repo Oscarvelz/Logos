@@ -4,6 +4,17 @@
 // The hunt probe (round3/probes/r3-voice-badge.ts) hardcodes the OLD rule
 // and so cannot flip; this probe mirrors its specimen exactly (EN-only
 // bucket, hash-true) and judges the rule the page now runs.
+//
+// 1.4.195 RE-SCOPE (the pin): the badge's fuel is pocketCached, which
+// now certifies only the pinned model bodies, measured from the real
+// upstream files. A mock body cannot be the pinned model, so the
+// badge-true legs are displaced to the real-file bench (NOTES
+// 1.4.195: the real English model certifies ⇒ the flag this rule
+// reads is true). What this probe proves in the pin world: the
+// manifests speak in prefixes as the real ones do; each language's
+// probe records its OWN pinned identity; an unverifiable body earns
+// NO badge in either language; and the badge stays language-bound —
+// moving the store's active language changes no voice's claim.
 const store = new Map<string, string>()
 ;(globalThis as any).localStorage = {
   getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
@@ -13,19 +24,16 @@ const store = new Map<string, string>()
 Object.defineProperty(globalThis, 'navigator', { value: { hardwareConcurrency: 4, deviceMemory: 4 }, configurable: true })
 ;(globalThis as any).self = globalThis
 
-const sha256 = async (bytes: Uint8Array): Promise<string> => {
-  const d = await crypto.subtle.digest('SHA-256', bytes as BufferSource)
-  return [...new Uint8Array(d)].map((x) => x.toString(16).padStart(2, '0')).join('')
-}
 const BODY_EN = new Uint8Array([11, 22, 33, 44, 55])
-const BODY_ES = new Uint8Array([66, 77, 88, 99, 111])
-const SHA_EN = await sha256(BODY_EN)
-const SHA_ES = await sha256(BODY_ES)
+const EN_PREFIX = '010c6701d007277e'
+const ES_PREFIX = 'fd31ae98160932ed'
+const EN_PIN = '010c6701d007277e6b37440b909de098200802fddbe70f74e890763b5dd43745'
+const ES_PIN = 'fd31ae98160932edb15c22e4a3539912a1010c691615fff0bc05c9135e18dd81'
 const pocketBucket = {
-  keys: async () => [{ url: `https://cdn.example/model.onnx?v=${SHA_EN}` }],
+  keys: async () => [{ url: `https://cdn.example/model.onnx?v=${EN_PREFIX}` }],
   match: async (req: any) => {
     const url = typeof req === 'string' ? req : req?.url ?? ''
-    if (!String(url).includes(SHA_EN)) return undefined
+    if (!String(url).includes(EN_PREFIX)) return undefined
     return new Response(BODY_EN.slice(), { headers: { 'content-length': String(BODY_EN.byteLength) } })
   },
   delete: async () => true,
@@ -38,13 +46,13 @@ const emptyBucket = { keys: async () => [], match: async () => undefined, delete
 ;(globalThis as any).fetch = async (url: string) => {
   const lang = String(url).includes('/es/') ? 'es' : 'en'
   const body = lang === 'en'
-    ? { model: { file: 'model.onnx', sha256: SHA_EN, bytes: BODY_EN.byteLength } }
-    : { model: { file: 'model.onnx', sha256: SHA_ES, bytes: BODY_ES.byteLength } }
+    ? { model: { file: 'model.onnx', sha256: EN_PREFIX, bytes: 176992315 } }
+    : { model: { file: 'model.onnx', sha256: ES_PREFIX, bytes: 173604779 } }
   return { json: async () => body }
 }
 
 const { settings } = await import('../src/lib/settings.ts')
-const { pocket } = await import('../src/engine/pocket.ts')
+const { pocket, pocketModelDigest } = await import('../src/engine/pocket.ts')
 const { engine, engineCachedFor, isModelCached } = await import('../src/engine/engine.ts')
 const { voiceById } = await import('../src/lib/voices.ts')
 
@@ -64,14 +72,16 @@ settings.set({ langMode: 'en', voiceOverride: 'pk_alba' } as any)
 await isModelCached()
 
 pocket.set({ active: 'en' })
-check('control: Alba (en) wears the badge — her model IS on the phone', badge('pk_alba') === true)
+check('pin: the English probe recorded the English pinned identity', pocketModelDigest('en') === EN_PIN)
+check('pin: Alba (en) wears NO badge over an unverifiable body — the pin refuses it', badge('pk_alba') === false)
 check('Lola (es) wears NO badge — the Spanish model was never downloaded', badge('pk_lola') === false,
   `badge=${badge('pk_lola')} — the card claims a 179 MB model the phone does not hold`)
 
 pocket.set({ active: 'es' })
 check('flipped: Lola (es) still wears no badge', badge('pk_lola') === false)
-check('flipped: Alba (en) KEEPS her badge — her model is still on the phone', badge('pk_alba') === true,
-  `badge=${badge('pk_alba')} — the downloaded English model lost its claim when the store's active language moved`)
+check('flipped: Alba (en) claim unchanged when the active language moved', badge('pk_alba') === false && pocketModelDigest('en') === EN_PIN,
+  `badge=${badge('pk_alba')} — a voice's claim must not move with the store's active language`)
+check('pin: the Spanish identity, when probed, is its own — never the English one', pocketModelDigest('es') === null || pocketModelDigest('es') === ES_PIN)
 
 console.log(`\ncure-waveD-voice-badge probe: ${pass}/${pass + fail} PASS`)
 process.exitCode = fail ? 1 : 0

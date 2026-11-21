@@ -8,7 +8,20 @@ import type { PocketRequest, PocketResponse } from './pocket.worker.ts'
 // downloads with, so probe and loader measure by one standard.
 // @ts-expect-error pocket-assets.js is the vendored-assets replacement
 // module (plain JS, no type declarations); only its sha256Hex is used.
-import { sha256Hex } from './pocket-assets.js'
+import { sha256Hex, pinnedModelDigest } from './pocket-assets.js'
+
+/** The pinned Pocket models' byte counts (1.4.195): the second witness
+ *  of each model's identity, beside the full digests pinned in
+ *  pocket-assets.js — measured from the same canonical files on
+ *  2026-11-21 and agreeing with the manifests' own declarations. A
+ *  manifest whose model does not match BOTH witnesses names a model
+ *  this version of Logos is not pinned to: the probe certifies nothing
+ *  for it and the load gate refuses it, in the open. (The manifest's
+ *  sha256 is a 16-hex prefix; before this pin, the probe compared the
+ *  body's full hash against that prefix, so certification could never
+ *  pass with a real manifest — the pin is also the cure for that.) */
+const POCKET_PINNED_MODEL_BYTES: Record<PocketLang, number> = { en: 176_992_315, es: 173_604_779 }
+const PIN_REFUSAL = 'The voice model offered by the download source is not the model this version of Logos is pinned to, so it was not downloaded. Nothing was kept.'
 
 export type PocketLang = 'en' | 'es'
 export const POCKET_LANGUAGE: Record<PocketLang, string> = { en: 'english', es: 'spanish' }
@@ -252,6 +265,35 @@ function failQueued(lang: PocketLang, message: string) {
   for (let i = queue.length - 1; i >= 0; i--) if (queue[i].lang === lang) { queue[i].reject(new Error(message)); queue.splice(i, 1) }
 }
 
+/** Refuse a load at the pin gate (1.4.195), in the loadError case's own
+ *  shape: the language lands in an honest error state, its waiters and
+ *  queued jobs are settled with the refusal, and no worker is spawned —
+ *  an unpinned model is never downloaded in the first place. */
+function refuseLoad(lang: PocketLang, message: string) {
+  loadSince.delete(lang)
+  setLang(lang, { status: 'error', error: message })
+  flushWaiters(lang, new Error(message))
+  failQueued(lang, message)
+}
+
+/** The pin gate a load passes before any worker spawns (1.4.195):
+ *  the manifest is fetched and judged — its model's prefix must extend
+ *  the pinned digest and its byte count must be the pinned count. A
+ *  manifest that cannot be reached proves nothing either way, so the
+ *  load proceeds as it always did and certification — the standing
+ *  judge, which hashes the body against the full pin — decides after;
+ *  a reachable manifest naming another model refuses the load here. */
+async function pocketPinGate(lang: PocketLang): Promise<boolean> {
+  try {
+    const m = await fetchPocketManifest(lang)
+    const sha = m.model?.sha256
+    const pin = sha ? pinnedModelDigest(sha) : null
+    return !!pin && m.model?.bytes === POCKET_PINNED_MODEL_BYTES[lang]
+  } catch { return true }
+}
+
+const gatePending = new Set<PocketLang>()
+
 /** Load a language's model (from the phone's cache after the first time). */
 export function pocketEnsure(lang: PocketLang): Promise<void> {
   if (pocket.get().langs[lang].status === 'ready' && workers.has(lang)) return Promise.resolve()
@@ -262,17 +304,29 @@ export function pocketEnsure(lang: PocketLang): Promise<void> {
   })
   // Single-flight (M-19): an ensure that arrives while a spawn for this
   // language is in flight joins the same pending worker — it adds its
-  // waiter above and does not spawn or post a second load.
-  if (!spawning.has(lang) && (pocket.get().langs[lang].status !== 'loading' || !workers.has(lang))) {
+  // waiter above and does not spawn or post a second load. The pin
+  // gate (1.4.195) stands in the same single flight: an ensure that
+  // arrives while the gate is judging joins the same waiters and does
+  // not judge twice.
+  if (!spawning.has(lang) && !gatePending.has(lang) && (pocket.get().langs[lang].status !== 'loading' || !workers.has(lang))) {
+    gatePending.add(lang)
     setLang(lang, { status: 'loading', loaded: 0, total: 0, error: null })
     loadSince.set(lang, Date.now())
     armLoadWatchdog()
     pocket.set({ active: lang })
-    const w = spawn(lang)
-    if (loadPostedFor.get(lang) !== w) {
-      loadPostedFor.set(lang, w)
-      w.postMessage({ type: 'load', language: POCKET_LANGUAGE[lang], threads: threads() } satisfies PocketRequest)
-    }
+    void (async () => {
+      const ok = await pocketPinGate(lang)
+      gatePending.delete(lang)
+      if (!ok) { refuseLoad(lang, PIN_REFUSAL); return }
+      // A reset or a drop may have settled this language while the
+      // gate judged — spawn only for a load that still stands.
+      if (pocket.get().langs[lang].status !== 'loading') return
+      const w = spawn(lang)
+      if (loadPostedFor.get(lang) !== w) {
+        loadPostedFor.set(lang, w)
+        w.postMessage({ type: 'load', language: POCKET_LANGUAGE[lang], threads: threads() } satisfies PocketRequest)
+      }
+    })()
   }
   return p
 }
@@ -496,10 +550,23 @@ export async function pocketCached(lang: PocketLang = 'en'): Promise<boolean> {
       const m = await fetchPocketManifest(lang)
       const file = m.model?.file
       const sha = m.model?.sha256
-      if (file && sha) {
+      // The pin judges the manifest first (1.4.195): the manifest's
+      // sha is a prefix — it must extend THIS language's pinned full
+      // digest, and its byte count must be the pinned count, or the
+      // manifest names a model this version of Logos does not trust:
+      // certify nothing, record nothing. (Before the pin, the record
+      // below stored the prefix itself and entryMatchesModel compared
+      // the body's full hash against it — a comparison no real body
+      // could ever pass, so no real model could ever certify.)
+      const pin = sha ? pinnedModelDigest(sha) : null
+      if (file && sha && !pin) return false
+      if (file && sha && pin) {
+        if (m.model?.bytes !== POCKET_PINNED_MODEL_BYTES[lang]) return false
         // Learn this language's digest identity (M-18) before judging:
         // the offline fallback below is only as honest as this record.
-        recordPocketDigest(lang, { file, sha, bytes: typeof m.model?.bytes === 'number' ? m.model.bytes : undefined })
+        // The record now carries the FULL pinned digest, so the
+        // fallback and keep.ts' stamps bind the true identity.
+        recordPocketDigest(lang, { file, sha: pin, bytes: m.model?.bytes })
         // Key existence alone never certifies (T4-3): a 1-byte stub or
         // an HTML error page filed under the digest key is not a model.
         // The manifest declares the model's true size (`bytes` —
@@ -511,7 +578,9 @@ export async function pocketCached(lang: PocketLang = 'en'): Promise<boolean> {
         // body — reports "downloaded".
         const hitKey = keys.find((k) => k.url.includes(`${file}?v=${sha}`))
         if (!hitKey) return false
-        return await entryMatchesModel(cache, hitKey, m.model?.bytes, sha)
+        // Judged against the full PIN, not the manifest's prefix: the
+        // body must hash to the pinned digest exactly (1.4.195).
+        return await entryMatchesModel(cache, hitKey, m.model?.bytes, pin)
       }
     } catch { /* offline — fall through to the language-bound fallback */ }
     // Offline fallback (M-18, was T4-10): the old shape loop iterated
@@ -525,9 +594,24 @@ export async function pocketCached(lang: PocketLang = 'en'): Promise<boolean> {
     // for this language → nothing is certified.
     const known = readPocketDigests()[lang]
     if (!known) return false
-    const hitKey = keys.find((k) => k.url.includes(`${known.file}?v=${known.sha}`))
+    // The recorded digest must resolve to the pin (1.4.195): records
+    // written by older versions carry the manifest's 16-hex prefix,
+    // which resolves here exactly as the full pin does — a record
+    // naming any other model certifies nothing. The entry's KEY still
+    // carries whatever version the loader filed it under (the prefix),
+    // so the key is matched by the pin's family, not by string
+    // equality with the record, and the BODY is judged against the
+    // full pin.
+    const knownPin = pinnedModelDigest(known.sha)
+    if (!knownPin) return false
+    const hitKey = keys.find((k) => {
+      const i = k.url.indexOf(`${known.file}?v=`)
+      if (i < 0) return false
+      const v = k.url.slice(i + known.file.length + 3).split('&')[0]
+      return v.length >= 8 && knownPin.startsWith(v)
+    })
     if (!hitKey) return false
-    return await entryMatchesModel(cache, hitKey, known.bytes, known.sha)
+    return await entryMatchesModel(cache, hitKey, known.bytes, knownPin)
   } catch { /* ignore */ }
   return false
 }

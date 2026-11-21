@@ -87,24 +87,51 @@ const throws = async (fn) => { try { await fn(); return null } catch (e) { retur
 }
 
 // 5. C-2 CONTROLS — the hash check itself is untouched by both cures.
+// (1.4.195: the control asset is the ENCODER, not model.onnx — a
+// model.onnx fetch is judged by the pin first, §5b below; the general
+// C-2 road for every other hashed asset is exactly what it was.)
 {
   currentCache = makeCache()
   const good = new Uint8Array([1, 2, 3, 4])
   const sha = await sha256Hex(good)
   const bad = new Uint8Array([9, 9, 9, 9])
   fetchImpl = async () => streamResponse(bad, 4)
-  const err = await throws(() => fetchAsset('https://x.test/model.onnx', null, sha))
+  const err = await throws(() => fetchAsset('https://x.test/encoder.onnx', null, sha))
   check('C-2 control: sha mismatch on download refused', !!err && /SHA-256 mismatch/.test(err.message))
   check('C-2 control: mismatch stored nothing', currentCache._map.size === 0)
   fetchImpl = async () => streamResponse(good, 4)
-  const out = await fetchAsset('https://x.test/model.onnx', null, sha)
+  const out = await fetchAsset('https://x.test/encoder.onnx', null, sha)
   check('C-2 control: correct bytes under their sha accepted + cached', new Uint8Array(out).byteLength === 4 && currentCache._map.size === 1)
   // A hashed asset whose ENCODED download delivers more decoded bytes
   // than the header: the hash, not the header, is the integrity bar.
   fetchImpl = async () => streamResponse(good, 3)
   currentCache = makeCache()
-  const out2 = await fetchAsset('https://x.test/model.onnx', null, sha)
+  const out2 = await fetchAsset('https://x.test/encoder.onnx', null, sha)
   check('T4-3+C-2: over-long header with hash-true body accepted', new Uint8Array(out2).byteLength === 4)
+}
+
+// 5b. THE PIN (1.4.195) — a model.onnx fetch is judged by the pinned
+//     digests in pocket-assets.js, measured from the real upstream
+//     files. The manifest's value is a 16-hex prefix of the pin.
+{
+  const { pinnedModelDigest } = await import('../src/engine/pocket-assets.js')
+  const EN_PIN = '010c6701d007277e6b37440b909de098200802fddbe70f74e890763b5dd43745'
+  const ES_PIN = 'fd31ae98160932edb15c22e4a3539912a1010c691615fff0bc05c9135e18dd81'
+  check('pin: the en prefix resolves to the full pinned digest', pinnedModelDigest('010c6701d007277e') === EN_PIN)
+  check('pin: the es prefix resolves to the full pinned digest', pinnedModelDigest('fd31ae98160932ed') === ES_PIN)
+  check('pin: an unknown prefix resolves to nothing', pinnedModelDigest('aaaaaaaaaaaaaaaa') === null)
+  check('pin: a release label resolves to nothing', pinnedModelDigest('espeak-ng-1.0.2') === null)
+  // A model offered under an unpinned digest is refused outright.
+  currentCache = makeCache()
+  fetchImpl = async () => streamResponse(new Uint8Array([1, 2, 3, 4]), 4)
+  const errPin = await throws(() => fetchAsset('https://x.test/en/model.onnx', null, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
+  check('pin: an unpinned model digest is refused before any byte is trusted', !!errPin && /not the model this version of Logos is pinned to/.test(errPin.message))
+  check('pin: the refusal stored nothing', currentCache._map.size === 0)
+  // A model offered under the pin's prefix but with wrong bytes is
+  // refused by the hash — against the FULL pin, not the prefix.
+  const errBody = await throws(() => fetchAsset('https://x.test/en/model.onnx', null, '010c6701d007277e'))
+  check('pin: wrong bytes under the pin prefix refused by the full-pin hash', !!errBody && /SHA-256 mismatch/.test(errBody.message) && errBody.message.includes(EN_PIN))
+  check('pin: the wrong body stored nothing', currentCache._map.size === 0)
 }
 
 // 6. T4-4 SPECIMENS — a malformed digest is a LOUD error, never a
