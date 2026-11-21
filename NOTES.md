@@ -1,3 +1,14 @@
+## 1.4.202 — The Q3 remap lands: the Pocket beat points at the accordion
+
+The 1.4.200 accordion left Q3's Pocket beat pointing at an element the page no longer has (declared in the 200 notes: its stay-here landing reported unlandable until the lane re-mapped it). The Presentation lane did the remap in its copy, verified it there, and handed it over; canon integrated it INTEGRA, NO REEMPLACES — only the Q3 changes crossed, because the lane's copy stands behind canon on other cures (the T6-9 tag-qualified locator, the family-aware lookup, several companion attributes, the 1.4.167 desk record), and every one of those survives untouched.
+
+- **The beat**: `q3-filter-pocket` is now `q3-section-pocket` — it taps `voices-section-head:pocket`, the Pocket section's head, and its feet say what the gesture does, in both languages («The catalog sorts into sections; tap Pocket and its voices open here.»). The goal is unchanged: with the section open, Alba's card stands in the grid for the two beats that examine her.
+- **The registry**: `voices-section-head:{group}` enters as MINT with companion `data-group` (several heads share the one mint, so the companion names the member), and `voices-filter:{key}` leaves the active registry for the new **RETIRED_ANCHORS** lineage list — kept with its death note («real-element-removed-in-1.4.200…»), never resolvable. The exchange is one-for-one: 323 active anchors, 251 MINT, totals unmoved. The anchor fence now imports and audits the retired list (a retired id found in ANCHORS, or one missing its note, fails the fence). The footprint table's key follows the rename, with the lane's maintenance note. `voices-empty-fav`'s precondition now says what is true: «Favorites section open…».
+- **The stage (canon-only half — the lane's copy has no stage to mirror)**: the sealed stage's Voices fiction is an accordion now, like the real page — Favourites, Pocket, English, Español; one section open at a time; a section's cards exist only while it stands open; language sections hold Phonon voices and Pocket voices live in their own section, as in the real composition; the empty-favorites note lives inside its section. `stageUi.voicesFilter` is `voicesSection` now.
+- **Gates, against the pre-integration baseline**: identical — anchor fence GREEN (the retired record listed with its note), Fence 0 exit 0, presentation suites 129/129.
+
+Presentation impact: this wave IS the presentation change — Q3's pocket beat has a real destination again, in the app and on the sealed stage.
+
 ## 1.4.201 — No ellipses: a chip is complete or it is not there
 
 Oscar's law, stated 2026-11-21 with two close-ups of the Listen player's chip row — the voice chip wearing a cut name («● N…») and the language chip cut to «Auto · …»: «No me gustan los puntos suspensivos. El ícono está completo o no está.»

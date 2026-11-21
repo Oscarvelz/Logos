@@ -239,14 +239,14 @@ export const Q3: PresentationModule = {
           },
         },
         {
-          id: 'q3-filter-pocket',
-          anchorId: 'voices-filter:pocket',
+          id: 'q3-section-pocket',
+          anchorId: 'voices-section-head:pocket',
           effectAnchorId: 'voices-grid',
           act: 'tap',
-          establishes: 'voices-filter-pocket',
+          establishes: 'voices-section-pocket',
           text: {
-            en: 'Filters sort the catalog: All, Favorites, English, Español, Pocket.',
-            es: 'Los filtros ordenan el catálogo por idioma, favoritas o motor Pocket.',
+            en: 'The catalog sorts into sections; tap Pocket and its voices open here.',
+            es: 'El catálogo se ordena en secciones; toca Pocket y sus voces se abren aquí.',
           },
         },
         {

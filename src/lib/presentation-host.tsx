@@ -68,7 +68,8 @@ export interface StageUiState {
   /** Book surface side panel: toc | search | type | info | note | find. */
   panel: string | null
   libTab: 'saved' | 'books'
-  voicesFilter: string
+  /** The Voices page fiction's open section (1.4.202 remap: the page is an accordion now, not filters). */
+  voicesSection: string | null
   /** Timed fiction effects: 'creating' | 'importing' | 'web-loading' | null. */
   fx: string | null
   /** The keep sheet after «Make the audio»: it stays standing, busy,
@@ -80,7 +81,7 @@ export interface StageUiState {
    *  the player's error line). Cleared on any room change. */
   listenError: boolean
 }
-export const stageUi = createStore<StageUiState>({ sheet: null, menu: null, selecting: false, confirm: null, panel: null, libTab: 'saved', voicesFilter: 'all', fx: null, keepBusy: false, listenError: false })
+export const stageUi = createStore<StageUiState>({ sheet: null, menu: null, selecting: false, confirm: null, panel: null, libTab: 'saved', voicesSection: null, fx: null, keepBusy: false, listenError: false })
 export function stagePatch(patch: Partial<StageUiState>) {
   stageUi.set({ ...stageUi.get(), ...patch })
   stageBump()
@@ -469,7 +470,7 @@ export function PresentationHost() {
   useEffect(() => {
     if (!current) { setBuilt(null); return }
     stageNav.set({ surface: 'settings', bump: 0 })
-    stageUi.set({ sheet: null, menu: null, selecting: false, confirm: null, panel: null, libTab: 'saved', voicesFilter: 'all', fx: null, keepBusy: false, listenError: false })
+    stageUi.set({ sheet: null, menu: null, selecting: false, confirm: null, panel: null, libTab: 'saved', voicesSection: null, fx: null, keepBusy: false, listenError: false })
     stagePrime.set({ books: [], clips: [] })
     stageBookTemp.set({ temp: null })
     stageActiveClip.set({ id: null })

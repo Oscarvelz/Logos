@@ -1,8 +1,9 @@
 /**
  * anchors.ts — the Logos Presentation anchor registry, as code.
  *
- * Faithful transcription of ANCHOR-REGISTRY.md (323 anchors: 251 MINT ·
- * 34 CONTRACT · 30 CLASS · 5 STORE · 3 EXISTING), built against Logos
+ * Faithful transcription of ANCHOR-REGISTRY.md (323 active anchors: 251 MINT ·
+ * 34 CONTRACT · 30 CLASS · 5 STORE · 3 EXISTING, plus retired records kept
+ * for lineage in RETIRED_ANCHORS below), built against Logos
  * 1.4.156. One record per anchor: { id, kind, strategy, items (census ids),
  * modules, locator, file/shellFile, family/companion, precondition? }.
  *
@@ -69,6 +70,8 @@ export interface AnchorRecord {
   probe?: ProbeSite[]
   /** Registry §5 precondition: what must hold (or be performed) before this anchor may be pointed at. */
   precondition?: string
+  /** Set ONLY on RETIRED_ANCHORS records: when and why the real element died. Retired records are never in ANCHORS and never resolve. */
+  retired?: string
 }
 
 /* ------------------------------------------------------------------ */
@@ -386,9 +389,9 @@ const G_VOICES: AnchorRecord[] = [
   r('voices-catalog', 'store', 'STORE', ['D-1'], ['AD5'], probeLoc('VOICES.length'), { file: VOICES_LIB, probe: [pr(VOICES_LIB, 'export const VOICES')] }),
   r('voices-catalog-accents', 'store', 'STORE', ['D-2', 'D-3'], ['AD5'], probeLoc('VOICES grouped by lang+accent'), { file: VOICES_LIB, probe: [pr(VOICES_LIB, 'export const VOICES')] }),
   r('voices-head', 'web', 'MINT', ['D-5'], ['Q3'], DP, { file: VOICES_P }),
-  r('voices-filter:{key}', 'web', 'MINT', ['D-6'], ['Q3'], DP, { file: VOICES_P, family: 'key', companion: 'data-filter' }),
+  r('voices-section-head:{group}', 'web', 'MINT', ['D-6'], ['Q3'], DP, { file: VOICES_P, family: 'group', companion: 'data-group' }),
   r('voices-grid', 'web', 'MINT', ['D-7'], ['Q3', 'AD5'], DP, { file: VOICES_P }),
-  r('voices-empty-fav', 'web', 'MINT', ['D-15'], ['Q3'], DP, { file: VOICES_P, precondition: 'Favorites filter with scenario favorites empty' }),
+  r('voices-empty-fav', 'web', 'MINT', ['D-15'], ['Q3'], DP, { file: VOICES_P, precondition: 'Favorites section open with scenario favorites empty' }),
   r('voice-card:{voiceId}', 'web', 'MINT', ['D-8', 'D-3', 'D-4'], ['Q3', 'AD5'], DP, { file: VOICES_P, family: 'voiceId', companion: 'data-voice-id' }),
   r('voice-card:{voiceId}:star', 'web', 'MINT', ['D-9', 'D-10'], ['Q3'], DP, { file: VOICES_P, family: 'voiceId', companion: 'data-voice-id' }),
   r('voice-card:{voiceId}:make-default', 'web', 'MINT', ['D-11'], ['Q3', 'AD5'], DP, { file: VOICES_P, family: 'voiceId', companion: 'data-voice-id', precondition: 'absent on the card that already is the default (it wears the flag instead)' }),
@@ -576,6 +579,23 @@ export const ANCHORS: AnchorRecord[] = [
   ...I_SHARE,
   ...J_SETTINGS,
   ...K_SHELL,
+]
+
+/* ------------------------------------------------------------------ */
+/* Retired records — lineage only. A retired anchor's real element is  */
+/* gone from the app; the record is kept so the registry never loses   */
+/* the history, but it is NOT in ANCHORS: the resolver cannot resolve  */
+/* through it, validation does not register its id, and the anchor     */
+/* fence demands no real element for it.                               */
+/* ------------------------------------------------------------------ */
+
+export const RETIRED_ANCHORS: AnchorRecord[] = [
+  r('voices-filter:{key}', 'web', 'MINT', ['D-6'], ['Q3'], DP, {
+    file: VOICES_P,
+    family: 'key',
+    retired:
+      'real-element-removed-in-1.4.200: canon removed the Voices page horizontal filter chips; the page is the picker accordion now and the sections do the filters’ work. Q3 remapped to voices-section-head:{group} in the same wave.',
+  }),
 ]
 
 const BY_ID = new Map<string, AnchorRecord>(ANCHORS.map((a) => [a.id, a]))

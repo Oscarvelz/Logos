@@ -28,7 +28,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { ANCHORS } from '../../src/lib/presentation/anchors.ts'
+import { ANCHORS, RETIRED_ANCHORS } from '../../src/lib/presentation/anchors.ts'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -83,6 +83,14 @@ for (const s of ['MINT', 'CONTRACT', 'CLASS', 'STORE', 'EXISTING']) {
 if (ANCHORS.length !== DOC_TOTALS.TOTAL) failures++
 if (dupes.length) fail(`duplicate anchor ids: ${dupes.join(', ')}`)
 else console.log('  ids: all unique ✓')
+
+/* --- Retired records: lineage only, never active --------------------- */
+console.log(`\nRetired records (${RETIRED_ANCHORS.length}) — kept for lineage, never in the active registry:`)
+for (const a of RETIRED_ANCHORS) {
+  if (seen.has(a.id)) fail(`${a.id}: retired record is also in ANCHORS (it must never resolve)`)
+  if (!a.retired) fail(`${a.id}: retired record carries no retirement note (registry defect)`)
+  console.log(`  ${a.id} — ${a.retired ?? ''}`)
+}
 
 /* --- EXISTING + CLASS: the recorded hook must be in source ----------- */
 console.log('\nEXISTING + CLASS anchors — recorded hook probe:')

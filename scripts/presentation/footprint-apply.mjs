@@ -35,6 +35,13 @@
  * day and verified step-by-step; the regex below now accepts both
  * quote forms. The script remains one-shot by design: its census
  * cross-check refuses a second run.
+ *
+ * NOTE (maintenance, 2026-11-21): canon 1.4.200 removed the Voices
+ * page filter chips, so the step this table knew as 'q3-filter-pocket'
+ * was renamed 'q3-section-pocket' in the same wave's remap (anchor
+ * voices-section-head:pocket, same EFF footprint on voices-grid). The
+ * table key above follows the live script; the 2026-11-15 run itself
+ * is unchanged history.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { MODULE_CATALOGUE } from '../../src/lib/presentation/catalogue.ts'
@@ -88,7 +95,7 @@ export const CLASSIFICATION = {
     'q3-preview-button': ['SELF'],
     'q3-pick-row': ['EFF', R],
     'q3-goto-voices': ['NAV'],
-    'q3-filter-pocket': ['EFF', 'voices-grid'],
+    'q3-section-pocket': ['EFF', 'voices-grid'],
     'q3-card-preview': ['SELF'],
     'q3-star-juniper': ['SELF'],
     'q3-back-to-picker': ['EFF', 'voice-picker'],

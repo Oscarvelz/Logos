@@ -397,41 +397,39 @@ function StageVoices({ scenario }: { scenario: Scenario }) {
   const ui = useStore(stageUi)
   const voices = useStore(stageVoices)
   const fav = new Set(voices.favs)
-  const filter = ui.voicesFilter
-  const shown = VOICES.filter((v) => {
-    if (filter === 'all') return true
-    if (filter === 'pocket') return v.engine === 'pocket'
-    if (filter === 'fav') return fav.has(v.id)
-    if (filter === 'en') return v.lang === 'en'
-    if (filter === 'es') return v.lang === 'es'
-    return true
-  })
-  const filters = [
-    { key: 'all', label: 'All' },
-    { key: 'pocket', label: 'Pocket' },
-    { key: 'en', label: 'English' },
-    { key: 'es', label: 'Español' },
-    { key: 'fav', label: 'Favourites' },
+  // 1.4.202 (the Q3 remap, integrated from the Presentation lane):
+  // the real Voices page has been the picker's accordion since
+  // 1.4.200 — sections that fold and open, one at a time — so the
+  // fiction wears the same shape: a section's cards exist only
+  // while it stands open, exactly as on the real page. Language
+  // sections hold Phonon voices; Pocket voices live in their own
+  // section, as in the real composition.
+  const open = ui.voicesSection
+  const groups = [
+    { key: 'fav', label: 'Favourites', members: VOICES.filter((v) => fav.has(v.id)) },
+    { key: 'pocket', label: 'Pocket', members: VOICES.filter((v) => v.engine === 'pocket') },
+    { key: 'en', label: 'English', members: VOICES.filter((v) => v.engine !== 'pocket' && v.lang === 'en') },
+    { key: 'es', label: 'Español', members: VOICES.filter((v) => v.engine !== 'pocket' && v.lang === 'es') },
   ]
   return (
     <div>
       <div className="pstage-eyebrow" data-present="voices-head">● VOICES</div>
       <h2 className="pstage-title">Voices</h2>
       <div className="pstage-note" data-present="voices-catalog">{VOICES.length} voices · {ENGINE_LABEL.pocket} and {ENGINE_LABEL.phonon}</div>
-      <div className="pstage-chips" style={{ margin: '12px 0' }}>
-        {filters.map((f) => (
-          <button key={f.key} type="button" className={filter === f.key ? 'pstage-chip accent' : 'pstage-chip'}
-            data-present="voices-filter" data-filter={f.key}
-            onClick={() => stagePatch({ voicesFilter: f.key })}>
-            {f.label}
-          </button>
-        ))}
-      </div>
-      {filter === 'fav' && shown.length === 0 && (
-        <p className="pstage-note" data-present="voices-empty-fav">No favourites yet — tap a star to keep a voice here.</p>
-      )}
-      <div className="pstage-grid" data-present="voices-grid">
-        {shown.map((v) => {
+      <div data-present="voices-grid">
+        {groups.map((g) => (
+          <div key={g.key}>
+            <button type="button" className={open === g.key ? 'pstage-chip accent' : 'pstage-chip'}
+              data-present="voices-section-head" data-group={g.key}
+              onClick={() => stagePatch({ voicesSection: open === g.key ? null : g.key })}>
+              {g.label} · {g.members.length}
+            </button>
+            {open === g.key && (
+              <div className="pstage-grid">
+                {g.key === 'fav' && g.members.length === 0 && (
+                  <p className="pstage-note" data-present="voices-empty-fav">No favourites yet — tap a star to keep a voice here.</p>
+                )}
+                {g.members.map((v) => {
           const isFav = fav.has(v.id)
           const isDefault = v.id === voices.defaultId
           return (
@@ -457,7 +455,11 @@ function StageVoices({ scenario }: { scenario: Scenario }) {
               </div>
             </div>
           )
-        })}
+                })}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -940,7 +942,7 @@ const STAGE_SETTING_INDEX: { anchor: string; title: string; sub: string; keys: s
   { anchor: 'set-card-language', title: 'Language', sub: 'The app’s own words — everything on screen.', keys: 'english español spanish idioma lenguaje inglés' },
   { anchor: 'set-presentations', title: 'Presentations', sub: 'Learn the whole app, guided, at your pace', keys: 'lessons tour guided learn presentaciones lecciones aprender guía' },
   { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy clips library copia respaldo exportar importar archivo biblioteca' },
-  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.201 · private, on-device text-to-speech', keys: 'version about acerca versión' },
+  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.202 · private, on-device text-to-speech', keys: 'version about acerca versión' },
 ]
 
 function StageSettings({ scenario }: { scenario: Scenario }) {
@@ -1122,8 +1124,8 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
 
       <div className="pstage-card" data-present="set-about">
         <strong>About Logos</strong>
-        <p className="pstage-note">Version 1.4.201 · private, on-device text-to-speech</p>
-        <p className="pstage-note" data-present="set-version">Version 1.4.201</p>
+        <p className="pstage-note">Version 1.4.202 · private, on-device text-to-speech</p>
+        <p className="pstage-note" data-present="set-version">Version 1.4.202</p>
       </div>
     </div>
   )
