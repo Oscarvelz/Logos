@@ -7,7 +7,7 @@
  * The shape, exactly as designed:
  *
  *   { modules: { <moduleId>: { state, step?, scene?, stepId?, done?,
- *                              verifiedAgainst, skips: [...],
+ *                              doneIds?, verifiedAgainst, skips: [...],
  *                              mode?, userPaused?, seededRequiredMiss? } },
  *     speed: <the user's remembered speed, one per user>,
  *     speedScale: 2 <the pace-scale stamp: speed is a NEW label (P2)>,
@@ -116,27 +116,73 @@ export function normalizePresentationState(value: unknown): PresentationStateFil
   if (isRecord(value.modules)) {
     for (const [id, raw] of Object.entries(value.modules)) {
       if (!isRecord(raw)) continue
+      // The module's registered length, when registration has fed it:
+      // the one bound every numeric witness in this record is judged
+      // against (done[] since R3-T6-2; the skip log and the resume
+      // point since R4-T6-1/2). A module with no registered length
+      // keeps the unbounded reading for whatever can still be judged
+      // — the gate judges only what it can know.
+      const total = moduleStepCount(id)
       const progress: ModuleProgress = {
         state: typeof raw.state === 'string' && MODULE_STATES.has(raw.state)
           ? (raw.state as ModuleProgress['state'])
           : 'unseen',
         verifiedAgainst: typeof raw.verifiedAgainst === 'string' ? raw.verifiedAgainst : '',
+        // The skip log is a standing witness (R3-T6-4): an entry bars
+        // `seen` until a lived walk presents its step and strikes it
+        // — so it is validated element-wise with the same discipline
+        // as done[] (R4-T6-1). An entry survives only if its step is
+        // an integer this module has: a string, a fraction, an absent
+        // or out-of-range step names no step a walk could ever
+        // present, so the entry could never be struck and would bar
+        // `seen` forever. Damage degrades to the honest subset here,
+        // exactly as a damaged done[] degrades below.
         skips: Array.isArray(raw.skips)
-          ? (raw.skips.filter(isRecord) as unknown as ModuleProgress['skips'])
+          ? (raw.skips.filter(
+              (entry): entry is Record<string, unknown> =>
+                isRecord(entry) &&
+                typeof entry.step === 'number' &&
+                Number.isInteger(entry.step) &&
+                entry.step >= 0 &&
+                (total === undefined || entry.step < total),
+            ) as unknown as ModuleProgress['skips'])
           : [],
       }
-      if (typeof raw.step === 'number' && Number.isFinite(raw.step)) progress.step = raw.step
+      // The resume point is a PLACE (R4-T6-2): it survives only as an
+      // integer step this module has — the same bound prepare()'s
+      // resume gate applies when it judges the field as a place to
+      // stand. An out-of-range or fractional value is damage, and a
+      // damaged place is dropped here, never left for the runner's
+      // grandfather seed to clamp into a completed walk.
+      if (
+        typeof raw.step === 'number' &&
+        Number.isInteger(raw.step) &&
+        raw.step >= 0 &&
+        (total === undefined || raw.step < total)
+      ) {
+        progress.step = raw.step
+      }
       if (typeof raw.scene === 'string') progress.scene = raw.scene
       if (typeof raw.stepId === 'string') progress.stepId = raw.stepId
       if (Array.isArray(raw.done)) {
         // The completed-steps set (T6-15): whole, non-negative,
         // deduped, in order — a damaged list degrades to the honest
-        // subset rather than breaking the record.
-        const seen = new Set<number>()
-        for (const n of raw.done) {
-          if (typeof n === 'number' && Number.isFinite(n) && n >= 0) seen.add(Math.floor(n))
-        }
-        let done = [...seen].sort((a, b) => a - b)
+        // subset rather than breaking the record. Each index travels
+        // with its signature (R4-T6-3): the id the writer's script
+        // seated at that index, read from the parallel doneIds array
+        // at the same raw position, so dedupe and ordering here can
+        // never separate an index from the step it names.
+        const rawIds = Array.isArray(raw.doneIds) ? raw.doneIds : null
+        const pairs = new Map<number, string | undefined>()
+        raw.done.forEach((n, i) => {
+          if (typeof n === 'number' && Number.isFinite(n) && n >= 0) {
+            const idx = Math.floor(n)
+            if (!pairs.has(idx)) {
+              pairs.set(idx, rawIds && typeof rawIds[i] === 'string' ? rawIds[i] : undefined)
+            }
+          }
+        })
+        let entries = [...pairs.entries()].sort((a, b) => a[0] - b[0])
         // The set is bounded by the module it witnesses (R3-T6-2):
         // an entry naming a step the module does not have means the
         // writer was not writing about THIS module — the set's
@@ -146,9 +192,16 @@ export function normalizePresentationState(value: unknown): PresentationStateFil
         // steps of a 37-step module would clamp to a complete walk.)
         // A module with no registered length keeps the unbounded
         // reading — the gate judges only what it can know.
-        const total = moduleStepCount(id)
-        if (total !== undefined && done.some((n) => n >= total)) done = []
-        progress.done = done
+        if (total !== undefined && entries.some(([n]) => n >= total)) entries = []
+        progress.done = entries.map(([n]) => n)
+        // The signature is kept only when it signs EVERY surviving
+        // index: a set with an unsigned seat has no whole provenance,
+        // and the runner reads an absent signature as exactly that
+        // (R4-T6-3). A partial signature is damage, resolved here by
+        // dropping the signature — never by aligning it loosely.
+        if (entries.length > 0 && entries.every(([, stepId]) => typeof stepId === 'string')) {
+          progress.doneIds = entries.map(([, stepId]) => stepId as string)
+        }
       }
       if (raw.mode === 'automatic' || raw.mode === 'interactive') progress.mode = raw.mode
       if (typeof raw.userPaused === 'boolean') progress.userPaused = raw.userPaused

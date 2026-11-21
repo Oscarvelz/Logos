@@ -786,6 +786,12 @@ export function handToShell(i: number): boolean {
   seekFracFor = -1
   listen.set({ current: i, playing: true, mode: 'device', finished: false, buffering: false, error: null, seekFrac: 0 })
   updateMediaSession()
+  // The session's own record (cure R4-T1-1): stamped HERE, at the
+  // handoff, synchronously — this call is the only door by which a
+  // session ever reaches the shell's voice, so the record written
+  // in this breath is by construction the text of the session the
+  // shell is about to read. Adoption (below) rebuilds from it.
+  stampShellSession(s.text)
   d.bubbleNative(s.text, '', i)
   return true
 }
@@ -825,19 +831,83 @@ export function handToShell(i: number): boolean {
  * never written into; stop()/loadText() clear the guard for exactly
  * that reason), no clip may hold the stage, and the report must be
  * a live session (active) or a finished one (done). The session is
- * restored from the persisted last text — the text this app handed
- * the shell is the text it keeps — and the ordinary report body
- * below then maps the position and, for `done`, closes the record.
- * With no persisted text there is nothing honest to restore, and
- * the report is refused as before.
+ * restored from its OWN record — the text stamped synchronously at
+ * the handoff (below) — and the ordinary report body below then
+ * maps the position and, for `done`, closes the record. With no
+ * honest record there is nothing to restore, and the report is
+ * refused as before.
  */
+
+/**
+ * The shell session's own record (cure R4-T1-1). Adoption used to
+ * restore from `loadLastText()` — the LOOSE-DRAFT store — and
+ * Round 4 proved the two are strangers: playBook never writes that
+ * store (a book session's text lives in the book and the drafts
+ * store, not in `logos.lastText`), so a shell book session whose
+ * page died was "restored" as whatever stale draft the box happened
+ * to hold — its position mapped onto the draft, its sentences
+ * published to the card, resume records keyed to a text the shell
+ * never read. And the draft store's own write is debounced 300 ms,
+ * so even a session whose text DID pass through it restored the
+ * PREVIOUS text whenever the page died inside the window — the
+ * bubble flow being a hidden-page flow, background throttling can
+ * stretch that window without bound.
+ *
+ * The record below is written by handToShell — the one door by
+ * which a session reaches the shell's voice — synchronously, in
+ * the same breath as the handoff itself. There is no window and no
+ * stranger: what it holds is the session's own text, because
+ * nothing else can write it. It carries a whole-text fingerprint
+ * (the house cyrb64 pattern, as keyOf/textKey/clipKey carry in
+ * their seats): a torn or foreign record whose fingerprint does
+ * not agree with its text is not evidence and restores nothing.
+ * The shell's own declaration that its session is over (the
+ * `!active` report) retires the record with it, so no later report
+ * can adopt a ghost. A session handed over before this record
+ * existed has none; for that one road the older door — the
+ * persisted last text — still stands, exactly as R2-T1-2 built it.
+ */
+const SHELL_SESSION_KEY = 'logos.shellSession'
+type ShellSessionRecord = { text: string; key: string; at: number }
+const shellTextKey = (t: string) => {
+  let h1 = 0xdeadbeef
+  let h2 = 0x41c6ce57
+  for (let i = 0; i < t.length; i++) {
+    const ch = t.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return 's' + (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0') + '-' + t.length
+}
+function stampShellSession(text: string) {
+  try {
+    const r: ShellSessionRecord = { text, key: shellTextKey(text), at: Date.now() }
+    localStorage.setItem(SHELL_SESSION_KEY, JSON.stringify(r))
+  } catch { /* quota — no record lands; adoption judges by the older door, as before */ }
+}
+function readShellSession(): string {
+  try {
+    const r = JSON.parse(localStorage.getItem(SHELL_SESSION_KEY) ?? 'null') as ShellSessionRecord | null
+    if (!r || typeof r.text !== 'string' || !r.text.trim()) return ''
+    return r.key === shellTextKey(r.text) ? r.text : ''
+  } catch { return '' }
+}
+function clearShellSession() {
+  try { localStorage.removeItem(SHELL_SESSION_KEY) } catch { /* ignore */ }
+}
+
 function adoptNativeSession(pos: { active?: boolean; done?: boolean }): boolean {
   if (!pos.active && !pos.done) return false
   const s = listen.get()
   if (s.active) return false
   const cp = clipPlayer.get()
   if (cp.key && !cp.key.startsWith('preview:')) return false
-  const text = loadLastText()
+  // The session's own record decides whenever it stands (cure
+  // R4-T1-1); the persisted last text is only the fallback for a
+  // session handed over before the record existed.
+  const text = readShellSession() || loadLastText()
   if (!text.trim()) return false
   // The restore loads the text WITHOUT stop()'s shell order (cure
   // R3-T1-1): the shell's voice is the thing being adopted — a stop
@@ -857,6 +927,10 @@ export function applyNativePos(pos: { idx?: number; total?: number; playing?: bo
   if (!s.active || s.mode !== 'device') return
   if (!pos.active) {
     shellHanded = false
+    // The shell itself declares its session over: the session's
+    // record retires with it (cure R4-T1-1), so a later report can
+    // never adopt the ghost of a finished session.
+    clearShellSession()
     if (pos.done) {
       // The native voice read to the end: land on its final reported
       // sentence (mapped like any other report) before finishing, so
@@ -1482,9 +1556,16 @@ function updateMediaSession() {
   if (!s.active) return
   // While a recording owns the stage, the browser card is the
   // clip's (cure T1-12): clip.ts writes its metadata, and the
-  // reading must not overwrite it with its own claim.
+  // reading must not overwrite it with its own claim. A sounding
+  // voice PREVIEW stands under the same law (cure R4-T1-5): the
+  // clipPlayer subscription below states it for both — while any
+  // clip or preview is actually sounding, its own metadata
+  // stands — but this guard used to exempt previews, so any
+  // reading-side write (a seek, a rate step, a stop) rewrote the
+  // card with the reading's name and a 'paused' state while the
+  // preview still sounded under it.
   const cp = clipPlayer.get()
-  if (cp.key && !cp.key.startsWith('preview:') && cp.playing) return
+  if (cp.key && cp.playing) return
   const ms = navigator.mediaSession
   const v = voiceById(s.voices[s.current])
   const base = import.meta.env.BASE_URL

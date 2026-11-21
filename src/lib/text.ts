@@ -59,6 +59,11 @@ const SENTENCE_STARTERS = new Set([
   // etc. rule in the gate below, not by this list.)
   'suddenly', 'meanwhile', 'finally', 'today', 'yesterday', 'tomorrow', 'later', 'soon', 'again', 'well',
   'finalmente', 'hoy', 'ayer', 'también', 'además', 'ahora', 'mientras',
+  // Cure R4-T8-12: the deictic day-part adverbs were missing their
+  // night member — "…at 6 p.m. Tonight was bitterly cold." welded
+  // while its twin with "Today" split. Same closed class (today /
+  // yesterday / tomorrow / tonight; hoy / ayer / anoche), same role.
+  'tonight', 'anoche',
 ])
 
 // Cure R2-T8-3: a title word CAN end a sentence — "He walked down Main
@@ -66,13 +71,20 @@ const SENTENCE_STARTERS = new Set([
 // unconditionally. A title now splits when what follows cannot be a
 // name: a pronoun or discourse opener (this set), or a ¿/¡ opener. The
 // set is SENTENCE_STARTERS minus the words that can belong to a name:
-// the articles ("el Sr. Las Heras", "Sr. La Torre" are names), the
-// prepositions, and "well" ("Mr. Well" is a name).
+// the articles ("el Sr. Las Heras", "Sr. La Torre" are names) and
+// "well" ("Mr. Well" is a name).
+// Cure R4-T8-13: the prepositions were excluded wholesale on the same
+// reasoning, but only the NAME PARTICLES can continue a name (de /
+// del / la / las / los / el / y) — "in" cannot: "Main St. In the
+// morning…" welded because the gate treated "In" as a name word. The
+// plain prepositions and conjunctions (in / on / at / as / if, en)
+// join the set; the particles stay out, as do the articles.
 const TITLE_END_STARTERS = new Set([
   'he', 'she', 'it', 'they', 'we', 'this', 'that', 'there', 'then', 'but', 'and', 'however', 'when', 'after', 'before', 'so', 'now', 'here',
   'suddenly', 'meanwhile', 'finally', 'today', 'yesterday', 'tomorrow', 'later', 'soon', 'again',
   'él', 'ella', 'ello', 'esto', 'eso', 'pero', 'entonces', 'luego', 'cuando', 'después',
   'también', 'además', 'finalmente', 'ahora', 'mientras',
+  'in', 'on', 'at', 'as', 'if', 'en', 'tonight', 'anoche',
 ])
 
 // Segments follow the text's own shape: one sentence each. A sentence is only
@@ -221,12 +233,32 @@ export function chunkLines(lines: string[]): string[] {
  * "in" does not glue into a line opening with a subject pronoun —
  * a new sentence's subject, where a preposition's continuation
  * would be its object, a noun phrase. The lowercase road never
- * needed the open-end evidence and is untouched. */
-const SUBJECT_OPEN = /^(?:she|he|it|they|we|you|él|ella|ellos|ellas|nosotros|esto|eso)\b/iu
+ * needed the open-end evidence and is untouched.
+ * Cure R4-T8-14: the licenser list named five words, but the
+ * licenser is a ROLE, not a vocabulary: demonstrative "that" is
+ * licensed by whatever governs it — a preposition ("laughed at
+ * that", "because of that", "more than that") or a degree adverb
+ * (only / just / all) — because a complementiser "that" is governed
+ * by a verb or a noun, never by a preposition ("in that" is the one
+ * conjunction wearing a preposition's shape, and it is deliberately
+ * NOT in the class: "happy in that he had won" still glues).
+ * Cure R4-T8-15: the "in" road's subject test named only pronouns
+ * and omitted the commonest subject of all — "I" — and every name:
+ * "…gave in / I understood…", "…gave in / Maria announced…" glued.
+ * A name-shaped opening (a capitalised word that is no function
+ * word) is a subject's head in the same way; it is judged for the
+ * "in" road only, where the phrasal reading competes. */
+const SUBJECT_OPEN = /^(?:she|he|it|they|we|you|I|él|ella|ellos|ellas|nosotros|esto|eso)\b/iu
+const nameOpens = (next: string): boolean => {
+  const w = next.match(/^\p{Lu}\p{Ll}+/u)?.[0]
+  if (!w) return false
+  const lw = w.toLowerCase()
+  return !SENTENCE_STARTERS.has(lw) && !TITLE_END_STARTERS.has(lw)
+}
 const capitalGlues = (prev: string, next: string): boolean => {
   if (!lineEndsOpen(prev)) return false
-  if (/\b(?:only|just|all|after|before)\s+that$/i.test(prev)) return false
-  if (/\bin$/i.test(prev) && SUBJECT_OPEN.test(next)) return false
+  if (/\b(?:only|just|all|than|at|by|for|from|of|on|to|with|about|after|before|behind|beyond|under|upon|over|against|despite|through|toward|towards|into|since|until|via)\s+that$/i.test(prev)) return false
+  if (/\bin$/i.test(prev) && (SUBJECT_OPEN.test(next) || nameOpens(next))) return false
   return true
 }
 
@@ -270,7 +302,15 @@ function lineChunks(lines: string[]): { start: number; text: string }[] {
     let prevTrim = lines[0].trim()
     for (let i = 1; i < lines.length; i++) {
       const t = lines[i].trim()
-      const continuation = /^[a-zà-ÿ]/u.test(t) || (/^\p{Lu}/u.test(t) && capitalGlues(prevTrim, t))
+      // Cure R4-T8-16: the continuation test read the line raw, so a
+      // wrapped line OPENING with a quote was judged by the quote
+      // mark and severed from its lead-in — proseShaped strips
+      // opening quotes for line 1 (cure R3-T8-5) and the wrap
+      // verdict strips them for the last line, but this test, the
+      // one that actually joins the lines, never did. The quote is
+      // stripped for the test only; the line itself is untouched.
+      const tOpen = t.replace(/^["'“‘«(]+/u, '')
+      const continuation = /^[a-zà-ÿ]/u.test(tOpen) || (/^\p{Lu}/u.test(tOpen) && capitalGlues(prevTrim, tOpen))
       glue.push(proseShaped && prevLen >= 14 && continuation)
       prevLen = t.length
       prevTrim = t
@@ -303,7 +343,16 @@ function lineChunks(lines: string[]): { start: number; text: string }[] {
 function splitSentences(p: string): Span[] {
   const spans: Span[] = []
   let start = 0
-  const re = /([.!?…。]+)(["'”’»)\]*_]*)(\s+|$)/g
+  // Cure R4-T8-19: the boundary demanded whitespace (or the string's
+  // end) after the terminal punctuation, so pasted text missing the
+  // space — "He left.She stayed home." — never split at all. A
+  // capital that opens a word is a boundary witness of the same
+  // strength: the lookahead leg fires only before a capital followed
+  // by a lowercase letter, a space or the end, so the dots inside a
+  // dotted initialism ("Ph.D.", "U.S.A.") — where the next capital
+  // is followed by another dot — never become candidates, and a
+  // lowercase continuation ("example.com") still cannot split.
+  const re = /([.!?…。]+)(["'”’»)\]*]*)(\s+|$|(?=\p{Lu}(?:\p{Ll}|\s|$)))/gu
   let m: RegExpExecArray | null
   while ((m = re.exec(p))) {
     const endPunct = m.index + m[1].length + m[2].length
@@ -338,8 +387,24 @@ function splitSentences(p: string): Span[] {
       // the abbreviations below use ("I" is an opener too — the
       // pronoun opens sentences and never continues a name).
       const nextIsInitial = /^\p{L}\./u.test(stripped)
+      // Cure R4-T8-11: the gate judged only the word AFTER the
+      // letter, so two true ends welded: a digit opener ("He got an
+      // A. 3 of his classmates…" — the etc. road below has had the
+      // digit leg since R2-T8-2) and a name opener ("He got an A.
+      // Maria smiled…"). The name leg is judged by the letter's own
+      // seat: a letter sitting inside a name — a capitalised word
+      // before it ("John F. Kennedy"), another initial, or nothing
+      // at all ("F. Scott Fitzgerald") — is an initial and never
+      // ends the sentence; a letter after a lowercase word is a
+      // grade or option, and a capital after it opens the next
+      // sentence. Declared trade: a label in name position ("Room
+      // B. Maria entered.") keeps the initial's protection.
+      const prevWord = before.slice(0, before.length - lastWord.length).match(/([\p{L}]+)\s*$/u)?.[1] ?? ''
+      const nameSeat = !prevWord || /^\p{Lu}/u.test(prevWord)
       const opensSentence = punctOpener || nextTok === 'I'
         || (capNext && SENTENCE_STARTERS.has(nextTok.toLowerCase()))
+        || /^\d/.test(stripped)
+        || (capNext && !nameSeat)
       if (nextIsInitial || !opensSentence) continue
     }
     // Cure R3-T8-1: the dotted initialisms are a CLASS, not a list —

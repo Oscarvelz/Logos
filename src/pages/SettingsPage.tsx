@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.191'
+const VERSION = '1.4.192'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -33,7 +33,7 @@ function BackupCard() {
   const file = useRef<HTMLInputElement>(null)
   const run = async () => {
     setBusy('out')
-    try { const r = await exportBackup(); const base = r.books === 1 ? t('Backup saved · 1 book inside') : t('Backup saved · {n} books inside', { n: r.books }); const leftOut = [r.skipped ? t('· {s} left out — their text is missing on this phone', { s: r.skipped }) : '', r.clipsSkipped ? t('· {s} Library items left out — their records are missing on this phone', { s: r.clipsSkipped }) : ''].filter(Boolean).join(' '); toast(leftOut ? `${base} ${leftOut}` : base) }
+    try { const r = await exportBackup(); const base = r.books === 1 ? t('Backup saved · 1 book inside') : t('Backup saved · {n} books inside', { n: r.books }); const leftOut = [r.skipped ? t('· {s} left out — their text is missing on this phone', { s: r.skipped }) : '', r.clipsSkipped ? t('· {s} Library items left out — their records are missing on this phone', { s: r.clipsSkipped }) : '', r.clipsNoAudio ? t('· {s} Library items left out — their audio is missing on this phone', { s: r.clipsNoAudio }) : '', r.clipsUnencoded ? t('· {s} Library items left out — their audio could not be written into the file', { s: r.clipsUnencoded }) : ''].filter(Boolean).join(' '); toast(leftOut ? `${base} ${leftOut}` : base) }
     catch { toast(t('The backup could not be made')) }
     setBusy('')
   }

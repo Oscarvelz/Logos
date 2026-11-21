@@ -155,6 +155,22 @@ export interface ModuleProgress {
    * point was credited as walked by the law that wrote it).
    */
   done?: number[]
+  /**
+   * The signature of the witness above (R4-T6-3): `doneIds[i]` is the
+   * id of the step that stood at index `done[i]` when the set was
+   * written. done[] names steps by POSITION, and a script revision
+   * can seat a different step at a witnessed position — an insert at
+   * the head shifts every seat after it — so the runner honours an
+   * index only where the current script still seats the named step
+   * at that index. A revision that moves no seat (an append at the
+   * tail) costs the witness nothing; an insert refuses exactly the
+   * seats it shifted. A done set carrying NO signature — everything
+   * written before this field existed — has no provenance for any of
+   * its positions: the runner refuses it whole, and the module is
+   * honestly re-walked (its resume place still stands, and steps the
+   * new walk presents witness as they always have).
+   */
+  doneIds?: string[]
   verifiedAgainst: string
   skips: PresentationSkip[]
   /** The mode this module's progress was last recorded in. */

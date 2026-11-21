@@ -517,13 +517,61 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
   // — the runner knows its script's length even where the state
   // layer's registry has not been fed, so a stored set naming steps
   // the module does not have seeds only the steps it can witness.
-  const doneSteps = new Set<number>(
-    (progress.done ??
-      (typeof progress.step === 'number' && progress.step > 0
-        ? Array.from({ length: Math.min(progress.step, flat.length) }, (_, i) => i)
-        : [])
-    ).filter((n) => n >= 0 && n < flat.length),
-  )
+  //
+  // THE WITNESS IS SIGNED (R4-T6-3): done[] names steps by position,
+  // and a position testifies only about the layout that seated it.
+  // This seed — the runner's one read of the stored set, and so the
+  // finish's one trust point — honours an index only where the
+  // record's signature names the very step THIS script seats there.
+  // A script revision that moves no seat (an append at the tail)
+  // costs the witness nothing; an insert refuses exactly the seats
+  // it shifted, each on its own evidence. A done set carrying no
+  // signature — everything written before the signature existed —
+  // cannot prove any of its positions and is refused whole: the
+  // module is honestly re-walked, its resume place still standing,
+  // its steps witnessing as the new walk presents them. The
+  // grandfather branch is a different shape of record — no done set
+  // at all — and keeps its own law, now bounded to the in-range
+  // steps the resume gate itself would accept as a place (R4-T6-2):
+  // an out-of-range step is damage, and damage seeds nothing rather
+  // than clamping into a full walk.
+  const doneStepIds = new Map<number, string>()
+  const doneSteps = new Set<number>()
+  let witnessRefused = false
+  if (progress.done !== undefined) {
+    const ids = progress.doneIds
+    const signed = Array.isArray(ids) && ids.length === progress.done.length
+    progress.done.forEach((n, i) => {
+      if (!(n >= 0 && n < flat.length)) return
+      const id = signed ? ids[i] : undefined
+      if (typeof id === 'string' && flat[n].step.id === id) {
+        doneSteps.add(n)
+        doneStepIds.set(n, id)
+      } else {
+        witnessRefused = true
+      }
+    })
+  } else if (typeof progress.step === 'number' && progress.step > 0 && progress.step < flat.length) {
+    for (let i = 0; i < progress.step; i++) {
+      doneSteps.add(i)
+      doneStepIds.set(i, flat[i].step.id)
+    }
+  }
+  // A record that calls itself `seen` on a witness this script
+  // cannot verify has not seen THIS lesson. It degrades to
+  // in-progress here, at the read, so the learner is offered the
+  // re-walk the verdict implies and the next persist writes the
+  // honest state — never a softened needs-refresh, never a kept
+  // `seen` the finish would have to launder.
+  if (witnessRefused && progress.state === 'seen') {
+    progress = { ...progress, state: 'in-progress' }
+  }
+
+  /** Witness one completed step: its index joins the done set with its step's id as its signature. */
+  function witnessStep(flatStep: FlatStep): void {
+    doneSteps.add(flatStep.globalIndex)
+    doneStepIds.set(flatStep.globalIndex, flatStep.step.id)
+  }
 
   function loadState(): PresentationStateFile {
     if (!storage) {
@@ -548,13 +596,31 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
       scene: stored.scene,
       stepId: stored.stepId,
       verifiedAgainst: stored.verifiedAgainst ?? script.verifiedAgainst ?? appVersion,
-      skips: Array.isArray(stored.skips) ? stored.skips : [],
+      // The skip log is judged against THIS script's length at the
+      // read (R4-T6-1): the normaliser bounds it by the registry,
+      // but the registry is fed by registration, and a reader that
+      // never registered (a probe, a partial import graph) would let
+      // an out-of-range entry stand — un-strikeable, barring `seen`
+      // forever. The runner knows its own length even where the
+      // registry has not been fed, the same double gate the done
+      // seed applies: an entry naming a step this module does not
+      // have is not a witness of this module.
+      skips: Array.isArray(stored.skips)
+        ? stored.skips.filter(
+            (s) => Number.isInteger(s.step) && s.step >= 0 && s.step < flat.length,
+          )
+        : [],
       // Threaded through the normaliser by Builder 1 — the runner must
       // name them too, or its own load gate strips them (P14/P17).
       mode: stored.mode,
       userPaused: stored.userPaused,
       seededRequiredMiss: stored.seededRequiredMiss,
       done: stored.done,
+      // The witness's signature rides with it (R4-T6-3): the seed
+      // below judges each done index against the step id the record
+      // names for it, and an unthreaded field would read as an
+      // unsigned — therefore refused — witness.
+      doneIds: stored.doneIds,
     }
   }
 
@@ -568,8 +634,20 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     // state, so a resumed start can restore them over host defaults.
     // The done set rides the same funnel (T6-15): folded from the
     // run-local set here, at the single persistence point, so no
-    // rebuild path (finish, landing, re-mark) can drop it.
-    progress = { ...progress, mode, userPaused, done: [...doneSteps].sort((a, b) => a - b) }
+    // rebuild path (finish, landing, re-mark) can drop it. Its
+    // signature rides the same funnel (R4-T6-3): every index the set
+    // claims carries the id of the step that earned it, so a future
+    // script revision can judge each seat on its own evidence. Every
+    // member of the set has an id by construction — the seed keeps
+    // only signed pairs, and the walk signs what it completes.
+    const doneSorted = [...doneSteps].sort((a, b) => a - b)
+    progress = {
+      ...progress,
+      mode,
+      userPaused,
+      done: doneSorted,
+      doneIds: doneSorted.map((n) => doneStepIds.get(n) as string),
+    }
     stateFile = loadState()
     stateFile = withLastUsed(
       {
@@ -992,7 +1070,7 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     // lands here first (the missed step takes `current`, counts as
     // passed, and completes when the walk moves on past it).
     if (current && step.globalIndex === current.globalIndex + 1 && presentedSteps.has(current.globalIndex)) {
-      doneSteps.add(current.globalIndex)
+      witnessStep(current)
     }
 
     current = step
@@ -1112,7 +1190,7 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     builtThrough = Math.max(builtThrough, current.globalIndex + 1)
     // And it is COMPLETED (T6-15): this is the one witness overall
     // progress trusts — a step the walk itself presented and passed.
-    doneSteps.add(current.globalIndex)
+    witnessStep(current)
     pushReturn(current.globalIndex)
     pointer = current.globalIndex + 1
     current = null
@@ -1135,7 +1213,7 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     // presented (a landing straight onto the end beat completes
     // nothing).
     const lastFlat = flat[flat.length - 1]
-    if (lastFlat && presentedSteps.has(lastFlat.globalIndex)) doneSteps.add(lastFlat.globalIndex)
+    if (lastFlat && presentedSteps.has(lastFlat.globalIndex)) witnessStep(lastFlat)
     // P17 finish rule: 'seen' ONLY with no disqualifier — a clean full
     // play, no required miss (walked), no seeded required miss, and a
     // run-local skip count of zero. ANY skip (required or optional,
@@ -1154,7 +1232,10 @@ export function createPresentationRunner(script: PresentationModule, options: Ru
     // two witnesses of its own, and the finish now opens both.
     // COVERAGE: a finish earns 'seen' only when every step is either
     // presented by this run or witnessed complete by the record's
-    // done set — a «Watch» landing or an unearned resume point walks
+    // done set — as admitted at the seed, under its signature
+    // (R4-T6-3): `doneSteps` here is never the raw stored set, so a
+    // position a script revision reseated cannot testify. A «Watch»
+    // landing or an unearned resume point walks
     // a tail over steps no run ever presented and no walk completed,
     // and lands in-progress at the end beat whatever its startedAt.
     // THE SKIP LOG: an entry still standing names a step that was

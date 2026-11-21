@@ -12,7 +12,7 @@ import { drafts } from './drafts.ts'
 import { pronEntries, savePronEntries, isValidPronEntry, type PronEntry } from './pronounce.ts'
 import { loadMarks, mergeMarks } from './marks.ts'
 import { downloadBlob } from './audio.ts'
-import { library, refreshLibrary, getClip, restoreClips, restoreClip, deleteClip, type Clip, type ClipMeta } from './library.ts'
+import { library, refreshLibrary, getClip, restoreClips, restoreClip, deleteClip, kindOf, type Clip, type ClipMeta } from './library.ts'
 import { VOICE_BY_ID } from './voices.ts'
 
 type BackupFile = {
@@ -93,14 +93,18 @@ const blobToB64 = (b: Blob) => new Promise<string>((res, rej) => {
  *  must be a data URL, and a cover's payload must be an image (or
  *  carry no type, as a typeless Blob's data URL does). Anything else
  *  is treated the way a failed decode already is — the decoration
- *  is dropped, never fetched, never stored. */
+ *  is dropped, never fetched, never stored. One image type is
+ *  refused by name (cure R4-T5-6): image/svg+xml is not a still
+ *  image but an XML document, script-capable by design — the gate's
+ *  purpose is a picture, so the one picture format that is a
+ *  document does not pass it. */
 function isDecodableDataUrl(s: string, kind: 'image' | 'any'): boolean {
   if (!s.startsWith('data:')) return false
   if (kind === 'any') return true
   const rest = s.slice('data:'.length)
   const cut = rest.search(/[;,]/)
   const mediaType = (cut === -1 ? rest : rest.slice(0, cut)).trim().toLowerCase()
-  return mediaType === '' || mediaType.startsWith('image/')
+  return mediaType === '' || (mediaType.startsWith('image/') && mediaType !== 'image/svg+xml')
 }
 
 /** What an export actually did (F8 cure): how many books are inside,
@@ -108,11 +112,37 @@ function isDecodableDataUrl(s: string, kind: 'image' | 'any'): boolean {
  *  is missing on this phone. The Settings toast declares both — a
  *  backup that silently omits a book teaches the reader to trust a
  *  file that does not hold what they think it holds. The clips are
- *  counted by the same law (cure R3-T5-6): the clip loop below had
- *  the identical shape and no count at all — a listed clip whose
- *  record was gone, or whose audio would not encode, vanished from
- *  the file with no field a report could carry. */
-export type ExportReport = { books: number; skipped: number; clips: number; clipsSkipped: number }
+ *  counted by the same law (cure R3-T5-6), and each clip cause has
+ *  its OWN count (cure R4-T5-3 + R4-T5-4): R3-T5-6's single
+ *  clipsSkipped lumped unlike facts together — a clip whose record
+ *  was gone and a clip whose audio would not encode both raised it,
+ *  so the toast spoke the missing-record reason for a clip whose
+ *  record was standing right there; and an audio clip whose record
+ *  stood but whose audio — the only copy there is — was gone was
+ *  counted as safely INSIDE while the file carried no audio for it.
+ *  Now: clipsSkipped is the missing-record cause alone, clipsNoAudio
+ *  is the record-without-its-audio cause, clipsUnencoded is the
+ *  encode failure — and the toast gives each cause its own true
+ *  sentence. */
+export type ExportReport = {
+  books: number
+  skipped: number
+  /** Clips that rode in the file, whole. */
+  clips: number
+  /** Clips left out because their full record is gone on this
+   *  phone (a surviving twin with nothing behind it). */
+  clipsSkipped: number
+  /** Clips left out because the record stands but, for an audio
+   *  clip, its audio is gone — the audio is the only copy there
+   *  is, so the clip cannot ride whole and is never counted as
+   *  inside without it. */
+  clipsNoAudio: number
+  /** Clips left out because their audio would not encode into
+   *  the file. The record and the audio are both on this phone;
+   *  the file-making failed them — a different fact from a
+   *  missing record, and never reported as one. */
+  clipsUnencoded: number
+}
 
 export async function exportBackup(): Promise<ExportReport> {
   await refreshBooks()
@@ -152,20 +182,28 @@ export async function exportBackup(): Promise<ExportReport> {
   // clips in full (their text is the only copy there is) and audio
   // clips with their blob encoded, imported audio included (its blob
   // is the app's only copy of a file the user brought in). A clip
-  // that cannot ride — its full record gone under a surviving twin,
-  // or its audio refusing to encode — is COUNTED as skipped, the
-  // way F8 counts a book (cure R3-T5-6): the file must never hold
-  // less than the Library shows without saying so.
+  // that cannot ride is COUNTED, the way F8 counts a book — under
+  // its own cause, never lumped and never silent (cures R3-T5-6,
+  // R4-T5-3, R4-T5-4): the record gone (clipsSkipped), the record
+  // standing but an audio clip's only-copy audio gone with it
+  // (clipsNoAudio — a meta entry without that audio would restore
+  // a clip that cannot play while the count called it inside), or
+  // the audio refusing to encode (clipsUnencoded). The file must
+  // never hold less than the Library shows without saying so, and
+  // what it says must be the cause that actually happened.
   let clipsSkipped = 0
+  let clipsNoAudio = 0
+  let clipsUnencoded = 0
   for (const m of library.get().clips) {
     const full = await getClip(m.id)
     if (!full) { clipsSkipped++; continue }
     const { blob, ...meta } = full
     const entry = { ...meta } as ClipMeta & { blobB64?: string }
-    if (blob) { try { entry.blobB64 = await blobToB64(blob) } catch { clipsSkipped++; continue } }
+    if (!blob && kindOf(full) === 'audio') { clipsNoAudio++; continue }
+    if (blob) { try { entry.blobB64 = await blobToB64(blob) } catch { clipsUnencoded++; continue } }
     out.clips!.push(entry)
   }
-  const report: ExportReport = { books: out.books.length, skipped, clips: out.clips!.length, clipsSkipped }
+  const report: ExportReport = { books: out.books.length, skipped, clips: out.clips!.length, clipsSkipped, clipsNoAudio, clipsUnencoded }
   const blob = new Blob([JSON.stringify(out)], { type: 'application/json' })
   const name = `logos-backup-${new Date().toISOString().slice(0, 10)}.json`
   const file = new File([blob], name, { type: 'application/json' })
@@ -314,15 +352,20 @@ export type ImportReport = {
    *  still merged in — the union below never loses one). */
   keptNewer: number
   pronAdded: number
-  /** Backup pronunciations that did NOT land because this phone
-   *  already has a different reading OF THE SAME WORD THAT SPEAKS
-   *  FOR THE SAME LANGUAGE — the phone's reading wins, and this
-   *  count is how the refusal stops being silent. The scope clause
-   *  is T7-09's law, applied to the merge at last (cure R3-T5-3):
-   *  a reading scoped to the other language is a different entry
-   *  and lands; only a phone entry whose scope overlaps the file
-   *  entry's (same language, or either side unscoped) can refuse
-   *  it — so the reason stated here is true of every count. */
+  /** Backup pronunciations that did NOT land because a different
+   *  reading of the same word was already standing in a seat the
+   *  entry speaks for — the standing reading wins, and this count
+   *  is how the refusal stops being silent. The standing reading
+   *  is judged on two benches (cures R3-T5-3, R4-T5-2, R4-T7-1):
+   *  against the PHONE, every entry whose scope overlaps the file
+   *  entry's (same language, or either side unscoped) is heard —
+   *  never just the first one found — and any of them reading the
+   *  word differently refuses it; against the FILE's own entries
+   *  that already landed, only a twin in the same seat (same word,
+   *  same scope) with a different reading refuses, because a
+   *  scoped entry and its unscoped twin are not rivals in the
+   *  dictionary's own law and a restore lands the pair whole. So
+   *  the reason stated here is true of every count. */
   pronKept: number
   /** 'landed' — the backup's Listen draft is the draft now (the phone
    *  had none); 'kept' — the phone already had a draft, so its text
@@ -405,6 +448,19 @@ function validateBook(raw: unknown, i: number): ValidBackup['books'][number] {
   if (typeof meta.title !== 'string') damaged(`${at} has no title`)
   if (typeof meta.format !== 'string' || typeof meta.lang !== 'string') damaged(`${at}${label} is missing its format or language`)
   if (!isNum(meta.addedAt) || !isNum(meta.progress) || !isNum(meta.words) || !isNum(meta.links) || !isNum(meta.size)) damaged(`${at}${label} has unreadable numbers in its details`)
+  // Progress is proven as a number above; here it is brought inside
+  // the range its consumers speak (cure R4-T5-5). BookMeta declares
+  // the field 0…1, the shelf renders it raw as a percentage, and the
+  // merge below lets the larger progress win a book outright — so a
+  // file carrying 2.5 used to land verbatim, render "250% read", win
+  // its merge, and then outbid every honest file (a finished 1.0
+  // included) for as long as the record stood. A number with an
+  // envelope is CLAMPED in this file's doctrine, never refused —
+  // settingsPatch clamps through clampSettingNumber for exactly
+  // this shape of value — so the clamp happens here, at the door,
+  // before any merge can judge by the value.
+  const metaRec = meta as { progress: number }
+  metaRec.progress = Math.min(1, Math.max(0, metaRec.progress))
   if (!isObj(meta.pos) || !isNum(meta.pos.ch) || !isNum(meta.pos.b)) damaged(`${at}${label} has no reading place`)
   if (!Array.isArray(meta.chWords) || !meta.chWords.every(isNum)) damaged(`${at}${label} has an unreadable chapter map`)
   if (!Array.isArray(meta.toc) || !meta.toc.every(isObj)) damaged(`${at}${label} has an unreadable contents list`)
@@ -483,6 +539,11 @@ function validateClip(raw: unknown, i: number): ValidBackup['clips'][number] {
  *  gained 1, because apply wrote the id twice and the last write
  *  won. Dedupe here, at the door, with that same winner, and every
  *  count downstream describes records, not lines in the file.
+ *  Marks stand under the same law (cure R4-T5-1): mergeMarks builds
+ *  its already-have set from the PHONE's marks only, so a file that
+ *  listed one mark id twice landed both entries — one identity in
+ *  two store seats, one delete removing both, two places taken at
+ *  the 120 cap for a single landed mark.
  *  (Every entry is still validated first: a damaged duplicate
  *  refuses the file like any other damage.) */
 function lastEntryById<T>(list: T[], idOf: (x: T) => string): T[] {
@@ -511,7 +572,9 @@ function validateBackup(data: unknown): ValidBackup {
     data.marks.forEach((m, i) => {
       if (!isObj(m) || typeof m.id !== 'string' || !m.id || !isNum(m.at) || !isNum(m.idx) || typeof m.title !== 'string' || typeof m.sentence !== 'string' || typeof m.key !== 'string') damaged(`mark ${i + 1} is incomplete`)
     })
-    marks = data.marks as ValidBackup['marks']
+    // One entry per id, last standing — the R3-T5-4 dedupe, extended
+    // to marks (cure R4-T5-1, see lastEntryById).
+    marks = lastEntryById(data.marks as ValidBackup['marks'], (m) => m.id)
   }
   // Three blocks are validated only as deep as their consumers
   // dereference (cure R2-T5-7): the draft stage reads drafts.listen
@@ -651,25 +714,50 @@ export async function importBackup(file: File): Promise<ImportReport> {
   // Spanish word — but this merge still keyed on the word, so a file's
   // Spanish reading of "pan" was refused because an English one
   // existed, and pronKept reported it as a word the phone already had
-  // a reading for. It did not — not in that language. THE RULING for
-  // the seam: two entries are the same entry when their scopes
-  // OVERLAP — an unscoped entry speaks both languages, so it overlaps
-  // every scope; two scoped entries overlap only in their own
-  // language. A file entry is refused only by a held entry (the
-  // phone's, or one this same file already landed) whose scope
-  // overlaps its own and whose reading differs — which is exactly
-  // when the report's reason ("the phone already has a different
-  // reading for this word") is true.
+  // a reading for. It did not — not in that language.
+  // THE RULING for the seam, rebuilt (cures R4-T5-2 + R4-T7-1): a
+  // file entry stands in two different relations, so it is judged on
+  // two benches.
+  //   · Against THE PHONE's standing entries the phone is the
+  //     authority, and the judgment is by scope OVERLAP — an unscoped
+  //     entry speaks both languages, so it overlaps every scope; two
+  //     scoped entries overlap only in their own language — against
+  //     EVERY overlapping phone entry, never the first one found.
+  //     Any of them reading the word differently refuses the entry,
+  //     and the refusal is counted; all of them reading it the same
+  //     makes the entry a duplicate the phone already speaks, and it
+  //     passes in silence. (The first-match judgment this replaces
+  //     made the verdict depend on the phone's storage order: an
+  //     unscoped file entry matching the phone's English reading was
+  //     silently dropped when English stood first, though the phone's
+  //     Spanish reading of the same word was a different reading for
+  //     a language the entry speaks — a real keep, uncounted.)
+  //   · Against THE FILE's OWN entries that have already landed, the
+  //     dictionary's own coexistence law rules (applyPron, R3-T7-2):
+  //     a scoped entry and its unscoped twin are not rivals — the
+  //     scoped reading rules its language, the unscoped one the
+  //     rest — so a file carrying the pair lands BOTH, in either
+  //     order, on a fresh phone most of all. (The overlap ruling,
+  //     applied to the file's own twins, used to amputate whichever
+  //     came second and report the loss as a keep on a phone that
+  //     held nothing.) Only a landed twin in the SAME seat — same
+  //     word, same scope — with a different reading refuses a later
+  //     entry: a file contradicting itself, counted like any other
+  //     refusal.
   const prevPron = pronEntries()
-  const heldPron: PronEntry[] = [...prevPron]
+  const landedPron: PronEntry[] = []
   const pronAdd: PronEntry[] = []
   let pronKept = 0
   const scopesOverlap = (a: PronEntry['lang'], b: PronEntry['lang']) => a === undefined || b === undefined || a === b
   for (const e of data.pronounce) {
     const word = e.from.toLowerCase()
-    const clash = heldPron.find((h) => h.from.toLowerCase() === word && scopesOverlap(h.lang, e.lang))
-    if (!clash) { pronAdd.push(e); heldPron.push(e) }
-    else if (clash.to !== e.to) pronKept++
+    const phoneOverlap = prevPron.filter((h) => h.from.toLowerCase() === word && scopesOverlap(h.lang, e.lang))
+    if (phoneOverlap.some((h) => h.to !== e.to)) { pronKept++; continue }
+    if (phoneOverlap.length) continue // the phone already speaks this reading of the word
+    const landedTwin = landedPron.find((h) => h.from.toLowerCase() === word && h.lang === e.lang)
+    if (landedTwin) { if (landedTwin.to !== e.to) pronKept++; continue }
+    pronAdd.push(e)
+    landedPron.push(e)
   }
   // The Listen draft (F7): it lands when the phone has none — and
   // lands DURABLY this time (saveLastText, the same persistence the

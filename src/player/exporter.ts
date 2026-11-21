@@ -67,34 +67,71 @@ const queue: { text: string; opts: ExportOpts }[] = []
  *  against it and against every waiting job. */
 let currentJob: { text: string; opts: ExportOpts } | null = null
 
+/** The job whose turn has come but whose render has not yet begun
+ *  (R4-T7-2): next() hands the head of the queue to a short timer —
+ *  the breath between two renders — and the job waits in this seat
+ *  for that breath. It used to wait NOWHERE: shifted out of the
+ *  queue, not yet currentJob, the admission door standing open — a
+ *  fresh tap inside the window claimed the runner, the timer's
+ *  runExport saw the claim and returned, and the shifted job was
+ *  never re-queued, never rendered, never errored, though its tap
+ *  had been answered 'queued'. The seat is a real one now: the
+ *  dedupe door judges it, admission queues behind it, isQueued sees
+ *  it and cancelItem can call it back — a promised job is somewhere
+ *  at every moment of its life. */
+let pendingStart: { text: string; opts: ExportOpts; timer: ReturnType<typeof setTimeout> | null } | null = null
+
 /** What makes two admissions THE SAME job (R3-T7-7): the same text
  *  under the same rendering choices lands as the same clip — title,
  *  summary and source ride along because they are written onto it.
- *  A re-render carries its clip id, and the id names it. */
+ *  A re-render carries its clip id, and the id names it. The key is
+ *  judged in the render's own terms (R4-T7-3, R4-T7-4): the title
+ *  enters as the render writes it — trimmed — so titles differing
+ *  only in stray spaces are one job, not three clips wearing one
+ *  name; and a re-render's speed enters only where the render would
+ *  honour it — a clip carrying its own `sp` renders at that speed
+ *  whatever the caller passes (M-41), so for an id-carrying job the
+ *  caller's speed cannot tell two admissions apart and stays out of
+ *  the key. (The door cannot read the clip's `sp` synchronously;
+ *  for a clip that carries none, two re-render taps at different
+ *  caller speeds inside one busy window are judged one job — the
+ *  second is refused only while the first runs or waits, and
+ *  renders freely once it ends.) */
 function jobKey(text: string, opts: ExportOpts): string {
-  return JSON.stringify([text, opts.voice ?? null, opts.speed, opts.format, opts.title ?? '', opts.summary ?? '', opts.origin ?? 'create', opts.id ?? '', opts.url ?? '', opts.site ?? ''])
+  return JSON.stringify([text, opts.voice ?? null, opts.id ? null : opts.speed, opts.format, (opts.title ?? '').trim(), opts.summary ?? '', opts.origin ?? 'create', opts.id ?? '', opts.url ?? '', opts.site ?? ''])
 }
 
 /** Render now, or after the current job when one is already running (Listen → Library can stack several).
- *  A tap that repeats the running or a waiting job exactly is a
- *  'duplicate' and is NOT admitted (R3-T7-7): the door used to accept
- *  it without limit, so N identical taps cost N full renders and
- *  landed as N indistinguishable clips on the shelf. */
+ *  A tap that repeats the running, the starting or a waiting job
+ *  exactly is a 'duplicate' and is NOT admitted (R3-T7-7): the door
+ *  used to accept it without limit, so N identical taps cost N full
+ *  renders and landed as N indistinguishable clips on the shelf. */
 export function queueExport(text: string, opts: ExportOpts): 'started' | 'queued' | 'duplicate' {
   const key = jobKey(text, opts)
-  if ((currentJob && jobKey(currentJob.text, currentJob.opts) === key) || queue.some((q) => jobKey(q.text, q.opts) === key)) return 'duplicate'
-  if (claimed || exportJob.get().status === 'running') { queue.push({ text, opts }); exportJob.set({ queued: queue.length }); return 'queued' }
+  const same = (j: { text: string; opts: ExportOpts }) => jobKey(j.text, j.opts) === key
+  if ((currentJob && same(currentJob)) || (pendingStart && same(pendingStart)) || queue.some(same)) return 'duplicate'
+  if (claimed || pendingStart || exportJob.get().status === 'running') { queue.push({ text, opts }); exportJob.set({ queued: queue.length }); return 'queued' }
   void runExport(text, opts)
   return 'started'
 }
 
 function next() {
+  if (pendingStart) return // a handoff is already armed; its job's own end calls next() again
   const n = queue.shift()
   exportJob.set({ queued: queue.length })
-  if (n) setTimeout(() => void runExport(n.text, n.opts), 50)
+  if (!n) return
+  // The shifted job takes the handoff seat (R4-T7-2) until its
+  // render actually begins — never nowhere.
+  const slot: { text: string; opts: ExportOpts; timer: ReturnType<typeof setTimeout> | null } = { text: n.text, opts: n.opts, timer: null }
+  slot.timer = setTimeout(() => {
+    if (pendingStart !== slot) return // called back by cancelItem in the breath
+    pendingStart = null
+    void runExport(slot.text, slot.opts)
+  }, 50)
+  pendingStart = slot
 }
 
-export function isQueued(id: string) { return queue.some((q) => q.opts.id === id) }
+export function isQueued(id: string) { return queue.some((q) => q.opts.id === id) || pendingStart?.opts.id === id }
 
 export async function runExport(text: string, opts: ExportOpts) {
   if (claimed || exportJob.get().status === 'running') return
@@ -248,6 +285,14 @@ export function cancelExport() {
 export function cancelItem(id: string) {
   const i = queue.findIndex((q) => q.opts.id === id)
   if (i >= 0) { queue.splice(i, 1); exportJob.set({ queued: queue.length }); return }
+  if (pendingStart && pendingStart.opts.id === id) {
+    // The job in the handoff seat (R4-T7-2): call it back before its
+    // render begins, and hand its turn to the next waiting job.
+    if (pendingStart.timer) clearTimeout(pendingStart.timer)
+    pendingStart = null
+    next()
+    return
+  }
   if (exportJob.get().itemId === id) ctrl?.abort()
 }
 

@@ -476,6 +476,20 @@ object NativeSpeaker {
         val avgChars = max(1, sentences.sumOf { it.length } / sentences.size)
         val cps = 13.5f * RATES[ratePos]
         val steps = max(1, Math.round(sec * cps / avgChars))
+        // A forward leap that lands past the last sentence takes
+        // the completion road (R4-T2-5): the clamp this replaces
+        // re-spoke the final sentence forever, so the leap verb
+        // dead-ended at the book's edge — the very dead end next()
+        // was cured of at the same seat (R3-T2-7). Seat advance()
+        // on the last sentence and let it step past the end: the
+        // session completes naturally, exactly as next() completes
+        // there. (A backward leap keeps its clamp at sentence 0,
+        // mirroring prev(), by design.)
+        if (dir > 0 && idx + steps >= sentences.size) {
+            idx = sentences.size - 1
+            advance()
+            return
+        }
         idx = (idx + dir * steps).coerceIn(0, sentences.size - 1)
         if (playing) speakCurrent() else notifyUi()
     }

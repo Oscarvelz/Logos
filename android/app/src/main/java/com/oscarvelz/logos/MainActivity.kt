@@ -9,6 +9,7 @@ import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -167,6 +168,14 @@ class MainActivity : Activity() {
                 v.loadDataWithBaseURL(home, "<html><body style=\"background:#0A0A0F;color:#eee;font:18px sans-serif;padding:32px\">" +
                     "<p>Logos needs the internet the first time it opens. After that it works offline.</p>" +
                     "<p><a style=\"color:#e9bd72\" href=\"$home\">Try again</a></p></body></html>", "text/html", "utf-8", null)
+            }
+            override fun onPageStarted(v: WebView, url: String?, favicon: Bitmap?) {
+                // R4-T2-2: a load START moves the shell's page
+                // incarnation, so every push the new page sends —
+                // from its first breath, before onPageFinished —
+                // is recorded as the new page's, never as the page
+                // it replaced.
+                BubbleService.notePageLoading()
             }
             override fun onPageFinished(v: WebView, url: String?) {
                 // R2-T2-1: a finished load moves the shell's page epoch,
@@ -727,9 +736,16 @@ class MainActivity : Activity() {
         @JavascriptInterface fun bubbleNow(json: String) {
             BubbleService.nowJson = json
             BubbleService.nowAt = System.currentTimeMillis()
+            // The push is latched under its incarnation (R4-T2-2):
+            // the poke watches judge receipt by which page pushed,
+            // remembered across any reload that follows the answer.
+            BubbleService.notePushTime()
             // A push that agrees with the last commanded state
             // confirms it (M-6): the snapshot rules taps again.
             BubbleService.confirmPush()
+            // The stored pause's witness (R4-T2-1): silence answers
+            // a standing pause; sound after an answer retires it.
+            BubbleService.judgePushForPause()
             BubbleService.syncWakeLock(this@MainActivity)
             BubbleService.onNow?.invoke()
             ghostPulse()

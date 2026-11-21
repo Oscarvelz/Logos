@@ -540,11 +540,15 @@ export interface OverallProgress {
  * - a completed module (seen) counts whole — fraction 1;
  * - a module under way counts the fraction of itself already walked:
  *   its COMPLETED steps over its total length — the record's `done`
- *   set, written only by lived walks (T6-15). The resume point is a
- *   place, not a measure: a landing on it (a search «Watch», a
- *   chapters jump) walks nothing and credits nothing. A legacy
- *   record with no `done` set is taken at its word — its resume
- *   point, which the law that wrote it credited as walked;
+ *   set, written only by lived walks (T6-15), and read under its
+ *   signature (R4-T6-3): an index counts only where the set's
+ *   `doneIds` names the step the current script seats there, so a
+ *   script revision cannot leave the line crediting seats it moved.
+ *   The resume point is a place, not a measure: a landing on it (a
+ *   search «Watch», a chapters jump) walks nothing and credits
+ *   nothing. A legacy record with no `done` set is taken at its
+ *   word — its resume point, which the law that wrote it credited
+ *   as walked;
  * - a needs-refresh module counts by that same walked fraction: its
  *   record carries a place, and what was walked was truly walked (it
  *   also counts among the modules under way);
@@ -568,14 +572,33 @@ export function overallProgress(state: PresentationStateFile): OverallProgress {
     }
     // in-progress or needs-refresh: the fraction of itself already walked.
     inProgress += 1
-    const totalSteps = entry.script ? flattenSteps(entry.script).length : 0
+    const flat = entry.script ? flattenSteps(entry.script) : []
+    const totalSteps = flat.length
     if (totalSteps > 0) {
       // Only steps the module HAS can count as walked (R3-T6-2): the
       // record's done set is counted as the distinct in-range steps it
       // names, never at the face value of its length — a count alone
-      // must not be able to buy a whole module's walk.
-      const walkedCount = Array.isArray(progress.done)
-        ? new Set(progress.done.filter((n) => typeof n === 'number' && n >= 0 && n < totalSteps)).size
+      // must not be able to buy a whole module's walk. And each named
+      // step must still BE that step (R4-T6-3): the set is signed,
+      // and an index counts only where the record's signature names
+      // the step this script seats at that index — the same judgement
+      // the runner's seed makes, so the progress line and the finish
+      // never read the same witness two ways. An unsigned set (every
+      // record written before the signature existed) counts nothing
+      // here until a walk re-earns it.
+      const doneSet = Array.isArray(progress.done) ? progress.done : null
+      const walkedCount = doneSet
+        ? new Set(
+            doneSet.filter(
+              (n, i) =>
+                typeof n === 'number' &&
+                n >= 0 &&
+                n < totalSteps &&
+                Array.isArray(progress.doneIds) &&
+                progress.doneIds.length === doneSet.length &&
+                progress.doneIds[i] === flat[n].step.id,
+            ),
+          ).size
         : (typeof progress.step === 'number' && progress.step > 0 ? progress.step : 0)
       if (walkedCount > 0) walked += Math.min(walkedCount, totalSteps) / totalSteps
     }

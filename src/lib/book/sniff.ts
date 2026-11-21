@@ -40,8 +40,24 @@ export async function sniffFormat(buf: ArrayBuffer): Promise<string | null> {
   // as "isn't a book file". The shape demanded is unchanged, only
   // the seat moves: prose ABOUT the signature still fails the break
   // test wherever in it the mention sits.
+  // Cure R4-T8-18: the header shape was the WHOLE testimony — a
+  // prose file that opens with the exact header line ("%PDF-1.7"
+  // followed by prose explaining the format) sniffed pdf and was
+  // sent to the PDF
+  // parser to die, where BMP must match its own size field and GIF
+  // its block layout. A real PDF agrees with itself behind the
+  // header: an indirect object ("12 0 obj") opens within the first
+  // stretch of the file, and the file ends with its cross-reference
+  // machinery (startxref / %%EOF). Prose about the format carries
+  // neither where the format puts them. A claim with no structure
+  // behind it says nothing, and the name/type verdict decides — a
+  // real PDF named .pdf loses nothing by the stricter door.
   for (let off = 0; off < 1024 && off + 9 <= b.length; off++) {
-    if (at('%PDF-', off) && b[off + 5] >= 0x30 && b[off + 5] <= 0x39 && b[off + 6] === 0x2e && b[off + 7] >= 0x30 && b[off + 7] <= 0x39 && (b[off + 8] === 0x0a || b[off + 8] === 0x0d)) return 'pdf'
+    if (at('%PDF-', off) && b[off + 5] >= 0x30 && b[off + 5] <= 0x39 && b[off + 6] === 0x2e && b[off + 7] >= 0x30 && b[off + 7] <= 0x39 && (b[off + 8] === 0x0a || b[off + 8] === 0x0d)) {
+      const region = new TextDecoder('windows-1252').decode(b.subarray(off, Math.min(b.length, off + 2048)))
+      const tail = new TextDecoder('windows-1252').decode(b.subarray(Math.max(off, b.length - 1024)))
+      if (/\d+ \d+ obj\b/.test(region) || /startxref/.test(tail) || /%%EOF/.test(tail)) return 'pdf'
+    }
   }
   if (at('\x89PNG') || at('\xff\xd8\xff') || (at('RIFF') && at('WEBP', 8))) return 'image'
   if (at('GIF8') && gifShaped(b)) return 'image'
@@ -114,7 +130,12 @@ function bmpShaped(b: Uint8Array): boolean {
     be followed — past any local colour table — by an LZW minimum
     code size, which the spec fixes at 2–8. Prose wears a comma
     easily; it does not wear a plausible descriptor AND a code
-    size in range. */
+    size in range.
+    Cure R4-T8-17: the comment extension's label alone testified —
+    prose wearing '!' + 'þ' at the block offset passed. The blocks
+    are now WALKED (gifBlockWalk below): every extension must end
+    where its structure ends it, and the stream must arrive at an
+    image descriptor or the trailer before anything testifies. */
 function gifShaped(b: Uint8Array): boolean {
   if (b.length < 14) return false
   const v = String.fromCharCode(b[4], b[5])
@@ -125,25 +146,86 @@ function gifShaped(b: Uint8Array): boolean {
   let next = 13
   if (packed & 0x80) next += 3 * 2 ** ((packed & 0x07) + 1)
   if (next >= b.length) return false
-  const block = b[next]
-  if (block === 0x3b) return b.subarray(next + 1).every((x) => x === 0) // trailer: only NUL padding may follow
-  if (block === 0x21) {
-    // Extension: graphic control, plain text, comment or application.
-    const label = b[next + 1]
-    if (label === 0xf9) return b[next + 2] === 4 // graphic control block is 4 bytes
-    if (label === 0xff) return b[next + 2] === 11 // application block is 11
-    if (label === 0x01) return b[next + 2] === 12 // plain-text header is 12
-    return label === 0xfe // a comment's chain is free-form; its label is witness enough
+  return gifBlockWalk(b, dv, next)
+}
+
+/** The end of a sub-block chain (a size byte, that many data bytes,
+    …, a zero terminator): the index just past the terminator, or -1
+    when the chain runs off the end of the file. */
+function gifChainEnd(b: Uint8Array, i: number): number {
+  for (;;) {
+    if (i >= b.length) return -1
+    const size = b[i]
+    if (size === 0) return i + 1
+    i += 1 + size
   }
-  if (block !== 0x2c) return false
-  // Image descriptor: position, a canvas of its own (nonzero), a
-  // packed byte, then the LZW minimum code size in 2–8.
-  if (next + 10 >= b.length) return false
-  if (dv.getUint16(next + 5, true) === 0 || dv.getUint16(next + 7, true) === 0) return false
-  let after = next + 10
-  if (b[next + 9] & 0x80) after += 3 * 2 ** ((b[next + 9] & 0x07) + 1)
-  if (after >= b.length) return false
-  return b[after] >= 2 && b[after] <= 8
+}
+
+/** Walk the GIF's block stream from `next`, judging each block by
+    its own structure, until an image descriptor or the trailer
+    testifies. Cure R4-T8-17: the first-block reading let the
+    COMMENT extension testify on its label alone ("a comment's chain
+    is free-form; its label is witness enough") — and prose wears
+    the label: "GIF89a is old!þ…" puts '!' at the block offset and
+    'þ' (0xFE) after it, and was routed to OCR as a picture. A
+    comment is now walked like every other extension — its chain
+    must terminate inside the file (prose's "size" byte is a letter,
+    so its chain runs off the end) — and the block AFTER the chain
+    must testify in its turn: an image descriptor with a canvas of
+    its own and an LZW code size in range, or the trailer with only
+    NUL padding behind it. The fixed-size extensions keep their size
+    testimony and must now also END where the spec ends them (the
+    graphic control's terminator byte) and be followed by a block
+    that testifies. Declared bound: a header-plus-extensions file
+    with no image and no trailer no longer testifies — it is not a
+    decodable GIF either. */
+function gifBlockWalk(b: Uint8Array, dv: DataView, next: number): boolean {
+  let i = next
+  for (let blocks = 0; blocks < 64; blocks++) {
+    if (i >= b.length) return false
+    const block = b[i]
+    if (block === 0x3b) return b.subarray(i + 1).every((x) => x === 0) // trailer: only NUL padding may follow
+    if (block === 0x2c) {
+      // Image descriptor: position, a canvas of its own (nonzero),
+      // a packed byte, then the LZW minimum code size in 2–8.
+      if (i + 10 >= b.length) return false
+      if (dv.getUint16(i + 5, true) === 0 || dv.getUint16(i + 7, true) === 0) return false
+      let after = i + 10
+      if (b[i + 9] & 0x80) after += 3 * 2 ** ((b[i + 9] & 0x07) + 1)
+      if (after >= b.length) return false
+      return b[after] >= 2 && b[after] <= 8
+    }
+    if (block !== 0x21) return false
+    // Extension: graphic control, plain text, comment or application.
+    const label = b[i + 1]
+    if (label === 0xf9) { // graphic control: size byte 4, four bytes, a zero terminator
+      if (b[i + 2] !== 4 || b[i + 7] !== 0) return false
+      i += 8
+      continue
+    }
+    if (label === 0xff) { // application: size byte 11, eleven bytes, then a sub-block chain
+      if (b[i + 2] !== 11) return false
+      const j = gifChainEnd(b, i + 14)
+      if (j < 0) return false
+      i = j
+      continue
+    }
+    if (label === 0x01) { // plain text: size byte 12, twelve bytes, then a sub-block chain
+      if (b[i + 2] !== 12) return false
+      const j = gifChainEnd(b, i + 15)
+      if (j < 0) return false
+      i = j
+      continue
+    }
+    if (label === 0xfe) { // comment: a sub-block chain, walked like the rest
+      const j = gifChainEnd(b, i + 2)
+      if (j < 0) return false
+      i = j
+      continue
+    }
+    return false
+  }
+  return false
 }
 
 /** Content fingerprint (M-6): a cyrb53 hash over every block's text.

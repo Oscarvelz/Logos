@@ -86,7 +86,47 @@ const CHAPTER_LINE = new RegExp(String.raw`^(?:(?:cap[ií]tulo|chapter|parte|par
 // ABOUT a chapter — "Chapter 3 was the hardest part…" — not a
 // heading. A real heading's tail follows a separator (colon, dash) or
 // opens capitalised ("Chapter 3: the storm", "Chapter 3 The Storm").
-const CHAPTER_PROSE_TAIL = new RegExp(String.raw`^(?:cap[ií]tulo|chapter|parte|part|libro|book|canto|acto|act)\s+${ORD}\b\s+[\p{Ll}]`, 'iu')
+// Cure R4-T8-1: the R3 veto tested case with \p{Ll} inside a regex
+// carrying the iu flags — and under /iu that class matches UPPERCASE
+// letters too (case-fold closure), so the veto never tested case at
+// all and acquitted every separator-less heading ("Chapter 3 The
+// Storm") as prose. The case is now judged by plain string
+// comparison, which no flag can blind.
+// Cure R4-T8-2/3: the veto also judged only the noun-first branch.
+// The ordinal-first branch ("One part of the story was missing.")
+// and the standalone-word branch ("Conclusion of the experiment
+// surprised everyone.") promoted plain sentences to headings with no
+// veto at all. One veto now judges every branch by the same law: a
+// separator or a capitalised tail is a heading's witness; a
+// lowercase-led tail with no separator is a sentence's. The
+// standalone words get one more condition — a sentence there must
+// also END as one (terminal punctuation), so a lowercase-led
+// heading phrase ("Preface to the second edition", no period)
+// still heads.
+const CH_NOUN_FIRST = new RegExp(String.raw`^(?:cap[ií]tulo|chapter|parte|part|libro|book|canto|acto|act)\s+${ORD}\b`, 'iu')
+const CH_ORD_FIRST = new RegExp(String.raw`^${ORD}\s+(?:parte|part|libro|book)\b`, 'iu')
+const CH_STANDALONE = /^(?:pr[oó]logo|prologue|ep[ií]logo|epilogue|introducci[oó]n|introduction|prefacio|preface|pr[eé]face|ap[eé]ndice|appendix|conclusi[oó]n|conclusion|dedicatoria|dedication)\b/iu
+const CAPS_UTTERANCE_END = new Set(['now', 'here', 'there', 'then', 'away', 'out', 'back', 'up', 'down', 'off', 'again', 'already', 'too', 'sir', 'madam', 'please', 'ahora', 'aquí', 'allí', 'entonces', 'fuera', 'atrás'])
+
+function chapterProseVeto(line: string): boolean {
+  let rest: string | null = null
+  let standalone = false
+  const m = CH_NOUN_FIRST.exec(line) ?? CH_ORD_FIRST.exec(line)
+  if (m) rest = line.slice(m[0].length)
+  else {
+    const s = CH_STANDALONE.exec(line)
+    if (s) { rest = line.slice(s[0].length); standalone = true }
+  }
+  if (rest === null) return false // no worded branch claimed the line (bare numerals judge themselves)
+  const tail = rest.replace(/^\s+/, '')
+  if (!tail) return false // the chapter name alone: a heading
+  if (/^[.:\-—–]/.test(tail)) return false // a separator carries the title: a heading
+  const first = tail[0]
+  const lowerLed = first.toLowerCase() === first && first.toUpperCase() !== first
+  if (!lowerLed) return false
+  if (standalone) return /[.!?…]$/.test(line)
+  return true
+}
 
 export function parseText(text: string, markdown: boolean): RawBook {
   let t = text.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ')
@@ -166,7 +206,7 @@ export function parseText(text: string, markdown: boolean): RawBook {
     // always did, so the guard no longer demands an empty para
     // there. In every other mode the old guard stands unchanged.
     if (!markdown && line.length < 110 && CHAPTER_LINE.test(line) && (!para.length || (!wrapped && !blankParas))) {
-      if (CHAPTER_PROSE_TAIL.test(line)) { para.push(line); continue }
+      if (chapterProseVeto(line)) { para.push(line); continue }
       // Cure R2-T8-8: a BARE numeral on its own line ("1.", "IV") is not
       // heading evidence by itself — a vertical numbered list (number
       // line, item line, number line, …) shattered into a chapter per
@@ -218,6 +258,20 @@ export function parseText(text: string, markdown: boolean): RawBook {
       continue
     }
     if (!markdown && alone && blankParas && line.length >= 3 && line.length <= 60 && /\p{Lu}{3}/u.test(line) && line === line.toUpperCase() && !/[.,;]$/.test(line)) {
+      // Cure R4-T8-4: case alone is not a heading's witness — a short
+      // all-caps line standing alone is as often shouted dialogue
+      // ("FIRE NOW") as a title, and the branch read the case, not
+      // the role. An utterance betrays itself by closed-class
+      // witnesses: terminal ! or ?, or a final word from the
+      // utterance-final class (time/place adverbs and particles —
+      // now, here, there, then, away, out, back, up, down, off,
+      // again, already, too — and the address words sir / madam /
+      // please): a heading's title ends on the thing it names, an
+      // utterance ends on when, where or to whom it is shouted.
+      // Declared trade: a caps chapter title ending on a particle
+      // ("THE JOURNEY BACK") reads as prose.
+      const lastWord = line.match(/[\p{L}']+$/u)?.[0]?.toLowerCase() ?? ''
+      if (/[!?]$/.test(line) || CAPS_UTTERANCE_END.has(lastWord)) { para.push(line); continue }
       flush(); blocks.push({ k: 'h2', t: line }); continue
     }
     para.push(line)
@@ -274,8 +328,20 @@ export type DecodedText = { text: string; warn?: string }
 /** Mojibake score: UTF-8 bytes misread as windows-1252 leave "Ã©"-style
     pairs. Used to tell a real legacy file (whose windows-1252 reading is
     clean) from a real UTF-8 file with a damaged byte or two (whose
-    windows-1252 reading is full of these pairs). */
-const mojibake = (s: string) => (s.match(/Ã[\u0080-\u00ff]|Â[\u0080-\u00bf]/g) ?? []).length
+    windows-1252 reading is full of these pairs).
+    Cure R4-T8-5: the score watched only two of UTF-8's three lead
+    bytes — C3 ("Ã") and C2 ("Â"). The third lead, E2 — every smart
+    quote, dash, ellipsis and the € sign — misreads as "â" followed
+    by two windows-1252 high characters, and was never counted, so a
+    UTF-8 book stamped iso-8859-1 whose text is accent-free but
+    punctuation-rich (the ordinary English case) scored zero and the
+    lie was acquitted. The "â" leg counts the lead followed by any
+    character windows-1252 assigns to a continuation byte
+    (0x80–0xBF): the Latin-1 range plus the printable punctuation
+    block (‚ „ … † ‡ € “ ” • – — ™ etc.). Honest legacy text cannot
+    wear the pair: a real "â" is followed by a letter, never by one
+    of these. */
+const mojibake = (s: string) => (s.match(/Ã[\u0080-\u00ff]|Â[\u0080-\u00bf]|â[\u0080-\u00bf\u0152\u0153\u0160\u0161\u0178\u017d\u017e\u0192\u02c6\u02dc\u2013\u2014\u2018\u2019\u201a\u201c\u201d\u201e\u2020\u2021\u2026\u2030\u2039\u203a\u20ac\u2122]/g) ?? []).length
 
 /** The BOM-less UTF-16 shape: NUL bytes massed on one byte parity
     (Latin text in UTF-16 is half NULs, all on the same side). Used
@@ -312,8 +378,16 @@ export function decodeTextDetailed(buf: ArrayBuffer): DecodedText {
   // The file's own declaration: an XML prolog (FB2) or a meta charset
   // (HTML), both readable as plain ASCII in the first bytes.
   const head = new TextDecoder('windows-1252').decode(bytes.subarray(0, 1024))
-  const declared = /<\?xml[^>]*?encoding\s*=\s*["']([\w.:-]+)["']/i.exec(head)?.[1]
+  const prolog = /<\?xml[^>]*?encoding\s*=\s*["']([\w.:-]+)["']/i.exec(head)
+  const declared = prolog?.[1]
     ?? /<meta[^>]*?charset\s*=\s*["']?([\w.:-]+)/i.exec(head)?.[1]
+  // Cure R4-T8-6: where a single-byte prolog carries the declaration,
+  // the encoded body starts after the prolog — and the body's byte
+  // parity is judged from ITS OWN first byte, not the file's (the
+  // prolog's length shifts every pair and made the shape test read
+  // the wrong endianness). prologEnd locates that boundary; the
+  // UTF-16 leg below walks it to the body's first byte.
+  const prologEnd = prolog ? head.indexOf('?>') : -1
   if (declared && !/^utf-?8$/i.test(declared)) {
     try {
       const asDeclared = new TextDecoder(declared).decode(bytes)
@@ -329,29 +403,60 @@ export function decodeTextDetailed(buf: ArrayBuffer): DecodedText {
       // true declaration is never second-guessed.
       let asUtf8: string | null = null
       try { asUtf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch { /* not valid UTF-8: the declaration stands */ }
-      if (asUtf8 !== null) {
-        const lieWarn = `This file says its text is ${declared}, but it was really written in UTF-8; Logos read it as UTF-8 so the words come out right.`
-        if (/^utf-?16/i.test(declared)) {
-          // Cure R3-T8-19: UTF-16 declarations were EXEMPT from the
-          // lie check, so a UTF-8 file stamped utf-16le (a converter
-          // mislabelling its output — the same sloppiness, one door
-          // over) was shelved as NUL-interleaved garbage with no
-          // warning. A real UTF-16 file wears its shape; bytes that
-          // wear none and read strictly as UTF-8 are UTF-8.
-          if (!utf16Shape(bytes)) return { text: asUtf8, warn: lieWarn }
-        } else {
-          const md = mojibake(asDeclared), mu = mojibake(asUtf8)
-          // Cure R3-T8-13: the R2 rule demanded a perfectly clean
-          // UTF-8 reading (mu === 0), so a book that QUOTES one
-          // "Ã©" — a book about encoding, the genre that writes the
-          // pair on purpose — acquitted the lie and shelved whole
-          // in mojibake. The clean-reading road stands; beside it,
-          // an overwhelming-evidence road: the declared reading is
-          // mojibake throughout (at least 4 pairs) while the UTF-8
-          // reading's own pairs — quotes included — are less than a
-          // third of that. One quoted pair no longer acquits.
-          if (md > 0 && (mu === 0 || (md >= 4 && md > mu * 3))) return { text: asUtf8, warn: lieWarn }
+      const lieWarn = `This file says its text is ${declared}, but it was really written in UTF-8; Logos read it as UTF-8 so the words come out right.`
+      if (/^utf-?16/i.test(declared)) {
+        // Cure R3-T8-19: UTF-16 declarations were EXEMPT from the
+        // lie check, so a UTF-8 file stamped utf-16le (a converter
+        // mislabelling its output — the same sloppiness, one door
+        // over) was shelved as NUL-interleaved garbage with no
+        // warning. A real UTF-16 file wears its shape; bytes that
+        // wear none and read strictly as UTF-8 are UTF-8.
+        // Cure R4-T8-6: the R3 check asked only that the bytes wear
+        // SOME UTF-16 shape, so a body wearing the OTHER
+        // endianness' shape passed and decoded byte-swapped, no
+        // warning. The declaration and the bytes must AGREE; when
+        // they disagree the bytes win — the file is read as the
+        // prolog it carries (single-byte) joined to the body its
+        // bytes declare, and the disagreement is reported. The
+        // agreement is judged on the body alone (declBody), and
+        // does not wait on the UTF-8 reading: a swapped body with
+        // accented bytes is not valid UTF-8 either, and it is the
+        // very file this leg exists for.
+        // The body is judged from its own first byte: a single-byte
+        // prolog is a LINE of single-byte text, so the body starts
+        // after the prolog and its trailing newline — judging from
+        // the file's first byte instead lets that one byte shift
+        // every pair and read the wrong endianness.
+        let bodyOff = prologEnd >= 0 ? prologEnd + 2 : 0
+        if (prologEnd >= 0) {
+          if (bytes[bodyOff] === 0x0d && bytes[bodyOff + 1] === 0x0a) bodyOff += 2
+          else if (bytes[bodyOff] === 0x0a || bytes[bodyOff] === 0x0d) bodyOff += 1
         }
+        const body = bytes.subarray(bodyOff)
+        const shape = utf16Shape(body)
+        if (shape) {
+          const declaredLE = !/utf-?16be/i.test(declared)
+          if ((shape === 'utf-16le') !== declaredLE) {
+            const headText = new TextDecoder('windows-1252').decode(bytes.subarray(0, bodyOff))
+            return { text: headText + new TextDecoder(shape).decode(body), warn: `This file says its text is ${declared}, but its bytes are written the other way round (${shape.toUpperCase()}); Logos read it by its bytes so the words come out right.` }
+          }
+          return { text: asDeclared }
+        }
+        if (asUtf8 !== null) return { text: asUtf8, warn: lieWarn }
+        return { text: asDeclared }
+      }
+      if (asUtf8 !== null) {
+        const md = mojibake(asDeclared), mu = mojibake(asUtf8)
+        // Cure R3-T8-13: the R2 rule demanded a perfectly clean
+        // UTF-8 reading (mu === 0), so a book that QUOTES one
+        // "Ã©" — a book about encoding, the genre that writes the
+        // pair on purpose — acquitted the lie and shelved whole
+        // in mojibake. The clean-reading road stands; beside it,
+        // an overwhelming-evidence road: the declared reading is
+        // mojibake throughout (at least 4 pairs) while the UTF-8
+        // reading's own pairs — quotes included — are less than a
+        // third of that. One quoted pair no longer acquits.
+        if (md > 0 && (mu === 0 || (md >= 4 && md > mu * 3))) return { text: asUtf8, warn: lieWarn }
       }
       return { text: asDeclared }
     } catch { /* unknown label: fall through to the guesses */ }

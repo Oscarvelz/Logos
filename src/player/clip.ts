@@ -29,6 +29,12 @@ export function clipSpeed(sp: number | undefined | null, fallback = 1): number {
 let clipRate = 1
 export const currentClipRate = () => clipRate
 
+/** Which clip owns the element (cure R4-T1-4): bumped by every
+ *  playClip that takes the element over, so a listener armed by an
+ *  earlier clip can tell at fire time that the element — and its
+ *  metadata events — belong to a newer clip now. */
+let clipGen = 0
+
 function el() {
   if (audio) return audio
   audio = new Audio()
@@ -63,8 +69,16 @@ export async function playClip(key: string, source: Blob | string, meta?: { titl
   if (url) URL.revokeObjectURL(url)
   url = typeof source === 'string' ? null : URL.createObjectURL(source)
   a.src = typeof source === 'string' ? source : url!
+  const gen = ++clipGen
   clipPlayer.set({ key, time: startAt, duration: 0, title: meta?.title ?? '', artist: meta?.artist ?? '' })
-  if (startAt > 0) a.addEventListener('loadedmetadata', () => { if (isFinite(a.duration) && startAt < a.duration - 2) a.currentTime = startAt }, { once: true })
+  // The startAt seek is armed for THIS clip only (cure R4-T1-4):
+  // the listener is {once:true} on the singleton element, and if a
+  // second clip took the element before the first clip's metadata
+  // ever fired, the stale listener used to fire on the SECOND
+  // clip's metadata and seek it to the first clip's startAt. The
+  // generation stamp judges ownership at fire time — a superseded
+  // listener lets the event pass as if it had never been armed.
+  if (startAt > 0) a.addEventListener('loadedmetadata', () => { if (gen === clipGen && isFinite(a.duration) && startAt < a.duration - 2) a.currentTime = startAt }, { once: true })
   if (meta && 'mediaSession' in navigator) {
     const base = import.meta.env.BASE_URL
     // 1.4.49: same themed artwork as Listen (see listen.ts) — warm charcoal and gold, absolute URLs.
