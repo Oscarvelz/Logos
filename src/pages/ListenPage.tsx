@@ -45,6 +45,7 @@ export function ListenPage() {
   const [speedOpen, setSpeedOpen] = useState(false)
   const [sleepOpen, setSleepOpen] = useState(false)
   const [keepOpen, setKeepOpen] = useState(false)
+  const [markAsk, setMarkAsk] = useState(false)
   const [queueOpen, setQueueOpen] = useState(false)
   const q = useStore(queue)
   const [webUrl, setWebUrl] = useState<string | null>(null)
@@ -55,11 +56,30 @@ export function ListenPage() {
   const [, setMarkTick] = useState(0)
   const markTarget = `${textKey(s.text)}:${s.current}`
   const markBusy = markGate.busy(markTarget)
-  const doMark = () => {
+  const runMark = () => {
     const st = listen.get()
     const target = `${textKey(st.text)}:${st.current}`
     void markGate.run(target, () => markAndToast()).finally(() => setMarkTick((n) => n + 1))
     setMarkTick((n) => n + 1)
+  }
+  // Oscar's ruling (1.4.204): a mark on a text that is not saved is a
+  // bookmark in a file that may not exist tomorrow. The door asks the
+  // user to save it to the Library first — then the mark lives with
+  // its text — and marking anyway is allowed only under the spoken
+  // warning: the mark lasts while this text stays open or playing.
+  const doMark = () => {
+    const st = listen.get()
+    if (!st.active) { runMark(); return }
+    const saved = !!nowReadingFor(st.text) || library.get().clips.some((c) => c.kind === 'text' && !!c.text && c.text.trim() === st.text.trim())
+    if (saved) { runMark(); return }
+    setMarkAsk(true)
+  }
+  const saveThenMark = async () => {
+    const ls = listen.get()
+    const info = describeText(ls.text, lang)
+    await saveForLater(ls.text, { title: info.title, summary: info.summary, lang, voice: st.voiceOverride ?? '', duration: estimateSeconds(ls.text, 1) })
+    setMarkAsk(false)
+    runMark()
   }
   const text = d.listen
 
@@ -292,6 +312,17 @@ export function ListenPage() {
 
       <WebImport open={webUrl !== null} onClose={() => setWebUrl(null)} initialUrl={webUrl ?? undefined} />
       <KeepSheet open={keepOpen} onClose={() => setKeepOpen(false)} text={reading ? s.text : text} lang={lang} />
+
+      <Sheet open={markAsk} onClose={() => setMarkAsk(false)} title={t('Mark this moment')}>
+        <p className="keepask-body">{t('This text is not in your Library yet. Save it to your Library and the mark stays with it. If you mark without saving, the mark lasts only while this text is open or playing — when the text is replaced, the mark is lost.')}</p>
+        <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+          <button className="btn primary grow" onClick={() => void saveThenMark()}>{t('Save to Library')}</button>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn ghost grow" onClick={() => setMarkAsk(false)}>{t('Cancel')}</button>
+          <button className="btn ghost grow" onClick={() => { setMarkAsk(false); runMark() }}>{t('Mark anyway')}</button>
+        </div>
+      </Sheet>
 
       <Sheet open={speedOpen} onClose={() => setSpeedOpen(false)} title={t('Speed')} present="listen-speed-sheet">
         <div className="speed-row" style={{ marginBottom: 14 }}>

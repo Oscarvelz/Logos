@@ -6,7 +6,7 @@
 // playing, always with an Undo, so no text is ever lost to it.
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
-import { listen, loadText, play, pauseFromShell, endSession, stepRate, seek, seekFraction, seekToMs, refreshVoices, voiceFor, sentenceProgress, wordClock, levels, registerTrackSkip } from '../player/listen.ts'
+import { listen, loadText, play, pauseFromShell, endSession, stepRate, setRate, seek, seekFraction, seekToMs, refreshVoices, voiceFor, sentenceProgress, wordClock, levels, registerTrackSkip } from '../player/listen.ts'
 import { queue, queueItems, currentItem, currentIndex, enqueue, setCurrent, removeItem as queueRemove, clearQueue, type QueueItem } from './queue.ts'
 import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { cancelDevice } from '../engine/device-voice.ts'
@@ -15,7 +15,7 @@ import { describeText } from './describe.ts'
 import { detectLang } from './text.ts'
 import { VOICES, favoriteVoices } from './voices.ts'
 import { nowReadingFor } from './book/nowreading.ts'
-import { markAndToast, textKey } from './marks.ts'
+import { markAndToast, marksEpoch, textKey } from './marks.ts'
 import { saveForLater, library, getClipBlob } from './library.ts'
 import { books } from './books.ts'
 import { playBook } from './book/playbook.ts'
@@ -36,6 +36,7 @@ type DroidBubble = {
   bubbleClip?: () => string
   bubbleWantClip?: () => boolean
   bubbleSeek?: () => string
+  bubbleRate?: () => string
   bubbleSeekCtx?: () => string
   bubbleSeekTo?: () => string
   bubbleSeekToCtx?: () => string
@@ -507,7 +508,7 @@ export function initBubble() {
       })
       return true
     }
-    if (cmd === 'slower' || cmd === 'faster' || listen.get().active || clipOwns()) {
+    if (cmd === 'slower' || cmd === 'faster' || cmd === 'rate' || listen.get().active || clipOwns()) {
       if (forThisSession()) dispatchEvent(new Event(`logosandroid-${cmd}`))
       return false
     }
@@ -590,6 +591,9 @@ export function initBubble() {
   // instead of landing nowhere (1.4.156).
   addEventListener('logosandroid-slower', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } stepRate(-1) })
   addEventListener('logosandroid-faster', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } stepRate(1) })
+  // 1.4.204: an absolute rate from the shell (the panel's speed list,
+  // 1.4.205) — pulled through the Bridge like bubbleSeek, never pushed.
+  addEventListener('logosandroid-rate', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } const v = parseFloat(d.bubbleRate?.() ?? ''); if (Number.isFinite(v) && v > 0) setRate(v) })
   // The panel's seek bar: the shell holds the fraction, the page pulls it.
   addEventListener('logosandroid-seek', () => {
     try {
@@ -648,7 +652,7 @@ export function initBubble() {
   // keeps playing, as the card says.
   addEventListener('logosandroid-clearqueue', () => clearQueue())
   // The panel's bookmark key, and the bubble's long-press voice wheel.
-  addEventListener('logosandroid-mark', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } void markAndToast() })
+  addEventListener('logosandroid-mark', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } void markAndToast().then(() => push()) })
   // The panel's save key: the copied text that is only visiting becomes a
   // permanent Library resident (a Listen-later text; audio is made on demand).
   addEventListener('logosandroid-save', () => {
@@ -849,6 +853,9 @@ export function initBubble() {
       // Whether what is playing already lives in the Library — the ⚑ asks this
       // before it marks, so no mark is ever left on unsaved audio.
       saved: s.active && (!!nowReadingFor(s.text) || library.get().clips.some((c) => c.kind === 'text' && !!c.text && c.text.trim() === s.text.trim())),
+      // The marks witness (1.4.204): a landed mark moves this counter,
+      // so the shell's poke watch sees the ⚑ press it caused.
+      marks: marksEpoch(),
       active: s.active,
       frac: s.active && s.segments.length ? Math.min(1, (s.current + sentenceProgress()) / s.segments.length) : 0,
       // Sentence coordinates (1.4.119): the panel's sentence scrub counts

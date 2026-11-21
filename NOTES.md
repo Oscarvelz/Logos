@@ -1,3 +1,42 @@
+## 1.4.204 — Marks ask first, dialogs breathe, the ⚑ gets its receipt (2026-11-21)
+
+Oscar's three orders from his phone this evening. (1) In the app's dialog
+windows the Cancel/Delete buttons sat right against the legend — the
+shared body style (.keepask-body) now carries 20px of air beneath it, so
+every window built on it (the confirm host, the book keep-ask, the new
+mark ask) sets its buttons lower. (2) A mark on a text that is not saved
+is a bookmark in a file that may not exist tomorrow — his Library showed
+a saved mark whose text was gone ("That text is no longer in Listen").
+The Listen mark door now ASKS first: save the text to the Library and
+the mark lives with it; Mark anyway stands only under the spoken
+warning — the mark lasts while this text is open or playing, and dies
+when the text is replaced. And the promise is kept in code: playLooseMark
+now falls back to the saved Library copy — when the draft has moved on,
+the copy comes back into Listen at the marked sentence, so a mark made
+after saving truly stays with its text. (3) The panel's ⚑ error (the
+black-screen trip) is cured at its root on the page side: a landed mark
+changed nothing the panel state push carries, so the shell's poke watch
+judged every mark on a quiet session unheard and manufactured a ghost
+visit. marks.ts now keeps an epoch counter that every handled mark
+moves; the push carries it as `marks`, and the mark listener pushes
+right after marking — the press is witnessed, no visit is manufactured.
+(The standing M-12 identity dedupe already ensured a re-fired mark
+could never duplicate; the harm was the visit itself.) The page also
+gains the absolute-rate listener (logosandroid-rate, pulled through the
+Bridge like bubbleSeek) ahead of the panel's speed list in 1.4.205.
+
+Presentation impact: none — no anchor moves, no registry change. The
+new mark-ask sheet carries no data-present (no anchor minted); the
+lane may mint one when it teaches the mark door.
+
+Tests: test/wave204-marks.ts 9/9 (epoch moves per handled mark, the
+identity dedupe holds). Battery 50 pass / 3 known non-runnable, suites
+129/129, Fence 0 and the anchor fence green. Benches at phone width:
+the ask sheet opens on an unsaved text; Mark anyway files one mark;
+Save to Library files the clip and the mark, and after the draft is
+replaced the mark reopens its saved copy in Listen; the confirm
+dialog's buttons sit 20px lower.
+
 ## 1.4.203 — The player's voice chip retires to the desk; the queue takes its seat
 
 Oscar's determination, over his own annotated photo of the chip row: the button that chose the voice in the Listen player **duplicated the voice choice the desk below already gives**, and the row was too full to breathe. So:

@@ -211,6 +211,8 @@ export const ES: Record<string, string> = {
   'Pause': 'Pausar',
   'Play': 'Reproducir',
   'Mark this moment': 'Marcar este momento',
+  'Mark anyway': 'Marcar de todos modos',
+  'This text is not in your Library yet. Save it to your Library and the mark stays with it. If you mark without saving, the mark lasts only while this text is open or playing — when the text is replaced, the mark is lost.': 'Este texto aún no está en tu Biblioteca. Guárdalo en tu Biblioteca y la marca se queda con él. Si marcas sin guardar, la marca dura solo mientras este texto esté abierto o sonando: cuando el texto se reemplace, la marca se pierde.',
   'Using your device voice while the neural voice downloads. It switches over automatically.': 'Usando la voz de tu teléfono mientras la neuronal se descarga. Cambia sola.',
   'Preparing the audio so it reads to the end without stopping · {d} of {t} sentences': 'Preparando el audio para que lea hasta el final sin parar · {d} de {t} oraciones',
   ' · about {w} left': ' · quedan unos {w}',

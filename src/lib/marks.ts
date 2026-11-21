@@ -7,6 +7,7 @@ import { drafts } from './drafts.ts'
 import { describeText } from './describe.ts'
 import { detectLang } from './text.ts'
 import { getBook, updateBook } from './books.ts'
+import { library } from './library.ts'
 import { nowReadingFor, posAt } from './book/nowreading.ts'
 import { playBook } from './book/playbook.ts'
 import { toast } from '../components/ui.tsx'
@@ -77,6 +78,14 @@ export function mergeMarks(incoming: LooseMark[]) {
   saveMarks([...loadMarks(), ...incoming.filter((m) => !have.has(m.id))].sort((a, b) => b.at - a.at))
 }
 
+// 1.4.204: the shell's receipt witness for the panel's ⚑. A landed mark
+// changes nothing the panel state push carries, so the shell's poke
+// watch judged every mark on a quiet session unheard and manufactured
+// a ghost visit — the black-screen trip Oscar reported again. Every
+// handled mark now moves this counter, and the push carries it.
+let marksEpochN = 0
+export const marksEpoch = () => marksEpochN
+
 /** Mark the sentence on the needle right now. Returns what happened, for the toast. */
 export async function markCurrentMoment(): Promise<'book' | 'loose' | null> {
   const s = listen.get()
@@ -87,7 +96,7 @@ export async function markCurrentMoment(): Promise<'book' | 'loose' | null> {
   if (nr) {
     const p = posAt(nr, seg.start)
     const landed = await updateBook(nr.id, (cur) => ({ bookmarks: [...(cur.bookmarks ?? []), { ch: p.ch, b: p.b, at: Date.now(), text: seg.text }] }), false)
-    if (landed) return 'book'
+    if (landed) { marksEpochN++; return 'book' }
   }
   addLooseMark({
     id: `m${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`,
@@ -97,6 +106,7 @@ export async function markCurrentMoment(): Promise<'book' | 'loose' | null> {
     key: textKey(s.text),
     idx: s.current,
   })
+  marksEpochN++
   return 'loose'
 }
 
@@ -108,15 +118,27 @@ export async function markAndToast() {
   else toast(t('Nothing is playing to mark'))
 }
 
-/** Jump back to a loose mark: only while its text is still the Listen draft. */
+/** Jump back to a loose mark: while its text is still the Listen draft,
+ *  or — 1.4.204, Oscar's ruling — from its saved copy in the Library:
+ *  a mark made after saving lives with that copy, so when the draft has
+ *  moved on, the copy comes back into Listen at the marked sentence. */
 export function playLooseMark(m: LooseMark): boolean {
   const text = drafts.get().listen
   // Dual-accept (cure R3-T1-4): a mark stored before the key change
   // carries the legacy fingerprint and is still honoured — the mark
   // is the user's data. New marks carry the strong key, against
   // which a middle-edited near-copy no longer matches.
-  if (!text.trim() || (textKey(text) !== m.key && legacyTextKey(text) !== m.key)) return false
-  loadText(text)
+  if (text.trim() && (textKey(text) === m.key || legacyTextKey(text) === m.key)) {
+    loadText(text)
+    if (m.idx > 0) seek(m.idx)
+    void play(m.idx)
+    location.hash = '#/listen'
+    return true
+  }
+  const clip = library.get().clips.find((c) => { const ct = c.text; return !!ct && (textKey(ct) === m.key || legacyTextKey(ct) === m.key) })
+  if (!clip?.text) return false
+  drafts.set({ listen: clip.text })
+  loadText(clip.text)
   if (m.idx > 0) seek(m.idx)
   void play(m.idx)
   location.hash = '#/listen'
