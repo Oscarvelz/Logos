@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
-import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, ListMusic, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, X } from 'lucide-react'
+import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, ListMusic, Loader2, Mic2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, X } from 'lucide-react'
 import { queue } from '../lib/queue.ts'
 import { playQueueAt, sendQueueToLater, saveQueueItemToLater } from '../lib/bubble.ts'
 import { removeItem as dropQueueItem, clearQueue } from '../lib/queue.ts'
@@ -9,7 +9,7 @@ import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings, READER_SCALES, stepReaderScale } from '../lib/settings.ts'
 import { detectLang, estimateSeconds, formatDuration, wordCount } from '../lib/text.ts'
 import { voiceById, LANG_LABEL, type Lang } from '../lib/voices.ts'
-import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, RATE_STEPS, setSleepTimer, refreshVoices, relangSession, voiceFor, endSession, sentenceProgress, seekFraction, wordClock, seekWord, ScrubHold, markGate } from '../player/listen.ts'
+import { listen, loadText, prepareText, play, toggle, next, prev, seek, setRate, RATE_STEPS, setSleepTimer, refreshVoices, relangSession, endSession, sentenceProgress, seekFraction, wordClock, seekWord, ScrubHold, markGate } from '../player/listen.ts'
 import { markAndToast, textKey } from '../lib/marks.ts'
 import { loadSessionResume } from '../lib/resume.ts'
 import { ContinueRow } from '../components/continue.tsx'
@@ -91,7 +91,6 @@ export function ListenPage() {
     return langs.size > 1
   }, [text])
   const lang: Lang = st.langMode === 'auto' ? detected.lang : st.langMode
-  const currentVoice = voiceById(s.active && !editing && s.voices[s.current] ? s.voices[s.current] : voiceFor(lang))
 
   // Begin preparing the audio as soon as text is pasted or typed (after a short pause in typing).
   useEffect(() => {
@@ -221,8 +220,13 @@ export function ListenPage() {
               {(st.copyQueue || q.items.length > 0) && <button className={`chip ${q.items.length ? 'accent' : ''}`} data-present="listen-queue-chip" onClick={() => setQueueOpen(true)} aria-label={t('Copy queue')}><ListMusic size={15} />{q.items.length > 0 ? q.items.length : null}</button>}
               <button className={`chip ${s.sleepLeft != null ? 'accent' : ''}`} data-present="listen-sleep-chip" onClick={() => setSleepOpen(true)} aria-label={t('Sleep timer')}><Moon size={15} />{s.sleepLeft != null ? formatDuration(s.sleepLeft) : null}</button>
               <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={t('Playback speed {x}', { x: fmtSpeed(st.listenSpeed) })}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
+              {/* 1.4.201 (Oscar's law): no ellipses — a chip is complete
+                  or it is not there. The voice's NAME no longer rides
+                  this chip (long names arrived cut, "N…"); the chip
+                  wears the app's own voice icon, Mic2, whole. The name
+                  itself lives one tap away, in the picker this opens. */}
               <button className="chip accent voice-chip" onClick={() => setVoiceOpen(true)} aria-label={t('Voice')}>
-                <span className="dot" /><span className="chip-txt">{currentVoice?.name ?? ''}</span>
+                <span className="dot" /><Mic2 size={15} />
               </button>
             </div>
           </div>
@@ -233,7 +237,7 @@ export function ListenPage() {
 
           <div className="player-meta">
             <span>{reading ? t('Sentence {a} of {b}', { a: s.current + 1, b: s.segments.length }) : t('Ready')}</span>
-            {/* 1.4.60: the voice's name lives in the chip above — naming it again here was pure repetition (Oscar). Only the device-voice state, which the chip cannot show, is still said. */}
+            {/* 1.4.60: the voice's name lived in the chip above — naming it again here was pure repetition (Oscar). 1.4.201: the chip wears the voice icon now, so the name is said nowhere on this card; only the device-voice state is still said. */}
             <span>{s.mode === 'device' ? t('Device voice · ') : ''}{t('{d} left', { d: formatDuration(remaining) })}</span>
           </div>
 

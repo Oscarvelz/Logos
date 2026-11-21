@@ -660,10 +660,13 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 .player-top .chip svg { width: 14px; height: 14px; }
 .player-top .chip { min-width: 0; }
 .player-top .chip svg, .player-top .chip .dot { flex: none; }
-.player-top .chip-txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.lang-chip { flex: 0 1 auto; }
+/* 1.4.201 (Oscar's law): no ellipses in the player's chips — a
+   chip's text stands complete or the chip wears an icon instead.
+   The lang chip never shrinks; the voice chip is icon-only now. */
+.player-top .chip-txt { white-space: nowrap; }
+.lang-chip { flex: none; }
 .speed-chip { flex: none; padding: 0 12px; gap: 6px; font-variant-numeric: tabular-nums; }
-.voice-chip { flex: 0 1 auto; max-width: 170px; }
+.voice-chip { flex: none; }
 .transport .t-left { justify-self: start; }
 .transport .t-right { justify-self: end; }
 @media (max-width: 839px) {

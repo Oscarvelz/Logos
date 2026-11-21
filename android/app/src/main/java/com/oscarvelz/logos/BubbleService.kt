@@ -1130,9 +1130,10 @@ class BubbleService : Service() {
     @Volatile private var panelQueueTitles: List<String> = emptyList()
     private var queueBtnV: View? = null
     private var queueBadgeV: TextView? = null
-    private var queueListV: LinearLayout? = null
+    private var queueListV: FrameLayout? = null
     private var queueRowsV: LinearLayout? = null
     private var queueHeadV: TextView? = null
+    private var queueClearV: TextView? = null
     private var queueListOpen = false
     private var haloAnim: ObjectAnimator? = null
     private var seekBar: SeekBar? = null
@@ -2408,7 +2409,11 @@ class BubbleService : Service() {
         titleV = TextView(this).apply {
             setTextColor(c["ink"]!!); textSize = 17f; typeface = Typeface.SERIF
             setTypeface(typeface, Typeface.BOLD)
-            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            // 1.4.201 (Oscar's law): no ellipses — the title shrinks
+            // its type until it stands COMPLETE on its line instead
+            // of arriving cut with dots ("Sobre Escu…").
+            maxLines = 1
+            setAutoSizeTextTypeUniformWithConfiguration(11, 17, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         subV = TextView(this).apply { setTextColor(c["muted"]!!); textSize = 12f }
@@ -2770,6 +2775,10 @@ class BubbleService : Service() {
         }
         clipRow.addView(leverLabel)
         val leverS = Switch(this).apply {
+            // 1.4.201 (Oscar's word): the Auto lever reads smaller —
+            // a little on the tablet, more on the phone.
+            val ls = if (isTablet()) 0.9f else 0.78f
+            scaleX = ls; scaleY = ls
             isChecked = lever(this@BubbleService)
             val goldStates = android.content.res.ColorStateList(
                 arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
@@ -2853,6 +2862,14 @@ class BubbleService : Service() {
         // ask is news by definition (deliver() has always bypassed
         // lock and hash for manual reads), so this disc runs the old
         // guaranteed-floor read: panel, blink, then Logos itself.
+        // 1.4.201 (Oscar's word): on the PHONE the footer's discs
+        // step down once more (25 → 22 dp, margins with them); on
+        // the tablet they keep the 1.4.200 size. The Auto lever
+        // shrinks on both — a little on the tablet, more on the
+        // phone (see leverS below).
+        val footDp = if (isTablet()) 25 else 22
+        val footM1 = if (isTablet()) 10 else 9
+        val footM = if (isTablet()) 6 else 5
         val pasteB = footBtn(s("Paste now", "Pegar ahora"), s("Paste", "Pegar"), { cv, ink, cx, cy, r ->
             val p = inkPaint(ink)
             // The wheel, not reinvented (Oscar, 2026-11-14, with the
@@ -2874,27 +2891,34 @@ class BubbleService : Service() {
             cv.drawRoundRect(front, rad, rad, fill)
             cv.drawRoundRect(front, rad, rad, p)
         }) { readClip(true) }
-        pasteB.layoutParams = LinearLayout.LayoutParams(dp(25), dp(25)).apply { leftMargin = dp(10) }
+        pasteB.layoutParams = LinearLayout.LayoutParams(dp(footDp), dp(footDp)).apply { leftMargin = dp(footM1) }
         clipRow.addView(pasteB)
         val listenB = footBtn(s("Go to the listening area", "Ir a la zona de escucha"), s("Listen", "Escuchar"), { cv, ink, cx, cy, r ->
-            // 1.4.200 (Oscar's word): the headphones are retired —
-            // they invite the wrong reading (a headset key) for a
-            // key whose deed is going to the listening area. The key
-            // now wears the listening area's own symbol, the sound
-            // wave the app's nav draws for Listen: five bars of
-            // uneven height, round-capped.
-            val p = inkPaint(ink).apply { strokeWidth = r * 0.34f }
-            val heights = floatArrayOf(0.62f, 1.18f, 1.72f, 1.06f, 0.58f)
-            for (i in heights.indices) {
-                val x = cx + (i - 2) * r * 0.46f
-                val h = heights[i] * r * 0.5f
-                cv.drawLine(x, cy - h, x, cy + h, p)
-            }
+            // 1.4.200 retired the headphones (they read as a headset
+            // key) for the sound wave; 1.4.201 (Oscar's word, same
+            // day): the wave describes the area but not the DEED —
+            // this key takes him INTO the application. It wears the
+            // enter sign: an arrow going into the app's frame, the
+            // frame open where the arrow enters.
+            val p = inkPaint(ink).apply { strokeJoin = android.graphics.Paint.Join.ROUND }
+            val fx = cx + r * 0.88f
+            val frame = android.graphics.Path()
+            frame.moveTo(cx - r * 0.02f, cy - r * 0.82f)
+            frame.lineTo(fx, cy - r * 0.82f)
+            frame.lineTo(fx, cy + r * 0.82f)
+            frame.lineTo(cx - r * 0.02f, cy + r * 0.82f)
+            cv.drawPath(frame, p)
+            cv.drawLine(cx - r * 0.90f, cy, cx + r * 0.28f, cy, p)
+            val head = android.graphics.Path()
+            head.moveTo(cx - r * 0.04f, cy - r * 0.36f)
+            head.lineTo(cx + r * 0.32f, cy)
+            head.lineTo(cx - r * 0.04f, cy + r * 0.36f)
+            cv.drawPath(head, p)
         }) {
             collapsePanel()
             runCatching { startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("logos.listen", true)) }
         }
-        listenB.layoutParams = LinearLayout.LayoutParams(dp(25), dp(25)).apply { leftMargin = dp(6) }
+        listenB.layoutParams = LinearLayout.LayoutParams(dp(footDp), dp(footDp)).apply { leftMargin = dp(footM) }
         clipRow.addView(listenB)
         val eyeB = footBtn(s("Hide bubble", "Ocultar burbuja"), s("Hide", "Ocultar"), { cv, ink, cx, cy, r ->
             val p = inkPaint(ink)
@@ -2907,7 +2931,7 @@ class BubbleService : Service() {
             p.style = android.graphics.Paint.Style.FILL
             cv.drawCircle(cx, cy, r * 0.18f, p)
         }) { showHideHint() }
-        eyeB.layoutParams = LinearLayout.LayoutParams(dp(25), dp(25)).apply { leftMargin = dp(6) }
+        eyeB.layoutParams = LinearLayout.LayoutParams(dp(footDp), dp(footDp)).apply { leftMargin = dp(footM) }
         clipRow.addView(eyeB)
         // The copy queue's key (1.4.198): a playlist glyph wearing
         // the line's count; its tap opens the line itself over the
@@ -2925,7 +2949,7 @@ class BubbleService : Service() {
                 cv.drawCircle(left - r * 0.02f, y, 1.1f * dens, dot)
             }
         }) { toggleQueueList() }
-        queueWrap.addView(queueB, FrameLayout.LayoutParams(dp(25), dp(25)))
+        queueWrap.addView(queueB, FrameLayout.LayoutParams(dp(footDp), dp(footDp)))
         val queueBadge = TextView(this).apply {
             text = ""
             visibility = View.INVISIBLE
@@ -2937,7 +2961,7 @@ class BubbleService : Service() {
         queueWrap.addView(queueBadge)
         queueBtnV = queueWrap
         queueBadgeV = queueBadge
-        queueWrap.layoutParams = LinearLayout.LayoutParams(dp(25), dp(25)).apply { leftMargin = dp(6) }
+        queueWrap.layoutParams = LinearLayout.LayoutParams(dp(footDp), dp(footDp)).apply { leftMargin = dp(footM) }
         clipRow.addView(queueWrap)
         card.addView(clipRow)
         // The reader's grip: two small gold ticks hugging the panel's free
@@ -2993,11 +3017,28 @@ class BubbleService : Service() {
         // The copy queue's list (1.4.198): a sheet over the panel's
         // own card, born hidden; the footer's queue key opens it,
         // and any lined-up text can be played or dropped from it.
-        val qList = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c["bg1"]!!, c["bg2"]!!)).apply { cornerRadius = dp(24).toFloat() }
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+        // 1.4.201 (Oscar's word): the sheet gets a DESIGNED face —
+        // not a black slab. It wears the panel card's own
+        // furniture: the rim around its gradient, the gold glow
+        // lying on its top like the player's, a hairline under its
+        // head, and a foot of its own for the universal key.
+        val qList = FrameLayout(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c["bg1"]!!, c["bg2"]!!)).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), c["line"]!!) }
             visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        }
+        val qGlow = View(this).apply {
+            background = GradientDrawable().apply {
+                gradientType = GradientDrawable.RADIAL_GRADIENT
+                gradientRadius = dp(190).toFloat()
+                colors = intArrayOf(c["glow"]!!, Color.TRANSPARENT)
+            }
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(120), Gravity.TOP)
+        }
+        qList.addView(qGlow)
+        val qContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         val qHeadRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -3007,18 +3048,43 @@ class BubbleService : Service() {
         }
         qHeadRow.addView(qHead)
         val qClose = TextView(this).apply {
-            text = "✕"; setTextColor(c["muted"]!!); textSize = 13f; gravity = Gravity.CENTER
+            // The way out wears a BACK ARROW, never an ✕ (Oscar,
+            // 1.4.201): the ✕ belongs to the rows' drops alone,
+            // and the two must not be confused.
+            text = "←"; setTextColor(c["muted"]!!); textSize = 15f; gravity = Gravity.CENTER
+            contentDescription = s("Back", "Atrás")
             layoutParams = LinearLayout.LayoutParams(dp(26), dp(26))
             setOnClickListener { toggleQueueList() }
         }
         qHeadRow.addView(qClose)
-        qList.addView(qHeadRow)
+        qContent.addView(qHeadRow)
+        val qDiv = View(this).apply {
+            setBackgroundColor(c["div"]!!)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply { topMargin = dp(8); bottomMargin = dp(6) }
+        }
+        qContent.addView(qDiv)
         val qScroll = ScrollView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         val qRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         qScroll.addView(qRows)
-        qList.addView(qScroll)
+        qContent.addView(qScroll)
+        // The universal key (Oscar, 1.4.201): empties the WHOLE
+        // line, behind its own confirmation, which says so.
+        val qClear = TextView(this).apply {
+            text = s("Empty the whole list", "Vaciar toda la lista")
+            setTextColor(c["gold"]!!); textSize = 13f; gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(2))
+            contentDescription = s("Empty the whole list", "Vaciar toda la lista")
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            setOnClickListener {
+                showHintCard(s("Empty the queue", "Vaciar la cola"), s("Every text in the line will be removed. What is playing keeps playing.", "Se quitarán todos los textos de la fila. Lo que está sonando seguirá sonando."), s("Empty it", "Vaciarla"), s("Not now", "Ahora no")) {
+                    pokeOrWake("clearqueue")
+                }
+            }
+        }
+        qContent.addView(qClear)
+        qList.addView(qContent)
         stage.addView(qList)
-        queueListV = qList; queueRowsV = qRows; queueHeadV = qHead
+        queueListV = qList; queueRowsV = qRows; queueHeadV = qHead; queueClearV = qClear
         val p = WindowManager.LayoutParams(
             panelWidth(), WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
@@ -3207,6 +3273,7 @@ class BubbleService : Service() {
                 setTextColor(c["muted"]!!); textSize = 12.5f
                 setPadding(0, dp(10), 0, dp(6))
             })
+            queueClearV?.visibility = View.GONE
             return
         }
         panelQueueTitles.forEachIndexed { i, title ->
@@ -3223,10 +3290,17 @@ class BubbleService : Service() {
             row.addView(TextView(this).apply {
                 text = "✕"; setTextColor(c["muted"]!!); textSize = 12f; gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(dp(26), dp(26))
-                setOnClickListener { storeQueueDrop(i); pokeOrWake("queuedrop") }
+                // A drop ASKS first (Oscar, 1.4.201): the card
+                // names the text, and only its answer drops it.
+                setOnClickListener {
+                    showHintCard(s("Remove from the queue", "Quitar de la cola"), s("“$title” will leave the line.", "«$title» saldrá de la fila."), s("Remove", "Quitar"), s("Not now", "Ahora no")) {
+                        storeQueueDrop(i); pokeOrWake("queuedrop")
+                    }
+                }
             })
             rows.addView(row)
         }
+        queueClearV?.visibility = View.VISIBLE
     }
 
     private fun syncQueueUi() {
@@ -3491,7 +3565,7 @@ class BubbleService : Service() {
         hideNameTag()
         val v = panel
         panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; gripV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null; scrubTarget = -1; scrubMode = 0
-        queueBtnV = null; queueBadgeV = null; queueListV = null; queueRowsV = null; queueHeadV = null; queueListOpen = false
+        queueBtnV = null; queueBadgeV = null; queueListV = null; queueRowsV = null; queueHeadV = null; queueClearV = null; queueListOpen = false
         // The shown-* diff memory describes these views (M-7): the
         // next panel is born blank, so its first refresh must paint
         // everything — the memory dies with the views it described.

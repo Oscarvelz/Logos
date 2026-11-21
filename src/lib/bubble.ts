@@ -491,6 +491,9 @@ export function initBubble() {
       const here = pageCtx()
       return !here || here === stamp
     }
+    // CLEARQUEUE (1.4.201) acts on the queue record, never on a
+    // session — like pause, it is judged before every session road.
+    if (cmd === 'clearqueue') { clearQueue(); return false }
     // A stored PAUSE (1.4.89): against a dead page, silence is already
     // the truth. The one thing it must never do is summon playback —
     // the recovery used to 'fulfil' it by playing the session, and his
@@ -640,6 +643,10 @@ export function initBubble() {
     if (idx >= 0) dropQueueAt(idx)
   })
   addEventListener('logosandroid-savequeue', () => { void sendQueueToLater() })
+  // 1.4.201: the panel list's Empty-the-whole-list key (behind its
+  // confirmation card) — the queue record clears; what is playing
+  // keeps playing, as the card says.
+  addEventListener('logosandroid-clearqueue', () => clearQueue())
   // The panel's bookmark key, and the bubble's long-press voice wheel.
   addEventListener('logosandroid-mark', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } void markAndToast() })
   // The panel's save key: the copied text that is only visiting becomes a

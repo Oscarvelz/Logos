@@ -1,3 +1,16 @@
+## 1.4.201 — No ellipses: a chip is complete or it is not there
+
+Oscar's law, stated 2026-11-21 with two close-ups of the Listen player's chip row — the voice chip wearing a cut name («● N…») and the language chip cut to «Auto · …»: «No me gustan los puntos suspensivos. El ícono está completo o no está.»
+
+- **The voice chip wears the voice icon.** The current voice's NAME no longer rides the Listen voice chip — long names arrived truncated by design (the chip capped at 170 px, its text span ellipsizing). The chip now carries the standing gold dot and **Mic2**, the app's own voice symbol (the same glyph the bottom nav draws for Voices), whole at any name length. The name itself lives one tap away, in the picker the chip opens. The 1.4.60 player-meta comment is amended: the name is now said nowhere on the player card.
+- **The language chip stands complete.** Its text span no longer ellipsizes and the chip never shrinks (`flex: none`): «Auto · EN», «Auto · EN + ES» and the manual labels stand whole — the room comes from the voice chip's new narrowness. The ellipsis mechanism is removed from the player's chips entirely (`.chip-txt` is nowrap, no overflow cut); the sleep and speed chips already wore complete contents.
+- **The panel title obeys the same law.** The bubble panel's session title ellipsized at the end («Sobre Escu…», photographed by Oscar the same afternoon). It now auto-sizes its type (17 sp down to 11 sp) until the title stands complete on its line; the dots are gone. The queue list's rows keep their compact form by the 198 design — the full titles live in the app, whose queue sheet is the line's complete record.
+
+- **The panel footer, at his further word the same afternoon** (folded into this wave before publishing): the «Listen» key's icon changes AGAIN — the 200 sound wave described the area but not the deed; this key takes him INTO the application, so it now wears the enter sign, an arrow going into the app's frame. And the footer steps down once more on the PHONE only: the four discs go 25 → 22 dp with their margins, and the Auto lever shrinks on both devices — a little on the tablet (×0.9), more on the phone (×0.78); the tablet's discs keep the 200 size, as he ordered.
+- **The queue list, at his word over his own photos of it** (he loves its simplicity; folded in before publishing): a row's ✕ now ASKS first — the hint card names the text and only its answer drops it; a universal key at the sheet's foot, «Empty the whole list», empties the line behind its own confirmation, which says exactly that (the page gains the matching `clearqueue` verb; what is playing keeps playing, as the card states); the sheet's way out wears a BACK ARROW instead of an ✕, so it can never be confused with the rows' drops; and the sheet itself gets a designed face instead of a black slab — the panel card's own furniture: the rim around its gradient, the gold glow lying on its top, a hairline under its head.
+
+Presentation impact: none — the voice chip keeps its seat and anchor (`listen-voice-chip`); only its contents changed, from a name to an icon. The shell half has no bench: CI compiles the Kotlin, and Oscar's phone judges the panel.
+
 ## 1.4.200 — The Voices sections fold and open; the panel's footer fits its line
 
 Two of Oscar's orders from 2026-11-21, minutes apart, one wave:
