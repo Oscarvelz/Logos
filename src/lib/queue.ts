@@ -1,0 +1,96 @@
+import { createStore } from './store.ts'
+import { textKey } from './marks.ts'
+
+/**
+ * The copy queue (Oscar, 1.4.198). With the queue mode on, a copied
+ * text no longer replaces what is playing — it lines up behind it,
+ * and the line plays through like a playlist, one text after the
+ * next. This module is only the record: the items, which one holds
+ * the stage, and the memory of a current item removed mid-play.
+ * Every deed — playing, advancing, saving — lives in bubble.ts,
+ * which wires this record to the session, the panel and the Library.
+ *
+ * The record persists across nights (localStorage); turning the
+ * mode off erases it whole — that erasure is the mode's own law,
+ * judged in bubble.ts where the settings change is seen.
+ */
+export type QueueItem = { id: string; text: string; key: string; title: string; secs: number; at: number }
+export type QueueState = { items: QueueItem[]; currentId: string | null; orphanKey: string }
+
+const KEY = 'logos.queue.v1'
+let seq = 0
+const newId = () => `q${Date.now().toString(36)}${(seq++).toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
+
+function load(): QueueState {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) ?? 'null') as QueueState | null
+    if (raw && Array.isArray(raw.items)) {
+      const items = raw.items.filter((i) => i && typeof i.text === 'string' && i.text.trim()).map((i) => ({
+        id: String(i.id || newId()), text: i.text, key: String(i.key || textKey(i.text)), title: String(i.title || ''), secs: Number(i.secs) || 0, at: Number(i.at) || 0,
+      }))
+      const currentId = items.some((i) => i.id === raw.currentId) ? raw.currentId : null
+      return { items, currentId, orphanKey: typeof raw.orphanKey === 'string' ? raw.orphanKey : '' }
+    }
+  } catch { /* a broken record is no record */ }
+  return { items: [], currentId: null, orphanKey: '' }
+}
+
+export const queue = createStore<QueueState>(load())
+
+function persist() {
+  try {
+    const s = queue.get()
+    if (!s.items.length && !s.currentId) localStorage.removeItem(KEY)
+    else localStorage.setItem(KEY, JSON.stringify(s))
+  } catch { /* the record lives in memory when storage refuses */ }
+}
+queue.subscribe(persist)
+
+export const queueItems = () => queue.get().items
+export const currentItem = () => queue.get().items.find((i) => i.id === queue.get().currentId) ?? null
+export const currentIndex = () => { const s = queue.get(); return s.items.findIndex((i) => i.id === s.currentId) }
+
+/**
+ * Line a text up. The same text twice in a row is one entry, never
+ * two (Oscar): the copy is judged against the line's tail — the
+ * current item when the line is otherwise empty, else the last item.
+ * Returns the item, or null when the copy was already the tail.
+ */
+export function enqueue(text: string, title: string, secs: number): QueueItem | null {
+  const key = textKey(text)
+  const s = queue.get()
+  const tail = s.items.length ? s.items[s.items.length - 1] : null
+  if (tail && tail.key === key) return null
+  if (!tail) { const cur = currentItem(); if (cur && cur.key === key) return null }
+  const item: QueueItem = { id: newId(), text, key, title, secs, at: Date.now() }
+  queue.set({ items: [...s.items, item] })
+  return item
+}
+
+export function setCurrent(id: string | null) {
+  queue.set({ currentId: id, orphanKey: '' })
+}
+
+/**
+ * Take an item out of the line. Removing the one on stage does not
+ * stop the sound — its text is already loaded — but the stage's
+ * memory moves to the item that followed it, and the removed
+ * item's key is kept as the orphan: when the sound ends, the
+ * finish judge recognises the orphan and steps to the successor.
+ */
+export function removeItem(id: string) {
+  const s = queue.get()
+  const idx = s.items.findIndex((i) => i.id === id)
+  if (idx < 0) return
+  const items = s.items.filter((i) => i.id !== id)
+  if (s.currentId === id) {
+    const successor = items[idx] ?? null
+    queue.set({ items, currentId: successor ? successor.id : null, orphanKey: s.items[idx].key })
+  } else {
+    queue.set({ items })
+  }
+}
+
+export function clearQueue() {
+  queue.set({ items: [], currentId: null, orphanKey: '' })
+}

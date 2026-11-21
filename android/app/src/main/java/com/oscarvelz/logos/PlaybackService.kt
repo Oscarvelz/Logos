@@ -139,8 +139,22 @@ class PlaybackService : Service() {
         @Volatile var ringFrac = -1.0
         @Volatile var ringFam = ""
         @Volatile var ringPct = -1
+        /** How many texts stand in the copy queue (1.4.198),
+         *  harvested from the page's push: while it stands above
+         *  zero the session declares SKIP and headset track keys
+         *  travel the line instead of leaping. */
+        @Volatile var queueCount = 0
         fun noteBubblePush(json: String) {
             val j = runCatching { org.json.JSONObject(json) }.getOrNull() ?: return
+            // The copy queue's count (1.4.198): while a line stands,
+            // the session declares SKIP and the track keys travel
+            // the line — the face is re-faced when the count's
+            // truth changes, like the ring's percent.
+            val qn = j.optInt("queue", 0)
+            if (qn != queueCount) {
+                queueCount = qn
+                if (cardUp) instance?.refreshSessionFace()
+            }
             if (j.optBoolean("active")) {
                 val fam = j.optString("fam")
                 if (fam.isNotEmpty() && fam != ringFam) {
@@ -294,8 +308,18 @@ class PlaybackService : Service() {
                     val ev = mediaButtonIntent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
                     if (ev != null && ev.action == KeyEvent.ACTION_DOWN) {
                         when (ev.keyCode) {
-                            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_MEDIA_NEXT -> { act("jumpfwd"); return true }
-                            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { act("jumpback"); return true }
+                            // The track keys (1.4.198): with a copy
+                            // queue standing they travel the line —
+                            // Oscar's headset speaks only these (its
+                            // double press is NEXT, its triple is
+                            // PREVIOUS, and it has no seek keys at
+                            // all). Without a line, the 194 law
+                            // stands: the leap, by the Settings
+                            // seconds. The seek keys always leap.
+                            KeyEvent.KEYCODE_MEDIA_NEXT -> { if (queueCount > 0) act("next") else act("jumpfwd"); return true }
+                            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { if (queueCount > 0) act("prev") else act("jumpback"); return true }
+                            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { act("jumpfwd"); return true }
+                            KeyEvent.KEYCODE_MEDIA_REWIND -> { act("jumpback"); return true }
                         }
                     }
                     return super.onMediaButtonEvent(mediaButtonIntent)
@@ -390,6 +414,16 @@ class PlaybackService : Service() {
      *  The page has definite doors (logosandroid-play/pause); the
      *  press now travels under its own name the whole way. */
     private fun act(kind: String) {
+        // The copy queue's exception (1.4.198): next/previous belong
+        // to the page while a line stands — the line lives there,
+        // whichever voice is speaking it. The page judges the press
+        // (queue first, then the book deed, then the sentence).
+        if ((kind == "next" || kind == "prev") && queueCount > 0) {
+            val a = onAction
+            if (a != null) { a(kind); return }
+            BubbleService.wakeForPending(this, kind)
+            return
+        }
         // While the shell's own voice holds the stage, the media keys are
         // its (1.4.112) — the page is the one that failed to flow.
         if (NativeSpeaker.active) { NativeSpeaker.handle(kind); return }
@@ -495,7 +529,10 @@ class PlaybackService : Service() {
         if (progDurMs > 0) md.putLong(MediaMetadata.METADATA_KEY_DURATION, progDurMs)
         s.setMetadata(md.build())
         var actions = PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
-        if (bookish) actions = actions or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+        // SKIP is declared for books (172) and, since 1.4.198, for a
+        // standing copy queue: both are lines of tracks, and the
+        // press travels the line that stands.
+        if (bookish || queueCount > 0) actions = actions or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
         if (progDurMs > 0) actions = actions or PlaybackState.ACTION_SEEK_TO
         val jbSec = getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_b", 15)
         val jfSec = getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_f", 30)

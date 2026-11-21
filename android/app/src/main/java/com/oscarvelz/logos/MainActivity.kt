@@ -746,6 +746,71 @@ class MainActivity : Activity() {
             return ctx
         }
 
+        /** A copy-queue row the panel chose to play (1.4.198),
+         *  pulled once — judged at this door by the same laws as
+         *  the seek's: twenty seconds of life, and the session it
+         *  was chosen against must still be the session standing.
+         *  A drop leaves its receipt on the Settings line. */
+        @JavascriptInterface fun bubbleQueuePlay(): String {
+            val i = BubbleService.queuePlayIdx
+            BubbleService.queuePlayIdx = -1
+            if (i < 0) return ""
+            if (System.currentTimeMillis() - BubbleService.queuePlayAt > 20_000) {
+                BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored queue choice went stale", "una elección de la cola guardada caducó"))
+                return ""
+            }
+            val ctx = BubbleService.queuePlayCtx
+            if (ctx.isNotEmpty()) {
+                val cur = BubbleService.currentContext()
+                if (cur.isNotEmpty() && cur != ctx) {
+                    BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored queue choice's session had moved on", "la sesión de una elección de la cola había cambiado"))
+                    return ""
+                }
+            }
+            BubbleService.lastTakenQueuePlayCtx = ctx
+            BubbleService.queuePlayCtx = ""
+            return i.toString()
+        }
+
+        /** The context stamp of the queue-play most recently
+         *  collected (1.4.198): the seek twin, for the queue. */
+        @JavascriptInterface fun bubbleQueuePlayCtx(): String {
+            val ctx = BubbleService.lastTakenQueuePlayCtx
+            BubbleService.lastTakenQueuePlayCtx = ""
+            return ctx
+        }
+
+        /** A copy-queue row the panel chose to drop (1.4.198):
+         *  the play pull's twin, with its own seats and stamp. */
+        @JavascriptInterface fun bubbleQueueDrop(): String {
+            val i = BubbleService.queueDropIdx
+            BubbleService.queueDropIdx = -1
+            if (i < 0) return ""
+            if (System.currentTimeMillis() - BubbleService.queueDropAt > 20_000) {
+                BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored queue choice went stale", "una elección de la cola guardada caducó"))
+                return ""
+            }
+            val ctx = BubbleService.queueDropCtx
+            if (ctx.isNotEmpty()) {
+                val cur = BubbleService.currentContext()
+                if (cur.isNotEmpty() && cur != ctx) {
+                    BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored queue choice's session had moved on", "la sesión de una elección de la cola había cambiado"))
+                    return ""
+                }
+            }
+            BubbleService.lastTakenQueueDropCtx = ctx
+            BubbleService.queueDropCtx = ""
+            return i.toString()
+        }
+
+        /** The context stamp of the queue-drop most recently
+         *  collected (1.4.198). */
+        @JavascriptInterface fun bubbleQueueDropCtx(): String {
+            val ctx = BubbleService.lastTakenQueueDropCtx
+            BubbleService.lastTakenQueueDropCtx = ""
+            return ctx
+        }
+
         @JavascriptInterface fun bubble(on: Boolean) {
             BubbleService.prefs(this@MainActivity).edit().putBoolean("on", on).apply()
             runOnUiThread {

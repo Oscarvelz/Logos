@@ -26,6 +26,10 @@ export type Settings = {
   bubbleOn: boolean
   /** The bubble's lever: ON = the bubble plays what's copied; OFF = it only controls playback. */
   bubbleAuto: boolean
+  /** The copy queue (Oscar, 1.4.198): ON = every copied text lines up
+   *  behind the one playing instead of replacing it, and the line
+   *  plays through like a playlist. OFF erases the queue's record. */
+  copyQueue: boolean
   /** The bubble's panel shows the words being read. */
   bubbleText: boolean
   /** The floating window's look (1.4.157): the bubble's resting opacity, percent. */
@@ -71,6 +75,7 @@ const DEFAULTS: Settings = {
   deviceFallback: false,
   bubbleOn: false,
   bubbleAuto: true,
+  copyQueue: false,
   bubbleText: true,
   bubbleAlpha: 100,
   panelAlpha: 100,
@@ -151,7 +156,7 @@ function load(): Settings {
     if (!['en', 'es', 'auto'].includes(out.langMode)) out.langMode = DEFAULTS.langMode
     if (!['mp3', 'wav'].includes(out.format)) out.format = DEFAULTS.format
     if (!['s', 'm', 'l'].includes(out.bubbleSize)) out.bubbleSize = DEFAULTS.bubbleSize
-    for (const k of ['autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'bubbleText', 'bubbleFade', 'highlight'] as const) {
+    for (const k of ['autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'copyQueue', 'bubbleText', 'bubbleFade', 'highlight'] as const) {
       if (typeof out[k] !== 'boolean') out[k] = DEFAULTS[k]
     }
     for (const k of ['listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec'] as const) {

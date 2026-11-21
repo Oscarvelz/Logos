@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
-import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, X } from 'lucide-react'
+import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, ListMusic, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, X } from 'lucide-react'
+import { queue } from '../lib/queue.ts'
+import { playQueueAt, sendQueueToLater, saveQueueItemToLater } from '../lib/bubble.ts'
+import { removeItem as dropQueueItem, clearQueue } from '../lib/queue.ts'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
 import { saveLastText, settings, READER_SCALES, stepReaderScale } from '../lib/settings.ts'
@@ -24,7 +27,7 @@ import { WebImport } from '../components/webimport.tsx'
 import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, JumpKey, StatusPill, VoicePicker } from '../components/chrome.tsx'
-import { Range, Sheet, toast, useMediaQuery } from '../components/ui.tsx'
+import { Range, Sheet, Switch, toast, useMediaQuery } from '../components/ui.tsx'
 import { t } from '../lib/i18n.ts'
 import { TabletDesk, TextMap } from '../components/desk.tsx'
 
@@ -42,6 +45,8 @@ export function ListenPage() {
   const [speedOpen, setSpeedOpen] = useState(false)
   const [sleepOpen, setSleepOpen] = useState(false)
   const [keepOpen, setKeepOpen] = useState(false)
+  const [queueOpen, setQueueOpen] = useState(false)
+  const q = useStore(queue)
   const [webUrl, setWebUrl] = useState<string | null>(null)
   // Save-once for the mark door (cure M-5): the gate is keyed by the
   // mark's target (this text, this sentence), so a double-tap files
@@ -213,6 +218,7 @@ export function ListenPage() {
               <span className="chip-txt">{st.langMode === 'auto' ? <>Auto · {mixed ? 'EN + ES' : detected.lang.toUpperCase()}</> : LANG_LABEL[st.langMode]}</span>
             </button>
             <div className="player-top-r">
+              {(st.copyQueue || q.items.length > 0) && <button className={`chip ${q.items.length ? 'accent' : ''}`} data-present="listen-queue-chip" onClick={() => setQueueOpen(true)} aria-label={t('Copy queue')}><ListMusic size={15} />{q.items.length > 0 ? q.items.length : null}</button>}
               <button className={`chip ${s.sleepLeft != null ? 'accent' : ''}`} data-present="listen-sleep-chip" onClick={() => setSleepOpen(true)} aria-label={t('Sleep timer')}><Moon size={15} />{s.sleepLeft != null ? formatDuration(s.sleepLeft) : null}</button>
               <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={t('Playback speed {x}', { x: fmtSpeed(st.listenSpeed) })}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
               <button className="chip accent voice-chip" onClick={() => setVoiceOpen(true)} aria-label={t('Voice')}>
@@ -296,6 +302,36 @@ export function ListenPage() {
           {[10, 15, 20, 30, 45, 60].map((m) => <button key={m} className={s.sleepMins === m ? 'on' : ''} onClick={() => setSleepTimer(m)}>{m} min</button>)}
         </div>
         <p className="muted small" style={{ margin: '8px 4px 0' }}>{t('The last ten seconds fade down gently, then it pauses.')}</p>
+      </Sheet>
+
+      <Sheet open={queueOpen} onClose={() => setQueueOpen(false)} title={t('Copy queue')} present="listen-queue-sheet">
+        <div className="row between" style={{ marginBottom: 6 }}>
+          <div className="t">{t('Queue what I copy')}</div>
+          <Switch label={t('Queue what I copy')} on={st.copyQueue} onChange={(v) => settings.set({ copyQueue: v })} />
+        </div>
+        <p className="muted small" style={{ margin: '0 4px 12px' }}>{t('On: every text you copy lines up behind the one playing, and the line plays through in order. Off: the line is erased and a copy takes the stage as always.')}</p>
+        {q.items.length === 0
+          ? <p className="muted" style={{ margin: '4px' }}>{t('The line is empty. Copy a text and it will stand here.')}</p>
+          : <div>
+              {q.items.map((it, i) => {
+                const isCur = it.id === q.currentId
+                return (
+                  <div key={it.id} className={`qrow ${isCur ? 'cur' : ''}`} data-present="listen-queue-row">
+                    <button className="qrow-main" onClick={() => { playQueueAt(i); setQueueOpen(false) }} aria-label={t('Play this one')}>
+                      {isCur ? <AudioLines size={16} /> : <Play size={16} />}
+                      <span className="qrow-title">{it.title || t('Copied text')}</span>
+                      <span className="muted small">{formatDuration(it.secs)}</span>
+                    </button>
+                    <button className="icon-btn" onClick={() => void saveQueueItemToLater(it)} aria-label={t('Save to Listen later')} title={t('Save to Listen later')}><BookmarkPlus size={17} /></button>
+                    <button className="icon-btn" onClick={() => dropQueueItem(it.id)} aria-label={t('Remove from the queue')} title={t('Remove')}><X size={17} /></button>
+                  </div>
+                )
+              })}
+              <div className="row" style={{ gap: 8, marginTop: 12 }}>
+                <button className="btn primary" style={{ flex: 1 }} onClick={() => { void sendQueueToLater(); setQueueOpen(false) }}>{t('Send all to Listen later')}</button>
+                <button className="btn ghost" onClick={() => clearQueue()}>{t('Clear')}</button>
+              </div>
+            </div>}
       </Sheet>
     </div>
   )

@@ -28,6 +28,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.ScrollView
 import android.widget.SeekBar
 import android.graphics.drawable.ClipDrawable
 import android.graphics.drawable.LayerDrawable
@@ -685,6 +686,21 @@ class BubbleService : Service() {
         @Volatile var seekToAt = 0L
         @Volatile var seekToCtx: String = ""
         @Volatile var lastTakenSeekToCtx: String = ""
+        /** A copy-queue row chosen on the panel (1.4.198): which
+         *  lined-up text to play, or to drop — pulled once by the
+         *  page under the same laws as the seek's (twenty seconds of
+         *  life, and the session it was chosen against must still
+         *  stand). Each verb carries its own taken-stamp. */
+        @Volatile var queuePlayIdx = -1
+        @Volatile var queuePlayAt = 0L
+        @Volatile var queuePlayCtx: String = ""
+        @Volatile var lastTakenQueuePlayCtx: String = ""
+        @Volatile var queueDropIdx = -1
+        @Volatile var queueDropAt = 0L
+        @Volatile var queueDropCtx: String = ""
+        @Volatile var lastTakenQueueDropCtx: String = ""
+        fun storeQueuePlay(idx: Int) { queuePlayIdx = idx; queuePlayAt = System.currentTimeMillis(); queuePlayCtx = currentContext() }
+        fun storeQueueDrop(idx: Int) { queueDropIdx = idx; queueDropAt = System.currentTimeMillis(); queueDropCtx = currentContext() }
         /** Set by the service: wave the bubble (leaving-Logos trigger). */
         var inviteHook: (() -> Unit)? = null
         private var lastKey: String? = null
@@ -1105,6 +1121,19 @@ class BubbleService : Service() {
     private var bubbleLambdaV: TextView? = null
     private var bubbleRingV: RingView? = null
     private var ringFracShown = -1f
+    // The copy queue's panel face (1.4.198): what the last page push
+    // said about the line, the footer's queue key, and the list the
+    // key opens over the panel's card.
+    @Volatile private var panelQueueCount = 0
+    @Volatile private var panelQueueCur = -1
+    @Volatile private var panelQueueMode = false
+    @Volatile private var panelQueueTitles: List<String> = emptyList()
+    private var queueBtnV: View? = null
+    private var queueBadgeV: TextView? = null
+    private var queueListV: LinearLayout? = null
+    private var queueRowsV: LinearLayout? = null
+    private var queueHeadV: TextView? = null
+    private var queueListOpen = false
     private var haloAnim: ObjectAnimator? = null
     private var seekBar: SeekBar? = null
     private var saveHint: View? = null
@@ -2403,6 +2432,9 @@ class BubbleService : Service() {
             contentDescription = s("Save this text to the Library", "Guardar este texto en la Biblioteca")
             layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(6) }
             setOnClickListener {
+                // With a copy queue standing, the save asks its
+                // question first (1.4.198): this text, or the line?
+                if (panelQueueCount > 0) { showQueueSaveCard(); return@setOnClickListener }
                 showHintCard(s("Save to Library", "Guardar en Biblioteca"), s("Save what's playing to your Library, to hear it again anytime.", "Guarda lo que suena en tu Biblioteca, para oírlo cuando quieras."), s("Save", "Guardar"), s("Not now", "Ahora no")) {
                     val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
                     pokeOrWake("save")
@@ -2876,6 +2908,36 @@ class BubbleService : Service() {
         }) { showHideHint() }
         eyeB.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(8) }
         clipRow.addView(eyeB)
+        // The copy queue's key (1.4.198): a playlist glyph wearing
+        // the line's count; its tap opens the line itself over the
+        // panel, where any text can be played or dropped.
+        val queueWrap = FrameLayout(this)
+        val queueB = footBtn(s("Copy queue", "Cola de copiado"), s("Queue", "Cola"), { cv, ink, cx, cy, r ->
+            val dens = resources.displayMetrics.density
+            val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ink; style = Paint.Style.STROKE; strokeWidth = 1.4f * dens; strokeCap = Paint.Cap.ROUND }
+            val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ink }
+            val left = cx - r * 0.78f
+            val right = cx + r * 0.78f
+            for (k in -1..1) {
+                val y = cy + k * r * 0.52f
+                cv.drawLine(left, y, right, y, p)
+                cv.drawCircle(left - r * 0.02f, y, 1.1f * dens, dot)
+            }
+        }) { toggleQueueList() }
+        queueWrap.addView(queueB, FrameLayout.LayoutParams(dp(30), dp(30)))
+        val queueBadge = TextView(this).apply {
+            text = ""
+            visibility = View.INVISIBLE
+            setTextColor(c["gold"]!!); textSize = 9.5f; gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
+            layoutParams = FrameLayout.LayoutParams(dp(14), dp(14), Gravity.BOTTOM or Gravity.END)
+        }
+        queueWrap.addView(queueBadge)
+        queueBtnV = queueWrap
+        queueBadgeV = queueBadge
+        queueWrap.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { leftMargin = dp(8) }
+        clipRow.addView(queueWrap)
         card.addView(clipRow)
         // The reader's grip: two small gold ticks hugging the panel's free
         // corner. Drag it and the reader stretches (see applyReaderScale).
@@ -2927,6 +2989,35 @@ class BubbleService : Service() {
         }
         gripV = grip
         stage.addView(grip)
+        // The copy queue's list (1.4.198): a sheet over the panel's
+        // own card, born hidden; the footer's queue key opens it,
+        // and any lined-up text can be played or dropped from it.
+        val qList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c["bg1"]!!, c["bg2"]!!)).apply { cornerRadius = dp(24).toFloat() }
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        }
+        val qHeadRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val qHead = TextView(this).apply {
+            setTextColor(c["ink"]!!); textSize = 14.5f; typeface = Typeface.SERIF; setTypeface(typeface, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        qHeadRow.addView(qHead)
+        val qClose = TextView(this).apply {
+            text = "✕"; setTextColor(c["muted"]!!); textSize = 13f; gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(dp(26), dp(26))
+            setOnClickListener { toggleQueueList() }
+        }
+        qHeadRow.addView(qClose)
+        qList.addView(qHeadRow)
+        val qScroll = ScrollView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
+        val qRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        qScroll.addView(qRows)
+        qList.addView(qScroll)
+        stage.addView(qList)
+        queueListV = qList; queueRowsV = qRows; queueHeadV = qHead
         val p = WindowManager.LayoutParams(
             panelWidth(), WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
@@ -3093,6 +3184,132 @@ class BubbleService : Service() {
 
     /** The panel's buttons explain themselves first (Oscar): a small floating
      *  card naming what the button does, the deed one clear tap away. */
+    /** The copy queue's list over the panel (1.4.198): open it, and
+     *  the line stands in order — the one sounding wears the gold —
+     *  each row a door (tap: play it) with its own ✕ (drop it). The
+     *  rows are rebuilt from the latest push whenever it opens and
+     *  whenever a push lands while it stands open. */
+    private fun toggleQueueList() {
+        val v = queueListV ?: return
+        queueListOpen = !queueListOpen
+        if (queueListOpen) { buildQueueRows(); v.visibility = View.VISIBLE } else v.visibility = View.GONE
+    }
+
+    private fun buildQueueRows() {
+        val rows = queueRowsV ?: return
+        rows.removeAllViews()
+        val c = cardPal()
+        queueHeadV?.text = s("Copy queue", "Cola de copiado") + if (panelQueueCount > 0) " · $panelQueueCount" else ""
+        if (panelQueueTitles.isEmpty()) {
+            rows.addView(TextView(this).apply {
+                text = if (panelQueueMode) s("The line is empty — copy a text and it will stand here.", "La fila está vacía: copia un texto y aparecerá aquí.") else s("The queue is off. Turn it on in Settings, and copies will line up here.", "La cola está desactivada. Actívala en Ajustes y las copias se pondrán en fila aquí.")
+                setTextColor(c["muted"]!!); textSize = 12.5f
+                setPadding(0, dp(10), 0, dp(6))
+            })
+            return
+        }
+        panelQueueTitles.forEachIndexed { i, title ->
+            val isCur = i == panelQueueCur
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(3), 0, dp(3)) }
+            row.addView(TextView(this).apply {
+                text = (if (isCur) "▶ " else "${i + 1} · ") + title
+                setTextColor(if (isCur) c["gold"]!! else c["ink"]!!); textSize = 13.5f
+                if (isCur) setTypeface(typeface, Typeface.BOLD)
+                maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setOnClickListener { storeQueuePlay(i); pokeOrWake("queueplay"); toggleQueueList() }
+            })
+            row.addView(TextView(this).apply {
+                text = "✕"; setTextColor(c["muted"]!!); textSize = 12f; gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(26), dp(26))
+                setOnClickListener { storeQueueDrop(i); pokeOrWake("queuedrop") }
+            })
+            rows.addView(row)
+        }
+    }
+
+    private fun syncQueueUi() {
+        queueBadgeV?.text = if (panelQueueCount > 0) panelQueueCount.toString() else ""
+        queueBadgeV?.visibility = if (panelQueueCount > 0) View.VISIBLE else View.INVISIBLE
+        if (queueListOpen) buildQueueRows()
+    }
+
+    /** The save key's question when a line stands (Oscar, 1.4.198):
+     *  this text alone, or the whole line to Listen later? The card
+     *  is the hint card's sibling — same veil, same face — with the
+     *  two answers stacked, and Not now beneath them. */
+    private fun showQueueSaveCard() {
+        dismissSaveHint()
+        val w = wm ?: return
+        val c = cardPal()
+        val scrim = View(this).apply {
+            setBackgroundColor(if (panelLight) Color.argb(90, 62, 48, 28) else Color.argb(118, 10, 8, 5))
+            alpha = 0f
+        }
+        runCatching {
+            w.addView(scrim, WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, PixelFormat.TRANSLUCENT))
+        }
+        saveHintScrim = scrim
+        scrim.animate().alpha(1f).setDuration(220).start()
+        val rim = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(mixCol(c["gold"]!!, c["ink"]!!, 0.18f), mixCol(c["gold"]!!, c["bg2"]!!, 0.50f), mixCol(c["gold"]!!, c["bg2"]!!, 0.68f))).apply {
+            cornerRadius = dp(21).toFloat()
+        }
+        val face = GradientDrawable().apply {
+            setColor(mixCol(c["bg1"]!!, c["bg2"]!!, 0.3f))
+            cornerRadius = dp(20).toFloat()
+        }
+        val stage = FrameLayout(this).apply {
+            background = android.graphics.drawable.LayerDrawable(arrayOf(rim, face)).apply { setLayerInset(1, dp(1), dp(1), dp(1), dp(1)) }
+            elevation = dp(10).toFloat()
+        }
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(14))
+        }
+        card.addView(TextView(this).apply {
+            text = s("Save", "Guardar")
+            setTextColor(c["ink"]!!); textSize = 15f; typeface = Typeface.SERIF
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        card.addView(TextView(this).apply {
+            text = s("A line of copied texts is standing. Save just what is playing, or send the whole line to Listen later?", "Hay una fila de textos copiados en pie. ¿Guardar solo lo que suena, o enviar toda la fila a Escuchar después?")
+            setTextColor(c["muted"]!!); textSize = 12.5f
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) }
+        })
+        fun answerRow(label: String, deed: () -> Unit) = TextView(this).apply {
+            text = label; setTextColor(c["gold"]!!); textSize = 13.5f; gravity = Gravity.CENTER_VERTICAL
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(4), dp(10), dp(4), dp(10))
+            setOnClickListener { dismissSaveHint(); deed() }
+        }
+        card.addView(answerRow(s("Just this text", "Solo este texto")) {
+            val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
+            pokeOrWake("save")
+            toastSavedWhenTrue(wasSaved)
+        })
+        card.addView(answerRow(s("The whole line, to Listen later", "Toda la fila, a Escuchar después")) {
+            pokeOrWake("savequeue")
+        })
+        card.addView(TextView(this).apply {
+            text = s("Not now", "Ahora no"); setTextColor(c["muted"]!!); textSize = 13f; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(8), dp(4), dp(2))
+            setOnClickListener { dismissSaveHint() }
+        })
+        stage.addView(card, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        val p = WindowManager.LayoutParams(dp(300), WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT).apply { gravity = Gravity.CENTER }
+        runCatching { w.addView(stage, p) }
+        saveHint = stage
+        stage.scaleX = 0.90f; stage.scaleY = 0.90f; stage.alpha = 0f
+        stage.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(230).setInterpolator(DecelerateInterpolator()).start()
+        val r = Runnable { dismissSaveHint() }
+        saveHintRun = r
+        handler.postDelayed(r, 9000)
+    }
+
     private fun showHintCard(title: String, body: String, confirmLabel: String, cancelLabel: String, action: () -> Unit) {
         dismissSaveHint()
         val w = wm ?: return
@@ -3273,6 +3490,7 @@ class BubbleService : Service() {
         hideNameTag()
         val v = panel
         panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; gripV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null; scrubTarget = -1; scrubMode = 0
+        queueBtnV = null; queueBadgeV = null; queueListV = null; queueRowsV = null; queueHeadV = null; queueListOpen = false
         // The shown-* diff memory describes these views (M-7): the
         // next panel is born blank, so its first refresh must paint
         // everything — the memory dies with the views it described.
@@ -3519,6 +3737,16 @@ class BubbleService : Service() {
     private fun refreshPanel() {
         val rawJ = runCatching { JSONObject(nowJson) }.getOrNull()
         progressWatch(rawJ)
+        // The copy queue's face (1.4.198) rides the page's push: the
+        // count on the footer's key, the titles in its list.
+        if (rawJ != null && rawJ.has("queue")) {
+            panelQueueCount = rawJ.optInt("queue", 0)
+            panelQueueCur = rawJ.optInt("qcur", -1)
+            panelQueueMode = rawJ.optInt("qmode", 0) == 1
+            val arr = rawJ.optJSONArray("qt")
+            panelQueueTitles = if (arr != null) (0 until arr.length()).map { arr.optString(it) } else emptyList()
+            handler.post { syncQueueUi() }
+        }
         val native = NativeSpeaker.active
         val j = if (native) NativeSpeaker.panelJson() else rawJ
         // The scrub counts in sentences: remember where the reading stands,

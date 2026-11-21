@@ -1379,13 +1379,24 @@ export function prev() {
 let bookSkipImpl: ((dir: 1 | -1) => void) | null = null
 export function registerBookSkip(fn: (dir: 1 | -1) => void) { bookSkipImpl = fn }
 
+/** The track skip (1.4.198): a standing copy queue claims the
+ *  next/previous press before any other deed — its items are the
+ *  tracks now. The queue layer registers its claim and judges it per
+ *  press (it claims only while one of its items holds the stage);
+ *  a press it declines falls through to the book deed, then to the
+ *  sentence step, exactly as before. */
+let trackSkipImpl: ((dir: 1 | -1) => boolean) | null = null
+export function registerTrackSkip(fn: (dir: 1 | -1) => boolean) { trackSkipImpl = fn }
+
 export function skipNext() {
+  if (trackSkipImpl && trackSkipImpl(1)) return
   const s = listen.get()
   if (bookSkipImpl && s.active && nowReadingFor(s.text)) { bookSkipImpl(1); return }
   next()
 }
 
 export function skipPrev() {
+  if (trackSkipImpl && trackSkipImpl(-1)) return
   const s = listen.get()
   if (bookSkipImpl && s.active && nowReadingFor(s.text)) { bookSkipImpl(-1); return }
   prev()

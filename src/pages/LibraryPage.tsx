@@ -11,6 +11,13 @@ import { settings } from '../lib/settings.ts'
 import { drafts } from '../lib/drafts.ts'
 import { navigate } from '../lib/router.ts'
 import { loadText, play as listenPlay } from '../player/listen.ts'
+import { playLaterChain } from '../lib/bubble.ts'
+
+/** The Listen-later line, in the order the texts arrived (1.4.198):
+ *  the playlist the saved texts form when they are played through. */
+export function laterChainIds(): string[] {
+  return library.get().clips.filter((c) => kindOf(c) === 'text' && !c.done).sort((a, b) => a.createdAt - b.createdAt).map((c) => c.id)
+}
 import { MenuSelect, Sheet, Seg, toast, useMediaQuery, confirmDelete } from '../components/ui.tsx'
 import { t } from '../lib/i18n.ts'
 import { BookShelf, useBookPicker, importMany } from '../components/shelf.tsx'
@@ -51,6 +58,15 @@ function makeAudio(c: ClipMeta) {
 }
 
 function openInListen(c: ClipMeta, autoplay = false) {
+  // A Listen-later text played from the Library takes its line with
+  // it (1.4.198): when it ends, the next saved text begins — the
+  // playlist Oscar asked for. Opening without playing keeps the
+  // old single-text road.
+  if (autoplay && kindOf(c) === 'text' && c.text) {
+    navigate('listen')
+    playLaterChain(laterChainIds(), c.id)
+    return
+  }
   drafts.set({ listen: c.text })
   loadText(c.text)
   navigate('listen')
@@ -153,6 +169,7 @@ export function LibraryPage() {
           </div>
           <div className="lib-sort" data-present="lib-saved-sort">
             <span className="muted small">{t('{n} shown', { n: shown.length })}</span>
+            {filter === 'later' && shown.length > 1 && <button className="btn sm" data-present="lib-later-playall" onClick={() => { const ids = laterChainIds(); if (ids.length) { navigate('listen'); playLaterChain(ids, ids[0]) } }}><Play size={14} /> {t('Play in order')}</button>}
             <MenuSelect value={sort} onChange={setSort} label={t('Sort')} options={SORTS.map((s) => ({ value: s.id, label: t(s.label) }))} />
           </div>
         </>

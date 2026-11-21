@@ -6,7 +6,8 @@
 // playing, always with an Undo, so no text is ever lost to it.
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
-import { listen, loadText, play, pauseFromShell, endSession, stepRate, seek, seekFraction, seekToMs, refreshVoices, voiceFor, sentenceProgress, wordClock, levels } from '../player/listen.ts'
+import { listen, loadText, play, pauseFromShell, endSession, stepRate, seek, seekFraction, seekToMs, refreshVoices, voiceFor, sentenceProgress, wordClock, levels, registerTrackSkip } from '../player/listen.ts'
+import { queue, queueItems, currentItem, currentIndex, enqueue, setCurrent, removeItem as queueRemove, clearQueue, type QueueItem } from './queue.ts'
 import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { cancelDevice } from '../engine/device-voice.ts'
 import { readClipboard } from './clipboard.ts'
@@ -38,6 +39,10 @@ type DroidBubble = {
   bubbleSeekCtx?: () => string
   bubbleSeekTo?: () => string
   bubbleSeekToCtx?: () => string
+  bubbleQueuePlay?: () => string
+  bubbleQueuePlayCtx?: () => string
+  bubbleQueueDrop?: () => string
+  bubbleQueueDropCtx?: () => string
   bubblePendingCmd?: () => string
   bubblePendingCtx?: () => string
   bubbleNative?: (text: string, title: string, idx: number) => void
@@ -209,6 +214,175 @@ export function playClipboardText(raw: string) {
     toast(t('Playing what you copied'), undefined, 3000)
   }
 }
+
+/* ── The copy queue (Oscar, 1.4.198) ─────────────────────────────
+ * With the mode on, a copied text lines up instead of taking the
+ * stage: the first one plays, each next one starts when the one
+ * before it ends, and next/previous travel the line. The record
+ * lives in queue.ts; everything that ACTS on it lives here, beside
+ * the clipboard roads it extends. */
+
+/** A queued text takes the stage — quietly: no Undo toast, no
+ *  resume card. The line itself is the memory of where it came
+ *  from and where it goes next. */
+export function playQueuedText(raw: string) {
+  const text = raw.trim()
+  if (!text) return
+  seenClip(text)
+  drafts.set({ listen: text })
+  saveLastText(text)
+  if (listen.get().active) endSession()
+  loadText(text)
+  dispatchEvent(new Event('logos-bubble-clip'))
+  void play()
+}
+
+function playQueueItem(item: QueueItem) {
+  setCurrent(item.id)
+  playQueuedText(item.text)
+}
+
+/** One step along the line. Past the end a hand press is claimed
+ *  but does nothing — the press was for the line, not for a
+ *  sentence — while the finish judge clears the stage's claim and
+ *  lets the last item park, as any finished reading does. */
+function stepQueue(dir: 1 | -1, auto = false): boolean {
+  const items = queueItems()
+  const idx = currentIndex()
+  if (idx < 0) return false
+  const nextIdx = idx + dir
+  if (nextIdx < 0) { playQueueItem(items[idx]); return true }
+  if (nextIdx >= items.length) {
+    if (auto) setCurrent(null)
+    return true
+  }
+  playQueueItem(items[nextIdx])
+  return true
+}
+
+registerTrackSkip((dir) => {
+  if (!settings.get().copyQueue) return false
+  if (currentIndex() < 0) return false
+  return stepQueue(dir)
+})
+
+/** A copy arrives while the mode is on: it joins the line. It
+ *  starts at once only when the stage is free — nothing loaded, the
+ *  last thing finished, no recording sounding. Copying what is
+ *  already playing, or the line's own tail, adds nothing. Returns
+ *  true when the queue took the arrival (the mode is on). */
+export function queueArrival(raw: string): boolean {
+  if (!settings.get().copyQueue) return false
+  const text = raw.trim()
+  if (!text) return true
+  seenClip(text)
+  const key = textKey(text)
+  const s = listen.get()
+  if (s.active && textKey(s.text) === key) return true
+  if (currentItem()?.key === key) return true
+  const item = enqueue(text, sessionTitle(text), estimateSeconds(text, 1))
+  if (!item) { toast(t('Already in the queue'), undefined, 2500); return true }
+  const cp = clipPlayer.get()
+  const clipBusy = !!cp.key && !cp.key.startsWith('preview:') && cp.playing
+  const idle = !clipBusy && (!s.active || s.finished)
+  if (!currentItem() && idle) playQueueItem(item)
+  else toast(t('Added to the queue · {n} in line', { n: queueItems().length }), undefined, 2500)
+  return true
+}
+
+/** Send the whole line to the Library's Listen later, in order —
+ *  and the line empties: its texts live there now. */
+export async function sendQueueToLater() {
+  const items = queueItems()
+  if (!items.length) return
+  for (const it of items) {
+    const lang = detectLang(it.text.slice(0, 2000)).lang
+    const info = describeText(it.text.slice(0, 12000), lang)
+    await saveForLater(it.text, { title: info.title || it.title || t('Copied text'), summary: info.summary, lang, voice: '', duration: it.secs })
+  }
+  clearQueue()
+  toast(t('{n} texts are waiting in Listen later', { n: items.length }), undefined, 3500)
+}
+
+/** Save one lined-up text to Listen later; it keeps its place in
+ *  the line — saving was never a removal. */
+export async function saveQueueItemToLater(item: QueueItem) {
+  const lang = detectLang(item.text.slice(0, 2000)).lang
+  const info = describeText(item.text.slice(0, 12000), lang)
+  await saveForLater(item.text, { title: info.title || item.title || t('Copied text'), summary: info.summary, lang, voice: '', duration: item.secs })
+  toast(t('Saved to Listen later'), undefined, 2500)
+}
+
+export function playQueueAt(idx: number) {
+  const item = queueItems()[idx]
+  if (item) playQueueItem(item)
+}
+export function dropQueueAt(idx: number) {
+  const item = queueItems()[idx]
+  if (item) queueRemove(item.id)
+}
+
+/* The Listen-later chain: the Library's saved texts, played in
+ * order like a playlist. The chain is a visit, not a record — it
+ * lives in memory and ends when the list does. */
+let laterChain: { ids: string[]; idx: number } | null = null
+let laterKey = ''
+export function playLaterChain(ids: string[], startId: string) {
+  if (!ids.length) return
+  laterChain = { ids, idx: Math.max(0, ids.indexOf(startId)) }
+  playLaterAt(laterChain.idx)
+}
+function playLaterAt(idx: number) {
+  const chain = laterChain
+  if (!chain) return
+  const clip = library.get().clips.find((c) => c.id === chain.ids[idx])
+  if (!clip?.text) { laterChain = null; laterKey = ''; return }
+  chain.idx = idx
+  laterKey = textKey(clip.text)
+  playQueuedText(clip.text)
+}
+function advanceLater() {
+  const chain = laterChain
+  if (!chain) return
+  if (chain.idx + 1 < chain.ids.length) playLaterAt(chain.idx + 1)
+  else { laterChain = null; laterKey = '' }
+}
+
+/* One finish judge for both lines (1.4.198): when a session ends,
+ * who speaks next? The later chain first (it is a visit Oscar
+ * started by hand), then the copy queue — unless a resume card
+ * stands, whose promise outranks the line, or the mode has been
+ * turned off since. A queue that waited behind a lone session
+ * starts when that session ends: the copies were made to be heard. */
+let finPrev = false
+listen.subscribe(() => {
+  const s = listen.get()
+  const fin = !!(s.active && s.finished)
+  const was = finPrev
+  finPrev = fin
+  if (!fin || was) return
+  const key = textKey(s.text)
+  if (laterChain && laterKey === key) { advanceLater(); return }
+  if (!settings.get().copyQueue) return
+  if (resumeCard) return
+  const st = queue.get()
+  const cur = currentItem()
+  if (cur && cur.key === key) { stepQueue(1, true); return }
+  if (st.orphanKey && st.orphanKey === key) {
+    if (cur) playQueueItem(cur)
+    else setCurrent(null)
+    return
+  }
+  if (!cur && st.items.length) playQueueItem(st.items[0])
+})
+
+/* The mode's own law (Oscar): turning it off erases the record. */
+let queueModeWas = settings.get().copyQueue
+settings.subscribe(() => {
+  const on = settings.get().copyQueue
+  if (queueModeWas && !on) clearQueue()
+  queueModeWas = on
+})
 
 let inited = false
 export function initBubble() {
@@ -444,6 +618,28 @@ export function initBubble() {
       else seekToMs(ms)
     } catch { /* ignore */ }
   })
+  // The panel's queue keys (1.4.198): a row tap plays that item, a
+  // row's ✕ drops it, and the save choice can send the whole line
+  // to Listen later. The seats are pulled and judged by context
+  // exactly like the seek's (a stale pull from a dead panel dies).
+  const pullQueueIdx = (raw: string | undefined, ctxRaw: string | undefined): number => {
+    try {
+      const i = parseInt(raw ?? '', 10)
+      if (!Number.isFinite(i) || i < 0) return -1
+      const sctx = ctxRaw ?? ''
+      if (sctx) { const here = pageCtx(); if (here && here !== sctx) return -1 }
+      return i
+    } catch { return -1 }
+  }
+  addEventListener('logosandroid-queueplay', () => {
+    const idx = pullQueueIdx(d.bubbleQueuePlay?.(), d.bubbleQueuePlayCtx?.())
+    if (idx >= 0) playQueueAt(idx)
+  })
+  addEventListener('logosandroid-queuedrop', () => {
+    const idx = pullQueueIdx(d.bubbleQueueDrop?.(), d.bubbleQueueDropCtx?.())
+    if (idx >= 0) dropQueueAt(idx)
+  })
+  addEventListener('logosandroid-savequeue', () => { void sendQueueToLater() })
   // The panel's bookmark key, and the bubble's long-press voice wheel.
   addEventListener('logosandroid-mark', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } void markAndToast() })
   // The panel's save key: the copied text that is only visiting becomes a
@@ -515,7 +711,7 @@ export function initBubble() {
       const raw = d.bubbleClip?.() ?? ''
       if (!raw) return
       const { t } = JSON.parse(raw) as { t?: string }
-      if (t?.trim()) playClipboardText(t)
+      if (t?.trim() && !queueArrival(t)) playClipboardText(t)
     } catch { /* ignore */ }
   }
   addEventListener('logosandroid-clip', pullClip)
@@ -598,6 +794,10 @@ export function initBubble() {
     // bubble, the panel and the hint cards in the same palette.
     const fam = th === 'tron' ? 'tron' : th === 'cyberpunk' ? 'cyberpunk' : light ? 'light' : 'dark'
     const cp = clipOwns() ? clipView() : null
+    // The copy queue rides every push (1.4.198): the panel's queue
+    // key wears the count, its list reads the titles, and the shell
+    // knows whether the line's mode stands at all.
+    const qInfo = { queue: queueItems().length, qcur: currentIndex(), qmode: settings.get().copyQueue ? 1 : 0, qt: queueItems().map((i) => i.title.slice(0, 60)) }
     if (cp) {
       // The recording's face: its title, its clock, its fraction. No
       // sentences, no words — it is a recording, and the panel says so
@@ -618,6 +818,7 @@ export function initBubble() {
         lang: settings.get().uiLang,
         words: settings.get().bubbleText,
         tp: '', tc: '', tn: '', wi: -1,
+        ...qInfo,
         title: cp.title || 'Logos',
         sub: t('{a} of {b}', { a: fmtClock(cp.time), b: fmtClock(cp.duration) }),
       }
@@ -657,6 +858,7 @@ export function initBubble() {
       tc: s.active ? capSent(cleanSent(s.segments[s.current]?.text ?? ''), 520) : '',
       tn: s.active ? capSent(cleanSent(s.segments[s.current + 1]?.text ?? ''), 160) : '',
       wi: settings.get().bubbleText ? wordIndexOf(s.active, s.current, s.active ? cleanSent(s.segments[s.current]?.text ?? '') : '') : -1,
+      ...qInfo,
       title: titleOf(s.active, text) || 'Logos',
       sub: s.active ? (s.cushion ? t('Preparing… {d} of {t} to start', { d: s.cushion.done, t: s.cushion.total }) : t('Sentence {a} of {b} · {r}', { a: s.current + 1, b: s.segments.length, r: fmtRate(settings.get().listenSpeed) })) : t('Ready'),
     }
@@ -667,6 +869,7 @@ export function initBubble() {
   }
   listen.subscribe(push)
   clipPlayer.subscribe(push)
+  queue.subscribe(push)
   // While playing, feed the panel's spectrum and its amber word — push()
   // dedupes unchanged states, so this costs nothing at rest.
   setInterval(() => { if (listen.get().playing || clipPlayer.get().playing) push() }, 120)
@@ -680,7 +883,7 @@ export function initBubble() {
       const raw = d.bubbleClip?.() ?? ''
       if (!raw) return
       const { t } = JSON.parse(raw) as { t?: string }
-      if (t?.trim() && clipKey(t.trim()) !== lastClip) playClipboardText(t)
+      if (t?.trim() && clipKey(t.trim()) !== lastClip && !queueArrival(t)) playClipboardText(t)
     } catch { /* ignore */ }
   }, 1200)
 
@@ -705,6 +908,10 @@ export function initBubble() {
       // Oscar re-copies a text the dedupe reads as no news, and only
       // his finger on the paste icon can say "again".
       if (!want && text === drafts.get().listen.trim()) { seenClip(text); return }
+      // The queue mode (1.4.198): an arrival joins the line instead
+      // of taking the stage, so there is nothing to ask permission
+      // for — nothing is displaced. Hand asks line up too.
+      if (queueArrival(text)) return
       if (!want) {
         // Oscar (1.4.192): arriving in the main app with a fresh copy
         // used to take the stage silently — and what it displaced could

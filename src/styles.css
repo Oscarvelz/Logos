@@ -1056,6 +1056,14 @@ html[data-immersive] .play-btn { box-shadow: 0 22px 46px -14px var(--accent-glow
 .book-temp.is-temp { background: var(--accent); color: #221806; }
 .keepask-body { color: var(--muted); font-size: 14.5px; line-height: 1.45; margin: 0; }
 .keepask-body b { color: inherit; font-weight: 700; }
+/* The copy queue's rows (1.4.198): the line, in order; the one on
+   stage wears the accent's edge. */
+.qrow { display: flex; align-items: center; gap: 4px; padding: 6px 4px; border-radius: 12px; }
+.qrow + .qrow { border-top: 1px solid var(--line, rgba(127, 127, 127, 0.14)); }
+.qrow.cur { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.qrow-main { flex: 1; display: flex; align-items: center; gap: 9px; min-width: 0; background: none; border: 0; color: inherit; font: inherit; text-align: left; padding: 6px 4px; cursor: pointer; }
+.qrow-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14.5px; }
+.qrow.cur .qrow-title { font-weight: 650; }
 .keepask-bar { height: 3px; border-radius: 99px; background: var(--line-2); overflow: hidden; margin: 12px 0 14px; }
 .keepask-bar i { display: block; height: 100%; background: var(--accent); animation: keepask-drain linear both; }
 @keyframes keepask-drain { from { width: 100% } to { width: 0% } }

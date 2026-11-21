@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.197'
+const VERSION = '1.4.198'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -449,6 +449,13 @@ export function SettingsPage() {
             <div className="d">{t('The lever. On: copy text anywhere, tap the bubble, and it plays — replacing what was playing, with an Undo so nothing is lost; opening Logos right after copying plays it too. Off: the bubble only controls playback, and pasting stays manual, as now. Android only lets Logos look at the clipboard at that tap — never in secret.')}</div>
           </div>
           <Switch label={t('Play the clipboard')} on={st.bubbleAuto} onChange={(v) => settings.set({ bubbleAuto: v })} />
+        </div>
+        <div className="list-row" data-present="set-copy-queue">
+          <div className="grow">
+            <div className="t">{t('Copy queue')}</div>
+            <div className="d">{t('Copy several texts, one after another, and hear them in order — like songs in a playlist. On: each copy lines up behind the one playing instead of replacing it; when one ends, the next begins, and the next/previous keys travel the line. The whole line can be sent to Listen later in the Library. Off: the line is erased, and a copy takes the stage as always.')}</div>
+          </div>
+          <Switch label={t('Copy queue')} on={st.copyQueue} onChange={(v) => settings.set({ copyQueue: v })} />
         </div>
         <div className="list-row" data-present="set-bubble-text">
           <div className="grow">
