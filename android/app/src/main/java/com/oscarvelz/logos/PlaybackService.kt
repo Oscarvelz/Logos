@@ -97,40 +97,55 @@ class PlaybackService : Service() {
         @Volatile var progSpd = 1f
         @Volatile var progCi = -1
         @Volatile var progCt = 0
+        // The seat's stamp (1.4.196): when the truth was seated, on
+        // the monotonic clock. faceSession extrapolates the seat to
+        // the moment it anchors the state, so a re-anchor — a
+        // refresh, a rebuild, a percent step — states the position
+        // as of NOW instead of dragging the panel's bar back to the
+        // seat (Oscar's phone, 1.4.193: the bar started, climbed a
+        // little and snapped back to the start, in a loop).
+        @Volatile var progAtMs = 0L
         fun noteProgress(posMs: Long, durMs: Long, spd: Float, ci: Int, ct: Int) {
             progPosMs = posMs
             progDurMs = durMs
             progSpd = spd
             progCi = ci
             progCt = ct
+            progAtMs = android.os.SystemClock.elapsedRealtime()
+            // The Ring's fraction is THIS seat's fraction (1.4.196):
+            // one truth for the bar and the artwork. It was the
+            // bubble push's sentence fraction before — a different
+            // clock that could leave a finished reading's 100% on a
+            // fresh reading's card (Oscar's phone, same morning).
+            val pct = if (durMs > 0 && posMs >= 0) Math.round(posMs.toDouble() / durMs.toDouble() * 100.0).toInt() else -1
+            val pctMoved = pct != ringPct
+            ringPct = pct
+            ringFrac = if (pct >= 0) posMs.toDouble() / durMs.toDouble() else -1.0
             // A session-only refresh: the metadata and state move,
             // the standing notification is not re-posted for this —
-            // the artwork has its own step rule, in noteBubblePush.
+            // the artwork steps by its percent rule, just below.
             instance?.refreshSessionFace()
+            if (pctMoved && cardUp) instance?.republish()
         }
 
-        /** The Ring's seats (1.4.193, Road 2): the bubble push has
-         *  always carried the stage's fraction and the theme family;
-         *  this service read the push only to judge the stage's
-         *  owner. Now it keeps them: when the ROUNDED PERCENT or the
-         *  family moves, the card is rebuilt wearing ringArt()'s new
-         *  face. A percent is the finest step — a long reading costs
-         *  at most a hundred rebuilds, most far fewer. */
+        /** The Ring's seats (1.4.193, Road 2; the fraction re-seated
+         *  in 1.4.196): ringFrac and ringPct are derived in
+         *  noteProgress from the progress seat itself — one truth
+         *  for the bar and the artwork. The bubble push still brings
+         *  the theme FAMILY: when it moves, the card is rebuilt
+         *  wearing ringArt()'s new face. A percent is the finest
+         *  step — a long reading costs at most a hundred rebuilds,
+         *  most far fewer. */
         @Volatile var ringFrac = -1.0
         @Volatile var ringFam = ""
         @Volatile var ringPct = -1
         fun noteBubblePush(json: String) {
             val j = runCatching { org.json.JSONObject(json) }.getOrNull() ?: return
             if (j.optBoolean("active")) {
-                val f = j.optDouble("frac", -1.0)
                 val fam = j.optString("fam")
-                if (f >= 0) {
-                    val pct = Math.round(f * 100).toInt()
-                    val changed = pct != ringPct || fam != ringFam
-                    ringFrac = f
-                    ringPct = pct
+                if (fam.isNotEmpty() && fam != ringFam) {
                     ringFam = fam
-                    if (changed && cardUp) instance?.republish()
+                    if (cardUp) instance?.republish()
                 }
             }
             val next: String? = when {
@@ -484,12 +499,23 @@ class PlaybackService : Service() {
         if (progDurMs > 0) actions = actions or PlaybackState.ACTION_SEEK_TO
         val jbSec = getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_b", 15)
         val jfSec = getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_f", 30)
+        // The anchor speaks for THIS moment (1.4.196): while the
+        // reading sounds, the seat is extrapolated by the time
+        // since it was stamped, at the seat's own speed, capped at
+        // the duration — so any re-anchor (a refresh, a rebuild, a
+        // percent step) agrees with the position the panel itself
+        // had extrapolated to, and the bar never snaps back to the
+        // seat. Paused, the seat stands exactly as published.
+        val anchorPos = if (progDurMs > 0 && progPosMs >= 0) {
+            if (playing) minOf(progDurMs, progPosMs + ((android.os.SystemClock.elapsedRealtime() - progAtMs) * progSpd.toDouble()).toLong())
+            else progPosMs
+        } else PlaybackState.PLAYBACK_POSITION_UNKNOWN
         s.setPlaybackState(PlaybackState.Builder()
             .setActions(actions)
             .addCustomAction("jumpback", "Jump back $jbSec seconds", jumpActionIcon(jbSec, -1))
             .addCustomAction("jumpfwd", "Jump forward $jfSec seconds", jumpActionIcon(jfSec, 1))
             .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
-                if (progDurMs > 0 && progPosMs >= 0) progPosMs else PlaybackState.PLAYBACK_POSITION_UNKNOWN,
+                anchorPos,
                 if (progDurMs > 0) progSpd else 1f)
             .build())
     }
@@ -730,14 +756,17 @@ class PlaybackService : Service() {
         return Notification.Builder(this, CH)
             .setSmallIcon(R.drawable.ic_note)
             .setLargeIcon(bmp)
-            // The notification's tint follows the theme family the
-            // page pushes (1.4.193), the way the Ring's face does;
-            // before a push seats one, the warm charcoal stands.
+            // The notification's tint is the theme's ACCENT (1.4.196):
+            // the colour the system paints the card's own furniture
+            // with — the seek bar above all. 1.4.193 handed it the
+            // family's GROUND colour and Samsung's card came out
+            // red-orange on Oscar's phone; the accent is the colour
+            // that is Logos in each family — Legacy's gold first.
             .setColor(when (ringFam) {
-                "light" -> Color.rgb(245, 241, 232)
-                "tron" -> Color.rgb(2, 10, 16)
-                "cyberpunk" -> Color.rgb(11, 10, 8)
-                else -> Color.rgb(23, 19, 16)
+                "light" -> Color.rgb(154, 102, 20)
+                "tron" -> Color.rgb(0, 229, 255)
+                "cyberpunk" -> Color.rgb(255, 42, 109)
+                else -> Color.rgb(233, 189, 114)
             })
             .setContentTitle(heading)
             .setContentText(if (clip != null) clipStageSub else if (book.isNotBlank()) text else artist)
