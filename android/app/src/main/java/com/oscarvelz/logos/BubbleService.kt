@@ -1103,6 +1103,8 @@ class BubbleService : Service() {
     private var halo: View? = null
     private var bubbleFaceV: FrameLayout? = null
     private var bubbleLambdaV: TextView? = null
+    private var bubbleRingV: RingView? = null
+    private var ringFracShown = -1f
     private var haloAnim: ObjectAnimator? = null
     private var seekBar: SeekBar? = null
     private var saveHint: View? = null
@@ -1726,10 +1728,11 @@ class BubbleService : Service() {
                     runCatching { wm?.updateViewLayout(b, bp) }
                 }
                 halo?.layoutParams = FrameLayout.LayoutParams(bubbleHalo(), bubbleHalo(), Gravity.CENTER)
+                bubbleRingV?.layoutParams = FrameLayout.LayoutParams(bubbleSize(), bubbleSize(), Gravity.CENTER)
                 repaintFace()
                 bubbleFaceV?.layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
                 bubbleLambdaV?.textSize = (if (isTablet()) 28f else 22f) * sizeFactor()
-                b.animate().cancel(); b.alpha = awakeAlpha()
+                b.animate().cancel(); b.alpha = if (panel != null) panelAlpha() else awakeAlpha()
                 handler.removeCallbacks(fadeRun)
                 if (panel == null) handler.postDelayed(fadeRun, 4000)
             }
@@ -1832,6 +1835,7 @@ class BubbleService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("bubble", "Floating bubble", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
         onNow = {
+            updateBubbleRing()
             refreshPanel()
             // The shade card follows the stage's owner too (T2-20):
             // every page push tells PlaybackService whether a
@@ -1913,6 +1917,60 @@ class BubbleService : Service() {
 
     /** Repaint the living bubble in the current family (a theme
      *  change lands while it floats — Oscar sees it turn). */
+    /** The bubble's own Ring (Oscar, 1.4.197): the reading's
+     *  progress around the λ's face — the same instrument as the
+     *  shade card's artwork, at bubble scale: a fine track, the
+     *  theme's accent filling clockwise from the top, a bead at the
+     *  frontier. It exists only while a session stands; with none,
+     *  the bubble is exactly the jewel it always was. */
+    private inner class RingView : View(this) {
+        var frac = -1f
+        private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+        private val arcP = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
+        private val bead = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+        private val beadHalo = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+        override fun onDraw(c: Canvas) {
+            val f = frac
+            if (f < 0f) return
+            val accent = facePaint().third
+            val dens = resources.displayMetrics.density
+            val cx = width / 2f; val cy = height / 2f
+            val r = bubbleFace() / 2f + 3f * dens
+            track.color = accent; track.alpha = 48; track.strokeWidth = 2f * dens
+            c.drawCircle(cx, cy, r, track)
+            if (f > 0f) {
+                arcP.color = accent; arcP.strokeWidth = 2.6f * dens
+                c.drawArc(android.graphics.RectF(cx - r, cy - r, cx + r, cy + r), -90f, f * 360f, false, arcP)
+                val a = Math.toRadians((-90f + f * 360f).toDouble())
+                val bx = cx + (r * Math.cos(a)).toFloat(); val by = cy + (r * Math.sin(a)).toFloat()
+                beadHalo.color = accent; beadHalo.alpha = 70
+                c.drawCircle(bx, by, 4.4f * dens, beadHalo)
+                bead.color = accent
+                c.drawCircle(bx, by, 2.4f * dens, bead)
+            }
+        }
+    }
+
+    /** Feed the bubble's Ring from the standing push (1.4.197):
+     *  the fraction the page publishes for the stage — a reading's
+     *  sentence fraction, a recording's clock fraction. No active
+     *  session, no ring. */
+    private fun updateBubbleRing() {
+        val v = bubbleRingV ?: return
+        val j = runCatching { JSONObject(nowJson) }.getOrNull()
+        val f = if (j?.optBoolean("active") == true) j.optDouble("frac", 0.0).toFloat().coerceIn(0f, 1f) else -1f
+        if (f < 0f) {
+            if (v.visibility != View.INVISIBLE) v.visibility = View.INVISIBLE
+            v.frac = -1f; ringFracShown = -1f
+            return
+        }
+        if (v.visibility != View.VISIBLE) v.visibility = View.VISIBLE
+        if (Math.abs(f - ringFracShown) >= 0.001f || v.frac < 0f) {
+            v.frac = f; ringFracShown = f
+            v.invalidate()
+        }
+    }
+
     private fun repaintFace() {
         val face = bubbleFaceV ?: return
         val (top, deep, ring) = facePaint()
@@ -1967,6 +2025,11 @@ class BubbleService : Service() {
         root.addView(haloV)
         root.addView(face)
         halo = haloV
+        val ringV = RingView()
+        ringV.layoutParams = FrameLayout.LayoutParams(size, size, Gravity.CENTER)
+        ringV.visibility = View.INVISIBLE
+        root.addView(ringV)
+        bubbleRingV = ringV
         val p = WindowManager.LayoutParams(
             size, size, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
@@ -2875,7 +2938,12 @@ class BubbleService : Service() {
         panel = stage
         positionPanel()
         handler.removeCallbacks(fadeRun)
-        bubble?.let { if (it.alpha < awakeAlpha()) { it.animate().cancel(); it.alpha = awakeAlpha() } }
+        // While the window is open, the bubble wears the WINDOW's
+        // opacity (Oscar, 1.4.197): it does not look right for the λ
+        // to stay at its own transparency beside a panel at another
+        // level — the bubble copies the panel's, and takes its own
+        // back when the panel closes (collapsePanel).
+        bubble?.let { it.animate().cancel(); it.animate().alpha(panelAlpha()).setDuration(190).start() }
         // A short, smooth birth: the panel grows out of the λ's own position.
         val bp2 = bubbleParams
         stage.pivotX = panelPivotX ?: if (seatRight) panelWidth().toFloat() else 0f
@@ -3209,6 +3277,9 @@ class BubbleService : Service() {
         // next panel is born blank, so its first refresh must paint
         // everything — the memory dies with the views it described.
         shownTitle = null; shownSub = null; shownPlaying = null; shownSeek = -1; shownBarsKey = null; shownLock = null
+        // The window is gone: the bubble takes its OWN opacity back
+        // (1.4.197 — while the panel stood, it wore the panel's).
+        bubble?.let { it.animate().cancel(); it.animate().alpha(awakeAlpha()).setDuration(160).start() }
         if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
         if (!now && deliveries != lastDeliverySeen) {
             lastDeliverySeen = deliveries

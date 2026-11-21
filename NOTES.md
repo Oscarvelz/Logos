@@ -1,3 +1,13 @@
+## 1.4.197 — The bubble wears the window's opacity, the Ring comes to the bubble, and the spectrum can never sit white
+
+Three of Oscar's words from 2026-11-21, one wave:
+
+- **The opacity rule (his determination, after the two sliders turned out to be his own settings):** when the window opens, the bubble takes the WINDOW's opacity — it does not look right for the λ to stay at its own transparency beside a panel at another level — and takes its own back when the panel closes. Three seats in `BubbleService.kt`: the open path animates the bubble to `panelAlpha()` with the panel's own birth; `collapsePanel` restores `awakeAlpha()`; `applyLook` honours the same rule if the look is re-pushed while the panel stands.
+- **The Ring around the floating λ (his choice, asked and answered):** a `RingView` rides as the bubble window's top child — fine track in the theme's ring colour at low alpha, the accent arc filling clockwise from the top, a bead with its halo at the frontier — fed on every push by `updateBubbleRing()` from the stage's own fraction (a reading's sentence fraction, a recording's clock fraction). No active session, no ring: the bubble is exactly the jewel it always was. The shade card keeps its own Ring from 193/196; the two instruments now agree because both drink from the session's truth.
+- **The white spectrum (his report on 196's first open: the Listen spectrum's seat sat white; a force-stop cured it):** the visualizer's preferred path hands its canvas to a worker (OffscreenCanvas) — a one-way door. When that worker never presents a frame (a cold or broken chunk load on a first open), the transferred canvas sits on the compositor's white backing and the page can never reclaim it. Cure: the worker posts `painted` after its first real frame; the page runs a 2.5 s watchdog, and on silence it remounts the canvas (new key) under its own 2D drawing. The spectrum can fall back to plain — it cannot sit white again. Declared: the trigger condition (a first-open worker failure) is not reproducible on the bench; the fallback path is the standing 2D drawer, and the watchdog's wiring is code-verified — Oscar's next first open is the judge.
+
+Presentation impact: none beyond the stage's version strings — no relay owed.
+
 ## 1.4.196 — The Ring, judged on Oscar's phone: the bar advances, in the theme's colour
 
 Oscar's verdict on 1.4.193 (2026-11-21, with shade screenshots): the seek bar does not advance — with a short 2-second text it starts, moves a little, snaps back to the start and keeps doing that in a loop; the bar renders RED, "not the colour of Logos, Legacy"; and a second screenshot shows a fresh reading wearing the finished one's 100% artwork. All three are shell-side, in `PlaybackService.kt`:

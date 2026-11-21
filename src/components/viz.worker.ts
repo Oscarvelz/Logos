@@ -22,6 +22,7 @@ let grad: CanvasGradient | null = null
 let gradKey = ''
 let envKey = ''
 let env: Float32Array | null = null
+let paintedSent = false
 let mode: Mode = 'idle'
 let clockKey = ''
 let raw = 0, rawAt = 0, rate = 1, running = false, shownTime = 0
@@ -106,4 +107,9 @@ function frame(now: number) {
     ctx.roundRect(i * gap + (gap - bw) / 2, (H - bh) / 2, bw, bh, bw / 2)
   }
   ctx.fill()
+  // The page's watchdog witness (1.4.197): one word after the first
+  // frame truly lands, so a worker that never paints — a cold or
+  // broken chunk load on a first open — is caught and replaced by
+  // the page-thread drawing instead of sitting white.
+  if (!paintedSent) { paintedSent = true; (self as unknown as { postMessage: (m: unknown) => void }).postMessage({ type: 'painted' }) }
 }

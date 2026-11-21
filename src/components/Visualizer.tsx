@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { levels, listen, vizSnapshot } from '../player/listen.ts'
 
 /**
@@ -8,9 +8,16 @@ import { levels, listen, vizSnapshot } from '../player/listen.ts'
  */
 export function Visualizer({ bars = 48 }: { bars?: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
+  // The off-thread canvas is a one-way door: once transferred, the
+  // page can never draw on it again. If the worker never paints —
+  // Oscar's phone, 1.4.196's first open: the spectrum's seat sat
+  // WHITE until a force-stop — the watchdog in startOffThread calls
+  // this, and the canvas is remounted (new key) under the page's own
+  // 2D drawing. The spectrum can be plain, never a white hole.
+  const [offDead, setOffDead] = useState(false)
   useEffect(() => {
     const canvas = ref.current!
-    const off = startOffThread(canvas, bars)
+    const off = offDead ? null : startOffThread(canvas, bars, () => setOffDead(true))
     if (off) return off
     const ctx = canvas.getContext('2d')!
     const target = new Float32Array(bars)
@@ -86,8 +93,8 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     }
     draw()
     return () => { cancelAnimationFrame(raf); themeObs.disconnect() }
-  }, [bars])
-  return <canvas ref={ref} className="viz" data-present="listen-visualizer" aria-hidden />
+  }, [bars, offDead])
+  return <canvas key={offDead ? 'fb' : 'off'} ref={ref} className="viz" data-present="listen-visualizer" aria-hidden />
 }
 
 /**
@@ -95,7 +102,7 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
  * thread; the page only sends it the sentence envelope and the playhead, a few
  * times a second. Returns a cleanup, or null where OffscreenCanvas is missing.
  */
-function startOffThread(canvas: HTMLCanvasElement, bars: number): (() => void) | null {
+function startOffThread(canvas: HTMLCanvasElement, bars: number, onDead: () => void): (() => void) | null {
   if (typeof canvas.transferControlToOffscreen !== 'function' || typeof OffscreenCanvas === 'undefined') return null
   if (canvas.dataset.off) return () => {}
   let worker: Worker | undefined
@@ -106,6 +113,14 @@ function startOffThread(canvas: HTMLCanvasElement, bars: number): (() => void) |
     canvas.dataset.off = '1'
   } catch { worker?.terminate(); return null }
   const w = worker
+  // The painted watchdog (1.4.197): the worker says 'painted' after
+  // its first real frame. Silence for 2.5 s means the canvas would
+  // sit on the compositor's white backing forever — hand the seat
+  // back to the page's own drawing (the caller remounts the canvas).
+  let painted = false
+  const onMsg = (e: MessageEvent) => { if ((e.data as { type?: string })?.type === 'painted') painted = true }
+  w.addEventListener('message', onMsg)
+  const watchdog = setTimeout(() => { if (!painted) onDead() }, 2500)
   w.postMessage({ type: 'init', canvas: offscreen, bars }, [offscreen])
   const css = (n: string, d: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || d
   const sendColors = () => w.postMessage({ type: 'colors', a: css('--accent', '#e9bd72'), b: css('--accent-2', '#f3d39c'), e: css('--viz-edge', '') })
@@ -134,5 +149,5 @@ function startOffThread(canvas: HTMLCanvasElement, bars: number): (() => void) |
   tick()
   const id = setInterval(tick, 100)
   const unsub = listen.subscribe(tick)
-  return () => { clearInterval(id); unsub(); ro.disconnect(); themeObs.disconnect(); w.terminate() }
+  return () => { clearInterval(id); unsub(); ro.disconnect(); themeObs.disconnect(); clearTimeout(watchdog); w.removeEventListener('message', onMsg); w.terminate() }
 }
