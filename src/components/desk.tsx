@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { AudioLines, BookOpen, FileText, Gauge, Pause, Play, Star } from 'lucide-react'
+import { AudioLines, BookOpen, FileText, Gauge, Mic2, Pause, Play, Star } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { library, refreshLibrary, kindOf, getClipBlob, type ClipMeta } from '../lib/library.ts'
 import { clipPlayer, playClip, pauseClip } from '../player/clip.ts'
@@ -13,7 +13,7 @@ import { BookCover } from './bookcover.tsx'
 import { t } from '../lib/i18n.ts'
 
 /** Tablet-only column under the player: the book in progress, quick voices and recent items. */
-export function TabletDesk({ onOpen }: { onOpen: (text: string) => void }) {
+export function TabletDesk({ onOpen, onVoice }: { onOpen: (text: string) => void; onVoice: () => void }) {
   const lib = useStore(library)
   const bk = useStore(books)
   const st = useStore(settings)
@@ -38,18 +38,28 @@ export function TabletDesk({ onOpen }: { onOpen: (text: string) => void }) {
         </a>
       )}
 
-      {favs.length > 0 && (
-        <div className="card desk-voices" data-present="desk-fav-voices">
-          <div className="desk-kicker"><Star size={13} /> {t('Favorite voices')}</div>
-          <div className="desk-vrow">
-            {favs.map((v) => (
-              <button key={v!.id} className={`chip ${st.voiceOverride === v!.id ? 'accent' : ''}`} onClick={() => { settings.set({ voiceOverride: st.voiceOverride === v!.id ? null : v!.id }); refreshVoices() }}>
-                <span className="dot" />{v!.name}
-              </button>
-            ))}
-          </div>
+      {/* The desk's voices card stands ALWAYS (1.4.203): it is the
+          Listen area's voice seat now — the player's own voice chip
+          was retired as its duplicate (Oscar). Beside the favorite
+          chips, the card carries what that chip held: the door to
+          the FULL picker (every voice, Automatic, search), wearing
+          the chip's own face — gold dot and Mic2 — and its class,
+          so the .voice-chip anchor follows the deed. Without the
+          door the desk would be a lesser substitute; with it, the
+          removal loses nothing. */}
+      <div className="card desk-voices" data-present="desk-fav-voices">
+        <div className="desk-kicker"><Star size={13} /> {t('Favorite voices')}</div>
+        <div className="desk-vrow">
+          {favs.map((v) => (
+            <button key={v!.id} className={`chip ${st.voiceOverride === v!.id ? 'accent' : ''}`} onClick={() => { settings.set({ voiceOverride: st.voiceOverride === v!.id ? null : v!.id }); refreshVoices() }}>
+              <span className="dot" />{v!.name}
+            </button>
+          ))}
+          <button className="chip voice-chip" onClick={onVoice} aria-label={t('Choose a voice')}>
+            <span className="dot" /><Mic2 size={15} />{t('Choose a voice')}
+          </button>
         </div>
-      )}
+      </div>
 
       {recent.length > 0 && (
         <div className="card desk-recent" data-present="desk-recent">

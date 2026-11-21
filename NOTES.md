@@ -1,3 +1,15 @@
+## 1.4.203 — The player's voice chip retires to the desk; the queue takes its seat
+
+Oscar's determination, over his own annotated photo of the chip row: the button that chose the voice in the Listen player **duplicated the voice choice the desk below already gives**, and the row was too full to breathe. So:
+
+- **The voice chip is out of the player.** The row now stands: language · sleep · speed — and it breathes.
+- **The copy queue takes the microphone's seat** — the row's last place, where the voice chip stood (his arrow drew exactly that move). Its anchor and deed are unchanged; only its seat moved.
+- **The desk becomes a real substitute.** Its voices card now stands always (before, it vanished when the user had no favorites — which would have taken the substitute down with it), and beside the favorite chips it carries what the removed chip held: **the door to the full picker** — every voice, Automatic, search — wearing the chip's own face (gold dot, Mic2, its label said whole: «Choose a voice»). Nothing the chip offered is lost; it just lives where Oscar said it belongs.
+- **The anchor follows the deed.** `listen-voice-chip` is a CLASS anchor (`.voice-chip`); the class now lives on the desk's door — exactly one element, opening the same picker — so the beats that tap it (Q0, Q3, AD5) need no script changes. Its registry record's probe moves from ListenPage.tsx to desk.tsx, where the element now lives. Declared bound: the desk is the wide layout's column, so the anchor's real element exists where the desk exists; on the phone, the Voices tab remains the catalog's door.
+- The sealed stage's fiction mirrors the move: no voice chip in the player fiction; the door stands in the desk fiction's voices card, carrying the class.
+
+Presentation impact: declared here and relayed to the Presentation lane — the `listen-voice-chip` element moved from the player row to the desk (same class, same deed, probe file updated in canon's transcription); no beat text or structure changes.
+
 ## 1.4.202 — The Q3 remap lands: the Pocket beat points at the accordion
 
 The 1.4.200 accordion left Q3's Pocket beat pointing at an element the page no longer has (declared in the 200 notes: its stay-here landing reported unlandable until the lane re-mapped it). The Presentation lane did the remap in its copy, verified it there, and handed it over; canon integrated it INTEGRA, NO REEMPLACES — only the Q3 changes crossed, because the lane's copy stands behind canon on other cures (the T6-9 tag-qualified locator, the family-aware lookup, several companion attributes, the 1.4.167 desk record), and every one of those survives untouched.

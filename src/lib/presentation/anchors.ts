@@ -166,7 +166,7 @@ const A_LISTEN: AnchorRecord[] = [
   r('listen-reader-edit', 'web', 'MINT', ['A-29'], ['AD3'], DP, { file: LP }),
   r('listen-visualizer', 'web', 'MINT', ['A-30'], ['AD3'], DP, { file: VIZ }),
   r('listen-lang-chip', 'web', 'CLASS', ['A-31'], ['Q1', 'AD5'], cls('.lang-chip'), { file: LP, probe: [pr(LP, 'lang-chip')] }),
-  r('listen-voice-chip', 'web', 'CLASS', ['A-32'], ['Q0', 'Q3'], cls('.voice-chip'), { file: LP, probe: [pr(LP, 'voice-chip')] }),
+  r('listen-voice-chip', 'web', 'CLASS', ['A-32'], ['Q0', 'Q3'], cls('.voice-chip'), { file: DESK, probe: [pr(DESK, 'voice-chip')] }),
   r('listen-speed-chip', 'web', 'CLASS', ['A-34'], ['AD4'], cls('.speed-chip'), { file: LP, probe: [pr(LP, 'speed-chip')] }),
   r('listen-speed-sheet', 'web', 'MINT', ['A-35'], ['AD4'], DP, { file: LP, precondition: PC_SHEET }),
   r('listen-sleep-chip', 'web', 'MINT', ['A-36'], ['AD4'], DP, { file: LP }),

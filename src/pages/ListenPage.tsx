@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
-import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, ListMusic, Loader2, Mic2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, X } from 'lucide-react'
+import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, ListMusic, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, X } from 'lucide-react'
 import { queue } from '../lib/queue.ts'
 import { playQueueAt, sendQueueToLater, saveQueueItemToLater } from '../lib/bubble.ts'
 import { removeItem as dropQueueItem, clearQueue } from '../lib/queue.ts'
@@ -217,17 +217,18 @@ export function ListenPage() {
               <span className="chip-txt">{st.langMode === 'auto' ? <>Auto · {mixed ? 'EN + ES' : detected.lang.toUpperCase()}</> : LANG_LABEL[st.langMode]}</span>
             </button>
             <div className="player-top-r">
-              {(st.copyQueue || q.items.length > 0) && <button className={`chip ${q.items.length ? 'accent' : ''}`} data-present="listen-queue-chip" onClick={() => setQueueOpen(true)} aria-label={t('Copy queue')}><ListMusic size={15} />{q.items.length > 0 ? q.items.length : null}</button>}
               <button className={`chip ${s.sleepLeft != null ? 'accent' : ''}`} data-present="listen-sleep-chip" onClick={() => setSleepOpen(true)} aria-label={t('Sleep timer')}><Moon size={15} />{s.sleepLeft != null ? formatDuration(s.sleepLeft) : null}</button>
               <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={t('Playback speed {x}', { x: fmtSpeed(st.listenSpeed) })}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
-              {/* 1.4.201 (Oscar's law): no ellipses — a chip is complete
-                  or it is not there. The voice's NAME no longer rides
-                  this chip (long names arrived cut, "N…"); the chip
-                  wears the app's own voice icon, Mic2, whole. The name
-                  itself lives one tap away, in the picker this opens. */}
-              <button className="chip accent voice-chip" onClick={() => setVoiceOpen(true)} aria-label={t('Voice')}>
-                <span className="dot" /><Mic2 size={15} />
-              </button>
+              {/* 1.4.203 (Oscar's determination): the voice chip that
+                  stood here is GONE — it duplicated the voice choice
+                  the desk below already gives, and this row was too
+                  full to breathe. The copy queue takes its seat (the
+                  row's last), and the desk's voices card gains the
+                  door the chip held — the full picker — so the desk
+                  is a real substitute, not a lesser one. The
+                  .voice-chip class (and its anchor) follows the
+                  deed to the desk; see desk.tsx. */}
+              {(st.copyQueue || q.items.length > 0) && <button className={`chip ${q.items.length ? 'accent' : ''}`} data-present="listen-queue-chip" onClick={() => setQueueOpen(true)} aria-label={t('Copy queue')}><ListMusic size={15} />{q.items.length > 0 ? q.items.length : null}</button>}
             </div>
           </div>
 
@@ -237,7 +238,7 @@ export function ListenPage() {
 
           <div className="player-meta">
             <span>{reading ? t('Sentence {a} of {b}', { a: s.current + 1, b: s.segments.length }) : t('Ready')}</span>
-            {/* 1.4.60: the voice's name lived in the chip above — naming it again here was pure repetition (Oscar). 1.4.201: the chip wears the voice icon now, so the name is said nowhere on this card; only the device-voice state is still said. */}
+            {/* 1.4.60: the voice's name lived in the chip above — naming it again here was pure repetition (Oscar). 1.4.201: the chip wore the voice icon instead. 1.4.203: the chip itself is gone (the desk below is the voice seat now); the name is said nowhere on this card, and only the device-voice state is still said. */}
             <span>{s.mode === 'device' ? t('Device voice · ') : ''}{t('{d} left', { d: formatDuration(remaining) })}</span>
           </div>
 
@@ -281,7 +282,7 @@ export function ListenPage() {
           {e.status === 'error' && <div className="error-note">{t('Neural engine: ')}{e.error}</div>}
         </div>
         {wide && <ContinueRow onResume={() => setEditing(false)} />}
-        {wide && <TabletDesk onOpen={(t) => { setText(t); setEditing(false) }} />}
+        {wide && <TabletDesk onOpen={(t) => { setText(t); setEditing(false) }} onVoice={() => setVoiceOpen(true)} />}
         </div>
         {big && <TextMap text={text} reading={reading} />}
       </div>

@@ -217,9 +217,7 @@ function StageListen({ scenario }: { scenario: Scenario }) {
   const session = scenario.stage.session()
   const voices = useStore(stageVoices)
   const ui = useStore(stageUi)
-  const chipVoice = voices.pickedId
-    ? (VOICES.find((v) => v.id === voices.pickedId) ?? FICTION_CAST.find((v) => v.id === voices.pickedId))?.name ?? 'Zoey'
-    : 'Zoey'
+
   const draft = scenario.getDrafts().listen
   const text = session?.text ?? draft
   const sentences = useMemo(() => sentencesOf(text), [text])
@@ -295,7 +293,6 @@ function StageListen({ scenario }: { scenario: Scenario }) {
           <span className="pstage-chip lang-chip">Auto · EN</span>
           <button type="button" className="pstage-chip" data-present="listen-sleep-chip"><Moon size={14} /> Sleep</button>
           <span className="pstage-chip speed-chip">1×</span>
-          <button type="button" className="pstage-chip accent voice-chip">● {chipVoice}</button>
           <span className="pstage-grow" />
           <button type="button" className="pstage-iconbtn" data-present="listen-nav-pin" aria-label="Keep the bar">📌</button>
         </div>
@@ -364,6 +361,10 @@ function StageListen({ scenario }: { scenario: Scenario }) {
           <span className="pstage-meta">Favorite voices</span>
           <div className="pstage-chips">
             {voices.favs.map((id) => <span key={id} className="pstage-chip">{(VOICES.find((v) => v.id === id))?.name ?? id}</span>)}
+            {/* 1.4.203: the fiction mirrors the real desk — the
+                player's voice chip is retired and the desk's card
+                carries the picker door with its class. */}
+            <button type="button" className="pstage-chip voice-chip">● Choose a voice</button>
           </div>
         </div>
         <div className="pstage-card" data-present="desk-recent">
@@ -397,7 +398,7 @@ function StageVoices({ scenario }: { scenario: Scenario }) {
   const ui = useStore(stageUi)
   const voices = useStore(stageVoices)
   const fav = new Set(voices.favs)
-  // 1.4.202 (the Q3 remap, integrated from the Presentation lane):
+  // 1.4.203 (the Q3 remap, integrated from the Presentation lane):
   // the real Voices page has been the picker's accordion since
   // 1.4.200 — sections that fold and open, one at a time — so the
   // fiction wears the same shape: a section's cards exist only
@@ -942,7 +943,7 @@ const STAGE_SETTING_INDEX: { anchor: string; title: string; sub: string; keys: s
   { anchor: 'set-card-language', title: 'Language', sub: 'The app’s own words — everything on screen.', keys: 'english español spanish idioma lenguaje inglés' },
   { anchor: 'set-presentations', title: 'Presentations', sub: 'Learn the whole app, guided, at your pace', keys: 'lessons tour guided learn presentaciones lecciones aprender guía' },
   { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy clips library copia respaldo exportar importar archivo biblioteca' },
-  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.202 · private, on-device text-to-speech', keys: 'version about acerca versión' },
+  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.203 · private, on-device text-to-speech', keys: 'version about acerca versión' },
 ]
 
 function StageSettings({ scenario }: { scenario: Scenario }) {
@@ -1124,8 +1125,8 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
 
       <div className="pstage-card" data-present="set-about">
         <strong>About Logos</strong>
-        <p className="pstage-note">Version 1.4.202 · private, on-device text-to-speech</p>
-        <p className="pstage-note" data-present="set-version">Version 1.4.202</p>
+        <p className="pstage-note">Version 1.4.203 · private, on-device text-to-speech</p>
+        <p className="pstage-note" data-present="set-version">Version 1.4.203</p>
       </div>
     </div>
   )

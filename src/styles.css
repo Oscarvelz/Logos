@@ -662,7 +662,9 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 .player-top .chip svg, .player-top .chip .dot { flex: none; }
 /* 1.4.201 (Oscar's law): no ellipses in the player's chips — a
    chip's text stands complete or the chip wears an icon instead.
-   The lang chip never shrinks; the voice chip is icon-only now. */
+   The lang chip never shrinks. 1.4.203: the voice chip left this
+   row for the desk (it duplicated the desk's voice choice); the
+   .voice-chip rule below now serves the desk's picker door. */
 .player-top .chip-txt { white-space: nowrap; }
 .lang-chip { flex: none; }
 .speed-chip { flex: none; padding: 0 12px; gap: 6px; font-variant-numeric: tabular-nums; }
