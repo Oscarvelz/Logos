@@ -6,7 +6,7 @@
 // playing, always with an Undo, so no text is ever lost to it.
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
-import { listen, loadText, play, pauseFromShell, endSession, stepRate, seek, seekFraction, refreshVoices, voiceFor, sentenceProgress, wordClock, levels } from '../player/listen.ts'
+import { listen, loadText, play, pauseFromShell, endSession, stepRate, seek, seekFraction, seekToMs, refreshVoices, voiceFor, sentenceProgress, wordClock, levels } from '../player/listen.ts'
 import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { cancelDevice } from '../engine/device-voice.ts'
 import { readClipboard } from './clipboard.ts'
@@ -36,6 +36,8 @@ type DroidBubble = {
   bubbleWantClip?: () => boolean
   bubbleSeek?: () => string
   bubbleSeekCtx?: () => string
+  bubbleSeekTo?: () => string
+  bubbleSeekToCtx?: () => string
   bubblePendingCmd?: () => string
   bubblePendingCtx?: () => string
   bubbleNative?: (text: string, title: string, idx: number) => void
@@ -425,6 +427,21 @@ export function initBubble() {
       const sctx = d.bubbleSeekCtx?.() ?? ''
       if (sctx && !clipOwns()) { const here = pageCtx(); if (here && here !== sctx) return }
       if (clipOwns()) { seekClip(f) } else { seekFraction(f) }
+    } catch { /* ignore */ }
+  })
+  // The media session's seek bar (1.4.193): the shell holds an
+  // absolute millisecond target, the page pulls it — judged by
+  // the same stamp law as the panel's fraction above. A recording
+  // takes it as a fraction of its real clock; a reading walks its
+  // durations to the same millisecond.
+  addEventListener('logosandroid-seekto', () => {
+    try {
+      const ms = parseFloat(d.bubbleSeekTo?.() ?? '')
+      if (!Number.isFinite(ms)) return
+      const sctx = d.bubbleSeekToCtx?.() ?? ''
+      if (sctx && !clipOwns()) { const here = pageCtx(); if (here && here !== sctx) return }
+      if (clipOwns()) { const cp = clipView(); if (cp && cp.duration > 0) seekClip(Math.min(1, Math.max(0, ms / 1000 / cp.duration))) }
+      else seekToMs(ms)
     } catch { /* ignore */ }
   })
   // The panel's bookmark key, and the bubble's long-press voice wheel.

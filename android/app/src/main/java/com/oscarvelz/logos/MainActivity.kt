@@ -572,6 +572,25 @@ class MainActivity : Activity() {
             }
         }
 
+        /** The session's progress truth (1.4.193): position and
+         *  duration in milliseconds on the book's own timeline, the
+         *  session's true speed, and the sentence coordinates — the
+         *  page measures, this seats them in PlaybackService, whose
+         *  session finally publishes a duration, a position and a
+         *  speed instead of UNKNOWN at 1f. Older pages never call
+         *  this; older shells never hear it (the page calls it
+         *  optionally), and either pairing keeps its old face. */
+        @JavascriptInterface fun mediaP(json: String) {
+            val j = runCatching { JSONObject(json) }.getOrNull() ?: return
+            PlaybackService.noteProgress(
+                j.optLong("pos", -1),
+                j.optLong("dur", 0),
+                j.optDouble("spd", 1.0).toFloat(),
+                j.optInt("ci", -1),
+                j.optInt("ct", 0),
+            )
+        }
+
         // ── The floating bubble (shell android-18) ──────────────────────────
         /** The bubble's native truth for the Settings card: permission + service + the last clipboard try. */
         @JavascriptInterface fun bubbleState(): String =
@@ -690,6 +709,40 @@ class MainActivity : Activity() {
         @JavascriptInterface fun bubbleSeekCtx(): String {
             val ctx = BubbleService.lastTakenSeekCtx
             BubbleService.lastTakenSeekCtx = ""
+            return ctx
+        }
+
+        /** The media session's seek target (1.4.193), pulled once —
+         *  judged at this door by the same laws as the panel's
+         *  fraction: twenty seconds of life, and the session it was
+         *  chosen against must still be the session standing. A
+         *  drop leaves its receipt on the Settings line. */
+        @JavascriptInterface fun bubbleSeekTo(): String {
+            val ms = BubbleService.seekToMs
+            BubbleService.seekToMs = -1
+            if (ms < 0) return ""
+            if (System.currentTimeMillis() - BubbleService.seekToAt > 20_000) {
+                BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored seek went stale", "una búsqueda guardada caducó"))
+                return ""
+            }
+            val ctx = BubbleService.seekToCtx
+            if (ctx.isNotEmpty()) {
+                val cur = BubbleService.currentContext()
+                if (cur.isNotEmpty() && cur != ctx) {
+                    BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored seek's session had moved on", "la sesión de una búsqueda guardada había cambiado"))
+                    return ""
+                }
+            }
+            BubbleService.lastTakenSeekToCtx = ctx
+            BubbleService.seekToCtx = ""
+            return ms.toString()
+        }
+
+        /** The context stamp of the seek target most recently
+         *  collected (1.4.193): the seekTo twin of bubbleSeekCtx. */
+        @JavascriptInterface fun bubbleSeekToCtx(): String {
+            val ctx = BubbleService.lastTakenSeekToCtx
+            BubbleService.lastTakenSeekToCtx = ""
             return ctx
         }
 

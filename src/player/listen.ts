@@ -8,7 +8,7 @@ import { voiceById, type Lang } from '../lib/voices.ts'
 import { encodeWav, envelope, silence, trimSilence, concat, applyGain, levelGain } from '../lib/audio.ts'
 import { engine, ensureModel, synthesize, promote } from '../engine/engine.ts'
 import { speakDevice, cancelDevice, deviceSpeechAvailable } from '../engine/device-voice.ts'
-import { stopClipPlayer, onClipPlay, clipPlayer, pauseClip, resumeClip, stepClip } from './clip.ts'
+import { stopClipPlayer, onClipPlay, clipPlayer, pauseClip, resumeClip, stepClip, currentClipRate } from './clip.ts'
 import { nowReadingFor } from '../lib/book/nowreading.ts'
 import { t } from '../lib/i18n.ts'
 import { alignWords } from './wordsync.ts'
@@ -1143,6 +1143,29 @@ export function seekFraction(f: number) {
   seekTo(Math.floor(pos), pos - Math.floor(pos))
 }
 
+/** Land at an absolute book-millisecond count (1.4.193): the
+ *  media session's seek bar speaks milliseconds, and this walks
+ *  the same durations the progress publisher sums — rendered
+ *  lengths where they exist, the jump keys' estimates where they
+ *  do not — so the bar's target and the bar's position are
+ *  measured with one ruler. Past the end lands at the last
+ *  sentence's edge, the way jumpBy's walk lands. */
+export function seekToMs(ms: number) {
+  const s = listen.get()
+  if (!s.active || !s.segments.length) return
+  const dur = (i: number): number => {
+    const r = cache.get(i)
+    return r ? r.duration : Math.max(0.4, estimateSeconds(s.segments[i].text, 1))
+  }
+  let rem = Math.max(0, ms / 1000)
+  for (let idx = 0; idx < s.segments.length; idx++) {
+    const d = dur(idx)
+    if (rem < d) { seekTo(idx, d > 0 ? rem / d : 0); return }
+    rem -= d
+  }
+  seekTo(s.segments.length - 1, 0.999)
+}
+
 /** Land on sentence `idx`, `frac` of the way through it. */
 export function seekTo(idx: number, frac: number) {
   const s = listen.get()
@@ -1654,10 +1677,11 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
 // Android app: keep the phone's media notification (and the app awake while reading) in step with playback,
 // and take play/pause/next/previous from that notification.
 {
-  type Droid = { playing(on: boolean, title: string, text: string): void; media?: (on: boolean, book: string, artist: string, text: string) => void; mediaF?: (on: boolean, book: string, artist: string, text: string) => void; bubbleNativePos?: () => string }
+  type Droid = { playing(on: boolean, title: string, text: string): void; media?: (on: boolean, book: string, artist: string, text: string) => void; mediaF?: (on: boolean, book: string, artist: string, text: string) => void; mediaP?: (json: string) => void; bubbleNativePos?: () => string }
   const droid = (window as unknown as { LogosAndroid?: Droid }).LogosAndroid
   if (droid?.playing) {
     let last = ''
+    let lastP = ''
     let started = false
     const publish = (force = false) => {
       const s = listen.get()
@@ -1691,6 +1715,54 @@ export function vizSnapshot(): { key: string; env: Float32Array | null; time: nu
       // The notification appears with the first play, not when text is merely loaded.
       if (on) started = true
       if (!started && !force) return
+      // The session's progress truth (1.4.193): for its whole life
+      // the shell's media session published position UNKNOWN at a
+      // hard-coded 1f, so the system's card drew its furniture
+      // with nothing inside — no bar, no clock, no seek. The page
+      // measures and the shell seats it: a reading in book seconds
+      // (rendered lengths where they exist, the same estimates
+      // the jump keys walk where they do not, the current sentence
+      // credited by sentenceProgress), a recording by its real
+      // clock. The panel extrapolates from (position, stamp,
+      // speed) between publishes, so this rides the sentence
+      // cadence — and a clip's clock — never a per-second stream.
+      // A finished reading reports its end; a closed session
+      // clears the seat so no stranger's duration survives it.
+      if (droid.mediaP) {
+        let pPos = -1
+        let pDur = 0
+        let pSpd = 1
+        let pCi = -1
+        let pCt = 0
+        if (clipOn) {
+          pPos = cp.time
+          pDur = cp.duration
+          pSpd = currentClipRate()
+        } else if (s.active && s.segments.length) {
+          pSpd = settings.get().listenSpeed
+          pCi = s.current
+          pCt = s.segments.length
+          const durAt = (i: number): number => {
+            const r = cache.get(i)
+            return r ? r.duration : Math.max(0.4, estimateSeconds(s.segments[i].text, 1))
+          }
+          let acc = 0
+          let pos = 0
+          for (let i = 0; i < s.segments.length; i++) {
+            const d = durAt(i)
+            if (i < s.current) pos += d
+            acc += d
+          }
+          pos += Math.min(1, Math.max(0, sentenceProgress())) * durAt(s.current)
+          pDur = acc
+          pPos = s.finished ? acc : pos
+        }
+        const pkey = `${Math.round(pPos * 10)}|${Math.round(pDur * 10)}|${pSpd}|${pCi}|${pCt}`
+        if (pkey !== lastP) {
+          lastP = pkey
+          try { droid.mediaP(JSON.stringify({ pos: Math.round(pPos * 1000), dur: Math.round(pDur * 1000), spd: pSpd, ci: pCi, ct: pCt })) } catch { /* old shell */ }
+        }
+      }
       if (clipOn) {
         const ckey = `clip|${cp.key}|${cp.title}`
         if (ckey === last) return
