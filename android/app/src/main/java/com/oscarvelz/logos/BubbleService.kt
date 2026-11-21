@@ -674,6 +674,17 @@ class BubbleService : Service() {
                 field = value
                 if (value >= 0) { seekFracAt = System.currentTimeMillis(); seekCtx = currentContext() }
             }
+        /** The media session's seek target (1.4.193): an absolute
+         *  book-millisecond count, stamped by PlaybackService's
+         *  onSeekTo exactly the way seekFrac is stamped — the same
+         *  twenty-second law and the same session-context judgment
+         *  apply at its pull door (Bridge.bubbleSeekTo), and its
+         *  stamp travels in lastTakenSeekToCtx for the page's own
+         *  check, the seek twin of the panel fraction's road. */
+        @Volatile var seekToMs = -1L
+        @Volatile var seekToAt = 0L
+        @Volatile var seekToCtx: String = ""
+        @Volatile var lastTakenSeekToCtx: String = ""
         /** Set by the service: wave the bubble (leaving-Logos trigger). */
         var inviteHook: (() -> Unit)? = null
         private var lastKey: String? = null

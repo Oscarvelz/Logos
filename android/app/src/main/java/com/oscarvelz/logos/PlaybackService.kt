@@ -15,7 +15,11 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
+import android.graphics.RadialGradient
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.Icon
 import android.os.Bundle
@@ -71,8 +75,60 @@ class PlaybackService : Service() {
          *  shape. */
         @Volatile var clipStage: String? = null
         @Volatile var clipStageSub: String = ""
+        /** The session's progress truth (1.4.193, Road 1): the page
+         *  publisher measures the reading — position and duration in
+         *  BOOK seconds (rendered lengths where they exist, honest
+         *  estimates where they do not, re-anchored at every
+         *  sentence), a recording's real clock for a clip — and sends
+         *  it over the mediaP bridge. Until this seat existed the
+         *  session published position UNKNOWN at a hard-coded 1f, so
+         *  the system's card drew its furniture with nothing inside:
+         *  no bar, no clock, no seek. With the truth seated, build()
+         *  publishes duration + position + the true speed and
+         *  declares ACTION_SEEK_TO; the panel extrapolates locally
+         *  from that triple, so the page publishes on sentence
+         *  boundaries, never per second. */
+        @Volatile var progPosMs = -1L
+        @Volatile var progDurMs = 0L
+        @Volatile var progSpd = 1f
+        @Volatile var progCi = -1
+        @Volatile var progCt = 0
+        fun noteProgress(posMs: Long, durMs: Long, spd: Float, ci: Int, ct: Int) {
+            progPosMs = posMs
+            progDurMs = durMs
+            progSpd = spd
+            progCi = ci
+            progCt = ct
+            // A session-only refresh: the metadata and state move,
+            // the standing notification is not re-posted for this —
+            // the artwork has its own step rule, in noteBubblePush.
+            instance?.refreshSessionFace()
+        }
+
+        /** The Ring's seats (1.4.193, Road 2): the bubble push has
+         *  always carried the stage's fraction and the theme family;
+         *  this service read the push only to judge the stage's
+         *  owner. Now it keeps them: when the ROUNDED PERCENT or the
+         *  family moves, the card is rebuilt wearing ringArt()'s new
+         *  face. A percent is the finest step — a long reading costs
+         *  at most a hundred rebuilds, most far fewer. */
+        @Volatile var ringFrac = -1.0
+        @Volatile var ringFam = ""
+        @Volatile var ringPct = -1
         fun noteBubblePush(json: String) {
             val j = runCatching { org.json.JSONObject(json) }.getOrNull() ?: return
+            if (j.optBoolean("active")) {
+                val f = j.optDouble("frac", -1.0)
+                val fam = j.optString("fam")
+                if (f >= 0) {
+                    val pct = Math.round(f * 100).toInt()
+                    val changed = pct != ringPct || fam != ringFam
+                    ringFrac = f
+                    ringPct = pct
+                    ringFam = fam
+                    if (changed && cardUp) instance?.republish()
+                }
+            }
             val next: String? = when {
                 j.optBoolean("active") && j.optInt("ct", 0) == 0 && j.optInt("ci", -1) == -1 && j.optBoolean("saved") ->
                     j.optString("title").ifBlank { "Logos" }
@@ -94,6 +150,20 @@ class PlaybackService : Service() {
     private var lastArtist = "Logos"
     private var lastText = ""
     private var lastFinished = false
+
+    /** Re-face the session — metadata and playback state — from
+     *  the last publish and the progress seats, WITHOUT re-posting
+     *  the notification (1.4.193): the panel reads the session, so
+     *  the bar, the clock and the seek target stay true on every
+     *  sentence boundary, while the artwork — the only part that
+     *  needs a re-post — steps by its own percent rule. */
+    fun refreshSessionFace() {
+        val s = session ?: return
+        if (!cardUp) return
+        val clip = clipStage
+        val heading = clip ?: lastBook.ifBlank { lastText }
+        faceSession(s, lastPlaying, heading, lastArtist, clip == null && lastBook.isNotBlank())
+    }
 
     /** Rebuild the standing card from the last publish, in the
      *  stage owner's current shape. The wake lock's state is the
@@ -136,6 +206,28 @@ class PlaybackService : Service() {
                 // seat when a queue exists.
                 override fun onRewind() { act("jumpback") }
                 override fun onFastForward() { act("jumpfwd") }
+                // The system's seek bar (1.4.193): declared in
+                // faceSession now that the session carries a true
+                // duration. The target is a book-millisecond count.
+                // While the shell's own voice holds the stage it
+                // takes the fraction directly, the way the panel's
+                // seek bar does; otherwise the seat is stamped in
+                // BubbleService (with its session context, judged at
+                // the pull door like the panel's fraction) and the
+                // press travels the standing action road — a live
+                // poke, or a stored order behind a wake.
+                override fun onSeekTo(pos: Long) {
+                    if (NativeSpeaker.active) {
+                        val d = progDurMs
+                        if (d > 0) NativeSpeaker.seekTo((pos.toDouble() / d.toDouble()).coerceIn(0.0, 1.0))
+                        return
+                    }
+                    BubbleService.seekToMs = pos
+                    BubbleService.seekToAt = System.currentTimeMillis()
+                    BubbleService.seekToCtx = BubbleService.currentContext()
+                    val a = onAction
+                    if (a != null) a("seekto") else BubbleService.wakeForPending(this@PlaybackService, "seekto")
+                }
                 // The session's own jump actions (1.4.176): the card
                 // buttons that wear the arrow face — see build().
                 override fun onCustomAction(action: String, extras: Bundle?) {
@@ -309,6 +401,161 @@ class PlaybackService : Service() {
         return artBmp!!
     }
 
+    /** The session's face (1.4.193): metadata and playback state,
+     *  set together — called by build() for the standing card and
+     *  by refreshSessionFace() when the progress truth moves. The
+     *  vocabulary history lives at build()'s call site; this is
+     *  only its current shape. With a true duration seated, the
+     *  state carries position + the session's own speed (the panel
+     *  extrapolates from that triple between publishes) and the
+     *  actions gain SEEK_TO; without one, the seat publishes
+     *  exactly what it published before this version — position
+     *  UNKNOWN at 1f, no seek — so an old page against this shell
+     *  loses nothing. */
+    private fun faceSession(s: MediaSession, playing: Boolean, heading: String, artist: String, bookish: Boolean) {
+        val bmp = cardFace()
+        val md = MediaMetadata.Builder()
+            .putString(MediaMetadata.METADATA_KEY_TITLE, heading)
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
+            .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bmp)
+            .putBitmap(MediaMetadata.METADATA_KEY_ART, bmp)
+        if (progDurMs > 0) md.putLong(MediaMetadata.METADATA_KEY_DURATION, progDurMs)
+        s.setMetadata(md.build())
+        var actions = PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
+        if (bookish) actions = actions or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+        if (progDurMs > 0) actions = actions or PlaybackState.ACTION_SEEK_TO
+        val jbSec = getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_b", 15)
+        val jfSec = getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_f", 30)
+        s.setPlaybackState(PlaybackState.Builder()
+            .setActions(actions)
+            .addCustomAction("jumpback", "Jump back $jbSec seconds", jumpActionIcon(jbSec, -1))
+            .addCustomAction("jumpfwd", "Jump forward $jfSec seconds", jumpActionIcon(jfSec, 1))
+            .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
+                if (progDurMs > 0 && progPosMs >= 0) progPosMs else PlaybackState.PLAYBACK_POSITION_UNKNOWN,
+                if (progDurMs > 0) progSpd else 1f)
+            .build())
+    }
+
+    /** The card's face (1.4.193): the Ring while a stage fraction
+     *  is seated, the bundled artwork before the first push brings
+     *  one. A drawing failure falls back to the artwork — the face
+     *  never breaks the card. */
+    private fun cardFace(): Bitmap {
+        val f = ringFrac
+        if (f < 0) return artBmp()
+        return runCatching { ringArt(f, ringFam) }.getOrElse { artBmp() }
+    }
+
+    private var lambdaStencil: Bitmap? = null
+    /** The λ lifted from the bundled artwork, as an alpha stencil:
+     *  its gold bounds in the 512 file were measured from the file
+     *  itself (x 188..375, y 122..279), cropped with a breath of
+     *  margin, and each pixel's alpha is its brightness above the
+     *  art's dark ground — so ringArt can tint the letter by its
+     *  own shape and every theme wears the same λ in its colour. */
+    private fun lambdaBitmap(): Bitmap {
+        lambdaStencil?.let { return it }
+        val src = Bitmap.createBitmap(artBmp(), 184, 118, 196, 166)
+        val w = src.width
+        val h = src.height
+        val px = IntArray(w * h)
+        src.getPixels(px, 0, w, 0, 0, w, h)
+        val op = IntArray(w * h)
+        for (i in px.indices) {
+            val p = px[i]
+            val lum = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
+            val a = ((lum - 70) * 255 / 120).coerceIn(0, 255)
+            op[i] = Color.argb(a, 255, 255, 255)
+        }
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        out.setPixels(op, 0, w, 0, 0, w, h)
+        lambdaStencil = out
+        return out
+    }
+
+    /** THE RING (1.4.193 — Oscar chose it «por mucho» over the
+     *  thread and the sentences): the artwork itself becomes the
+     *  instrument, because the system's card gives a session no
+     *  custom view — the art is the only surface it honours. A
+     *  fine ring around the medallion fills clockwise over a dim
+     *  hairline as the reading advances, a luminous bead rides the
+     *  frontier, and the percent stands beneath the λ in the
+     *  house serif; at the end the ring closes and the bead
+     *  crowns the top. Geometry and palettes are the design
+     *  sheet's own (~/workspace/logos-progress/): ring r = 0.365
+     *  of the canvas, λ centred high, percent beneath it; Legacy
+     *  and Light print flat, Tron glows, Cyberpunk prints its
+     *  diamond bead in yellow. Drawn at runtime — a hundred
+     *  percents times four themes is no set of faces to ship. */
+    private fun ringArt(fracIn: Double, fam: String): Bitmap {
+        val size = 512
+        val frac = fracIn.coerceIn(0.0, 1.0)
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(bmp)
+        val ground: Int
+        val accent: Int
+        val dim: Int
+        val ink: Int
+        val glow: Boolean
+        when (fam) {
+            "light" -> { ground = Color.rgb(245, 241, 232); accent = Color.rgb(154, 102, 20); dim = Color.argb(56, 60, 50, 30); ink = accent; glow = false }
+            "tron" -> { ground = Color.rgb(2, 10, 16); accent = Color.rgb(0, 229, 255); dim = Color.argb(64, 0, 229, 255); ink = Color.rgb(207, 250, 254); glow = true }
+            "cyberpunk" -> { ground = Color.rgb(11, 10, 8); accent = Color.rgb(255, 42, 109); dim = Color.argb(64, 255, 42, 109); ink = Color.rgb(255, 214, 64); glow = false }
+            else -> { ground = Color.rgb(23, 19, 16); accent = Color.rgb(233, 189, 114); dim = Color.argb(54, 233, 189, 114); ink = accent; glow = false }
+        }
+        cv.drawColor(ground)
+        val cx = size / 2f
+        val cy = size / 2f
+        // The halo: the accent, breathed out from the centre.
+        val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        haloPaint.shader = RadialGradient(cx, cy, 205f,
+            intArrayOf(Color.argb(if (glow) 110 else 56, Color.red(accent), Color.green(accent), Color.blue(accent)), Color.TRANSPARENT),
+            null, Shader.TileMode.CLAMP)
+        cv.drawCircle(cx, cy, 205f, haloPaint)
+        // The λ, tinted by its own alpha.
+        val lam = lambdaBitmap()
+        val lw = 150f
+        val lh = lw * lam.height.toFloat() / lam.width.toFloat()
+        val lamPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        lamPaint.colorFilter = PorterDuffColorFilter(accent, PorterDuff.Mode.SRC_IN)
+        lamPaint.isFilterBitmap = true
+        cv.drawBitmap(lam, null, RectF(cx - lw / 2, 205f - lh / 2, cx + lw / 2, 205f + lh / 2), lamPaint)
+        // The ring: a dim hairline whole, the accent over what is read.
+        val r = 187f
+        val ringRect = RectF(cx - r, cy - r, cx + r, cy + r)
+        val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        trackPaint.style = Paint.Style.STROKE
+        trackPaint.strokeWidth = 3f
+        trackPaint.color = dim
+        cv.drawCircle(cx, cy, r, trackPaint)
+        val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        arcPaint.style = Paint.Style.STROKE
+        arcPaint.strokeWidth = 7f
+        arcPaint.strokeCap = Paint.Cap.ROUND
+        arcPaint.color = accent
+        if (glow) arcPaint.setShadowLayer(18f, 0f, 0f, accent)
+        cv.drawArc(ringRect, -90f, (frac * 360).toFloat(), false, arcPaint)
+        // The bead at the frontier, haloed in the accent.
+        val ang = Math.toRadians(-90.0 + frac * 360.0)
+        val bx = cx + (r * Math.cos(ang)).toFloat()
+        val by = cy + (r * Math.sin(ang)).toFloat()
+        val beadHalo = Paint(Paint.ANTI_ALIAS_FLAG)
+        beadHalo.color = Color.argb(70, Color.red(accent), Color.green(accent), Color.blue(accent))
+        cv.drawCircle(bx, by, 15f, beadHalo)
+        val beadPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        beadPaint.color = ink
+        if (glow) beadPaint.setShadowLayer(16f, 0f, 0f, accent)
+        cv.drawCircle(bx, by, 8f, beadPaint)
+        // The percent, beneath the λ.
+        val pctPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        pctPaint.color = ink
+        pctPaint.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+        pctPaint.textSize = 54f
+        pctPaint.textAlign = Paint.Align.CENTER
+        cv.drawText("${Math.round(frac * 100)}%", cx, 357f, pctPaint)
+        return bmp
+    }
+
     private fun build(playing: Boolean, book: String, artist: String, text: String, finished: Boolean = false): Notification {
         val s = session!!
         // A recording owns the stage (T2-20): the card wears the
@@ -324,13 +571,8 @@ class PlaybackService : Service() {
         // The card heads with the book's title (the current sentence scrolling across it was the
         // 1.4.49 complaint); pasted text without a book falls back to the sentence itself.
         val heading = clip ?: book.ifBlank { text }
-        val bmp = artBmp()
-        s.setMetadata(MediaMetadata.Builder()
-            .putString(MediaMetadata.METADATA_KEY_TITLE, heading)
-            .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
-            .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bmp)
-            .putBitmap(MediaMetadata.METADATA_KEY_ART, bmp)
-            .build())
+        val bmp = cardFace()
+        faceSession(s, playing, heading, artist, effBook.isNotBlank())
         // Both vocabularies are declared (1.4.154, correcting 153):
         // the keys step one sentence — they have never skipped a
         // recording or a book — but the system's media card only
@@ -392,17 +634,12 @@ class PlaybackService : Service() {
         // truly. A frozen lie was the price he accepted knowingly:
         // the set is wide, and a value outside it shows no number
         // rather than a wrong one.
-        val cardActions = if (effBook.isNotBlank())
-            PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
-        else
-            PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_REWIND or PlaybackState.ACTION_FAST_FORWARD
-        val jbSec = getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_b", 15)
-        val jfSec = getSharedPreferences("bubble", MODE_PRIVATE).getInt("jump_f", 30)
-        s.setPlaybackState(PlaybackState.Builder()
-            .setActions(cardActions)
-            .addCustomAction("jumpback", "Jump back $jbSec seconds", jumpActionIcon(jbSec, -1))
-            .addCustomAction("jumpfwd", "Jump forward $jfSec seconds", jumpActionIcon(jfSec, 1))
-            .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f).build())
+        // (Amended 1.4.193: the metadata and the state are set by
+        // faceSession above — one shape for the standing card and
+        // for the progress refresh alike. The vocabulary stands as
+        // the history above settled it; SEEK_TO joins it when a
+        // true duration is seated, and the state finally carries
+        // the position and speed it always should have.)
         // The session is awake only while the voice is (1.4.154):
         // while paused-but-active it held the media-button router,
         // and a PLAY nobody pressed — the kind a dictation session's
@@ -435,7 +672,15 @@ class PlaybackService : Service() {
         return Notification.Builder(this, CH)
             .setSmallIcon(R.drawable.ic_note)
             .setLargeIcon(bmp)
-            .setColor(Color.rgb(23, 19, 16))
+            // The notification's tint follows the theme family the
+            // page pushes (1.4.193), the way the Ring's face does;
+            // before a push seats one, the warm charcoal stands.
+            .setColor(when (ringFam) {
+                "light" -> Color.rgb(245, 241, 232)
+                "tron" -> Color.rgb(2, 10, 16)
+                "cyberpunk" -> Color.rgb(11, 10, 8)
+                else -> Color.rgb(23, 19, 16)
+            })
             .setContentTitle(heading)
             .setContentText(if (clip != null) clipStageSub else if (book.isNotBlank()) text else artist)
             .setContentIntent(open)
