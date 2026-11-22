@@ -520,7 +520,7 @@ class PlaybackService : Service() {
      *  UNKNOWN at 1f, no seek — so an old page against this shell
      *  loses nothing. */
     private fun faceSession(s: MediaSession, playing: Boolean, heading: String, artist: String, bookish: Boolean) {
-        val bmp = cardFace()
+        val bmp = paletteFace()
         val md = MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, heading)
             .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
@@ -565,6 +565,66 @@ class PlaybackService : Service() {
         val f = ringFrac
         if (f < 0) return artBmp()
         return runCatching { ringArt(f, ringFam) }.getOrElse { artBmp() }
+    }
+
+    private var paletteBmp: Bitmap? = null
+    private var paletteFam: String? = null
+    /** The session metadata's own face (1.4.215): the SYSTEM's media
+     *  panel (the «This phone» player) does not take its scrubber
+     *  colour from the notification's setColor — it extracts a
+     *  palette from the session's ARTWORK, and the Ring's artwork is
+     *  nine-tenths dark ground with the accent in fine strokes, so
+     *  Samsung's extraction saturated Legacy's pale gold into a
+     *  burnt orange (Oscar's photo, 2026-11-21). The metadata
+     *  therefore carries a face built for the extraction: the
+     *  medallion — a full disc of the theme's pure accent with the λ
+     *  standing in the ground's colour — so the palette's dominant
+     *  vibrant colour IS the accent in every family. The
+     *  notification's large icon keeps the Ring exactly as designed;
+     *  only the metadata's art keys change seats. Cached per family;
+     *  any failure falls back to the card's face. */
+    private fun paletteFace(): Bitmap {
+        val fam = ringFam
+        paletteBmp?.let { if (paletteFam == fam) return it }
+        val bmp = runCatching { paletteArt(fam) }.getOrElse { return cardFace() }
+        paletteBmp = bmp
+        paletteFam = fam
+        return bmp
+    }
+
+    private fun paletteArt(fam: String): Bitmap {
+        val size = 512
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(bmp)
+        val ground: Int
+        val accent: Int
+        val glow: Boolean
+        when (fam) {
+            "light" -> { ground = Color.rgb(245, 241, 232); accent = Color.rgb(154, 102, 20); glow = false }
+            "tron" -> { ground = Color.rgb(2, 10, 16); accent = Color.rgb(0, 229, 255); glow = true }
+            "cyberpunk" -> { ground = Color.rgb(11, 10, 8); accent = Color.rgb(255, 42, 109); glow = false }
+            else -> { ground = Color.rgb(23, 19, 16); accent = Color.rgb(233, 189, 114); glow = false }
+        }
+        cv.drawColor(ground)
+        val cx = size / 2f
+        val cy = size / 2f
+        val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        haloPaint.shader = RadialGradient(cx, cy, 250f,
+            intArrayOf(Color.argb(if (glow) 120 else 64, Color.red(accent), Color.green(accent), Color.blue(accent)), Color.TRANSPARENT),
+            null, Shader.TileMode.CLAMP)
+        cv.drawCircle(cx, cy, 250f, haloPaint)
+        val discPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        discPaint.color = accent
+        if (glow) discPaint.setShadowLayer(22f, 0f, 0f, accent)
+        cv.drawCircle(cx, cy, 158f, discPaint)
+        val lam = lambdaBitmap()
+        val lw = 218f
+        val lh = lw * lam.height.toFloat() / lam.width.toFloat()
+        val lamPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        lamPaint.colorFilter = PorterDuffColorFilter(ground, PorterDuff.Mode.SRC_IN)
+        lamPaint.isFilterBitmap = true
+        cv.drawBitmap(lam, null, RectF(cx - lw / 2, cy - lh / 2, cx + lw / 2, cy + lh / 2), lamPaint)
+        return bmp
     }
 
     private var lambdaStencil: Bitmap? = null

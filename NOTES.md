@@ -1,3 +1,12 @@
+## 1.4.215 — The system player's bar wears the theme's accent (2026-11-21)
+
+Oscar's photo of the system's media panel (the «This phone» player): its progress bar stood in a burnt orange-red, and he ordered it amber — Legacy's colour — adjusted to the theme. Diagnosis, verified in the shell: the notification already carried `setColor(accent)` since 1.4.196, but the system's media panel does not take its scrubber colour from there — it extracts a palette from the session's artwork, and the artwork was the Ring: nine-tenths dark ground with the accent in fine strokes, whose extraction Samsung saturates into orange.
+
+- The session metadata now carries its own face (`paletteArt` in PlaybackService.kt): the medallion — a full disc of the theme's pure accent with the λ standing in the ground's colour, over the family's ground and halo — so the palette's dominant vibrant colour is the accent itself in every family (Legacy gold, Light's deep gold, Tron's cyan, Cyberpunk's pink). Cached per family; any drawing failure falls back to the card's face.
+- The notification's large icon is untouched: the Ring remains the card's face exactly as designed. Only the metadata's two art keys changed seats.
+- Presentation impact: none — no page, anchor or fiction surface is involved; the change is entirely in the shell's session metadata.
+- Declared bound: the extraction is the system's own; this wave attacks the mechanism with the strongest palette the design allows, and Oscar's phone is the judge, as with every shell wave.
+
 ## 1.4.213 — Create, in three trays (2026-11-21)
 
 Create's first design treatment. Oscar asked for the page's buttons and chips to be treated under the wrap law («la forma no es esclava de la función»); three directions were rendered with his real text and judged on his phone, and he chose **B — Three trays** «cleaner and more professional by far», with the refinement that ornaments repeating what is already said (initial medallions beside names) are not wrap but noise — the wrap is not minimalism, but it is sharply not maximalism.
