@@ -2608,15 +2608,18 @@ class BubbleService : Service() {
         // 1.4.216 (Oscar): the lock leaves the emoji behind and is
         // DRAWN like its neighbours — the Lucide lock in gold line on
         // the same disc, «por fin el mismo tema» — and drawn a touch
-        // larger than them (its grid unit runs 1.15×), because beside
-        // the bookmark and the book it read small. The shackle stands
-        // open while the stage is unlocked; a state change repaints.
+        // larger than them (its grid unit runs 1.07× — born 1.15× in
+        // 216, and Oscar's phone judged that a shade too much: «un
+        // poquito más pequeño, pero un poquito», 1.4.217), because
+        // beside the bookmark and the book the emoji read small. The
+        // shackle stands open while the stage is unlocked; a state
+        // change repaints.
         val lockB = glyphDiscKey("Lock the stage", c["disc"]!!, c["discLine"]!!, { cv, cx, cy, u ->
             val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                 color = c["gold"]!!; style = android.graphics.Paint.Style.STROKE
                 strokeWidth = dp(3) / 2f; strokeCap = android.graphics.Paint.Cap.ROUND; strokeJoin = android.graphics.Paint.Join.ROUND
             }
-            val uu = u * 1.15f
+            val uu = u * 1.07f
             fun px(x: Float) = cx + (x - 12f) * uu
             fun py(y: Float) = cy + (y - 12f) * uu
             val locked = isLocked(this@BubbleService)

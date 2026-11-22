@@ -1,3 +1,7 @@
+## 1.4.217 — The lock, a shade smaller (2026-11-21)
+
+Oscar's phone judged 1.4.216's drawn lock: the theme is right, the size overshot by a shade — «puedes hacer el candado ahora un poquito más pequeño, pero un poquito». The lock's grid unit steps from 1.15× to 1.07×: still a touch larger than the bookmark and the book beside it (the standing order from the same evening), no longer the largest face on the row. One number in BubbleService.kt, plus the version stamps. Presentation impact: none.
+
 ## 1.4.216 — Cerca: the drum beside the counter, and the lock joins the theme (2026-11-21)
 
 Oscar's two panel orders. (1) The speed drum exiled at the sub-line's far end moves close to the sentence counter: three distances were rendered on one base and he picked «1 · Cerca» — the counter now hugs its own words (its weight is gone) and the drum stands ~14dp after the last digit (a 4dp margin plus the drum's own left padding), close with air, so the numbers never blur into each other. The wheel itself is untouched: drag rolls, tap steps. (2) The stage lock was the panel's last emoji — a 🔒 TextView at 10.5sp sitting beside two gold line-drawn keys; Oscar saw it drawn in the mock in the theme's own line and ordered it so («por fin el mismo tema»), a touch larger: the lock is now a glyphDiscKey drawing the Lucide lock (shackle closed, or open while unlocked) at a 1.15× grid unit, and its state changes repaint instead of swapping emoji.
