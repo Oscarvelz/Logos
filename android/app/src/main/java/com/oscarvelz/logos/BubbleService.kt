@@ -2401,7 +2401,18 @@ class BubbleService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     handler.removeCallbacks(longRun)
-                    val target = hoverTarget
+                    // THE SEPARATION (1.4.236, Oscar): the gates and
+                    // the gesture are two different intentions, and
+                    // only one may take the release. A gate takes it
+                    // only when the hand MEANT the gate — the bubble
+                    // rested on it for a beat (400 ms of hover). A
+                    // gesture that merely crosses a gate on its way
+                    // somewhere (his left flick from the top-right
+                    // corner, bound for the top-left, swept the
+                    // Remove gate and removed the bubble by error)
+                    // never arms it: the release falls through to
+                    // the gesture/drag judge below.
+                    val target = if (hoverTarget >= 0 && System.currentTimeMillis() - hoverSince >= 400) hoverTarget else -1
                     hideTargets()
                     when {
                         longHit -> { longHit = false }
@@ -2418,7 +2429,7 @@ class BubbleService : Service() {
                             val fdx = e.rawX - downX; val fdy = e.rawY - downY
                             val dist = Math.hypot(fdx.toDouble(), fdy.toDouble())
                             val dur = e.eventTime - e.downTime
-                            val flick = if (dist >= dp(24) && dur in 1..400 && dist / dur >= 0.45) flickTarget(fdx, fdy) else null
+                            val flick = if (dist >= dp(24) && dur in 1..400 && dist / dur >= 0.45) flickTarget(fdx, fdy, far = dist >= dp(130)) else null
                             if (flick != null) {
                                 getSharedPreferences("bubble", MODE_PRIVATE).edit().putInt("corner", flick).apply()
                                 seatBubbleInCorner(true)
@@ -2438,6 +2449,7 @@ class BubbleService : Service() {
 
     private var dragTargets: List<DragTarget> = emptyList()
     private var hoverTarget = -1
+    private var hoverSince = 0L
 
     private fun pill(fill: Int, stroke: Int) = GradientDrawable().apply {
         cornerRadius = dp(99).toFloat(); setColor(fill); setStroke(dp(1), stroke)
@@ -2485,6 +2497,9 @@ class BubbleService : Service() {
         val idx = dragTargets.indexOfFirst { it.rect.contains(cx, cy) }
         if (idx == hoverTarget) return
         hoverTarget = idx
+        // The gate's clock (1.4.236): a gate is only ARMED once the
+        // bubble has rested on it a beat — see the ACTION_UP judge.
+        hoverSince = if (idx >= 0) System.currentTimeMillis() else 0L
         dragTargets.forEachIndexed { i, t ->
             val hot = i == idx
             t.view.background = if (hot) t.hot else t.idle
@@ -2501,6 +2516,7 @@ class BubbleService : Service() {
         dragTargets.forEach { t -> runCatching { wm?.removeView(t.view) } }
         dragTargets = emptyList()
         hoverTarget = -1
+        hoverSince = 0L
     }
 
     // THE CORNER IS ITS HOME (Oscar, 2026-11-22): the bubble always
@@ -2605,26 +2621,38 @@ class BubbleService : Service() {
     // THE GESTURE (1.4.235, Oscar, 2026-11-22): «Haz que la esfera
     // reconozca el tipo de gesto. Si hago un gesto hacia abajo…
     // se va a su posición más cerca.» A flick names a DIRECTION:
-    // the sphere answers with the predetermined place that lies
-    // most nearly in that direction from its current home — down
-    // one step on its own edge, across to the other edge on its
-    // own row, diagonally to the diagonal corner. A gesture aimed
-    // where no place lies (up, from a top corner) wins nothing and
-    // the release is judged as a plain drag.
-    private fun flickTarget(dx: Float, dy: Float): Int? {
+    // the sphere answers with a predetermined place that lies in
+    // that direction from its current home. And it has a MEASURE
+    // (1.4.236, his correction the same day): a SHORT gesture
+    // stops at the NEAR place in that direction — down from a top
+    // corner rests at the edge's middle — and a LONG gesture
+    // travels to the FAR one — all the way to the bottom corner.
+    // (235's first cut judged direction alone: on a tall screen
+    // the middle and the far corner share the downward line, and
+    // the far one won — the sphere fell past the middle seat he
+    // asked for.) Candidates are the places lying within ~45° of
+    // the gesture's line; among them the short gesture takes the
+    // smallest projection along that line, the long one the
+    // largest. A gesture aimed where no place lies (up, from a
+    // top corner) wins nothing and the release is judged as a
+    // plain drag.
+    private fun flickTarget(dx: Float, dy: Float, far: Boolean): Int? {
         val len = Math.hypot(dx.toDouble(), dy.toDouble())
         if (len < 1.0) return null
         val ux = dx / len; val uy = dy / len
         val home = bubbleCorner()
         val (hx, hy) = cornerSeat(home)
-        var best: Int? = null; var bestDot = 0.35
+        var best: Int? = null
+        var bestProj = if (far) Double.NEGATIVE_INFINITY else Double.POSITIVE_INFINITY
         for (s in 0..5) {
             if (s == home) continue
             val (sx, sy) = cornerSeat(s)
             val vx = (sx - hx).toDouble(); val vy = (sy - hy).toDouble()
             val vl = Math.hypot(vx, vy); if (vl < 1.0) continue
             val dot = ux * (vx / vl) + uy * (vy / vl)
-            if (dot > bestDot) { bestDot = dot; best = s }
+            if (dot < 0.70) continue
+            val proj = vx * ux + vy * uy
+            if (if (far) proj > bestProj else proj < bestProj) { bestProj = proj; best = s }
         }
         return best
     }

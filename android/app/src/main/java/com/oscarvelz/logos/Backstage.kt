@@ -27,6 +27,12 @@ object Backstage {
     private var tenant: WebView? = null
     @Volatile var active = false
         private set
+    // Every eviction, counted (1.4.236): the activity holding the
+    // evicted page may still be alive — it watches this number to
+    // know its page died behind its back and must be reborn, never
+    // reparented as a corpse.
+    @Volatile var evictions = 0
+        private set
 
     fun adopt(c: Context, web: WebView, w: Int, h: Int): Boolean {
         if (active) return true
@@ -78,6 +84,7 @@ object Backstage {
     fun evictAndDestroy() {
         val t = tenant
         release()
+        evictions++
         if (t != null) runCatching { t.destroy() }
     }
 }

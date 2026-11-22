@@ -105,6 +105,7 @@ class MainActivity : Activity() {
         root = FrameLayout(this)
         root.setBackgroundColor(bg)
         web = makeWeb()
+        webEvictions = Backstage.evictions
         root.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.setOnApplyWindowInsetsListener { v, insets ->
             val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
@@ -229,6 +230,7 @@ class MainActivity : Activity() {
         val now = SystemClock.elapsedRealtime()
         crashes.add(now); crashes.removeAll { now - it > 60_000 }
         web = makeWeb()
+        webEvictions = Backstage.evictions
         if (ghost) web.alpha = 0f
         if (wasBackstage) {
             Backstage.release()
@@ -1032,6 +1034,21 @@ class MainActivity : Activity() {
 
     /** Take the WebView back from the backstage before the activity draws. */
     private fun bringWebHome() {
+        if (Backstage.evictions != webEvictions) {
+            // The page this activity holds died behind its back
+            // (1.4.236): removing the bubble stops its service, whose
+            // onDestroy evicts and destroys the backstage page
+            // (1.4.128) — but this activity may still be alive, and
+            // taking the corpse home delivered Oscar to a black
+            // screen that only a force-close could leave. A corpse
+            // is never taken home: a fresh page is born in its seat.
+            webEvictions = Backstage.evictions
+            (web.parent as? ViewGroup)?.removeView(web)
+            web = makeWeb()
+            root.addView(web, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            web.loadUrl(home)
+            return
+        }
         if (web.parent === root) return
         Backstage.release()
         (web.parent as? ViewGroup)?.removeView(web)
@@ -1039,6 +1056,11 @@ class MainActivity : Activity() {
     }
 
     override fun onSaveInstanceState(out: Bundle) { super.onSaveInstanceState(out); web.saveState(out) }
+
+    // The backstage eviction count this activity's page was born
+    // under (1.4.236): a moved count means the page was destroyed
+    // behind the activity's back and must be reborn, not reparented.
+    private var webEvictions = 0
 
     private var lastBack = 0L
     @Deprecated("Deprecated in Java")
