@@ -1145,7 +1145,37 @@ class BubbleService : Service() {
     private var bubbleFaceV: FrameLayout? = null
     private var bubbleLambdaV: LambdaView? = null
     private var bubbleRingV: RingView? = null
-    private var ringFracShown = -1f
+    // The ring's seat (1.4.225): the pushed fraction arrives in steps
+    // — a word at a time from the page's voices, a whole sentence at
+    // a time from the device voice — so between seats the ring
+    // EXTRAPOLATES at the pace the seats themselves teach it, capped
+    // at the end of the sentence being read: the shade card's recipe
+    // (1.4.196) brought to the bubble. Before this, the ring drew
+    // the raw steps — long frozen stretches, then a jump: «a
+    // tropezón», and whole sentences where it seemed not to run.
+    private var ringSeatFrac = -1f
+    private var ringSeatAt = 0L
+    private var ringVel = 0f
+    private var ringCi = -1
+    private var ringCt = 0
+    private var ringPlayingNow = false
+    private var ringTicking = false
+    private fun ringCap(): Float =
+        if (ringCt > 0 && ringCi >= 0) ((ringCi + 1).toFloat() / ringCt - 0.0005f).coerceAtLeast(ringSeatFrac) else 1f
+    private fun ringDrawnFrac(): Float {
+        if (!ringPlayingNow || ringVel <= 0f || ringSeatFrac < 0f) return ringSeatFrac
+        val dt = (System.currentTimeMillis() - ringSeatAt).coerceAtLeast(0)
+        return (ringSeatFrac + ringVel * dt).coerceAtMost(ringCap()).coerceAtMost(1f)
+    }
+    private val ringTick = object : Runnable {
+        override fun run() {
+            val v = bubbleRingV
+            if (v == null || v.visibility != View.VISIBLE || ringSeatFrac < 0f) { ringTicking = false; return }
+            val drawn = ringDrawnFrac()
+            if (Math.abs(drawn - v.frac) > 0.0004f) { v.frac = drawn; v.invalidate() }
+            if (ringPlayingNow && drawn < ringCap() - 0.0004f) handler.postDelayed(this, 33) else ringTicking = false
+        }
+    }
     // The copy queue's panel face (1.4.198): what the last page push
     // said about the line, the footer's queue key, and the list the
     // key opens over the panel's card.
@@ -2095,7 +2125,10 @@ class BubbleService : Service() {
             ) else null
             c.save()
             c.translate(width / 2f, height / 2f)
-            c.scale(width / 512f, width / 512f)
+            // 1.4.225 (Oscar): the composition at 92% — «al menos un
+            // seis por ciento» smaller, so it centres in the sphere;
+            // the geometry itself is untouched, by his word.
+            c.scale(width * 0.92f / 512f, width * 0.92f / 512f)
             c.translate(-256f, -256f)
             fillP.shader = grad; if (grad == null) fillP.color = col
             c.drawPath(logoLambdaPath, fillP)
@@ -2151,16 +2184,37 @@ class BubbleService : Service() {
     private fun updateBubbleRing() {
         val v = bubbleRingV ?: return
         val j = runCatching { JSONObject(nowJson) }.getOrNull()
-        val f = if (j?.optBoolean("active") == true) j.optDouble("frac", 0.0).toFloat().coerceIn(0f, 1f) else -1f
-        if (f < 0f) {
+        if (j?.optBoolean("active") != true) {
             if (v.visibility != View.INVISIBLE) v.visibility = View.INVISIBLE
-            v.frac = -1f; ringFracShown = -1f
+            v.frac = -1f; ringSeatFrac = -1f; ringSeatAt = 0L; ringVel = 0f; ringCi = -1; ringCt = 0; ringPlayingNow = false
             return
         }
         if (v.visibility != View.VISIBLE) v.visibility = View.VISIBLE
-        if (Math.abs(f - ringFracShown) >= 0.001f || v.frac < 0f) {
-            v.frac = f; ringFracShown = f
-            v.invalidate()
+        val f = j.optDouble("frac", 0.0).toFloat().coerceIn(0f, 1f)
+        val ci = j.optInt("ci", -1)
+        ringCt = j.optInt("ct", 0)
+        ringPlayingNow = j.optBoolean("playing")
+        val now = System.currentTimeMillis()
+        // A seek (or a new text) re-seats the ring exactly; a step
+        // forward teaches it its pace; anything else leaves the
+        // extrapolation to carry the motion between seats.
+        val seeked = ringSeatFrac >= 0f && (f < ringSeatFrac - 0.002f || (ringCi >= 0 && ci != ringCi && ci != ringCi + 1))
+        when {
+            seeked -> { ringSeatFrac = f; ringSeatAt = now; ringVel = 0f; v.frac = f; v.invalidate() }
+            f > ringSeatFrac + 0.0004f -> {
+                if (ringSeatAt > 0L && ringSeatFrac >= 0f) {
+                    val inst = (f - ringSeatFrac) / (now - ringSeatAt).coerceAtLeast(1).toFloat()
+                    ringVel = if (ringVel <= 0f) inst else ringVel * 0.6f + inst * 0.4f
+                }
+                ringSeatFrac = f; ringSeatAt = now
+            }
+            ringSeatFrac < 0f -> { ringSeatFrac = f; ringSeatAt = now; v.frac = f; v.invalidate() }
+        }
+        ringCi = ci
+        if (!ringPlayingNow) {
+            if (Math.abs(v.frac - ringSeatFrac) > 0.0004f) { v.frac = ringSeatFrac; v.invalidate() }
+        } else if (!ringTicking) {
+            ringTicking = true; handler.post(ringTick)
         }
     }
 
