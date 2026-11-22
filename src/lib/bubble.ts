@@ -1022,6 +1022,11 @@ export function initBubble() {
       marks: marksEpoch(),
       active: s.active,
       frac: s.active && s.segments.length ? Math.min(1, (s.current + sentenceProgress()) / s.segments.length) : 0,
+      // The end, honestly (1.4.237): the session's finished flag —
+      // set only at a natural end, cleared by any seek or new play —
+      // so the shell's ring can retire when the reading is done
+      // instead of resting complete on a finished text.
+      fin: s.finished ? 1 : 0,
       // Sentence coordinates (1.4.119): the panel's sentence scrub counts
       // in sentences, so it needs the driver's own numbers, not a guess
       // from the fraction.

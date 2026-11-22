@@ -2225,6 +2225,22 @@ class BubbleService : Service() {
         val ci = j.optInt("ci", -1)
         ringCt = j.optInt("ct", 0)
         ringPlayingNow = j.optBoolean("playing")
+        // THE RING RETIRES AT THE END (1.4.237, Oscar's principle):
+        // «cuando el aro termina de llenarse porque el audio terminó
+        // de reproducirse, desaparece… Como ya terminó, no es
+        // necesario.» A complete ring resting on a finished reading
+        // is a leftover, not information. The end carries honest
+        // signals: the page's `fin` (its session's finished flag —
+        // set only at a natural end, cleared by any seek or new
+        // play), the device voice's `done`, or the seat itself
+        // standing at the very end. A PAUSED reading carries none
+        // of them and keeps its ring resting on its seat; the next
+        // reading seats the ring afresh from the reset below.
+        if (!ringPlayingNow && (j.optInt("fin", 0) == 1 || j.optBoolean("done") || f >= 0.999f)) {
+            if (v.visibility != View.INVISIBLE) v.visibility = View.INVISIBLE
+            v.frac = -1f; ringSeatFrac = -1f; ringSeatAt = 0L; ringVel = 0f; ringCi = -1; ringCt = 0
+            return
+        }
         val now = System.currentTimeMillis()
         // A seek (or a new text) re-seats the ring exactly; a step
         // forward teaches it its pace; anything else leaves the

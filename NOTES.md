@@ -1,3 +1,14 @@
+## 1.4.237 — The ring retires at the end (2026-11-22)
+
+Oscar's new principle, over a photo of the finished «Sobre sube» (Sentence 18 of 18, the bubble wearing its complete ring): «cuando el aro termina de llenarse porque el audio terminó de reproducirse, desaparece, en lugar de que quede el aro completo con su vuelta… Como ya terminó, no es necesario.» A complete ring resting on a finished reading is a leftover, not information.
+
+The ring now retires when the reading ends. The end is judged on honest signals, never on a guess: the page's push gains **`fin`** — the listen session's own finished flag, set only at a natural end and cleared by any seek or new play — the device voice's panelJson gains **`done`** (its natural-completion witness, the same one its snapshot already carried), and the shell also honours the seat itself standing at the very end (frac ≥ 0.999, not playing), which is how a finished recording reads. On any of them, the ring hides and its seats reset, so the next reading seats it afresh.
+
+The distinction Oscar's principle implies is kept: a **paused** reading carries none of those signals and keeps its ring resting on its seat — the reading is still alive. Only the end retires it. Replay, a seek, or the queue stepping to the next text clears the end flag, and the ring returns with the new reading.
+
+- Declared bound: the shell half has no bench — the CI compile is its gate and Oscar's phone the judge. The page half is one added field in the panel push; the battery and presentation suites stand as its gates.
+- Presentation impact: none — no anchor, surface or copy changes.
+
 ## 1.4.236 — The gesture measured, the gates meant, the page reborn (2026-11-22)
 
 Oscar's verdict on 1.4.235 was warm — «Lo que hiciste me gustó mucho. Los gestos están funcionando bastante bien» — and it carried two conflicts by the gesture's own nature, plus a third wound from the first:

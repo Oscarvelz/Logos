@@ -574,6 +574,7 @@ object NativeSpeaker {
         return JSONObject()
             .put("title", title)
             .put("playing", playing)
+            .put("done", naturalDone)
             .put("busy", false)
             .put("sub", sub)
             .put("frac", (idx + wordFrac) / total)
