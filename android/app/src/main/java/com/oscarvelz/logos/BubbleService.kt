@@ -3501,6 +3501,16 @@ class BubbleService : Service() {
         stage.setOnTouchListener { _, e -> if (e.action == MotionEvent.ACTION_OUTSIDE) { outsideClosedAt = System.currentTimeMillis(); if (queueListOpen) toggleQueueList() else collapsePanel(); true } else false }
         runCatching { w.addView(stage, p) }
         panel = stage
+        // The bubble outranks its window (1.4.227, Oscar): the
+        // panel's window is born after the bubble's, so the card
+        // painted OVER the jewel's lower cap — in photo after photo
+        // the bubble showed «detrás de la ventana», however well
+        // its corner seated. The bubble is re-raised the moment the
+        // panel is born: the graze stays exactly as settled, but
+        // the λ now sits ON its window, whole, in every territory
+        // of the phone — and a later window (a hint card, a drag
+        // target) still rises above them both, as it should.
+        bubble?.let { b -> runCatching { wm?.removeView(b); wm?.addView(b, bubbleParams) } }
         positionPanel()
         // While the window is open, the bubble wears the WINDOW's
         // opacity (Oscar, 1.4.197): it does not look right for the λ
