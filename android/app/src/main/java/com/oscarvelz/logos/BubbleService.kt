@@ -2323,17 +2323,9 @@ class BubbleService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            val sw2 = resources.displayMetrics.widthPixels
-            val sh2 = resources.displayMetrics.heightPixels
-            val fx = getSharedPreferences("bubble", MODE_PRIVATE).getFloat("posFx", -1f)
-            val fy = getSharedPreferences("bubble", MODE_PRIVATE).getFloat("posFy", -1f)
-            if (fx >= 0f) {
-                x = (fx * (sw2 - size)).toInt()
-                y = (fy * (sh2 - size)).toInt()
-            } else {
-                x = sw2 - size - dp(10)
-                y = (sh2 * 0.38f).toInt()
-            }
+            val seat = cornerSeat(bubbleCorner())
+            x = seat.first
+            y = seat.second
         }
         bubbleParams = p
         attachDrag(root, p)
@@ -2464,33 +2456,61 @@ class BubbleService : Service() {
         hoverTarget = -1
     }
 
-    // FREE PLACEMENT (Oscar): the bubble lives where his hand leaves it —
-    // mid-screen included. It docks only when dropped near an edge, and it
-    // remembers its spot as screen fractions, so a rotation, a restart or
-    // a bigger screen keeps the same relative place.
-    private fun saveBubblePos(x: Int, y: Int) {
+    // THE CORNER IS ITS HOME (Oscar, 2026-11-22): the bubble always
+    // rests in a screen corner — the one his hand last chose. Its
+    // memory NAMES the corner, never fractions of a screen measured
+    // another day: the seat is re-measured against the real screen
+    // every time, so it cannot drift or land "random". The mid-room
+    // rule (the panel unfolding below a mid-screen bubble) is
+    // retired by his word the same day — he introduced it in
+    // 2026-11-10 and withdrew it as his own error.
+    // Corners: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right.
+    private fun bubbleCorner(): Int {
+        val prefs = getSharedPreferences("bubble", MODE_PRIVATE)
+        if (prefs.contains("corner")) return prefs.getInt("corner", 3).coerceIn(0, 3)
+        // First run of the law: the old fraction memory names its
+        // nearest corner; no memory at all seats bottom-right.
+        val fx = prefs.getFloat("posFx", -1f); val fy = prefs.getFloat("posFy", -1f)
+        val c = if (fx < 0f) 3 else (if (fy >= 0.5f) 2 else 0) + (if (fx >= 0.5f) 1 else 0)
+        prefs.edit().putInt("corner", c).apply()
+        return c
+    }
+
+    private fun cornerSeat(corner: Int): Pair<Int, Int> {
         val sw2 = resources.displayMetrics.widthPixels
         val sh2 = resources.displayMetrics.heightPixels
         val bw = bubbleSize()
-        getSharedPreferences("bubble", MODE_PRIVATE).edit()
-            .putFloat("posFx", if (sw2 > bw) x.toFloat() / (sw2 - bw) else 0f)
-            .putFloat("posFy", if (sh2 > bw) y.toFloat() / (sh2 - bw) else 0f)
-            .apply()
+        val x = if (corner % 2 == 1) sw2 - bw - dp(4) else dp(4)
+        val y = if (corner >= 2) sh2 - bw - dp(24) else dp(28)
+        return Pair(x, y)
+    }
+
+    private fun seatBubbleInCorner(animate: Boolean) {
+        val bp = bubbleParams ?: return
+        val bv = bubble ?: return
+        val (tx, ty) = cornerSeat(bubbleCorner())
+        if (bp.x == tx && bp.y == ty) { if (panel != null) positionPanel(); return }
+        if (!animate) {
+            bp.x = tx; bp.y = ty
+            runCatching { wm?.updateViewLayout(bv, bp) }
+            if (panel != null) positionPanel()
+            return
+        }
+        val sx = bp.x; val sy = bp.y
+        ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 220
+            addUpdateListener {
+                val f = it.animatedValue as Float
+                bp.x = sx + ((tx - sx) * f).toInt(); bp.y = sy + ((ty - sy) * f).toInt()
+                runCatching { wm?.updateViewLayout(bv, bp) }
+                if (panel != null) positionPanel()
+            }
+            start()
+        }
     }
 
     private fun placeFromMemory() {
-        val bp = bubbleParams ?: return
-        val bv = bubble ?: return
-        val prefs = getSharedPreferences("bubble", MODE_PRIVATE)
-        val fx = prefs.getFloat("posFx", -1f); val fy = prefs.getFloat("posFy", -1f)
-        if (fx < 0f) return
-        val sw2 = resources.displayMetrics.widthPixels
-        val sh2 = resources.displayMetrics.heightPixels
-        val bw = bubbleSize()
-        bp.x = (fx * (sw2 - bw)).toInt().coerceIn(dp(2), (sw2 - bw - dp(2)).coerceAtLeast(dp(2)))
-        bp.y = (fy * (sh2 - bw)).toInt().coerceIn(dp(2), (sh2 - bw - dp(24)).coerceAtLeast(dp(2)))
-        runCatching { wm?.updateViewLayout(bv, bp) }
-        if (panel != null) positionPanel()
+        seatBubbleInCorner(false)
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
@@ -2500,28 +2520,16 @@ class BubbleService : Service() {
     }
 
     private fun settleBubble(v: View, p: WindowManager.LayoutParams) {
+        // The hand may carry the bubble anywhere; where it RESTS is
+        // the nearest corner (Oscar, 2026-11-22), and that corner is
+        // what the bubble remembers.
         val sw2 = resources.displayMetrics.widthPixels
         val sh2 = resources.displayMetrics.heightPixels
         val bw = bubbleSize()
-        p.x = p.x.coerceIn(dp(2), (sw2 - bw - dp(2)).coerceAtLeast(dp(2)))
-        p.y = p.y.coerceIn(dp(2), (sh2 - bw - dp(24)).coerceAtLeast(dp(2)))
-        val near = dp(30)
-        val target = when {
-            p.x <= near -> dp(4)
-            p.x >= sw2 - bw - near -> sw2 - bw - dp(4)
-            else -> p.x
-        }
-        saveBubblePos(target, p.y)
-        if (target != p.x) {
-            val anim = ValueAnimator.ofInt(p.x, target).apply {
-                duration = 150
-                addUpdateListener { p.x = it.animatedValue as Int; runCatching { wm?.updateViewLayout(v, p) }; if (panel != null) positionPanel() }
-            }
-            anim.start()
-        } else {
-            runCatching { wm?.updateViewLayout(v, p) }
-            if (panel != null) positionPanel()
-        }
+        val cx = p.x + bw / 2; val cy = p.y + bw / 2
+        val corner = (if (cy >= sh2 / 2) 2 else 0) + (if (cx >= sw2 / 2) 1 else 0)
+        getSharedPreferences("bubble", MODE_PRIVATE).edit().putInt("corner", corner).apply()
+        seatBubbleInCorner(true)
     }
 
     private var outsideClosedAt = 0L
@@ -2627,6 +2635,9 @@ class BubbleService : Service() {
 
     private fun openPanel() {
         val w = wm ?: return
+        // The bubble stands in its corner before the panel is born,
+        // so the panel's seat is judged from the corner, always.
+        seatBubbleInCorner(false)
         panelLight = runCatching { JSONObject(nowJson).optBoolean("light") }.getOrDefault(false)
         panelFam = runCatching { JSONObject(nowJson).optString("fam", "") }.getOrDefault("").ifEmpty { themeFam(this) }
         wordsOn = runCatching { JSONObject(nowJson).optBoolean("words", true) }.getOrDefault(true)
@@ -3589,21 +3600,16 @@ class BubbleService : Service() {
         val r = bubbleFace() / 2
         val dist = r + dp(2) - (dp(24) * 0.4142f).toInt()
         val d = (dist * 0.7071f).toInt()
-        seatRight = cx >= sw2 / 2
+        // THE CORNER DECIDES (1.4.231): the bubble rests in a corner,
+        // so the panel's seat is read off that corner — the same
+        // corner gives the same arrangement every time.
+        val homeCorner = bubbleCorner()
+        seatRight = homeCorner % 2 == 1
+        val bottomCorner = homeCorner >= 2
         p.x = (if (seatRight) cx - d - pw else cx + d).coerceIn(margin, (sw2 - pw - margin).coerceAtLeast(margin))
-        // THE MIDDLE OF THE ROOM (Oscar, 2026-11-10; phone only): with
-        // the bubble resting mid-screen, the corner seat above cannot
-        // land — the wide phone panel clamps its corner to a far edge,
-        // and its top edge then cuts through the circle, the λ stranded
-        // mid-edge, sunk into the player: the panel doesn't know where
-        // to go. When the seated corner ends up more than a bubble's
-        // width from the bubble, forget the corner: the panel unfolds
-        // straight BELOW the bubble, its top edge resting under the
-        // whole circle (the same 2dp graze, vertical now), the bubble
-        // stays in the middle on top, and the birth grows out of the
-        // point beneath it (panelPivotX). Corners and borders keep the
-        // corner seat exactly as it was; tablets keep it everywhere.
-        val midRoom = !isTablet() && kotlin.math.abs((if (seatRight) p.x + pw else p.x) - cx) > dp(56)
+        // (The mid-room branch that stood here — the panel unfolding
+        // straight below a mid-screen bubble — is retired, 1.4.231:
+        // the bubble is never mid-screen now, it rests in a corner.)
         // THE GRAZE OUTRANKS THE FIT (1.4.222, Oscar's photo): the
         // bottom-fit clamp in the seat below used to drag a tall
         // panel UP over the bubble — the λ left half-buried behind
@@ -3622,16 +3628,20 @@ class BubbleService : Service() {
             val phF = ph - (wvNat - target)
             return if (topSeat + phF <= sh2 - margin) topSeat else (sh2 - phF - margin).coerceAtLeast(margin)
         }
-        if (midRoom) {
-            val rest = r + dp(2)
-            seatBottom = !(cy + rest + ph <= sh2 - margin) && (cy - rest - ph >= margin)
-            p.y = if (seatBottom) cy - rest - ph else seatBelow(cy + rest)
-            panelPivotX = (cx - p.x).toFloat().coerceIn(0f, pw.toFloat())
-        } else {
-            seatBottom = !(cy + d + ph <= sh2 - margin) && (cy - d - ph >= margin)
-            p.y = if (seatBottom) cy - d - ph else seatBelow(cy + d)
-            panelPivotX = null
+        // The mirror for a bottom corner (1.4.231): the panel rises
+        // above the bubble, and the words window yields the overflow
+        // toward the top exactly as seatBelow yields it toward the
+        // bottom — the graze outranks the fit in both directions.
+        fun seatAbove(topSeat: Int): Int {
+            var target = wvNat
+            if (wvOn && topSeat < margin) target = (wvNat - (margin - topSeat)).coerceAtLeast(dp(36))
+            if (wvOn && target != wvH) { wv!!.layoutParams.height = target; wv.requestLayout(); wvH = target }
+            val phF = ph - (wvNat - target)
+            return (cy - d - phF).coerceAtLeast(margin)
         }
+        seatBottom = bottomCorner
+        p.y = if (bottomCorner) seatAbove(cy - d - ph) else seatBelow(cy + d)
+        panelPivotX = null
         // The grip rides the corner opposite the seated one — the free one.
         val nfr = !seatRight; val nfb = !seatBottom
         gripV?.let { g ->

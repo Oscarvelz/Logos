@@ -1,3 +1,49 @@
+## 1.4.231 — The bubble's home is a corner (2026-11-22)
+
+Oscar's ruling, with five screenshots of the panel standing over
+another app in several different arrangements: the bubble does
+not stay in its corner. It overlaps the window in one shot, sits
+under it in another, takes a different corner each time — "a
+veces es random y así no se puede". His diagnosis: the app does
+not have his phone's screen mapped, so it does not know where
+to sit. And his retraction, in his own words: the rule that the
+bubble stands above when it is in the centre — the mid-room
+rule of 2026-11-10 — was his own error; "eso no es así". The
+bubble should always be in the corner where it belongs.
+
+He is right on both counts. The bubble's memory was a pair of
+screen fractions — a position measured against whatever screen
+the day it was saved, re-measured against today's — and the
+panel derived its seat from wherever that left the bubble, with
+the mid-room branch inventing a third arrangement when the
+bubble rested mid-screen. Three arrangements, no fixed point:
+from his seat, random.
+
+- The bubble's home is now NAMED, not measured: it remembers a
+  corner (top-left, top-right, bottom-left, bottom-right), and
+  the seat is computed from that corner against the real screen
+  at the moment of seating — at birth, on every panel opening,
+  on every configuration change. The old fraction memory names
+  its nearest corner on first run and is never used again.
+- The hand may still carry the bubble anywhere; where it rests
+  is the nearest corner, gliding there on release, and that
+  corner becomes its remembered home.
+- The panel's seat is read off the bubble's corner: a top
+  corner hangs the panel below the graze, a bottom corner
+  raises it above — with a new seatAbove mirroring 1.4.222's
+  seatBelow, so the words window yields the overflow toward
+  the top exactly as it already yielded it toward the bottom,
+  and the graze outranks the fit in both directions. The
+  mid-room branch is deleted. Same corner, same arrangement,
+  every time; the bubble's window still outranks the panel's
+  (1.4.227), so the λ sits whole on its corner of the card.
+
+Declared bound: while the panel stands open the bubble does
+not change corners on its own — a new corner is chosen by the
+hand, by dragging the bubble there (the panel follows).
+
+Presentation impact: none.
+
 ## 1.4.230 — No white holes (2026-11-22)
 
 Oscar's report (09:57, photo): the white rectangle is back — the
