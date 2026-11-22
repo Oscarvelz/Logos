@@ -667,7 +667,7 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
    .voice-chip rule below now serves the desk's picker door. */
 .player-top .chip-txt { white-space: nowrap; }
 .lang-chip { flex: none; }
-.speed-chip { flex: none; padding: 0 12px; gap: 6px; font-variant-numeric: tabular-nums; }
+.speed-chip { flex: none; padding: 0 12px; gap: 6px; font-variant-numeric: tabular-nums; touch-action: none; }
 .voice-chip { flex: none; }
 .transport .t-left { justify-self: start; }
 .transport .t-right { justify-self: end; }

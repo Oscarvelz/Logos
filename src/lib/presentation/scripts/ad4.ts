@@ -65,45 +65,42 @@ export const AD4: PresentationModule = {
         {
           id: 'ad4-speed-chip-tap',
           anchorId: 'listen-speed-chip',
-          effectAnchorId: 'listen-speed-sheet',
           act: 'tap',
-          establishes: 'speed-sheet-open',
           text: {
-            en: 'This gauge chip wears the current speed: tap it.',
-            es: 'Este chip medidor lleva la velocidad actual: tócalo.',
+            en: 'This gauge chip wears the current speed — and the chip itself is a wheel. Tap it: the speed steps up.',
+            es: 'Este chip medidor lleva la velocidad actual — y el propio chip es una rueda. Tócalo: la velocidad sube un paso.',
           },
         },
         {
           id: 'ad4-speed-steps',
-          anchorId: 'listen-speed-sheet',
+          anchorId: 'listen-speed-chip',
           act: 'say',
           text: {
-            en: 'Eight step buttons climb from 0.75 up to 2.',
-            es: 'Ocho botones escalonados suben de 0,75 hasta 2.',
+            en: 'Drag it up or down and the speed rolls with it, one step at a time: eight steps climb from 0.75 up to 2, and past 2 the wheel loops back to 0.75.',
+            es: 'Arrástralo hacia arriba o hacia abajo y la velocidad rueda con él, paso a paso: ocho pasos suben de 0,75 hasta 2, y al pasar de 2 la rueda vuelve a 0,75.',
           },
         },
         {
           id: 'ad4-speed-pick',
-          anchorId: 'listen-speed-sheet',
-          effectAnchorId: 'listen-reader',
+          anchorId: 'listen-speed-chip',
           act: 'tap',
           text: {
-            en: 'Tap 1.5: the reading speeds up right now.',
-            es: 'Toca 1,5: la lectura acelera en este instante.',
+            en: 'Every step applies the moment it lands — the reading speeds up or slows down right now.',
+            es: 'Cada paso se aplica en el instante en que cae: la lectura acelera o frena ahora mismo.',
           },
         },
         {
           id: 'ad4-speed-slider',
-          anchorId: 'listen-speed-sheet',
+          anchorId: 'listen-speed-chip',
           act: 'say',
           text: {
-            en: 'The fine slider continues past 2, up to 2.5.',
-            es: 'El deslizador fino sigue más allá de 2, hasta 2,5.',
+            en: 'For a finer speed — any value, up to 2.5 — the same key waits in Settings, on its own slider. We will meet it there in a moment.',
+            es: 'Para una velocidad más fina — cualquier valor, hasta 2,5 — la misma llave espera en Ajustes, con su propio deslizador. La veremos allí en un momento.',
           },
         },
         {
           id: 'ad4-speed-pitch',
-          anchorId: 'listen-speed-sheet',
+          anchorId: 'listen-speed-chip',
           act: 'say',
           text: {
             en: 'Faster, but never squeaky: the pitch stays natural.',

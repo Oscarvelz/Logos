@@ -168,7 +168,6 @@ const A_LISTEN: AnchorRecord[] = [
   r('listen-lang-chip', 'web', 'CLASS', ['A-31'], ['Q1', 'AD5'], cls('.lang-chip'), { file: LP, probe: [pr(LP, 'lang-chip')] }),
   r('listen-voice-chip', 'web', 'CLASS', ['A-32'], ['Q0', 'Q3'], cls('.voice-chip'), { file: DESK, probe: [pr(DESK, 'voice-chip')] }),
   r('listen-speed-chip', 'web', 'CLASS', ['A-34'], ['AD4'], cls('.speed-chip'), { file: LP, probe: [pr(LP, 'speed-chip')] }),
-  r('listen-speed-sheet', 'web', 'MINT', ['A-35'], ['AD4'], DP, { file: LP, precondition: PC_SHEET }),
   r('listen-sleep-chip', 'web', 'MINT', ['A-36'], ['AD4'], DP, { file: LP }),
   r('listen-sleep-sheet', 'web', 'MINT', ['A-37', 'A-38'], ['AD4'], DP, { file: LP, precondition: PC_SHEET }),
   r('listen-player-meta', 'web', 'CLASS', ['A-39', 'A-57'], ['Q1', 'AD12'], cls('.player-meta'), { file: LP, probe: [pr(LP, 'player-meta')] }),
@@ -595,6 +594,11 @@ export const RETIRED_ANCHORS: AnchorRecord[] = [
     family: 'key',
     retired:
       'real-element-removed-in-1.4.200: canon removed the Voices page horizontal filter chips; the page is the picker accordion now and the sections do the filters’ work. Q3 remapped to voices-section-head:{group} in the same wave.',
+  }),
+  r('listen-speed-sheet', 'web', 'MINT', ['A-35'], ['AD4'], DP, {
+    file: LP,
+    retired:
+      'real-element-removed-in-1.4.211: Oscar replaced the Listen Speed sheet with the speed wheel — the chip itself rolls (drag or tap) through the ladder, in the app as in the bubble (1.4.207). AD4’s speed scene was re-anchored to listen-speed-chip in the same wave; the stage chip steps the fiction rate.',
   }),
 ]
 

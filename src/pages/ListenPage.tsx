@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as RPE } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
 import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, ListMusic, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, X } from 'lucide-react'
 import { queue } from '../lib/queue.ts'
@@ -27,11 +27,9 @@ import { WebImport } from '../components/webimport.tsx'
 import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, JumpKey, StatusPill, VoicePicker } from '../components/chrome.tsx'
-import { Range, Sheet, Switch, toast, useMediaQuery } from '../components/ui.tsx'
+import { Sheet, Switch, toast, useMediaQuery } from '../components/ui.tsx'
 import { t } from '../lib/i18n.ts'
 import { TabletDesk, TextMap } from '../components/desk.tsx'
-
-const SPEEDS = RATE_STEPS
 
 export function ListenPage() {
   const d = useStore(drafts)
@@ -42,7 +40,6 @@ export function ListenPage() {
   const e = useStore(engine)
   const [editing, setEditing] = useState(() => !listen.get().active)
   const [voiceOpen, setVoiceOpen] = useState(false)
-  const [speedOpen, setSpeedOpen] = useState(false)
   const [sleepOpen, setSleepOpen] = useState(false)
   const [keepOpen, setKeepOpen] = useState(false)
   const [markAsk, setMarkAsk] = useState(false)
@@ -156,6 +153,45 @@ export function ListenPage() {
     relangSession()
   }
 
+  // The speed wheel (1.4.211, Oscar): the chip keeps its face —
+  // gauge and number — but the number is a drum, the same wheel
+  // the bubble's counter grew in 1.4.207. Drag up or down and
+  // the rate rolls through the ladder in a loop, each detent
+  // (26 px, as in the bubble) applying at once with a tick and
+  // the number rolling in from the side it came; a tap steps one
+  // up. The Speed sheet is gone — the wheel is the door, here as
+  // in the bubble. A finer rate (any value up to 2.5) still
+  // lives in Settings, on its own slider.
+  const rateLabel = useRef<HTMLSpanElement>(null)
+  const wheelDrag = useRef<{ y: number; idx: number; applied: number } | null>(null)
+  const nearestStep = (rate: number) => {
+    let best = 0, bd = Infinity
+    RATE_STEPS.forEach((v, i) => { const dd = Math.abs(v - rate); if (dd < bd) { bd = dd; best = i } })
+    return best
+  }
+  const rollRate = (idx: number, dir: number) => {
+    setRate(RATE_STEPS[idx])
+    const el = rateLabel.current
+    if (el) el.animate([{ transform: `translateY(${dir * 6}px)`, opacity: 0.25 }, { transform: 'translateY(0)', opacity: 1 }], { duration: 110, easing: 'ease-out' })
+    try { navigator.vibrate?.(1) } catch { /* this surface has no haptics */ }
+  }
+  const onWheelDown = (e: RPE<HTMLButtonElement>) => {
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* a synthetic or stale pointer: the drag still tracks by hand */ }
+    wheelDrag.current = { y: e.clientY, idx: nearestStep(settings.get().listenSpeed), applied: 0 }
+  }
+  const onWheelMove = (e: RPE<HTMLButtonElement>) => {
+    const w = wheelDrag.current
+    if (!w) return
+    const total = Math.trunc((w.y - e.clientY) / 26)
+    while (w.applied < total) { w.applied++; w.idx = (w.idx + 1) % RATE_STEPS.length; rollRate(w.idx, 1) }
+    while (w.applied > total) { w.applied--; w.idx = (w.idx + RATE_STEPS.length - 1) % RATE_STEPS.length; rollRate(w.idx, -1) }
+  }
+  const onWheelUp = () => {
+    const w = wheelDrag.current
+    wheelDrag.current = null
+    if (w && w.applied === 0) rollRate((w.idx + 1) % RATE_STEPS.length, 1)
+  }
+
   // Space toggles playback (tablet keyboards)
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
@@ -238,7 +274,7 @@ export function ListenPage() {
             </button>
             <div className="player-top-r">
               <button className={`chip ${s.sleepLeft != null ? 'accent' : ''}`} data-present="listen-sleep-chip" onClick={() => setSleepOpen(true)} aria-label={t('Sleep timer')}><Moon size={15} />{s.sleepLeft != null ? formatDuration(s.sleepLeft) : null}</button>
-              <button className="chip speed-chip" onClick={() => setSpeedOpen(true)} aria-label={t('Playback speed {x}', { x: fmtSpeed(st.listenSpeed) })}><Gauge size={15} />{fmtSpeed(st.listenSpeed)}</button>
+              <button className="chip speed-chip" onPointerDown={onWheelDown} onPointerMove={onWheelMove} onPointerUp={onWheelUp} onPointerCancel={() => { wheelDrag.current = null }} onClick={(e) => { if (e.detail === 0) rollRate((nearestStep(settings.get().listenSpeed) + 1) % RATE_STEPS.length, 1) }} aria-label={t('Playback speed {x}', { x: fmtSpeed(st.listenSpeed) })}><Gauge size={15} /><span ref={rateLabel} style={{ display: 'inline-block' }}>{fmtSpeed(st.listenSpeed)}</span></button>
               {/* 1.4.203 (Oscar's determination): the voice chip that
                   stood here is GONE — it duplicated the voice choice
                   the desk below already gives, and this row was too
@@ -329,14 +365,6 @@ export function ListenPage() {
           <button className="btn ghost grow" onClick={() => setMarkAsk(false)}>{t('Cancel')}</button>
           <button className="btn ghost grow" onClick={() => { setMarkAsk(false); runMark() }}>{t('Mark anyway')}</button>
         </div>
-      </Sheet>
-
-      <Sheet open={speedOpen} onClose={() => setSpeedOpen(false)} title={t('Speed')} present="listen-speed-sheet">
-        <div className="speed-row" style={{ marginBottom: 14 }}>
-          {SPEEDS.map((v) => <button key={v} className={Math.abs(st.listenSpeed - v) < 0.001 ? 'on' : ''} onClick={() => setRate(v)}>{v}×</button>)}
-        </div>
-        <Range label={t('Speed')} min={0.5} max={2.5} step={0.05} value={st.listenSpeed} onChange={setRate} />
-        <p className="muted small" style={{ margin: '8px 4px 0' }}>{t('Changes apply instantly, pitch preserved.')}</p>
       </Sheet>
 
       <Sheet open={sleepOpen} onClose={() => setSleepOpen(false)} title={t('Sleep timer')} present="listen-sleep-sheet">

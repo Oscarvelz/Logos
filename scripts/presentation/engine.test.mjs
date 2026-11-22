@@ -2046,7 +2046,7 @@ describe('P12 reveal wait', () => {
           chapter: bi('Sheet', 'Hoja'),
           steps: [
             { id: 'r1', anchorId: 'listen-paste', act: 'say', text: bi('First live beat here now.', 'Primer paso vivo aquí.') },
-            { id: 'r2', anchorId: 'listen-speed-sheet', act: 'tap', text: bi('The sheet is here now.', 'La hoja ya está aquí.') },
+            { id: 'r2', anchorId: 'listen-sleep-sheet', act: 'tap', text: bi('The sheet is here now.', 'La hoja ya está aquí.') },
           ],
         },
       ],
@@ -2054,7 +2054,7 @@ describe('P12 reveal wait', () => {
     let attempts = 0
     const resolver = (step) => {
       const record = anchorById(step.anchorId)
-      if (step.anchorId === 'listen-speed-sheet') {
+      if (step.anchorId === 'listen-sleep-sheet') {
         attempts += 1
         if (attempts <= 3) return { status: 'miss', record, anchorId: step.anchorId, reason: 'not-yet' }
       }

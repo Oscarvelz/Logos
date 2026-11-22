@@ -87,12 +87,6 @@ export function LogosScenarioStage({ scenario }: { scenario: Scenario }) {
             : <p className="pstage-note" data-present="listen-keep-note">Kept readings wait in the Library, under Saved.</p>}
         </div>
       )}
-      {ui.sheet === 'speed' && (
-        <div className="pstage-sheet pstage-overlay" data-present="listen-speed-sheet">
-          <div className="pstage-sheet-h">Speed</div>
-          <div className="pstage-chips">{['0.75×', '1×', '1.25×', '1.5×', '2×'].map((s) => <span key={s} className="pstage-chip">{s}</span>)}</div>
-        </div>
-      )}
       {ui.sheet === 'sleep' && (
         <div className="pstage-sheet pstage-overlay" data-present="listen-sleep-sheet">
           <div className="pstage-sheet-h">Sleep timer</div>
@@ -292,7 +286,7 @@ function StageListen({ scenario }: { scenario: Scenario }) {
         <div className="pstage-chips">
           <span className="pstage-chip lang-chip">Auto · EN</span>
           <button type="button" className="pstage-chip" data-present="listen-sleep-chip"><Moon size={14} /> Sleep</button>
-          <span className="pstage-chip speed-chip">1×</span>
+          <span className="pstage-chip speed-chip">{['0.75×', '0.9×', '1×', '1.1×', '1.25×', '1.5×', '1.75×', '2×'][ui.speedIdx]}</span>
           <span className="pstage-grow" />
           <button type="button" className="pstage-iconbtn" data-present="listen-nav-pin" aria-label="Keep the bar">📌</button>
         </div>
@@ -943,7 +937,7 @@ const STAGE_SETTING_INDEX: { anchor: string; title: string; sub: string; keys: s
   { anchor: 'set-card-language', title: 'Language', sub: 'The app’s own words — everything on screen.', keys: 'english español spanish idioma lenguaje inglés' },
   { anchor: 'set-presentations', title: 'Presentations', sub: 'Learn the whole app, guided, at your pace', keys: 'lessons tour guided learn presentaciones lecciones aprender guía' },
   { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy clips library copia respaldo exportar importar archivo biblioteca' },
-  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.210 · private, on-device text-to-speech', keys: 'version about acerca versión' },
+  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.211 · private, on-device text-to-speech', keys: 'version about acerca versión' },
 ]
 
 function StageSettings({ scenario }: { scenario: Scenario }) {
@@ -1125,8 +1119,8 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
 
       <div className="pstage-card" data-present="set-about">
         <strong>About Logos</strong>
-        <p className="pstage-note">Version 1.4.210 · private, on-device text-to-speech</p>
-        <p className="pstage-note" data-present="set-version">Version 1.4.210</p>
+        <p className="pstage-note">Version 1.4.211 · private, on-device text-to-speech</p>
+        <p className="pstage-note" data-present="set-version">Version 1.4.211</p>
       </div>
     </div>
   )

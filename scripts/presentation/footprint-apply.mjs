@@ -42,6 +42,13 @@
  * voices-section-head:pocket, same EFF footprint on voices-grid). The
  * table key above follows the live script; the 2026-11-15 run itself
  * is unchanged history.
+ *
+ * NOTE (maintenance, 2026-11-21, canon 1.4.211): the Listen Speed
+ * sheet is gone — the speed chip is a wheel now. AD4's two performed
+ * speed taps (ad4-speed-chip-tap, ad4-speed-pick) act on the chip
+ * itself and their effect lands on the chip's own number, so both
+ * are SELF here; the sheet anchor (listen-speed-sheet) stands
+ * retired in the registry with its lineage.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { MODULE_CATALOGUE } from '../../src/lib/presentation/catalogue.ts'
@@ -214,8 +221,8 @@ export const CLASSIFICATION = {
   },
   'ad4.ts': {
     'ad4-play-fiction': ['EFF', R],
-    'ad4-speed-chip-tap': ['EFF', 'listen-speed-sheet'],
-    'ad4-speed-pick': ['EFF', R],
+    'ad4-speed-chip-tap': ['SELF'],
+    'ad4-speed-pick': ['SELF'],
     'ad4-goto-settings': ['NAV'],
     'ad4-set-playback': ['SELF'],
     'ad4-goto-listen': ['NAV'],

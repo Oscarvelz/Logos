@@ -57,7 +57,7 @@ export function closePresentation() {
 
 // ── The fiction stage's navigation + sheets ───────────────────────
 export type StageSurface = 'listen' | 'library' | 'voices' | 'create' | 'settings' | 'book' | 'bubble'
-export type StageSheet = 'voice' | 'keep' | 'speed' | 'sleep' | 'lang' | null
+export type StageSheet = 'voice' | 'keep' | 'sleep' | 'lang' | null
 export const stageNav = createStore<{ surface: StageSurface; bump: number }>({ surface: 'settings', bump: 0 })
 export interface StageUiState {
   sheet: StageSheet
@@ -80,8 +80,14 @@ export interface StageUiState {
    *  about errors focuses (the fx fast-forward principle, applied to
    *  the player's error line). Cleared on any room change. */
   listenError: boolean
+  /** The fiction speed wheel's step (1.4.211): the player's speed
+   *  chip is a wheel now — a tap on the stage chip steps the
+   *  fiction rate up the ladder, in a loop, as the real one does.
+   *  Index into the ladder [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+   *  born at 1× (index 2), the chip's resting face. */
+  speedIdx: number
 }
-export const stageUi = createStore<StageUiState>({ sheet: null, menu: null, selecting: false, confirm: null, panel: null, libTab: 'saved', voicesSection: null, fx: null, keepBusy: false, listenError: false })
+export const stageUi = createStore<StageUiState>({ sheet: null, menu: null, selecting: false, confirm: null, panel: null, libTab: 'saved', voicesSection: null, fx: null, keepBusy: false, listenError: false, speedIdx: 2 })
 export function stagePatch(patch: Partial<StageUiState>) {
   stageUi.set({ ...stageUi.get(), ...patch })
   stageBump()
@@ -123,6 +129,11 @@ export function stageBump() {
 }
 export function stageSheet(sheet: StageSheet) {
   stagePatch({ sheet })
+}
+/** Step the fiction speed wheel one rung up, looping past the top
+ *  back to 0.75 — the real chip's tap deed since 1.4.211. */
+export function stageStepSpeed() {
+  stagePatch({ speedIdx: (stageUi.get().speedIdx + 1) % 8 })
 }
 
 /** Voice-catalogue state shared by the Voices surface and the voice
@@ -234,7 +245,7 @@ function choreograph(anchorId: string, act: string) {
   else if (anchorId === 'listen-reader-save') stageSheet('keep')
   else if (anchorId === 'listen-keep-audio') stagePatch({ keepBusy: true })
   else if (anchorId === 'listen-keep-later') stagePatch({ keepBusy: false })
-  else if (anchorId === 'listen-speed-chip') stageSheet('speed')
+  else if (anchorId === 'listen-speed-chip') stageStepSpeed()
   else if (anchorId === 'listen-sleep-chip') stageSheet('sleep')
   // Library: clip menu, selection mode, delete confirm.
   else if (anchorId === 'lib-clip-more') stagePatch({ menu: 'clip' })

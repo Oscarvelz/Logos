@@ -1,3 +1,34 @@
+## 1.4.211 — The wheel comes to the app
+
+Oscar (2026-11-21): for balance, the app's own Listen screen
+changes speed the same way the bubble learned in 1.4.207 — the
+chip keeps its face (the gauge, the number), and the number is
+the wheel: drag up or down to roll the speeds in a loop, a tap
+to step up. «Ya no necesitamos la tarjeta de speed» — the app's
+Speed sheet is deleted.
+
+- **The chip is the wheel.** Pointer drag with capture, 26 px
+  per detent as in the bubble; each detent steps the ladder
+  [0.75 … 2] with wrap, applies at once through setRate, rolls
+  the number in from the side it came (110 ms), and ticks
+  (navigator.vibrate where the surface has it). A press with no
+  detent is a tap: one step up. Keyboard activation (detail 0)
+  also steps up, so the button stays a button. An off-ladder
+  rate (set finely in Settings) seeds the wheel at its nearest
+  rung. The chip keeps its class, its aria name, and its seat.
+- **The Speed sheet is deleted whole** — its preset chips, its
+  fine slider, and its note. A finer rate still exists: the
+  Settings slider (0.5–2.5) is untouched, and the wheel steps
+  from wherever it stands.
+- **Presentation impact: real, and integrated in this wave.**
+  The sheet's anchor (listen-speed-sheet, A-35) is retired with
+  lineage; the stage fiction loses its speed sheet, the stage
+  chip now shows the fiction rate and a performed tap steps it
+  (stageStepSpeed), and AD4's speed scene is re-anchored to the
+  chip and rewritten to teach the wheel truthfully — tap steps
+  up, drag rolls the loop, fine values live in Settings. A
+  relay goes to the Presentation lane with this wave.
+
 ## 1.4.210 — The queue's door stands
 
 Oscar, from his phone (2026-11-21): reopening Logos, the copy

@@ -33,7 +33,7 @@ import { ANCHORS, RETIRED_ANCHORS } from '../../src/lib/presentation/anchors.ts'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 /** ANCHOR-REGISTRY.md §2 — the document totals this registry must match. */
-const DOC_TOTALS = { MINT: 251, CONTRACT: 34, CLASS: 30, STORE: 5, EXISTING: 3, TOTAL: 323 }
+const DOC_TOTALS = { MINT: 250, CONTRACT: 34, CLASS: 30, STORE: 5, EXISTING: 3, TOTAL: 322 }
 
 const cache = new Map()
 function source(rel) {
