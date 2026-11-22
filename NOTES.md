@@ -1,3 +1,27 @@
+## 1.4.210 — The queue's door stands
+
+Oscar, from his phone (2026-11-21): reopening Logos, the copy
+queue's icon was gone — because the queue stood off in Settings.
+He does not want it to disappear: the door must stand even when
+the queue is off, and tapping it should let him turn the queue
+on right there, with the switch the queue's own card already
+carries, without a trip to Settings.
+
+- **The Listen player's queue chip is unconditional now.** It
+  used to render only when the queue was on or the line held
+  texts — vanishing in exactly the state where it is needed,
+  since the sheet behind it is where the switch lives. Off and
+  empty it wears the bare icon (no count, no accent); the count
+  and the accent still come with the line. The sheet itself is
+  unchanged: its «Queue what I copy» switch, its explanation,
+  and the line were already there — they were simply
+  unreachable when the door hid.
+
+Presentation impact: none — the chip and its seat already exist
+(the stage's Listen fiction carries no queue chip and no anchor
+record claims it); the change only removes a render condition
+in the real page. No relay owed.
+
 ## 1.4.209 — The queue sheet, right-sized
 
 Oscar, from his phone (2026-11-21): the queue sheet's back arrow

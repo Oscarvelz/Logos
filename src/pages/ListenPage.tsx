@@ -248,7 +248,14 @@ export function ListenPage() {
                   is a real substitute, not a lesser one. The
                   .voice-chip class (and its anchor) follows the
                   deed to the desk; see desk.tsx. */}
-              {(st.copyQueue || q.items.length > 0) && <button className={`chip ${q.items.length ? 'accent' : ''}`} data-present="listen-queue-chip" onClick={() => setQueueOpen(true)} aria-label={t('Copy queue')}><ListMusic size={15} />{q.items.length > 0 ? q.items.length : null}</button>}
+              {/* 1.4.210 (Oscar's word): the queue's door STANDS
+                  whether the queue is on or off. It used to vanish
+                  when the queue was off and the line empty — the
+                  very state in which he needs the door, since the
+                  sheet behind it carries the switch that turns the
+                  queue on. Off and empty it wears the bare icon;
+                  the count and the accent come with the line. */}
+              <button className={`chip ${q.items.length ? 'accent' : ''}`} data-present="listen-queue-chip" onClick={() => setQueueOpen(true)} aria-label={t('Copy queue')}><ListMusic size={15} />{q.items.length > 0 ? q.items.length : null}</button>
             </div>
           </div>
 
