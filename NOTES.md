@@ -1,3 +1,13 @@
+## 1.4.208 — The splash's understudy (the white block, cured the spectrum's way)
+
+Oscar, opening the app: for a moment, very briefly, the splash screen's icon and animation turned into a white block — «tal y como estaba el bloque del espectro antes, pero esta vez para el splash screen». The shell's own frames are all dark by construction (the system splash background, the window, and the WebView's background are all #0A0A0F), so the block was born inside the page's splash itself: the medallion is a 240×240 animated layer whose entrance animated a blur over its whole face — the same family as the spectrum's block before 1.4.197: when that layer's frame is not ready, the phone shows the empty block for an instant.
+
+- **A static twin under the animated mark.** An identical, self-contained, animation-free copy of the medallion (its own gradient defs, the birth seat, the resting arcs) now stands exactly beneath `.sp-mark`, sharing only the cheap lift transform. If the animated layer ever drops a frame, the twin shows through: the worst case is a still mark for a blink — never a white block. Proven on the bench by hiding the animated mark outright: the twin carries the whole medallion alone.
+- **The blur is out of the entrance and the exit.** `spFadeIn` is a plain fade now (no `filter: blur(8px)` over the medallion), and the splash's exit no longer blurs the full screen — opacity and scale only. The blur was the heaviest paint on the layer at the coldest moment of the app's life.
+- **Presentation impact: NONE** — index.html's splash only; no page element, anchor, or stage fiction changes. No relay owed.
+
+Web-only wave (index.html + version stamps), as 204/203/199/195 — the shell reads the page live, so no APK is owed. The block itself is a compositor frame-drop on Oscar's phone and cannot be reproduced on the bench; the bench proves the understudy stands complete in the animated mark's place.
+
 ## 1.4.207 — The speed wheel (Oscar's combination lock)
 
 Oscar's verdict on 205's speed card, with his phone's photo of it: the buttons were excellent, but the card is «ancho e innecesariamente espacioso» — his replacement design, verbatim in spirit: run the speed the way the numbers run on a combination lock; rotating the number like a gear takes no extra space and opens no window — drag down or up and the speeds roll in a loop. «Eso sí sería interesante de ver y más sencillo.»
