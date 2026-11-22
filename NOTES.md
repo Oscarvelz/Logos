@@ -1,3 +1,38 @@
+## 1.4.229 — The line takes the Library in (2026-11-22)
+
+Oscar's word (09:10, with a photo of a book's menu): to make the
+queue far more useful, add the option to place files or books in
+the line from the Library, so they wait one below the other to
+be played.
+
+- «Add to the queue» now stands in both Library menus — a book's
+  menu (under Continue reading) and a file's menu. The deed turns
+  the queue mode on when it stands off (a line that is not
+  registering is no line to join), lines the resident up behind
+  whatever waits, and starts it at once only when the stage is
+  free — the courtesy a copy already receives.
+- The line's record learns two new kinds beside the copy: a book
+  and a recording carry only their Library name, fetched when
+  their turn comes. A book plays by the book road — the whole
+  book as one session, opening at its own saved place, a finished
+  book from its start, its progress writing back to the shelf.
+  A recording plays by the Library's road — from where it was
+  left, a finished one from the top. A text file lines up as the
+  text it is. A resident deleted before its turn is stepped over:
+  the line never stalls on a ghost.
+- Both finish judges now serve the mixed line: a reading's end
+  (the book item's key is re-noted with the staged text's key
+  when it takes the stage) and a recording's end (a new clip-end
+  judge, with the orphan judgment the text road already makes).
+- «Send to Listen later» keeps its promise honestly in a mixed
+  line: only the copies move house — books and recordings already
+  live in the Library, so they simply go home when the line
+  empties; the per-item save key likewise stands only on copies.
+
+Presentation impact: two anchors minted in canon — lib-menu-queue
+(C-122) and bk-menu-queue (C-123), MINT, in the menus' own files.
+Relayed to the Presentation lane.
+
 ## 1.4.228 — The main player follows the floating one (2026-11-22)
 
 Oscar's word (09:05): in the main Listen player, while the

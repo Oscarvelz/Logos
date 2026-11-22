@@ -613,6 +613,7 @@ export const ES: Record<string, string> = {
   'Added to the queue · {n} in line': 'Añadido a la cola · {n} en fila',
   'Previous in the queue': 'Anterior en la fila',
   'Next in the queue': 'Siguiente en la fila',
+  'Add to the queue': 'Añadir a la fila',
   '{n} texts are waiting in Listen later': '{n} textos esperan en Escuchar después',
   'Send all to Listen later': 'Enviar todo a Escuchar después',
   'Play in order': 'Escuchar en orden',

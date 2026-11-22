@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, BookPlus, Grid2x2, Grid3x3, Square, CircleCheck, MoreHorizontal, Pencil, Search, Star, Trash2, X, Pin, Clock } from 'lucide-react'
+import { BookOpen, BookPlus, Grid2x2, Grid3x3, Square, CircleCheck, ListMusic, MoreHorizontal, Pencil, Search, Star, Trash2, X, Pin, Clock } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { books, refreshBooks, updateBook, deleteBook, putBook, bookMatchesQuery, type BookMeta } from '../lib/books.ts'
 import { importBook, BOOK_ACCEPT } from '../lib/book/import.ts'
 import { playBook } from '../lib/book/playbook.ts'
+import { queueBookById } from '../lib/bubble.ts'
 import { keepAsk, askKeep } from '../lib/book/keepask.ts'
 import { MenuSelect, Sheet, toast, confirmDelete } from './ui.tsx'
 import { BookCover } from './bookcover.tsx'
@@ -302,6 +303,7 @@ function BookMenu({ b, onClose, onRename }: { b: BookMeta | null; onClose: () =>
       {b.warn && <p className="keepask-body" data-present="bk-menu-warn" style={{ color: 'var(--danger)' }}>⚠ {b.warn}</p>}
       <div className="menu-list">
         <button data-present="bk-menu-open" onClick={run(() => openBook(b.id))}><BookOpen size={20} /> {b.progress > 0.002 ? t('Continue reading') : t('Start reading')}</button>
+        <button data-present="bk-menu-queue" onClick={run(() => void queueBookById(b.id))}><ListMusic size={20} /> {t('Add to the queue')}</button>
         <button data-present="bk-menu-fav" onClick={run(() => guardedBookWrite(updateBook(b.id, (cur) => ({ fav: !cur.fav }), false)))}><Star size={20} /> {b.fav ? t('Remove from favorites') : t('Add to favorites')}</button>
         <button data-present="bk-menu-temp" onClick={run(() => guardedBookWrite(updateBook(b.id, (cur) => ({ temp: !cur.temp }), false)))}>{b.temp ? <Pin size={20} /> : <Clock size={20} />} {b.temp ? t('Keep this book') : t('Only once')}</button>
         <button data-present="bk-menu-done" onClick={run(() => guardedBookWrite(updateBook(b.id, (cur) => (cur.done ? { done: false } : { done: true, progress: 1 }), false)))}><CircleCheck size={20} /> {b.done ? t('Mark as not finished') : t('Mark as finished')}</button>

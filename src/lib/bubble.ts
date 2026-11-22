@@ -7,7 +7,7 @@
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
 import { listen, loadText, play, pauseFromShell, endSession, stepRate, setRate, seek, seekFraction, seekToMs, refreshVoices, voiceFor, sentenceProgress, wordClock, levels, registerTrackSkip } from '../player/listen.ts'
-import { queue, queueItems, currentItem, currentIndex, enqueue, enqueueFront, setCurrent, removeItem as queueRemove, clearQueue, type QueueItem } from './queue.ts'
+import { queue, queueItems, currentItem, currentIndex, enqueue, enqueueFront, enqueueRef, noteStagedKey, setCurrent, removeItem as queueRemove, clearQueue, type QueueItem } from './queue.ts'
 import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { cancelDevice } from '../engine/device-voice.ts'
 import { readClipboard } from './clipboard.ts'
@@ -16,11 +16,11 @@ import { detectLang } from './text.ts'
 import { VOICES, favoriteVoices } from './voices.ts'
 import { nowReadingFor } from './book/nowreading.ts'
 import { markAndToast, marksEpoch, textKey } from './marks.ts'
-import { saveForLater, library, getClipBlob } from './library.ts'
-import { books } from './books.ts'
+import { saveForLater, library, getClipBlob, getClip, kindOf, updateClip, type ClipMeta } from './library.ts'
+import { books, getBook, getContent } from './books.ts'
 import { playBook } from './book/playbook.ts'
 import { t } from './i18n.ts'
-import { playClip, clipPlayer, pauseClip, resumeClip, seekClip } from '../player/clip.ts'
+import { playClip, clipPlayer, pauseClip, resumeClip, seekClip, onClipEnded } from '../player/clip.ts'
 import { loadSessionResume } from './resume.ts'
 import { estimateSeconds } from './text.ts'
 import { toast, confirmAsk } from '../components/ui.tsx'
@@ -241,7 +241,45 @@ export function playQueuedText(raw: string) {
 
 function playQueueItem(item: QueueItem) {
   setCurrent(item.id)
+  if (item.kind === 'book') { void playQueuedBook(item); return }
+  if (item.kind === 'audio') { void playQueuedClip(item); return }
   playQueuedText(item.text)
+}
+
+/**
+ * A queued book takes the stage (1.4.229): the book road itself —
+ * the whole book as one session, opening at its own saved place
+ * (a finished book starts over), its progress writing back to the
+ * shelf as it plays. Once the session stands, the item's key is
+ * re-noted with the staged text's key, so the finish judge below
+ * steps the line when the book ends. A book that has vanished
+ * from the shelf, or holds no words, is stepped over — the line
+ * never stalls on a ghost.
+ */
+async function playQueuedBook(item: QueueItem) {
+  const meta = await getBook(item.ref)
+  const content = meta ? await getContent(item.ref) : null
+  const hasText = !!content?.chapters.some((c) => c.blocks.some((b) => b.t.trim()))
+  if (!meta || !hasText) { stepQueue(1, true); return }
+  if (clipPlayer.get().playing) pauseClip()
+  await playBook(meta, { pos: meta.done ? { ch: 0, b: 0 } : meta.pos })
+  const staged = listen.get().text
+  if (staged) noteStagedKey(item.id, textKey(staged))
+}
+
+/**
+ * A queued recording takes the stage (1.4.229): the Library's own
+ * play road — from where it was left, a finished one from the
+ * top, its done flag cleared as the Library clears it. The
+ * session yields the stage first. A recording whose file has
+ * vanished is stepped over.
+ */
+async function playQueuedClip(item: QueueItem) {
+  const full = await getClip(item.ref)
+  if (!full?.blob) { stepQueue(1, true); return }
+  if (listen.get().active) endSession()
+  void playClip(`clip:${item.ref}`, full.blob, { title: item.title, artist: `Logos · ${t('Library')}` }, full.done ? 0 : full.pos ?? 0)
+  if (full.done) void updateClip(item.ref, { done: false }, false)
 }
 
 /** One step along the line. Past the end a hand press is claimed
@@ -315,23 +353,76 @@ export function queueFrontArrival(raw: string): boolean {
   return true
 }
 
+/** The Library doors into the line (Oscar, 1.4.229): «Add to the
+ *  queue» in a book's or a file's menu. The deed turns the queue
+ *  mode on when it stands off — a line that is not registering is
+ *  no line to join — then lines the resident up behind whatever
+ *  waits, and starts it at once only when the stage is free, the
+ *  same courtesy a copy receives. */
+function ensureLineMode() {
+  if (!settings.get().copyQueue) settings.set({ copyQueue: true })
+}
+
+function lineUp(item: QueueItem | null) {
+  if (!item) { toast(t('Already in the queue'), undefined, 2500); return }
+  const cp = clipPlayer.get()
+  const clipBusy = !!cp.key && !cp.key.startsWith('preview:') && cp.playing
+  const s = listen.get()
+  const idle = !clipBusy && (!s.active || s.finished)
+  if (!currentItem() && idle) playQueueItem(item)
+  else toast(t('Added to the queue · {n} in line', { n: queueItems().length }), undefined, 2500)
+}
+
+export async function queueBookById(id: string) {
+  ensureLineMode()
+  const meta = await getBook(id)
+  if (!meta) return
+  const content = await getContent(id)
+  const chapters = content?.chapters ?? []
+  if (!chapters.length) return
+  // The estimate covers what will actually play: from the book's
+  // saved place to its end — a finished book, from its start.
+  const from = meta.done ? { ch: 0, b: 0 } : meta.pos
+  const parts: string[] = []
+  for (let c = Math.min(from.ch, chapters.length - 1); c < chapters.length; c++) {
+    const blocks = chapters[c].blocks
+    for (let i = c === from.ch ? Math.min(from.b, blocks.length) : 0; i < blocks.length; i++) parts.push(blocks[i].t)
+  }
+  lineUp(enqueueRef('book', id, meta.title, estimateSeconds(parts.join('\n\n'), 1), `book:${id}`))
+}
+
+export function queueClipItem(clip: ClipMeta) {
+  ensureLineMode()
+  if (kindOf(clip) === 'text' && clip.text) {
+    lineUp(enqueue(clip.text, clip.title, estimateSeconds(clip.text, 1)))
+  } else {
+    lineUp(enqueueRef('audio', clip.id, clip.title, clip.duration ?? 0, `clip:${clip.id}`))
+  }
+}
+
 /** Send the whole line to the Library's Listen later, in order —
  *  and the line empties: its texts live there now. */
 export async function sendQueueToLater() {
   const items = queueItems()
   if (!items.length) return
-  for (const it of items) {
+  // Only the copies move house (1.4.229): books and recordings in
+  // the line already live in the Library — sending them to Listen
+  // later would duplicate them as homeless texts. The line still
+  // empties whole; the residents simply go home.
+  const copies = items.filter((it) => it.kind === 'copy')
+  for (const it of copies) {
     const lang = detectLang(it.text.slice(0, 2000)).lang
     const info = describeText(it.text.slice(0, 12000), lang)
     await saveForLater(it.text, { title: info.title || it.title || t('Copied text'), summary: info.summary, lang, voice: '', duration: it.secs })
   }
   clearQueue()
-  toast(t('{n} texts are waiting in Listen later', { n: items.length }), undefined, 3500)
+  if (copies.length) toast(t('{n} texts are waiting in Listen later', { n: copies.length }), undefined, 3500)
 }
 
 /** Save one lined-up text to Listen later; it keeps its place in
  *  the line — saving was never a removal. */
 export async function saveQueueItemToLater(item: QueueItem) {
+  if (item.kind !== 'copy') return
   const lang = detectLang(item.text.slice(0, 2000)).lang
   const info = describeText(item.text.slice(0, 12000), lang)
   await saveForLater(item.text, { title: info.title || item.title || t('Copied text'), summary: info.summary, lang, voice: '', duration: item.secs })
@@ -399,6 +490,22 @@ listen.subscribe(() => {
     return
   }
   if (!cur && st.items.length) playQueueItem(st.items[0])
+})
+
+/* The line's second finish judge (1.4.229): a recording's end is
+ * heard here, as a reading's end is heard above. When the clip
+ * that ends is the line's standing recording, the line steps; when
+ * it is an orphan — the current recording removed mid-play — the
+ * successor takes the stage, the same judgment the text road makes. */
+onClipEnded((key) => {
+  if (!key || !settings.get().copyQueue) return
+  const st = queue.get()
+  const cur = currentItem()
+  if (cur && cur.kind === 'audio' && key === `clip:${cur.ref}`) { stepQueue(1, true); return }
+  if (st.orphanKey && st.orphanKey === key) {
+    if (cur) playQueueItem(cur)
+    else setCurrent(null)
+  }
 })
 
 /* The mode's own law (Oscar): turning it off erases the record. */

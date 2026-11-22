@@ -32,8 +32,9 @@ import { ANCHORS, RETIRED_ANCHORS } from '../../src/lib/presentation/anchors.ts'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
-/** ANCHOR-REGISTRY.md §2 — the document totals this registry must match. */
-const DOC_TOTALS = { MINT: 250, CONTRACT: 34, CLASS: 30, STORE: 5, EXISTING: 3, TOTAL: 322 }
+/** ANCHOR-REGISTRY.md §2 — the document totals this registry must match.
+ *  1.4.229: +2 MINT (lib-menu-queue, bk-menu-queue) minted in canon. */
+const DOC_TOTALS = { MINT: 252, CONTRACT: 34, CLASS: 30, STORE: 5, EXISTING: 3, TOTAL: 324 }
 
 const cache = new Map()
 function source(rel) {

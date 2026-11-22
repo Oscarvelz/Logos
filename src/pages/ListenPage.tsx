@@ -405,7 +405,7 @@ export function ListenPage() {
                       <span className="qrow-title">{it.title || t('Copied text')}</span>
                       <span className="muted small">{formatDuration(it.secs)}</span>
                     </button>
-                    <button className="icon-btn" onClick={() => void saveQueueItemToLater(it)} aria-label={t('Save to Listen later')} title={t('Save to Listen later')}><BookDown size={17} /></button>
+                    {it.kind === 'copy' && <button className="icon-btn" onClick={() => void saveQueueItemToLater(it)} aria-label={t('Save to Listen later')} title={t('Save to Listen later')}><BookDown size={17} /></button>}
                     <button className="icon-btn" onClick={() => dropQueueItem(it.id)} aria-label={t('Remove from the queue')} title={t('Remove')}><X size={17} /></button>
                   </div>
                 )

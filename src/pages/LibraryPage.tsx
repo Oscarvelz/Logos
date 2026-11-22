@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownToLine, AudioLines, ExternalLink, Globe, Check, CheckCheck, CircleCheck, Clock, FileAudio, MoreHorizontal, Pause, Pencil, Play, Plus, Search, Share2, Square, Star, Trash2, Upload, X } from 'lucide-react'
+import { ArrowDownToLine, AudioLines, ExternalLink, Globe, Check, CheckCheck, CircleCheck, Clock, FileAudio, ListMusic, MoreHorizontal, Pause, Pencil, Play, Plus, Search, Share2, Square, Star, Trash2, Upload, X } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { library, refreshLibrary, getClip, deleteClips, restoreClips, updateClip, importAudio, kindOf, type ClipMeta } from '../lib/library.ts'
 import { clipPlayer, playClip, seekClip, pauseClip } from '../player/clip.ts'
@@ -11,7 +11,7 @@ import { settings } from '../lib/settings.ts'
 import { drafts } from '../lib/drafts.ts'
 import { navigate } from '../lib/router.ts'
 import { loadText, play as listenPlay } from '../player/listen.ts'
-import { playLaterChain } from '../lib/bubble.ts'
+import { playLaterChain, queueClipItem } from '../lib/bubble.ts'
 
 /** The Listen-later line, in the order the texts arrived (1.4.198):
  *  the playlist the saved texts form when they are played through. */
@@ -343,6 +343,7 @@ function ItemMenu({ clip, onClose, onRename }: { clip: ClipMeta | null; onClose:
     <Sheet open onClose={onClose} title={clip.title.length > 34 ? t('Options') : clip.title}>
       <div className="menu-list">
         {clip.text && <button data-present="lib-menu-open-listen" onClick={run(() => openInListen(clip))}><AudioLines size={20} /> {t('Open in Listen')}</button>}
+        <button data-present="lib-menu-queue" onClick={run(() => queueClipItem(clip))}><ListMusic size={20} /> {t('Add to the queue')}</button>
         {isText && <button data-present="lib-menu-make-audio" onClick={run(() => makeAudio(clip))}><FileAudio size={20} /> {t('Make audio')}</button>}
         <button data-present="lib-menu-done" onClick={run(() => updateClip(clip.id, (cur) => (cur.done ? { done: false } : { done: true, pos: 0 }), false))}><CircleCheck size={20} /> {clip.done ? t('Mark as not finished') : t('Mark as finished')}</button>
         {!isText && !!clip.pos && !clip.done && <button data-present="lib-menu-startover" onClick={run(() => updateClip(clip.id, { pos: 0 }, false))}><Clock size={20} /> {t('Start over next time')}</button>}
