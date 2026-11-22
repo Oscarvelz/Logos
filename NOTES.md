@@ -8,7 +8,7 @@ Oscar's verdict on 205's speed card, with his phone's photo of it: the buttons w
 - **Honest paint while rolling.** While a hand is on the drum (`wheelLive`), pushes never repaint it — the drum shows the hand's own rolling; the standing step re-syncs from the counter's witness on the next push after the hand lifts. The drum's step seeds from the rate the counter witnesses (`currentRateFromSub`, kept from 205) and thereafter from the pushes themselves.
 - **Presentation impact: NONE** — the panel is shell-native; no page element, anchor, or stage fiction changes. No relay owed.
 
-Shell-only wave (BubbleService.kt) plus the version stamps; the page is untouched. The drum's feel — detent size, roll, tick — is judged on Oscar's phone; CI is the compile gate.
+Shell-only wave (BubbleService.kt) plus the version stamps; the page is untouched. The drum's feel — detent size, roll, tick — is judged on Oscar's phone; CI is the compile gate. (First CI run failed honestly: the pushed sub is a nullable String, and the split called methods on it bare — cured by judging a non-null witness copy inside the block; run 128 green.)
 
 ## 1.4.206 — The queue's own lever, and Paste now jumps the line (Oscar, 2026-11-21)
 
