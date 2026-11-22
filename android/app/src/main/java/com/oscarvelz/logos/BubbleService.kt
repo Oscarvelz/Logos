@@ -4313,19 +4313,31 @@ class BubbleService : Service() {
             // own writing, so the diff stays honest; while a hand is
             // on the drum (wheelLive) pushes never repaint it — the
             // drum is showing the hand's own rolling.
+            // 1.4.221 (Oscar's find): the line is remembered as shown
+            // ONLY when a living view received it — the title's own
+            // discipline, which this block alone had skipped. It used
+            // to record shownSub on every push even with the panel
+            // closed, so a panel born mid-reading stood with its
+            // counter line empty until the sentence changed; only
+            // dragging the seek bar painted it, the scrub writing the
+            // line by hand. Now a closed panel remembers nothing, and
+            // the newborn panel paints in full at its first refresh.
             if (sub != shownSub || transportQueueMode != shownSubMode) {
-                shownSub = sub; shownSubMode = transportQueueMode
-                val subW = sub ?: ""
-                val sep = if (transportQueueMode) subW.lastIndexOf(" · ") else -1
-                val rateTxt = if (sep >= 0) subW.substring(sep + 3) else ""
-                val rateVal = rateTxt.dropLast(1).toDoubleOrNull()
-                val hasRate = rateTxt.endsWith("×") && rateVal != null
-                subV?.text = if (hasRate) subW.substring(0, sep) else sub
-                rateV?.let { rv ->
-                    rv.visibility = if (hasRate) View.VISIBLE else View.GONE
-                    if (hasRate && !wheelLive) {
-                        rv.text = rateTxt
-                        wheelIdx = wheelIndexFor(rateVal!!)
+                val sv = subV
+                if (sv != null) {
+                    shownSub = sub; shownSubMode = transportQueueMode
+                    val subW = sub ?: ""
+                    val sep = if (transportQueueMode) subW.lastIndexOf(" · ") else -1
+                    val rateTxt = if (sep >= 0) subW.substring(sep + 3) else ""
+                    val rateVal = rateTxt.dropLast(1).toDoubleOrNull()
+                    val hasRate = rateTxt.endsWith("×") && rateVal != null
+                    sv.text = if (hasRate) subW.substring(0, sep) else sub
+                    rateV?.let { rv ->
+                        rv.visibility = if (hasRate) View.VISIBLE else View.GONE
+                        if (hasRate && !wheelLive) {
+                            rv.text = rateTxt
+                            wheelIdx = wheelIndexFor(rateVal!!)
+                        }
                     }
                 }
             }
