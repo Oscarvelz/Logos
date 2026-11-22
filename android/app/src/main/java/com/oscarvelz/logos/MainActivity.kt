@@ -746,6 +746,22 @@ class MainActivity : Activity() {
             return ctx
         }
 
+        /** An absolute rate from the panel's speed list (1.4.205),
+         *  pulled once — twenty seconds of life, like the seek's.
+         *  No session judgment at this door: the rate is a global
+         *  setting, not a seat in a session. A stale drop leaves
+         *  its receipt on the Settings line. */
+        @JavascriptInterface fun bubbleRate(): String {
+            val v = BubbleService.ratePick
+            BubbleService.ratePick = -1.0
+            if (v <= 0) return ""
+            if (System.currentTimeMillis() - BubbleService.ratePickAt > 20_000) {
+                BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored rate went stale", "una velocidad guardada caducó"))
+                return ""
+            }
+            return v.toString()
+        }
+
         /** A copy-queue row the panel chose to play (1.4.198),
          *  pulled once — judged at this door by the same laws as
          *  the seek's: twenty seconds of life, and the session it

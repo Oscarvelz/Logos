@@ -675,6 +675,18 @@ class BubbleService : Service() {
                 field = value
                 if (value >= 0) { seekFracAt = System.currentTimeMillis(); seekCtx = currentContext() }
             }
+        /** An absolute rate chosen on the panel's speed list
+         *  (1.4.205), pulled once by the page through the Bridge —
+         *  twenty seconds of life at that door, like the seek's.
+         *  No session context travels with it: the rate is a global
+         *  setting, and belongs to whichever reading stands when
+         *  it lands. */
+        @Volatile var ratePickAt = 0L
+        @Volatile var ratePick = -1.0
+            set(value) {
+                field = value
+                if (value > 0) ratePickAt = System.currentTimeMillis()
+            }
         /** The media session's seek target (1.4.193): an absolute
          *  book-millisecond count, stamped by PlaybackService's
          *  onSeekTo exactly the way seekFrac is stamped — the same
@@ -1228,6 +1240,17 @@ class BubbleService : Service() {
     private var ctlPrev: View? = null
     private var ctlNext: View? = null
     private var ctlFast: View? = null
+    // The queue transport's extra seats (1.4.205): the track keys
+    // exist from the panel's birth but only take the row while a
+    // copy queue stands; transportQueueMode is the shape the row
+    // currently wears, and shownCueMode the shape the sub-line's
+    // speed cue was last painted for (both die with the panel's
+    // views in spirit — the next birth re-arranges by force).
+    private var ctlTrackPrev: View? = null
+    private var ctlTrackNext: View? = null
+    private var controlsV: LinearLayout? = null
+    private var transportQueueMode = false
+    private var shownCueMode = false
     private val handler = Handler(Looper.getMainLooper())
 
     /** The player's mirrored spectrum, drawn the way Listen draws it: bars ease
@@ -1787,30 +1810,67 @@ class BubbleService : Service() {
      *  give (10 → 6 → 4 dp), then the keys themselves scale together,
      *  the toggle always the largest. Nothing is ever cropped. */
     private fun fitControls() {
-        val slow = ctlSlow ?: return
-        val prev = ctlPrev ?: return
         val tog = toggleB ?: return
-        val next = ctlNext ?: return
-        val fast = ctlFast ?: return
         val inner = panelWidth() - dp(36) // the card's own side padding
         // Proportions (1.4.179, Oscar): the jump keys shrink toward
         // their proper rank under the toggle — 34 / 42 / 54 / 42 / 34
         // (they were 38 / 46 / 54 / 46 / 38, the jumps nearly the
         // toggle's peers). The row stays symmetric, so the toggle
         // keeps the exact center fitControls always gave it.
+        // (1.4.205: the queue shape keeps the SAME five numbers —
+        // the jumps take the 34 seats at the ends, the track keys
+        // the 42 seats beside the toggle — so the row's footprint
+        // never changes when the line arrives or leaves.)
         val design = dp(34 + 42 + 54 + 42 + 34)
         var gap = dp(10)
         var avail = inner - gap * 4
         if (avail < design) { gap = dp(6); avail = inner - gap * 4 }
         if (avail < design) { gap = dp(4); avail = inner - gap * 4 }
         val k = if (avail >= design) 1f else (avail.toFloat() / design).coerceAtLeast(0.7f)
-        fun seat(v: View, designDp: Int, last: Boolean) {
-            val lp = v.layoutParams as? LinearLayout.LayoutParams ?: return
+        fun seat(v: View?, designDp: Int, last: Boolean) {
+            val view = v ?: return
+            val lp = view.layoutParams as? LinearLayout.LayoutParams ?: return
             val s = (dp(designDp) * k).toInt()
             lp.width = s; lp.height = s; lp.marginEnd = if (last) 0 else gap
-            v.layoutParams = lp
+            view.layoutParams = lp
         }
-        seat(slow, 34, false); seat(prev, 42, false); seat(tog, 54, false); seat(next, 42, false); seat(fast, 34, true)
+        if (transportQueueMode) {
+            seat(ctlPrev, 34, false); seat(ctlTrackPrev, 42, false); seat(tog, 54, false); seat(ctlTrackNext, 42, false); seat(ctlNext, 34, true)
+        } else {
+            seat(ctlSlow, 34, false); seat(ctlPrev, 42, false); seat(tog, 54, false); seat(ctlNext, 42, false); seat(ctlFast, 34, true)
+        }
+    }
+
+    /** The transport's two shapes (Oscar, 1.4.205): as it stands, and —
+     *  while a copy queue stands — the queue shape, where the time
+     *  jumps move OUT to the speed keys' seats at the speed keys'
+     *  size, the inner seats go to previous/next AUDIO (the line is
+     *  a playlist, travelled like songs), and the −/+ keys leave the
+     *  row (the rate lives on the sentence counter's tap instead).
+     *  Nothing is destroyed: when the line empties, the row rebuilds
+     *  itself exactly as it was. Sizing stays fitControls' deed. */
+    private fun arrangeTransport(force: Boolean = false) {
+        val q = panelQueueCount > 0
+        if (panel == null && !force) { transportQueueMode = q; return }
+        val row = controlsV ?: return
+        val tog = toggleB ?: return
+        if (!force && q == transportQueueMode) return
+        transportQueueMode = q
+        row.removeAllViews()
+        if (q) {
+            ctlPrev?.let { row.addView(it) }
+            ctlTrackPrev?.let { row.addView(it) }
+            row.addView(tog)
+            ctlTrackNext?.let { row.addView(it) }
+            ctlNext?.let { row.addView(it) }
+        } else {
+            ctlSlow?.let { row.addView(it) }
+            ctlPrev?.let { row.addView(it) }
+            row.addView(tog)
+            ctlNext?.let { row.addView(it) }
+            ctlFast?.let { row.addView(it) }
+        }
+        fitControls()
     }
 
     // THE STRETCHABLE READER (1.4.105, Oscar: 'redimensionar el tamaño del
@@ -2333,7 +2393,11 @@ class BubbleService : Service() {
     /** The explainer cards step ONE tone away from the player (Oscar, refined):
      *  a warm charcoal — a dark gray that never nears pure black — on the dark
      *  player, a deeper parchment on the light one. The full pole-swap was too
-     *  stark; the player's own tone was invisible. Never Android gray. */
+     *  stark; the player's own tone was invisible. Never Android gray.
+     *  (1.4.205, Oscar's verdict on his phone: the dark step was still
+     *  «demasiado blanco» — the same Vela diagnosis. The dark face now
+     *  sits a WHISPER above the panel itself, and the separation is
+     *  carried by the rim and the edge stack, never by luminance.) */
     private fun cardPal(): Map<String, Int> = when (panelFam) {
         "tron" -> mapOf(
             "bg1" to Color.rgb(12, 40, 62), "bg2" to Color.rgb(7, 24, 40),
@@ -2356,11 +2420,11 @@ class BubbleService : Service() {
         "discLine" to Color.rgb(200, 180, 140), "gold" to Color.rgb(154, 102, 20),
         "glow" to Color.argb(46, 233, 189, 114), "div" to Color.rgb(200, 184, 148)
     ) else mapOf(
-        "bg1" to Color.rgb(79, 70, 58), "bg2" to Color.rgb(60, 53, 44),
+        "bg1" to Color.rgb(44, 38, 30), "bg2" to Color.rgb(30, 26, 21),
         "line" to Color.rgb(158, 132, 84), "ink" to Color.rgb(246, 240, 228),
-        "muted" to Color.rgb(226, 216, 196), "disc" to Color.rgb(90, 81, 68),
-        "discLine" to Color.rgb(120, 106, 82), "gold" to gold,
-        "glow" to Color.argb(64, 233, 189, 114), "div" to Color.rgb(96, 86, 70)
+        "muted" to Color.rgb(226, 216, 196), "disc" to Color.rgb(52, 45, 36),
+        "discLine" to Color.rgb(86, 74, 58), "gold" to gold,
+        "glow" to Color.argb(64, 233, 189, 114), "div" to Color.rgb(58, 50, 40)
     )
     }
 
@@ -2416,7 +2480,15 @@ class BubbleService : Service() {
             setAutoSizeTextTypeUniformWithConfiguration(11, 17, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        subV = TextView(this).apply { setTextColor(c["muted"]!!); textSize = 12f }
+        subV = TextView(this).apply {
+            setTextColor(c["muted"]!!); textSize = 12f
+            // The counter is the rate's door in the queue shape
+            // (1.4.205, Oscar): the rate already lives in its second
+            // half, so its tap opens the speed list — but only while
+            // the queue shape stands; as the row stands, the counter
+            // is a label and takes no taps, exactly as before.
+            setOnClickListener { if (transportQueueMode) showSpeedCard() }
+        }
         val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         titleRow.addView(titleV)
         val markB = TextView(this).apply {
@@ -2503,6 +2575,7 @@ class BubbleService : Service() {
             setOnClickListener { pokeOrWake(cmd); handler.postDelayed({ refreshPanel() }, 350) }
         }
         controls.gravity = Gravity.CENTER
+        controlsV = controls
         fun speedBtn(glyph: String, label: String, cmd: String): TextView = TextView(this).apply {
             text = glyph; textSize = 18f; gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
@@ -2731,9 +2804,13 @@ class BubbleService : Service() {
                 }
             }, 2600)
         }
-        controls.addView(slowB); controls.addView(prevB); controls.addView(toggleB); controls.addView(nextB); controls.addView(fastB)
+        // The track keys (1.4.205): born with the panel, seated only
+        // while a copy queue stands — arrangeTransport owns the row.
+        val trackPrevB = mediaBtn(android.R.drawable.ic_media_previous, "Previous audio", "prev", 42, c["discLine"]!!)
+        val trackNextB = mediaBtn(android.R.drawable.ic_media_next, "Next audio", "next", 42, c["discLine"]!!)
         ctlSlow = slowB; ctlPrev = prevB; ctlNext = nextB; ctlFast = fastB
-        fitControls()
+        ctlTrackPrev = trackPrevB; ctlTrackNext = trackNextB
+        arrangeTransport(force = true)
         card.addView(controls)
         val seekW = SeekBar(this).apply {
             max = 1000
@@ -2919,7 +2996,6 @@ class BubbleService : Service() {
             runCatching { startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("logos.listen", true)) }
         }
         listenB.layoutParams = LinearLayout.LayoutParams(dp(footDp), dp(footDp)).apply { leftMargin = dp(footM) }
-        clipRow.addView(listenB)
         val eyeB = footBtn(s("Hide bubble", "Ocultar burbuja"), s("Hide", "Ocultar"), { cv, ink, cx, cy, r ->
             val p = inkPaint(ink)
             val eye = android.graphics.Path()
@@ -2963,6 +3039,11 @@ class BubbleService : Service() {
         queueBadgeV = queueBadge
         queueWrap.layoutParams = LinearLayout.LayoutParams(dp(footDp), dp(footDp)).apply { leftMargin = dp(footM) }
         clipRow.addView(queueWrap)
+        // The enter key takes the RIGHT END (Oscar, 1.4.205, by
+        // symmetry): the key that takes him into the app sits where
+        // the queue's key sat, and the rest of the row steps one
+        // seat left — [paste][eye][queue][enter].
+        clipRow.addView(listenB)
         card.addView(clipRow)
         // The reader's grip: two small gold ticks hugging the panel's free
         // corner. Drag it and the reader stretches (see applyReaderScale).
@@ -3030,10 +3111,16 @@ class BubbleService : Service() {
         val qGlow = View(this).apply {
             background = GradientDrawable().apply {
                 gradientType = GradientDrawable.RADIAL_GRADIENT
-                gradientRadius = dp(190).toFloat()
+                // The glow lies over the WHOLE sheet (1.4.205, Oscar:
+                // the 120 dp band's bottom edge cut the fade in two —
+                // «se ve como un error que haya un corte de color»).
+                // Centered on the top edge with a wider radius, the
+                // light dies inside the sheet and no edge ever shows.
+                setGradientCenter(0.5f, 0.0f)
+                gradientRadius = dp(240).toFloat()
                 colors = intArrayOf(c["glow"]!!, Color.TRANSPARENT)
             }
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(120), Gravity.TOP)
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         qList.addView(qGlow)
         val qContent = LinearLayout(this).apply {
@@ -3050,10 +3137,12 @@ class BubbleService : Service() {
         val qClose = TextView(this).apply {
             // The way out wears a BACK ARROW, never an ✕ (Oscar,
             // 1.4.201): the ✕ belongs to the rows' drops alone,
-            // and the two must not be confused.
-            text = "←"; setTextColor(c["muted"]!!); textSize = 15f; gravity = Gravity.CENTER
+            // and the two must not be confused. (1.4.205, Oscar:
+            // the arrow grows «un poquito más» — 15 → 19 in a
+            // 26 → 32 dp seat.)
+            text = "←"; setTextColor(c["muted"]!!); textSize = 19f; gravity = Gravity.CENTER
             contentDescription = s("Back", "Atrás")
-            layoutParams = LinearLayout.LayoutParams(dp(26), dp(26))
+            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32))
             setOnClickListener { toggleQueueList() }
         }
         qHeadRow.addView(qClose)
@@ -3071,7 +3160,9 @@ class BubbleService : Service() {
         // line, behind its own confirmation, which says so.
         val qClear = TextView(this).apply {
             text = s("Empty the whole list", "Vaciar toda la lista")
-            setTextColor(c["gold"]!!); textSize = 13f; gravity = Gravity.CENTER
+            // (1.4.205, Oscar: the words stay; the size steps down
+            // «un poquitín» — 13 → 12.)
+            setTextColor(c["gold"]!!); textSize = 12f; gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, dp(2))
             contentDescription = s("Empty the whole list", "Vaciar toda la lista")
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -3385,7 +3476,7 @@ class BubbleService : Service() {
         handler.postDelayed(r, 9000)
     }
 
-    private fun showHintCard(title: String, body: String, confirmLabel: String, cancelLabel: String, action: () -> Unit) {
+    private fun showHintCard(title: String, body: String, confirmLabel: String, cancelLabel: String, cancelAction: (() -> Unit)? = null, action: () -> Unit) {
         dismissSaveHint()
         val w = wm ?: return
         val c = cardPal()
@@ -3454,7 +3545,7 @@ class BubbleService : Service() {
         if (cancelLabel.isNotEmpty()) row.addView(TextView(this).apply {
             text = cancelLabel; setTextColor(c["muted"]!!); textSize = 13f; gravity = Gravity.CENTER
             setPadding(dp(12), dp(8), dp(12), dp(8))
-            setOnClickListener { dismissSaveHint() }
+            setOnClickListener { dismissSaveHint(); cancelAction?.invoke() }
         })
         row.addView(TextView(this).apply {
             text = confirmLabel; setTextColor(c["gold"]!!); textSize = 13f; gravity = Gravity.CENTER
@@ -3479,6 +3570,90 @@ class BubbleService : Service() {
         handler.postDelayed(r, 9000)
     }
 
+    /** The speed list (Oscar, 1.4.205): in the queue shape the −/+
+     *  keys have left the row, and the rate lives where it is already
+     *  written — the sentence counter's second half. Its tap opens
+     *  this card in the hint cards' mould: the app's own rate steps,
+     *  the standing one in gold; a tap sets the rate through the
+     *  Bridge's absolute-rate door, and the choice stays written on
+     *  the counter, as it always was. */
+    private fun showSpeedCard() {
+        dismissSaveHint()
+        val w = wm ?: return
+        val c = cardPal()
+        val scrim = View(this).apply {
+            setBackgroundColor(if (panelLight) Color.argb(90, 62, 48, 28) else Color.argb(118, 10, 8, 5))
+            alpha = 0f
+        }
+        runCatching {
+            w.addView(scrim, WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, PixelFormat.TRANSLUCENT))
+        }
+        saveHintScrim = scrim
+        scrim.animate().alpha(1f).setDuration(220).start()
+        val rim = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(mixCol(c["gold"]!!, c["ink"]!!, 0.18f), mixCol(c["gold"]!!, c["bg2"]!!, 0.50f), mixCol(c["gold"]!!, c["bg2"]!!, 0.68f))).apply {
+            cornerRadius = dp(21).toFloat()
+        }
+        val face = GradientDrawable().apply {
+            setColor(mixCol(c["bg1"]!!, c["bg2"]!!, 0.3f))
+            cornerRadius = dp(20).toFloat()
+        }
+        val stage = FrameLayout(this).apply {
+            background = android.graphics.drawable.LayerDrawable(arrayOf(rim, face)).apply { setLayerInset(1, dp(1), dp(1), dp(1), dp(1)) }
+            elevation = dp(10).toFloat()
+        }
+        val gold = c["gold"]!!
+        val sheenV = View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.argb(26, Color.red(gold), Color.green(gold), Color.blue(gold)), Color.TRANSPARENT))
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(30), Gravity.TOP)
+        }
+        stage.addView(sheenV)
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(14))
+        }
+        card.addView(TextView(this).apply {
+            text = s("Speed", "Velocidad")
+            setTextColor(c["ink"]!!); textSize = 15f; typeface = Typeface.SERIF
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        val cur = currentRateFromSub()
+        for (v in listOf(0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0)) {
+            card.addView(TextView(this).apply {
+                text = rateLabel(v)
+                setTextColor(if (v == cur) c["gold"]!! else c["ink"]!!)
+                textSize = 14.5f; gravity = Gravity.CENTER
+                if (v == cur) setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(12), dp(9), dp(12), dp(9))
+                contentDescription = s("Speed", "Velocidad") + " " + rateLabel(v)
+                setOnClickListener { ratePick = v; dismissSaveHint(); pokeOrWake("rate") }
+            })
+        }
+        stage.addView(card, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        val p = WindowManager.LayoutParams(dp(300), WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT).apply { gravity = Gravity.CENTER }
+        runCatching { w.addView(stage, p) }
+        saveHint = stage
+        stage.scaleX = 0.90f; stage.scaleY = 0.90f; stage.alpha = 0f
+        stage.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(230).setInterpolator(DecelerateInterpolator()).start()
+        val r = Runnable { dismissSaveHint() }
+        saveHintRun = r
+        handler.postDelayed(r, 9000)
+    }
+
+    private fun rateLabel(v: Double): String = if (v == v.toInt().toDouble()) "${v.toInt()}×" else "$v×"
+
+    /** The standing rate, read off the pushed sub-line's own writing
+     *  («Sentence 5 of 10 · 1.1×») — the counter is the rate's home,
+     *  so it is also its witness. -1 when the writing names none. */
+    private fun currentRateFromSub(): Double {
+        val sub = runCatching { JSONObject(nowJson).optString("sub") }.getOrDefault("")
+        val m = Regex("""([0-9]+(?:\.[0-9]+)?)×""").find(sub) ?: return -1.0
+        return m.groupValues[1].toDoubleOrNull() ?: -1.0
+    }
+
     /** The lock explains itself, like every panel button: what it holds, and
      *  what letting go restores. (A hand paste inside the app itself was
      *  never the lock's business; the panel's Paste now key is gone since
@@ -3499,8 +3674,11 @@ class BubbleService : Service() {
 
     /** The ⚑ asks where its mark would live (Oscar): on saved content it marks
      *  at once (a moment cannot wait for a card) and teaches itself a single
-     *  time; on a text that is not in the Library it refuses kindly and offers
-     *  the save first — marks on unsaved audio would be lost in the dark. */
+     *  time; on a text that is not in the Library it asks for the save
+     *  first — and if he goes on anyway, he is advised first that the
+     *  mark lasts only while this text is open or playing, and dies
+     *  when the text is replaced (his ruling, 1.4.204 in the app,
+     *  mirrored here in 1.4.205). */
     /** "Saved" is claimed only once the page's own state says so (1.4.108,
      *  audit E-1): the shell used to toast «Saved to Library» in the same
      *  tap that SENT the save poke — before the page had saved anything,
@@ -3530,7 +3708,11 @@ class BubbleService : Service() {
                 showHintCard(s("The ⚑ mark", "La marca ⚑"), s("The ⚑ marks this moment. Find it in Library, under Saved Marks.", "La ⚑ marca este momento. La encuentras en Biblioteca, en Marcas guardadas."), s("Got it", "Entendido"), "") { }
             }
         } else {
-            showHintCard(s("Not in your Library yet", "Aún no está en tu Biblioteca"), s("Marks live with their audio. Save this text to your Library first.", "Las marcas viven con su audio. Guarda primero este texto en tu Biblioteca."), s("Save to Library", "Guardar en Biblioteca"), s("Not now", "Ahora no")) {
+            showHintCard(s("Not in your Library yet", "Aún no está en tu Biblioteca"), s("Marks live with their text. Save this text to your Library first, and the mark stays with it.", "Las marcas viven con su texto. Guarda primero este texto en tu Biblioteca, y la marca se queda con él."), s("Save to Library", "Guardar en Biblioteca"), s("Not now", "Ahora no"), cancelAction = {
+                showHintCard(s("Mark anyway?", "¿Marcar de todos modos?"), s("Without saving, this mark lasts only while this text is open or playing. When the text is replaced, the mark is lost.", "Sin guardar, esta marca dura solo mientras este texto esté abierto o sonando. Cuando el texto se reemplace, la marca se pierde."), s("Mark anyway", "Marcar de todos modos"), s("Cancel", "Cancelar")) {
+                    pokeOrWake("mark")
+                }
+            }) {
                 val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
                 pokeOrWake("save")
                 toastSavedWhenTrue(wasSaved)
@@ -3569,7 +3751,7 @@ class BubbleService : Service() {
         // The shown-* diff memory describes these views (M-7): the
         // next panel is born blank, so its first refresh must paint
         // everything — the memory dies with the views it described.
-        shownTitle = null; shownSub = null; shownPlaying = null; shownSeek = -1; shownBarsKey = null; shownLock = null
+        shownTitle = null; shownSub = null; shownPlaying = null; shownSeek = -1; shownBarsKey = null; shownLock = null; shownCueMode = false
         // The window is gone: the bubble takes its OWN opacity back
         // (1.4.197 — while the panel stood, it wore the panel's).
         bubble?.let { it.animate().cancel(); it.animate().alpha(awakeAlpha()).setDuration(160).start() }
@@ -3854,7 +4036,15 @@ class BubbleService : Service() {
                 else if (j?.optBoolean("busy") == true) s("Processing…", "Procesando…")
                 else j?.optString("sub")?.ifBlank { s("Ready", "Listo") } ?: s("Ready", "Listo")
             if (scrubTarget >= 0 && lastCt > 0) sub = s("Sentence", "Oración") + " ${scrubTarget + 1} " + s("of", "de") + " $lastCt"
-            if (sub != shownSub) subV?.let { it.text = sub; shownSub = sub }
+            arrangeTransport()
+            // In the queue shape the counter wears its door's sign
+            // (1.4.205): the trailing ▾ says the line can be tapped
+            // for the speed list. The cue is display only — shownSub
+            // keeps the page's own writing, so the diff stays honest.
+            if (sub != shownSub || transportQueueMode != shownCueMode) subV?.let {
+                it.text = if (transportQueueMode) "$sub ▾" else sub
+                shownSub = sub; shownCueMode = transportQueueMode
+            }
             val locked = isLocked(this@BubbleService)
             if (locked != shownLock) lockBtn?.let { it.text = if (locked) "🔒" else "🔓"; shownLock = locked }
             if (playing != shownPlaying && toggleB != null) {

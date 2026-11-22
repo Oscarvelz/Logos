@@ -1,3 +1,16 @@
+## 1.4.205 — The panel in the queue's shape (Oscar's panel round, 2026-11-21)
+
+Six panel orders from Oscar's evening with 1.4.201 in hand, all shell (BubbleService + the MainActivity Bridge); the page's half of the speed road (the absolute-rate listener) already shipped in 1.4.204. Presentation impact: NONE — no anchor moves, no registry change, nothing on the stage wears the panel's transport; no relay owed.
+
+- **The hint cards darken (his Vela verdict, applied here).** «Las tarjetas de ayuda tienen demasiado blanco.» cardPal's Legacy dark face stepped from rgb(79,70,58)/(60,53,44) to rgb(44,38,30)/(30,26,21) — a whisper above the panel's own (34,29,23)/(19,16,13); the discs and dividers darkened in step. The separation is now carried by the rim and the edge stack (the Calibration Law), never by a luminance leap. Light, Tron and Cyberpunk card palettes untouched.
+- **The transport wears the queue's shape.** While a copy queue stands (the push's count > 0), the row rebuilds itself: the time jumps move OUT to the −/+ seats at the −/+ size (34), the inner 42 seats go to previous/next AUDIO (the standing media glyphs, the panel's own "prev"/"next" verbs — the line is travelled like songs), and the −/+ keys leave the row. fitControls learned the shape: the same five numbers (34/42/54/42/34) seat both rows, so the footprint never changes. When the line empties, the row rebuilds exactly as it was. Nothing is deleted — the speed keys return with the empty line.
+- **The speed lives on the counter.** In the queue shape the sentence counter («Sentence 5 of 10 · 1.1×») wears a trailing ▾ and its tap opens the speed list — the app's own eight steps in the hint cards' mould, the standing rate in gold (read off the counter's own writing). A tap stores the pick in the shell (ratePick, stamped like the seek), pokes "rate", and the page sets it absolutely through Bridge.bubbleRate (twenty seconds of life, no session judgment — the rate is global). The chosen speed stays written on the counter, as it always was.
+- **The queue sheet breathes.** Its exit arrow grows a little (15 → 19 in a 26 → 32 dp seat); «Empty the whole list» keeps its words a touch smaller (13 → 12); and the gold glow now lies over the WHOLE sheet (radial, centered on the top edge, radius 240) instead of a 120 dp band whose bottom edge cut the fade in two — «se ve como un error que haya un corte de color». One piece, no cut.
+- **The ⚑ mirror.** The panel's unsaved-mark card now mirrors the app's 1.4.204 ruling: save first; «Not now» leads to the warning card («Without saving, this mark lasts only while this text is open or playing…») and only there does «Mark anyway» mark. showHintCard learned an optional cancel deed for the chain; every other card is untouched.
+- **The footer's symmetry.** The enter-sign key takes the far RIGHT seat — where the queue's key sat — and the rest step one seat left: [paste][eye][queue][enter]. The queue's count badge travels with its key.
+
+Shell has no bench: the Android CI compile is the gate, Oscar's phone the judge — the card darkness, the row's two shapes, the counter's list and the sheet's one-piece face are all his to verdict.
+
 ## 1.4.204 — Marks ask first, dialogs breathe, the ⚑ gets its receipt (2026-11-21)
 
 Oscar's three orders from his phone this evening. (1) In the app's dialog
