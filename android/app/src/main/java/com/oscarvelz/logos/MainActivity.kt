@@ -762,6 +762,21 @@ class MainActivity : Activity() {
             return v.toString()
         }
 
+        /** The confirmed front paste's stamp (1.4.206), pulled
+         *  once — twenty seconds of life, like the rate's. No
+         *  session judgment: the stamp names a delivery, and the
+         *  line it jumps belongs to no single session. */
+        @JavascriptInterface fun bubblePasteFront(): String {
+            val on = BubbleService.pasteFront
+            BubbleService.pasteFront = false
+            if (!on) return ""
+            if (System.currentTimeMillis() - BubbleService.pasteFrontAt > 20_000) {
+                BubbleService.noteTry(this@MainActivity, BubbleService.s("a front paste went stale", "un pegado al frente caducó"))
+                return ""
+            }
+            return "1"
+        }
+
         /** A copy-queue row the panel chose to play (1.4.198),
          *  pulled once — judged at this door by the same laws as
          *  the seek's: twenty seconds of life, and the session it

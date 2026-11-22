@@ -7,7 +7,7 @@
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
 import { listen, loadText, play, pauseFromShell, endSession, stepRate, setRate, seek, seekFraction, seekToMs, refreshVoices, voiceFor, sentenceProgress, wordClock, levels, registerTrackSkip } from '../player/listen.ts'
-import { queue, queueItems, currentItem, currentIndex, enqueue, setCurrent, removeItem as queueRemove, clearQueue, type QueueItem } from './queue.ts'
+import { queue, queueItems, currentItem, currentIndex, enqueue, enqueueFront, setCurrent, removeItem as queueRemove, clearQueue, type QueueItem } from './queue.ts'
 import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { cancelDevice } from '../engine/device-voice.ts'
 import { readClipboard } from './clipboard.ts'
@@ -37,6 +37,7 @@ type DroidBubble = {
   bubbleWantClip?: () => boolean
   bubbleSeek?: () => string
   bubbleRate?: () => string
+  bubblePasteFront?: () => string
   bubbleSeekCtx?: () => string
   bubbleSeekTo?: () => string
   bubbleSeekToCtx?: () => string
@@ -291,6 +292,29 @@ export function queueArrival(raw: string): boolean {
   return true
 }
 
+/** The hand paste's second deed (Oscar, 1.4.206): with the mode on,
+ *  Paste now no longer lines a copy up at the tail — behind its
+ *  confirmation card in the panel, the fresh copy takes the FRONT
+ *  of the line and the stage with it, substituting the line's
+ *  standing current (it leaves the line; the rest keep their order
+ *  behind the new head). Re-pasting the very text on stage simply
+ *  plays it again from the top. A lone session on stage — not the
+ *  line's — is replaced by the play, as any hand paste replaces.
+ *  Returns true when the front road took the arrival. */
+export function queueFrontArrival(raw: string): boolean {
+  if (!settings.get().copyQueue) return false
+  const text = raw.trim()
+  if (!text) return true
+  seenClip(text)
+  const key = textKey(text)
+  const cur = currentItem()
+  if (cur && cur.key === key) { playQueueItem(cur); return true }
+  const item = enqueueFront(text, sessionTitle(text), estimateSeconds(text, 1))
+  if (cur) queueRemove(cur.id)
+  playQueueItem(item)
+  return true
+}
+
 /** Send the whole line to the Library's Listen later, in order —
  *  and the line empties: its texts live there now. */
 export async function sendQueueToLater() {
@@ -495,6 +519,12 @@ export function initBubble() {
     // CLEARQUEUE (1.4.201) acts on the queue record, never on a
     // session — like pause, it is judged before every session road.
     if (cmd === 'clearqueue') { clearQueue(); return false }
+    // QUEUEON / QUEUEOFF (1.4.206) act on the setting itself — the
+    // panel sheet's lever, behind its confirmation card. The mode's
+    // own watcher in this module judges the erasure when it turns
+    // off; no session is involved, so they too are judged here.
+    if (cmd === 'queueon') { settings.set({ copyQueue: true }); return false }
+    if (cmd === 'queueoff') { settings.set({ copyQueue: false }); return false }
     // A stored PAUSE (1.4.89): against a dead page, silence is already
     // the truth. The one thing it must never do is summon playback —
     // the recovery used to 'fulfil' it by playing the session, and his
@@ -651,6 +681,11 @@ export function initBubble() {
   // confirmation card) — the queue record clears; what is playing
   // keeps playing, as the card says.
   addEventListener('logosandroid-clearqueue', () => clearQueue())
+  // 1.4.206: the queue sheet's own lever — the mode turned on or off
+  // from the panel, behind its confirmation cards. The erasure when
+  // it turns off is the settings watcher's deed, here as everywhere.
+  addEventListener('logosandroid-queueon', () => settings.set({ copyQueue: true }))
+  addEventListener('logosandroid-queueoff', () => settings.set({ copyQueue: false }))
   // The panel's bookmark key, and the bubble's long-press voice wheel.
   addEventListener('logosandroid-mark', () => { if (clipOwns()) { toast(t('That key belongs to readings')); return } void markAndToast().then(() => push()) })
   // The panel's save key: the copied text that is only visiting becomes a
@@ -712,6 +747,19 @@ export function initBubble() {
       stageKey = ''; resumeCard = null; saveResume()
     }
   })
+  // The confirmed front paste's stamp (1.4.206): the panel's Paste
+  // now, behind its card, flags the delivery it is about to make —
+  // pulled once at the Bridge, twenty seconds of life. Only a hand
+  // paste carries it; an automatic catch never sets it.
+  const takeFrontFlag = (): boolean => {
+    try { return d.bubblePasteFront?.() === '1' } catch { return false }
+  }
+  // Every shell delivery is judged here: a stamped one takes the
+  // front road; the rest join the line's tail as they always have.
+  const judgeArrival = (text: string): boolean => {
+    if (takeFrontFlag() && queueFrontArrival(text)) return true
+    return queueArrival(text)
+  }
   // A stored catch is pulled once (the shell clears it on the pull), so
   // pulling on every return is safe — and necessary: the 'clip' poke can
   // fall into a sleeping page and be lost, and a catch that only a poke
@@ -722,7 +770,7 @@ export function initBubble() {
       const raw = d.bubbleClip?.() ?? ''
       if (!raw) return
       const { t } = JSON.parse(raw) as { t?: string }
-      if (t?.trim() && !queueArrival(t)) playClipboardText(t)
+      if (t?.trim() && !judgeArrival(t)) playClipboardText(t)
     } catch { /* ignore */ }
   }
   addEventListener('logosandroid-clip', pullClip)
@@ -897,7 +945,7 @@ export function initBubble() {
       const raw = d.bubbleClip?.() ?? ''
       if (!raw) return
       const { t } = JSON.parse(raw) as { t?: string }
-      if (t?.trim() && clipKey(t.trim()) !== lastClip && !queueArrival(t)) playClipboardText(t)
+      if (t?.trim() && clipKey(t.trim()) !== lastClip && !judgeArrival(t)) playClipboardText(t)
     } catch { /* ignore */ }
   }, 1200)
 
@@ -922,6 +970,11 @@ export function initBubble() {
       // Oscar re-copies a text the dedupe reads as no news, and only
       // his finger on the paste icon can say "again".
       if (!want && text === drafts.get().listen.trim()) { seenClip(text); return }
+      // The front paste (1.4.206): when the shell could not read
+      // the clipboard itself, the hand ask lands here instead —
+      // its stamp still names it, and the front road takes it
+      // before the tail can.
+      if (want && takeFrontFlag() && queueFrontArrival(text)) return
       // The queue mode (1.4.198): an arrival joins the line instead
       // of taking the stage, so there is nothing to ask permission
       // for — nothing is displaced. Hand asks line up too.

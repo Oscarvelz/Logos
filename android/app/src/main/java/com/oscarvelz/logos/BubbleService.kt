@@ -687,6 +687,17 @@ class BubbleService : Service() {
                 field = value
                 if (value > 0) ratePickAt = System.currentTimeMillis()
             }
+        /** The confirmed front paste's stamp (1.4.206): Paste now,
+         *  behind its card, flags the delivery it is about to make —
+         *  the page pulls it once through the Bridge and judges the
+         *  arrival by the front road instead of the tail's. Twenty
+         *  seconds of life at that door, like the rate's. */
+        @Volatile var pasteFrontAt = 0L
+        @Volatile var pasteFront = false
+            set(value) {
+                field = value
+                if (value) pasteFrontAt = System.currentTimeMillis()
+            }
         /** The media session's seek target (1.4.193): an absolute
          *  book-millisecond count, stamped by PlaybackService's
          *  onSeekTo exactly the way seekFrac is stamped — the same
@@ -1147,6 +1158,12 @@ class BubbleService : Service() {
     private var queueHeadV: TextView? = null
     private var queueClearV: TextView? = null
     private var queueListOpen = false
+    // The queue sheet's own lever (1.4.206) and the moment IT was
+    // flipped by hand: a push already in flight must not revert a
+    // flip younger than a breath — the page's next push carries
+    // the new truth and the sync below follows it from then on.
+    private var queueLeverV: Switch? = null
+    private var queueLeverFlipAt = 0L
     private var haloAnim: ObjectAnimator? = null
     private var seekBar: SeekBar? = null
     private var saveHint: View? = null
@@ -2967,7 +2984,21 @@ class BubbleService : Service() {
             val front = android.graphics.RectF(cx - r * 0.30f, cy - r * 0.14f, cx + r * 0.82f, cy + r * 0.98f)
             cv.drawRoundRect(front, rad, rad, fill)
             cv.drawRoundRect(front, rad, rad, p)
-        }) { readClip(true) }
+        }) {
+            // Paste now's second deed (Oscar, 1.4.206): while the
+            // copy queue stands ON, the key no longer promises the
+            // stage to the last copy — it asks first, in one short
+            // card, and the confirmed copy jumps the line: the stamp
+            // is set before the read, and the page judges the
+            // delivery by the front road. With the mode off, the key
+            // is exactly the key it has always been.
+            if (panelQueueMode) {
+                showHintCard(s("Put the last copy first?", "¿Poner la última copia al frente?"), s("The text you just copied will jump to the front of the line and take the place of what is playing. The rest of the line stays behind it.", "El texto que acabas de copiar saltará al frente de la fila y tomará el lugar de lo que está sonando. El resto de la fila queda detrás."), s("Put it first", "Ponerlo al frente"), s("Not now", "Ahora no")) {
+                    pasteFront = true
+                    readClip(true)
+                }
+            } else readClip(true)
+        }
         pasteB.layoutParams = LinearLayout.LayoutParams(dp(footDp), dp(footDp)).apply { leftMargin = dp(footM1) }
         clipRow.addView(pasteB)
         val listenB = footBtn(s("Go to the listening area", "Ir a la zona de escucha"), s("Listen", "Escuchar"), { cv, ink, cx, cy, r ->
@@ -3134,6 +3165,43 @@ class BubbleService : Service() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         qHeadRow.addView(qHead)
+        // The mode's own lever (Oscar, 1.4.206): the queue can be
+        // turned on or off from its own sheet — after the count,
+        // before the way out — wearing the Auto lever's face, so he
+        // never has to go to Settings for it. A tap does NOT flip
+        // it: the lever steps back and a card asks first, short and
+        // direct, what the flip means; only the card's answer moves
+        // the lever and pokes the page.
+        val qLever = Switch(this).apply {
+            val ls = if (isTablet()) 0.9f else 0.78f
+            scaleX = ls; scaleY = ls
+            isChecked = panelQueueMode
+            val goldStates = android.content.res.ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(c["gold"]!!, Color.rgb(140, 130, 115))
+            )
+            thumbTintList = goldStates
+            trackTintList = goldStates
+            contentDescription = s("Copy queue", "Cola de copiado")
+            setOnClickListener {
+                isChecked = panelQueueMode
+                if (panelQueueMode) {
+                    showHintCard(s("Turn off the copy queue?", "¿Apagar la cola de copiado?"), s("The line will be erased, and copies will stop lining up — a copy will take the stage as it did before.", "La fila se borrará y las copias dejarán de alinearse: una copia tomará la escena como antes."), s("Turn it off", "Apagarla"), s("Not now", "Ahora no")) {
+                        queueLeverFlipAt = System.currentTimeMillis()
+                        queueLeverV?.isChecked = false
+                        pokeOrWake("queueoff")
+                    }
+                } else {
+                    showHintCard(s("Turn on the copy queue?", "¿Encender la cola de copiado?"), s("What you copy will line up and play one text after the next, instead of replacing what is playing.", "Lo que copies se pondrá en fila y sonará un texto tras otro, en lugar de reemplazar lo que está sonando."), s("Turn it on", "Encenderla"), s("Not now", "Ahora no")) {
+                        queueLeverFlipAt = System.currentTimeMillis()
+                        queueLeverV?.isChecked = true
+                        pokeOrWake("queueon")
+                    }
+                }
+            }
+        }
+        qHeadRow.addView(qLever)
+        queueLeverV = qLever
         val qClose = TextView(this).apply {
             // The way out wears a BACK ARROW, never an ✕ (Oscar,
             // 1.4.201): the ✕ belongs to the rows' drops alone,
@@ -3397,6 +3465,14 @@ class BubbleService : Service() {
     private fun syncQueueUi() {
         queueBadgeV?.text = if (panelQueueCount > 0) panelQueueCount.toString() else ""
         queueBadgeV?.visibility = if (panelQueueCount > 0) View.VISIBLE else View.INVISIBLE
+        // The sheet's lever follows the page's truth (1.4.206) —
+        // except across the breath after a hand flip, whose own
+        // poke is still travelling: a stale push must not revert
+        // what his finger just decided on the card.
+        val lv = queueLeverV
+        if (lv != null && lv.isChecked != panelQueueMode && System.currentTimeMillis() - queueLeverFlipAt > 3000) {
+            lv.isChecked = panelQueueMode
+        }
         if (queueListOpen) buildQueueRows()
     }
 
@@ -3747,7 +3823,7 @@ class BubbleService : Service() {
         hideNameTag()
         val v = panel
         panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; gripV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null; scrubTarget = -1; scrubMode = 0
-        queueBtnV = null; queueBadgeV = null; queueListV = null; queueRowsV = null; queueHeadV = null; queueClearV = null; queueListOpen = false
+        queueBtnV = null; queueBadgeV = null; queueListV = null; queueRowsV = null; queueHeadV = null; queueClearV = null; queueListOpen = false; queueLeverV = null
         // The shown-* diff memory describes these views (M-7): the
         // next panel is born blank, so its first refresh must paint
         // everything — the memory dies with the views it described.
