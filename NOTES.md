@@ -1,3 +1,39 @@
+## 1.4.230 — No white holes (2026-11-22)
+
+Oscar's report (09:57, photo): the white rectangle is back — the
+visualizer's seat in the Listen player standing pure white — and
+he has also seen the splash flicker toward a white window. His
+verdict: it is the same problem. He is right about the family:
+a surface that should wear the app's dark ground showing white
+instead. Two seats, two cures.
+
+- The visualizer's white seat is the defect of 1.4.196 returned.
+  Its canvas is handed to a worker through OffscreenCanvas — a
+  one-way door: once transferred, the page can never draw on it
+  again, and a transferred canvas whose worker has not painted,
+  or whose surface the system discarded under pressure, shows
+  the compositor's white backing. The 1.4.197 watchdog cured the
+  never-paints case; this return walked around it (a surface
+  lost after the first frame is no watchdog's witness). The road
+  itself is retired: the visualizer draws on the page's own
+  thread, as the fallback always did. A plain canvas unpainted
+  is transparent over the dark card — it can be plain, never a
+  white hole. The worker file remains as a tombstone. Declared
+  trade: under heavy synthesis load the bars may drop a frame;
+  they did the same on every fallback day since 1.4.197 and the
+  seat never sat white.
+- The boot white: the document itself carried no ground — only
+  the splash div was painted inline, so any frame shown before
+  the app's stylesheet lands (cold start, a service-worker
+  reload between versions) fell to the browser's default white.
+  The document now paints its ground inline in the head style,
+  keyed to the theme the boot script settles: #09090d dark,
+  #f5f1e8 light. No frame of the app's life can be white now:
+  not before the splash, not between the splash and the app.
+
+Presentation impact: none — the visualizer keeps its element,
+its class and its anchor; only its drawing hand changed.
+
 ## 1.4.229 — The line takes the Library in (2026-11-22)
 
 Oscar's word (09:10, with a photo of a book's menu): to make the

@@ -1,24 +1,26 @@
-import { useEffect, useRef, useState } from 'react'
-import { levels, listen, vizSnapshot } from '../player/listen.ts'
+import { useEffect, useRef } from 'react'
+import { levels, listen } from '../player/listen.ts'
 
 /**
  * Mirrored-bar visualizer. Reads the real loudness envelope of the sentence
  * being played (computed from the synthesized PCM, so it keeps working when the
  * page is backgrounded and needs no AudioContext), with a gentle idle shimmer.
+ *
+ * The drawing lives on the page's own thread (1.4.230). It used to be
+ * handed to a worker through OffscreenCanvas — a one-way door: once
+ * transferred, the page can never draw on the canvas again, and a
+ * transferred canvas whose worker has not painted (or whose surface
+ * the system discarded) shows the compositor's WHITE backing. That
+ * white seat is the defect Oscar photographed at 1.4.196's first
+ * open and again at 1.4.229, past every watchdog: a plain canvas is
+ * transparent where it has not painted, so over the dark card it can
+ * be plain — never a white hole. The worker path is retired; the
+ * bars may drop a frame under heavy synthesis load, a fair trade.
  */
 export function Visualizer({ bars = 48 }: { bars?: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
-  // The off-thread canvas is a one-way door: once transferred, the
-  // page can never draw on it again. If the worker never paints —
-  // Oscar's phone, 1.4.196's first open: the spectrum's seat sat
-  // WHITE until a force-stop — the watchdog in startOffThread calls
-  // this, and the canvas is remounted (new key) under the page's own
-  // 2D drawing. The spectrum can be plain, never a white hole.
-  const [offDead, setOffDead] = useState(false)
   useEffect(() => {
     const canvas = ref.current!
-    const off = offDead ? null : startOffThread(canvas, bars, () => setOffDead(true))
-    if (off) return off
     const ctx = canvas.getContext('2d')!
     const target = new Float32Array(bars)
     const shown = new Float32Array(bars)
@@ -34,7 +36,6 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     const themeObs = new MutationObserver(() => { colors = [accent(), accent2(), edge()] })
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
-    // Fallback for browsers without OffscreenCanvas: draw on the page, every frame.
     let last = 0
     let grad: CanvasGradient | null = null
     let gradKey = ''
@@ -93,61 +94,6 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     }
     draw()
     return () => { cancelAnimationFrame(raf); themeObs.disconnect() }
-  }, [bars, offDead])
-  return <canvas key={offDead ? 'fb' : 'off'} ref={ref} className="viz" data-present="listen-visualizer" aria-hidden />
-}
-
-/**
- * Preferred path: hand the canvas to a worker that draws every frame on its own
- * thread; the page only sends it the sentence envelope and the playhead, a few
- * times a second. Returns a cleanup, or null where OffscreenCanvas is missing.
- */
-function startOffThread(canvas: HTMLCanvasElement, bars: number, onDead: () => void): (() => void) | null {
-  if (typeof canvas.transferControlToOffscreen !== 'function' || typeof OffscreenCanvas === 'undefined') return null
-  if (canvas.dataset.off) return () => {}
-  let worker: Worker | undefined
-  let offscreen: OffscreenCanvas
-  try {
-    worker = new Worker(new URL('./viz.worker.ts', import.meta.url), { type: 'module' })
-    offscreen = canvas.transferControlToOffscreen()
-    canvas.dataset.off = '1'
-  } catch { worker?.terminate(); return null }
-  const w = worker
-  // The painted watchdog (1.4.197): the worker says 'painted' after
-  // its first real frame. Silence for 2.5 s means the canvas would
-  // sit on the compositor's white backing forever — hand the seat
-  // back to the page's own drawing (the caller remounts the canvas).
-  let painted = false
-  const onMsg = (e: MessageEvent) => { if ((e.data as { type?: string })?.type === 'painted') painted = true }
-  w.addEventListener('message', onMsg)
-  const watchdog = setTimeout(() => { if (!painted) onDead() }, 2500)
-  w.postMessage({ type: 'init', canvas: offscreen, bars }, [offscreen])
-  const css = (n: string, d: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || d
-  const sendColors = () => w.postMessage({ type: 'colors', a: css('--accent', '#e9bd72'), b: css('--accent-2', '#f3d39c'), e: css('--viz-edge', '') })
-  const sendSize = () => w.postMessage({ type: 'size', w: canvas.clientWidth, h: canvas.clientHeight, dpr: Math.min(2, devicePixelRatio || 1) })
-  sendColors(); sendSize()
-  const themeObs = new MutationObserver(sendColors)
-  themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-  const ro = new ResizeObserver(sendSize)
-  ro.observe(canvas)
-  let envKey = ''
-  let lastSig = ''
-  const tick = () => {
-    const s = listen.get()
-    const v = vizSnapshot()
-    if (v.key !== envKey) {
-      envKey = v.key
-      w.postMessage({ type: 'env', key: v.key, env: v.env ? v.env.slice() : null })
-    }
-    const mode = v.env ? 'live' : s.playing && s.mode === 'device' ? 'device' : s.buffering ? 'buffering' : 'idle'
-    const sig = `${v.key}|${v.time}|${v.running}|${mode}|${v.rate}`
-    if (sig !== lastSig || mode !== 'idle') {
-      lastSig = sig
-      w.postMessage({ type: 'clock', key: v.key, time: v.time, rate: v.rate, running: v.running, mode })
-    }
-  }
-  tick()
-  const id = setInterval(tick, 100)
-  const unsub = listen.subscribe(tick)
-  return () => { clearInterval(id); unsub(); ro.disconnect(); themeObs.disconnect(); clearTimeout(watchdog); w.removeEventListener('message', onMsg); w.terminate() }
+  }, [bars])
+  return <canvas ref={ref} className="viz" data-present="listen-visualizer" aria-hidden />
 }
