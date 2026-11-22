@@ -1,3 +1,18 @@
+## 1.4.240 — The diagonal's line decides (2026-11-22)
+
+Oscar's verdict on the gesture work, the same afternoon it landed: «Has progresado enormemente, donde falta afinar todavía son los gestos diagonales que te llevan a la mitad de la pantalla ya sea a la izquierda o a la derecha. Los gestos son diagonales nada más.» — and, clarified a breath later: he meant the diagonal gestures, only those.
+
+The flaw, measured on the seats themselves: 1.4.236 judged every place within ~45° of the gesture's line by projection alone — nearest for a short flick, farthest for a long one. From a top corner, a short 45° diagonal's smallest projection is the FAR TOP corner: near along the line, but the diagonal does not point at it (it stands ~45° off the gesture). The place the diagonal actually points at is the opposite edge's MIDDLE (~3° off the line from a top corner), with the far bottom corner behind it on nearly the same line (~21° off).
+
+The tuning — the gesture's law gains a tier, nothing else moves:
+
+- **The places on the gesture's own line (within ~23°) are judged first**, by the standing measure: a short flick takes the nearest of them, a long one the farthest. A short diagonal from a top corner now rests at the edge middle it points at; a long diagonal continues to the far corner on that same line. Straight-down and straight-across gestures are untouched — their middles and corners were always on the line.
+- **Only when no place stands on the line** does the wider field (~45°, as before) answer, and then with its single best-aligned place — so from the left middle, a down-left diagonal still lands on the bottom-left corner (his original 1.4.235 example, where no place stands on the diagonal's line at all).
+- A gesture aimed where no place lies still wins nothing, and the drag gates keep their 400 ms rest (1.4.236) — the gates are not the gesture.
+
+- Declared bound: shell work — no bench exists for it; the geometry was verified by hand against every example Oscar has given (235's three, 236's two conflicts, today's diagonal). The CI compile is its gate and Oscar's phone the judge.
+- Presentation impact: none — no anchor, surface or copy changes.
+
 ## 1.4.239 — The line keeps the copy order (2026-11-22)
 
 Oscar's law, stated plainly: «¿Cómo se decide el orden de las copias? Por orden de copiado, no por orden de entrada. El primer texto que copio gana su posición para ser escuchado de primero. El segundo, segundo puesto. El tercer texto que copio, tercer puesto y así consecutivamente, en lugar de ir montando de primero los últimos textos. Lo que define el orden de los audios es el orden de los textos copiados.»

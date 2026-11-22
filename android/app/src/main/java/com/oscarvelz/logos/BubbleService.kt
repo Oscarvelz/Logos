@@ -2654,14 +2654,23 @@ class BubbleService : Service() {
     // stops at the NEAR place in that direction — down from a top
     // corner rests at the edge's middle — and a LONG gesture
     // travels to the FAR one — all the way to the bottom corner.
-    // (235's first cut judged direction alone: on a tall screen
-    // the middle and the far corner share the downward line, and
-    // the far one won — the sphere fell past the middle seat he
-    // asked for.) Candidates are the places lying within ~45° of
-    // the gesture's line; among them the short gesture takes the
-    // smallest projection along that line, the long one the
-    // largest. A gesture aimed where no place lies (up, from a
-    // top corner) wins nothing and the release is judged as a
+    // THE LINE DECIDES (1.4.240, his tuning the same afternoon:
+    // «donde falta afinar todavía son los gestos diagonales que te
+    // llevan a la mitad de la pantalla»): 236 judged every place
+    // within ~45° of the gesture by projection alone, so a SHORT
+    // diagonal from a top corner landed on the FAR top corner —
+    // the nearest place along the line, though the diagonal does
+    // not point at it; the place a 45° diagonal from a top corner
+    // actually points at is the opposite edge's MIDDLE (it stands
+    // ~3° off the line; the far corner ~21°; the near top corner
+    // ~45°). Now the places ON the gesture's own line (within
+    // ~23°) are judged first, by the measure as always — short
+    // takes the nearest of them, long the farthest — and only
+    // when no place stands on the line does the wider field
+    // (~45°) answer, with its single best-aligned place (from the
+    // left middle, a down-left diagonal still finds the bottom-
+    // left corner, his original example). A gesture aimed where
+    // no place lies wins nothing and the release is judged as a
     // plain drag.
     private fun flickTarget(dx: Float, dy: Float, far: Boolean): Int? {
         val len = Math.hypot(dx.toDouble(), dy.toDouble())
@@ -2669,8 +2678,11 @@ class BubbleService : Service() {
         val ux = dx / len; val uy = dy / len
         val home = bubbleCorner()
         val (hx, hy) = cornerSeat(home)
-        var best: Int? = null
-        var bestProj = if (far) Double.NEGATIVE_INFINITY else Double.POSITIVE_INFINITY
+        var lineBest: Int? = null
+        var lineProj = if (far) Double.NEGATIVE_INFINITY else Double.POSITIVE_INFINITY
+        var wideBest: Int? = null
+        var wideDot = 0.0
+        var wideProj = Double.POSITIVE_INFINITY
         for (s in 0..5) {
             if (s == home) continue
             val (sx, sy) = cornerSeat(s)
@@ -2679,9 +2691,10 @@ class BubbleService : Service() {
             val dot = ux * (vx / vl) + uy * (vy / vl)
             if (dot < 0.70) continue
             val proj = vx * ux + vy * uy
-            if (if (far) proj > bestProj else proj < bestProj) { bestProj = proj; best = s }
+            if (dot >= 0.92 && (if (far) proj > lineProj else proj < lineProj)) { lineProj = proj; lineBest = s }
+            if (wideBest == null || dot > wideDot || (dot == wideDot && proj < wideProj)) { wideDot = dot; wideProj = proj; wideBest = s }
         }
-        return best
+        return lineBest ?: wideBest
     }
 
     private var outsideClosedAt = 0L
