@@ -2040,67 +2040,83 @@ class BubbleService : Service() {
         else -> Triple(Color.rgb(58, 49, 35), Color.rgb(21, 17, 13), gold)
     }
 
-    private var lambdaStencil: android.graphics.Bitmap? = null
-    /** The TRUE λ (1.4.219, Oscar): the letterform lifted from the
-     *  bundled artwork, kept as an alpha mask. 1.4.222 (Oscar's
-     *  photo: the letter read THICKER than the app icon's and off
-     *  centre) — the recipe is now measured against the artwork
-     *  itself, not borrowed from the medallion's: the composition's
-     *  true bounds are x 188..375, y 122..279 of the 512 file (the
-     *  letter, x 188..321, and its wave, x 357..375, as one group —
-     *  the old crop ran 59px too wide on the right, so the letter
-     *  landed left of centre and the wave spilled to the rim), and
-     *  the alpha ramp starts at the glow's ceiling (135) instead of
-     *  the ground's (70): the artwork's luminous halo used to pose
-     *  as ink at up to two-thirds strength, fattening every stroke.
-     *  The ramp now tracks the letter's body (full at 195), so the
-     *  bubble's λ keeps the icon's own weight. PlaybackService
-     *  keeps its wider medallion crop — a different seat, approved
-     *  there. Null when the artwork cannot be read; the face then
-     *  falls back to the serif glyph it wore before. */
-    private fun lambdaBitmap(): android.graphics.Bitmap? {
-        lambdaStencil?.let { return it }
-        val built = runCatching {
-            val src0 = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.media_art)
-            val src = android.graphics.Bitmap.createBitmap(src0, 188, 122, 188, 158)
-            val w = src.width; val h = src.height
-            val px = IntArray(w * h); src.getPixels(px, 0, w, 0, 0, w, h)
-            val op = IntArray(w * h)
-            for (i in px.indices) {
-                val p = px[i]
-                val lum = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
-                op[i] = Color.argb(((lum - 135) * 255 / 60).coerceIn(0, 255), 255, 255, 255)
-            }
-            val out = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
-            out.setPixels(op, 0, w, 0, 0, w, h)
-            out
-        }.getOrNull()
-        lambdaStencil = built
-        return built
+    /** THE LOGO ITSELF, AS VECTORS (1.4.223, Oscar's order): the
+     *  bubble's face no longer wears a stencil lifted from the
+     *  raster artwork. Two stencil waves (219, 222) could not win:
+     *  an alpha mask read from luminance reads the letter's
+     *  SHADING as coverage — the leg the artwork lights up came
+     *  out a slab and the shadowed leg a thread («una de sus
+     *  piernas más gruesa… la otra demasiado delgada»). Oscar's
+     *  ruling: the Splash already solved this — implement THAT
+     *  logo in the bubble exactly as it stands there, waves and
+     *  all. The paths below are transcribed 1:1 from public/
+     *  logo.svg (the same vector the splash draws): the λ in two
+     *  filled subpaths (the group's translate(−26,−6) folded into
+     *  the numbers) and the two sound arcs as round-capped strokes
+     *  (each SVG arc re-expressed as an arcTo on its true centre:
+     *  r146 about (270.3,268), r190 about (281.4,268)). The 512
+     *  canvas maps onto the face, so the composition keeps the
+     *  icon's own proportions. The gold families (Legacy, and
+     *  Light — the bubble's jewel is dark in both) wear the logo's
+     *  own gold gradient (#fbe3b0 → #e9bd72 → #b9843a, the SVG's
+     *  stops); Tron and Cyberpunk wear their accent flat — the
+     *  GEOMETRY is the logo's in all of them. */
+    private val logoLambdaPath = android.graphics.Path().apply {
+        moveTo(124f, 118f)
+        cubicTo(150f, 98f, 188f, 98f, 206f, 130f)
+        lineTo(314f, 354f)
+        cubicTo(322f, 371f, 332f, 378f, 348f, 374f)
+        lineTo(354f, 390f)
+        cubicTo(322f, 408f, 292f, 398f, 276f, 366f)
+        lineTo(172f, 150f)
+        cubicTo(162f, 130f, 146f, 124f, 130f, 132f)
+        close()
+        moveTo(212f, 226f)
+        lineTo(230f, 260f)
+        lineTo(160f, 392f)
+        cubicTo(156f, 400f, 148f, 402f, 140f, 398f)
+        lineTo(134f, 394f)
+        cubicTo(130f, 390f, 130f, 384f, 134f, 378f)
+        close()
+    }
+    private val logoArc1Path = android.graphics.Path().apply {
+        moveTo(364f, 156f)
+        arcTo(android.graphics.RectF(124.3f, 122f, 416.3f, 414f), -50.09f, 100.18f, false)
+    }
+    private val logoArc2Path = android.graphics.Path().apply {
+        moveTo(398f, 118f)
+        arcTo(android.graphics.RectF(91.4f, 78f, 471.4f, 458f), -52.13f, 104.26f, false)
     }
 
-    /** The bubble's face letter (1.4.219): the logo's own λ, drawn
-     *  from the artwork's stencil and tinted with the family's ring
-     *  colour — no longer a serif font's stand-in, which beside the
-     *  app icon read cheap («una versión más barata y pobre del
-     *  logo», Oscar). The ring, the ground and the colours around
-     *  it are untouched; only the letter changed. */
+    /** The bubble's face (1.4.223): the logo drawn from its own
+     *  vectors — see the paths above. The ring, the ground and the
+     *  colours around it are untouched; only the letter changed —
+     *  for the last time, because it is no longer an approximation. */
     private inner class LambdaView : View(this) {
-        private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
-        private val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.SERIF; textAlign = Paint.Align.CENTER }
+        private val fillP = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+        private val arcP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND
+        }
         override fun onDraw(c: Canvas) {
+            val fam = themeFam(this@BubbleService)
             val col = facePaint().third
-            val st = lambdaBitmap()
-            if (st != null) {
-                p.colorFilter = android.graphics.PorterDuffColorFilter(col, android.graphics.PorterDuff.Mode.SRC_IN)
-                val lw = width * 0.52f
-                val lh = lw * st.height.toFloat() / st.width.toFloat()
-                c.drawBitmap(st, null, android.graphics.RectF((width - lw) / 2f, (height - lh) / 2f, (width + lw) / 2f, (height + lh) / 2f), p)
-            } else {
-                tp.color = col; tp.textSize = height * 0.52f
-                val fm = tp.fontMetrics
-                c.drawText("λ", width / 2f, height / 2f - (fm.ascent + fm.descent) / 2f, tp)
-            }
+            val grad = if (fam != "tron" && fam != "cyberpunk") android.graphics.LinearGradient(
+                124f, 98f, 405f, 412f,
+                intArrayOf(Color.rgb(251, 227, 176), Color.rgb(233, 189, 114), Color.rgb(185, 132, 58)),
+                floatArrayOf(0f, 0.45f, 1f), android.graphics.Shader.TileMode.CLAMP
+            ) else null
+            c.save()
+            c.translate(width / 2f, height / 2f)
+            c.scale(width / 512f, width / 512f)
+            c.translate(-256f, -256f)
+            fillP.shader = grad; if (grad == null) fillP.color = col
+            c.drawPath(logoLambdaPath, fillP)
+            arcP.shader = grad; if (grad == null) arcP.color = col
+            arcP.strokeWidth = 7f; arcP.alpha = 140
+            c.drawPath(logoArc1Path, arcP)
+            arcP.strokeWidth = 5f; arcP.alpha = 71
+            c.drawPath(logoArc2Path, arcP)
+            c.restore()
         }
     }
 
