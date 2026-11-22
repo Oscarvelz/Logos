@@ -20,7 +20,7 @@
  * from the scenario session whenever an act lands (stageNav.bump).
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Bookmark, Check, ChevronRight, ClipboardPaste, Eraser, Moon, Pause, Play, Save, Search, SkipBack, SkipForward, Star, X } from 'lucide-react'
+import { BookDown, Bookmark, Check, ChevronRight, ClipboardPaste, Eraser, Moon, Pause, Play, Search, SkipBack, SkipForward, Star, X } from 'lucide-react'
 import { useStore } from './store.ts'
 import { VOICES, ACCENT_LABEL, ENGINE_LABEL, type Voice } from './voices.ts'
 import { isJustUrl } from './webtext.ts'
@@ -277,7 +277,7 @@ function StageListen({ scenario }: { scenario: Scenario }) {
             <Eraser size={18} />
           </button>
           <button type="button" className="pstage-iconbtn" data-present="listen-save" aria-label="Save">
-            <Save size={18} />
+            <BookDown size={18} />
           </button>
         </div>
       </div>
@@ -327,7 +327,7 @@ function StageListen({ scenario }: { scenario: Scenario }) {
             <button type="button" className="pstage-iconbtn" data-present="listen-text-bigger" aria-label="Bigger text">A+</button>
             <button type="button" className="pstage-iconbtn" data-present="listen-reader-edit" aria-label="Edit the text">✎</button>
             <button type="button" className="pstage-iconbtn" data-present="listen-reader-save" aria-label="Keep this reading">
-              <Save size={17} />
+              <BookDown size={17} />
             </button>
           </div>
           <p>
@@ -937,7 +937,7 @@ const STAGE_SETTING_INDEX: { anchor: string; title: string; sub: string; keys: s
   { anchor: 'set-card-language', title: 'Language', sub: 'The app’s own words — everything on screen.', keys: 'english español spanish idioma lenguaje inglés' },
   { anchor: 'set-presentations', title: 'Presentations', sub: 'Learn the whole app, guided, at your pace', keys: 'lessons tour guided learn presentaciones lecciones aprender guía' },
   { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy clips library copia respaldo exportar importar archivo biblioteca' },
-  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.211 · private, on-device text-to-speech', keys: 'version about acerca versión' },
+  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.212 · private, on-device text-to-speech', keys: 'version about acerca versión' },
 ]
 
 function StageSettings({ scenario }: { scenario: Scenario }) {
@@ -1119,8 +1119,8 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
 
       <div className="pstage-card" data-present="set-about">
         <strong>About Logos</strong>
-        <p className="pstage-note">Version 1.4.211 · private, on-device text-to-speech</p>
-        <p className="pstage-note" data-present="set-version">Version 1.4.211</p>
+        <p className="pstage-note">Version 1.4.212 · private, on-device text-to-speech</p>
+        <p className="pstage-note" data-present="set-version">Version 1.4.212</p>
       </div>
     </div>
   )

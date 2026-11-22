@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPE } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
-import { AudioLines, BookOpen, Bookmark, BookmarkPlus, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, ListMusic, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, X } from 'lucide-react'
+import { AudioLines, BookDown, BookOpen, Bookmark, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, ListMusic, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, X } from 'lucide-react'
 import { queue } from '../lib/queue.ts'
 import { playQueueAt, sendQueueToLater, saveQueueItemToLater } from '../lib/bubble.ts'
 import { removeItem as dropQueueItem, clearQueue } from '../lib/queue.ts'
@@ -252,7 +252,7 @@ export function ListenPage() {
               <div className="editor-bar">
                 <button className="icon-btn" data-present="listen-paste" onClick={paste} aria-label={t('Paste from clipboard')} title={t('Paste')}><ClipboardPaste size={21} /></button>
                 <button className="icon-btn" data-present="listen-clear" onClick={() => { setText(''); endSession() }} disabled={!text} aria-label={t('Clear text')} title={t('Clear')}><Eraser size={21} /></button>
-                <button className="icon-btn" data-present="listen-save" onClick={() => setKeepOpen(true)} disabled={!text.trim()} aria-label={t('Save to Library')} title={t('Save to Library')}><BookmarkPlus size={21} /></button>
+                <button className="icon-btn" data-present="listen-save" onClick={() => setKeepOpen(true)} disabled={!text.trim()} aria-label={t('Save to Library')} title={t('Save to Library')}><BookDown size={21} /></button>
                 {s.active && <button className="icon-btn" data-present="listen-reading-view" onClick={() => { if (s.text !== text) loadText(text); setEditing(false) }} aria-label={t('Back to reading view')} title={t('Reading view')}><X size={21} /></button>}
                 {text.trim() && <div className="editor-meta" aria-label={t('About {d} of listening, {n} words', { d: formatDuration(estimateSeconds(text, st.listenSpeed)), n: wordCount(text) })}>
                   <span className="em-time"><Clock size={12} strokeWidth={2.4} />{formatDuration(estimateSeconds(text, st.listenSpeed))}</span>
@@ -393,7 +393,7 @@ export function ListenPage() {
                       <span className="qrow-title">{it.title || t('Copied text')}</span>
                       <span className="muted small">{formatDuration(it.secs)}</span>
                     </button>
-                    <button className="icon-btn" onClick={() => void saveQueueItemToLater(it)} aria-label={t('Save to Listen later')} title={t('Save to Listen later')}><BookmarkPlus size={17} /></button>
+                    <button className="icon-btn" onClick={() => void saveQueueItemToLater(it)} aria-label={t('Save to Listen later')} title={t('Save to Listen later')}><BookDown size={17} /></button>
                     <button className="icon-btn" onClick={() => dropQueueItem(it.id)} aria-label={t('Remove from the queue')} title={t('Remove')}><X size={17} /></button>
                   </div>
                 )
@@ -541,7 +541,7 @@ function Reader({ onEdit, onKeep }: { onEdit: () => void; onKeep: () => void }) 
         <div className="rh-actions">
           <button className="rh-btn" data-present="listen-text-smaller" aria-label={t('Smaller text')} disabled={st.readerScale <= READER_SCALES[0]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, -1) })}><span style={{ fontSize: 10, fontWeight: 700 }}>A</span><span aria-hidden="true">−</span></button>
           <button className="rh-btn" data-present="listen-text-bigger" aria-label={t('Bigger text')} disabled={st.readerScale >= READER_SCALES[READER_SCALES.length - 1]} onClick={() => settings.set({ readerScale: stepReaderScale(st.readerScale, 1) })}><span style={{ fontSize: 15, fontWeight: 700 }}>A</span><span aria-hidden="true">+</span></button>
-          <button className="rh-btn" data-present="listen-reader-save" onClick={onKeep} aria-label={t('Save to Library')}><BookmarkPlus size={13} /><span className="rh-label">{t('Save')}</span></button>
+          <button className="rh-btn" data-present="listen-reader-save" onClick={onKeep} aria-label={t('Save to Library')}><BookDown size={13} /><span className="rh-label">{t('Save')}</span></button>
           <button className="rh-btn" data-present="listen-reader-edit" onClick={onEdit}><PenLine size={13} /><span className="rh-label">{t('Edit')}</span></button>
         </div>
       </div>

@@ -2533,34 +2533,69 @@ class BubbleService : Service() {
         subRow.addView(rateV)
         val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         titleRow.addView(titleV)
-        val markB = TextView(this).apply {
-            text = "⚑"; setTextColor(c["gold"]!!); textSize = 11f; gravity = Gravity.CENTER
-            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
-            contentDescription = "Mark this moment"
-            layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(6) }
-            setOnClickListener { showMarkHint() }
-        }
+        // 1.4.212 (Oscar): the mark key wears the app's own face — the
+        // bookmark from Listen — drawn on the grid, not the ⚑ glyph:
+        // one button, one face, on both surfaces.
+        val markB = glyphDiscKey("Mark this moment", c["disc"]!!, c["discLine"]!!, { cv, cx, cy, u ->
+            val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = c["gold"]!!; style = android.graphics.Paint.Style.STROKE
+                strokeWidth = dp(3) / 2f; strokeCap = android.graphics.Paint.Cap.ROUND; strokeJoin = android.graphics.Paint.Join.ROUND
+            }
+            fun px(x: Float) = cx + (x - 12f) * u
+            fun py(y: Float) = cy + (y - 12f) * u
+            val path = android.graphics.Path()
+            path.moveTo(px(17f), py(3f))
+            path.quadTo(px(19f), py(3f), px(19f), py(5f))
+            path.lineTo(px(19f), py(20.2f))
+            path.lineTo(px(12f), py(17f))
+            path.lineTo(px(5f), py(20.2f))
+            path.lineTo(px(5f), py(5f))
+            path.quadTo(px(5f), py(3f), px(7f), py(3f))
+            path.close()
+            cv.drawPath(path, p)
+        }) { showMarkHint() }
+        markB.layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(6) }
         titleRow.addView(markB)
         // The save key (Oscar's scenario): a copied text is playing temporarily
         // and the wish strikes — one tap turns the temporary into a permanent
         // Library resident. It sits by the title, where the text is named.
-        val saveB = TextView(this).apply {
-            text = "+"; setTextColor(c["gold"]!!); textSize = 14f; gravity = Gravity.CENTER
-            setTypeface(typeface, Typeface.BOLD)
-            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
-            contentDescription = s("Save this text to the Library", "Guardar este texto en la Biblioteca")
-            layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(6) }
-            setOnClickListener {
-                // With a copy queue standing, the save asks its
-                // question first (1.4.198): this text, or the line?
-                if (panelQueueCount > 0) { showQueueSaveCard(); return@setOnClickListener }
-                showHintCard(s("Save to Library", "Guardar en Biblioteca"), s("Save what's playing to your Library, to hear it again anytime.", "Guarda lo que suena en tu Biblioteca, para oírlo cuando quieras."), s("Save", "Guardar"), s("Not now", "Ahora no")) {
-                    val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
-                    pokeOrWake("save")
-                    toastSavedWhenTrue(wasSaved)
-                }
+        // 1.4.212 (Oscar): the save key wears the design he chose for
+        // Save everywhere — the book that receives, an arrow entering
+        // a book — drawn on the grid, replacing the bare "+".
+        val saveB = glyphDiscKey(s("Save this text to the Library", "Guardar este texto en la Biblioteca"), c["disc"]!!, c["discLine"]!!, { cv, cx, cy, u ->
+            val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = c["gold"]!!; style = android.graphics.Paint.Style.STROKE
+                strokeWidth = dp(3) / 2f; strokeCap = android.graphics.Paint.Cap.ROUND; strokeJoin = android.graphics.Paint.Join.ROUND
+            }
+            fun px(x: Float) = cx + (x - 12f) * u
+            fun py(y: Float) = cy + (y - 12f) * u
+            val path = android.graphics.Path()
+            path.moveTo(px(4f), py(19.5f))
+            path.lineTo(px(4f), py(4.5f))
+            path.quadTo(px(4f), py(2f), px(6.5f), py(2f))
+            path.lineTo(px(19f), py(2f))
+            path.quadTo(px(20f), py(2f), px(20f), py(3f))
+            path.lineTo(px(20f), py(21f))
+            path.quadTo(px(20f), py(22f), px(19f), py(22f))
+            path.lineTo(px(6.5f), py(22f))
+            path.lineTo(px(6.5f), py(17f))
+            path.lineTo(px(20f), py(17f))
+            cv.drawPath(path, p)
+            val arrow = android.graphics.Path()
+            arrow.moveTo(px(12f), py(7f)); arrow.lineTo(px(12f), py(13f))
+            arrow.moveTo(px(9f), py(10f)); arrow.lineTo(px(12f), py(13f)); arrow.lineTo(px(15f), py(10f))
+            cv.drawPath(arrow, p)
+        }) {
+            // With a copy queue standing, the save asks its
+            // question first (1.4.198): this text, or the line?
+            if (panelQueueCount > 0) { showQueueSaveCard(); return@glyphDiscKey }
+            showHintCard(s("Save to Library", "Guardar en Biblioteca"), s("Save what's playing to your Library, to hear it again anytime.", "Guarda lo que suena en tu Biblioteca, para oírlo cuando quieras."), s("Save", "Guardar"), s("Not now", "Ahora no")) {
+                val wasSaved = runCatching { JSONObject(nowJson).optBoolean("saved") }.getOrDefault(false)
+                pokeOrWake("save")
+                toastSavedWhenTrue(wasSaved)
             }
         }
+        saveB.layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(6) }
         titleRow.addView(saveB)
         // The stage lock: while it holds, a fresh copy cannot evict what's
         // playing — the audiobook keeps the stage (Oscar's scenario).
@@ -3589,6 +3624,25 @@ class BubbleService : Service() {
         handler.postDelayed(r, 9000)
     }
 
+    /** A title-row disc key whose face is a DRAWN glyph (1.4.212): the
+     * mark and save keys wear the same faces as the app — the bookmark
+     * and the book-that-receives — drawn on the 24-grid the app's own
+     * icons use, in the disc's gold, instead of text glyphs. The glyph
+     * lambda receives the centre and the grid unit (the face spans
+     * 56% of the disc). */
+    private fun glyphDiscKey(desc: String, disc: Int, discLine: Int, glyph: (cv: android.graphics.Canvas, cx: Float, cy: Float, u: Float) -> Unit, act: () -> Unit): View {
+        val v = object : View(this) {
+            override fun onDraw(cv: android.graphics.Canvas) {
+                super.onDraw(cv)
+                glyph(cv, width / 2f, height / 2f, width * 0.56f / 24f)
+            }
+        }
+        v.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(disc); setStroke(dp(1), discLine) }
+        v.contentDescription = desc
+        v.setOnClickListener { act() }
+        return v
+    }
+
     private fun showHintCard(title: String, body: String, confirmLabel: String, cancelLabel: String, cancelAction: (() -> Unit)? = null, action: () -> Unit) {
         dismissSaveHint()
         val w = wm ?: return
@@ -3772,7 +3826,7 @@ class BubbleService : Service() {
         }
     }
 
-    /** The ⚑ asks where its mark would live (Oscar): on saved content it marks
+    /** The mark key asks where its mark would live (Oscar): on saved content it marks
      *  at once (a moment cannot wait for a card) and teaches itself a single
      *  time; on a text that is not in the Library it asks for the save
      *  first — and if he goes on anyway, he is advised first that the
@@ -3805,7 +3859,7 @@ class BubbleService : Service() {
             pokeOrWake("mark")
             if (!prefs(this).getBoolean("markTaught", false)) {
                 prefs(this).edit().putBoolean("markTaught", true).apply()
-                showHintCard(s("The ⚑ mark", "La marca ⚑"), s("The ⚑ marks this moment. Find it in Library, under Saved Marks.", "La ⚑ marca este momento. La encuentras en Biblioteca, en Marcas guardadas."), s("Got it", "Entendido"), "") { }
+                showHintCard(s("The mark", "La marca"), s("It marks this moment. Find it in Library, under Saved Marks.", "Marca este momento. La encuentras en Biblioteca, en Marcas guardadas."), s("Got it", "Entendido"), "") { }
             }
         } else {
             showHintCard(s("Not in your Library yet", "Aún no está en tu Biblioteca"), s("Marks live with their text. Save this text to your Library first, and the mark stays with it.", "Las marcas viven con su texto. Guarda primero este texto en tu Biblioteca, y la marca se queda con él."), s("Save to Library", "Guardar en Biblioteca"), s("Not now", "Ahora no"), cancelAction = {

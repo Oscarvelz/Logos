@@ -1,3 +1,30 @@
+## 1.4.212 — One button, one face (2026-11-21)
+
+Oscar's eye, twice in one evening. First: the bubble panel's ⚑ flag and the
+app Listen player's bookmark do exactly the same deed — both file a mark at
+the current moment — so they must wear the same face. Second: the app's Save
+button (a bookmark with a small +) was a near-twin of the mark and could be
+mistaken for it; Save needed a face of its own. After three rendered rounds
+(the book that receives, its reinforcements, and a fresh no-book round),
+Oscar chose the first design: **the book that receives** — a book with an
+arrow entering it (Lucide BookDown, the app's own icon set).
+
+- Panel (BubbleService): the mark key's ⚑ text glyph is gone; a new
+  glyphDiscKey helper draws the **bookmark** on the app's 24-grid in the
+  disc's gold, same 24dp disc, same deed (showMarkHint). The save key's
+  bare "+" is gone; the same helper draws the **book that receives**.
+  The mark's teaching card no longer names a flag («The mark» / «La
+  marca»; "It marks this moment…" / "Marca este momento…").
+- App (ListenPage): every Save seat trades BookmarkPlus for BookDown —
+  the editor head (listen-save, 21), the queue rows' save-to-later (17),
+  and the reader head (listen-reader-save, 13, word kept). The mark
+  button already wore the bookmark; nothing about any deed changed.
+- Presentation: the stage fiction's two Listen save glyphs wore a generic
+  floppy (Save); they now mirror the app's chosen face (BookDown). No
+  anchor moved — listen-save and listen-reader-save name the same
+  elements. The lesson player's own save-record button (BookmarkPlus in
+  presentation-player) is a different deed and was left alone.
+
 ## 1.4.211 — The wheel comes to the app
 
 Oscar (2026-11-21): for balance, the app's own Listen screen
