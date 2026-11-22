@@ -4135,11 +4135,12 @@ class BubbleService : Service() {
             // drum is showing the hand's own rolling.
             if (sub != shownSub || transportQueueMode != shownSubMode) {
                 shownSub = sub; shownSubMode = transportQueueMode
-                val sep = if (transportQueueMode) sub.lastIndexOf(" · ") else -1
-                val rateTxt = if (sep >= 0) sub.substring(sep + 3) else ""
+                val subW = sub ?: ""
+                val sep = if (transportQueueMode) subW.lastIndexOf(" · ") else -1
+                val rateTxt = if (sep >= 0) subW.substring(sep + 3) else ""
                 val rateVal = rateTxt.dropLast(1).toDoubleOrNull()
                 val hasRate = rateTxt.endsWith("×") && rateVal != null
-                subV?.text = if (hasRate) sub.substring(0, sep) else sub
+                subV?.text = if (hasRate) subW.substring(0, sep) else sub
                 rateV?.let { rv ->
                     rv.visibility = if (hasRate) View.VISIBLE else View.GONE
                     if (hasRate && !wheelLive) {
