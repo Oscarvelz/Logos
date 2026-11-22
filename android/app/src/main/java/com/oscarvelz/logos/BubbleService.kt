@@ -3160,25 +3160,27 @@ class BubbleService : Service() {
         // lying on its top like the player's, a hairline under its
         // head, and a foot of its own for the universal key.
         val qList = FrameLayout(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c["bg1"]!!, c["bg2"]!!)).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), c["line"]!!) }
+            // The glow rides IN the background now (1.4.209): as a
+            // MATCH_PARENT child (1.4.205) it claimed the whole
+            // screen height for itself and dragged the sheet — and
+            // the window — up with it, so three texts stood in a
+            // full-screen sheet. A background drawable never takes
+            // part in measurement; the light it paints is identical
+            // (the 205 one-piece radial, centered on the top edge,
+            // dying inside the sheet — the colours Oscar praised
+            // are untouched, only the size is cured).
+            background = android.graphics.drawable.LayerDrawable(arrayOf(
+                GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c["bg1"]!!, c["bg2"]!!)).apply { cornerRadius = dp(24).toFloat(); setStroke(dp(1), c["line"]!!) },
+                GradientDrawable().apply {
+                    gradientType = GradientDrawable.RADIAL_GRADIENT
+                    setGradientCenter(0.5f, 0.0f)
+                    gradientRadius = dp(240).toFloat()
+                    colors = intArrayOf(c["glow"]!!, Color.TRANSPARENT)
+                }
+            ))
             visibility = View.GONE
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
-        val qGlow = View(this).apply {
-            background = GradientDrawable().apply {
-                gradientType = GradientDrawable.RADIAL_GRADIENT
-                // The glow lies over the WHOLE sheet (1.4.205, Oscar:
-                // the 120 dp band's bottom edge cut the fade in two —
-                // «se ve como un error que haya un corte de color»).
-                // Centered on the top edge with a wider radius, the
-                // light dies inside the sheet and no edge ever shows.
-                setGradientCenter(0.5f, 0.0f)
-                gradientRadius = dp(240).toFloat()
-                colors = intArrayOf(c["glow"]!!, Color.TRANSPARENT)
-            }
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
-        }
-        qList.addView(qGlow)
         val qContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(12), dp(16), dp(12))
@@ -3190,13 +3192,16 @@ class BubbleService : Service() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         qHeadRow.addView(qHead)
-        // The mode's own lever (Oscar, 1.4.206): the queue can be
-        // turned on or off from its own sheet — after the count,
-        // before the way out — wearing the Auto lever's face, so he
-        // never has to go to Settings for it. A tap does NOT flip
-        // it: the lever steps back and a card asks first, short and
-        // direct, what the flip means; only the card's answer moves
-        // the lever and pokes the page.
+        // The mode's own lever (Oscar, 1.4.206; seated 1.4.209):
+        // the queue can be turned on or off from its own sheet,
+        // wearing the Auto lever's face, so he never has to go to
+        // Settings for it. It takes the head row's right end — the
+        // seat the back arrow held until 209, when Oscar retired
+        // the arrow: the way back is a tap outside the sheet (or
+        // the queue key again), and the arrow was furniture. A tap
+        // does NOT flip it: the lever steps back and a card asks
+        // first, short and direct, what the flip means; only the
+        // card's answer moves the lever and pokes the page.
         val qLever = Switch(this).apply {
             val ls = if (isTablet()) 0.9f else 0.78f
             scaleX = ls; scaleY = ls
@@ -3227,18 +3232,6 @@ class BubbleService : Service() {
         }
         qHeadRow.addView(qLever)
         queueLeverV = qLever
-        val qClose = TextView(this).apply {
-            // The way out wears a BACK ARROW, never an ✕ (Oscar,
-            // 1.4.201): the ✕ belongs to the rows' drops alone,
-            // and the two must not be confused. (1.4.205, Oscar:
-            // the arrow grows «un poquito más» — 15 → 19 in a
-            // 26 → 32 dp seat.)
-            text = "←"; setTextColor(c["muted"]!!); textSize = 19f; gravity = Gravity.CENTER
-            contentDescription = s("Back", "Atrás")
-            layoutParams = LinearLayout.LayoutParams(dp(32), dp(32))
-            setOnClickListener { toggleQueueList() }
-        }
-        qHeadRow.addView(qClose)
         qContent.addView(qHeadRow)
         val qDiv = View(this).apply {
             setBackgroundColor(c["div"]!!)
@@ -3275,7 +3268,7 @@ class BubbleService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START }
         panelParams = p
-        stage.setOnTouchListener { _, e -> if (e.action == MotionEvent.ACTION_OUTSIDE) { outsideClosedAt = System.currentTimeMillis(); collapsePanel(); true } else false }
+        stage.setOnTouchListener { _, e -> if (e.action == MotionEvent.ACTION_OUTSIDE) { outsideClosedAt = System.currentTimeMillis(); if (queueListOpen) toggleQueueList() else collapsePanel(); true } else false }
         runCatching { w.addView(stage, p) }
         panel = stage
         positionPanel()
@@ -3443,7 +3436,26 @@ class BubbleService : Service() {
     private fun toggleQueueList() {
         val v = queueListV ?: return
         queueListOpen = !queueListOpen
-        if (queueListOpen) { buildQueueRows(); v.visibility = View.VISIBLE } else v.visibility = View.GONE
+        val p = panelParams; val st = panel
+        if (queueListOpen) {
+            // The window is pinned to the card's own height BEFORE
+            // the sheet shows (1.4.209): the sheet is a sheet OVER
+            // THE CARD, and with its height capped at the card's,
+            // no measurement inside it can stretch the window to
+            // the screen again. The cap is the card's height as it
+            // stands now, the sheet still hidden.
+            if (p != null && st != null && st.height > 0 && p.height != st.height) {
+                p.height = st.height
+                runCatching { wm?.updateViewLayout(st, p) }
+            }
+            buildQueueRows(); v.visibility = View.VISIBLE
+        } else {
+            v.visibility = View.GONE
+            if (p != null && st != null && p.height != WindowManager.LayoutParams.WRAP_CONTENT) {
+                p.height = WindowManager.LayoutParams.WRAP_CONTENT
+                runCatching { wm?.updateViewLayout(st, p) }
+            }
+        }
     }
 
     private fun buildQueueRows() {
@@ -3453,7 +3465,7 @@ class BubbleService : Service() {
         queueHeadV?.text = s("Copy queue", "Cola de copiado") + if (panelQueueCount > 0) " · $panelQueueCount" else ""
         if (panelQueueTitles.isEmpty()) {
             rows.addView(TextView(this).apply {
-                text = if (panelQueueMode) s("The line is empty — copy a text and it will stand here.", "La fila está vacía: copia un texto y aparecerá aquí.") else s("The queue is off. Turn it on in Settings, and copies will line up here.", "La cola está desactivada. Actívala en Ajustes y las copias se pondrán en fila aquí.")
+                text = if (panelQueueMode) s("The line is empty — copy a text and it will stand here.", "La fila está vacía: copia un texto y aparecerá aquí.") else s("The queue is off. Turn it on with the lever above, and copies will line up here.", "La cola está desactivada. Enciéndela con la palanca de arriba y las copias se pondrán en fila aquí.")
                 setTextColor(c["muted"]!!); textSize = 12.5f
                 setPadding(0, dp(10), 0, dp(6))
             })

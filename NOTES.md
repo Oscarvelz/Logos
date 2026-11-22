@@ -1,3 +1,37 @@
+## 1.4.209 — The queue sheet, right-sized
+
+Oscar, from his phone (2026-11-21): the queue sheet's back arrow
+is retired — a tap outside the sheet is the way back — and the
+on/off lever takes the arrow's seat at the head row's right end;
+and the sheet had grown to fill the whole screen over three
+texts, where before it hugged its content.
+
+- **The arrow is gone; the lever sits at the right end.** The
+  head row is now the count (taking the slack) and the lever.
+  Tapping outside the sheet while it stands open closes the
+  sheet alone (before, an outside tap collapsed the whole
+  panel); the footer's queue key still toggles it too. The
+  phone's back key belongs to the app underneath a floating
+  window — Android does not deliver it to the panel — so the
+  outside tap is the sheet's way back, and it is now exact.
+- **The sheet is the card's size again.** The 205 one-piece
+  glow was a MATCH_PARENT child of the sheet: a content-less
+  view with a match-parent height claims the window's whole
+  measure for itself, and the sheet — and the panel window —
+  stretched to the screen. The glow now rides in the sheet's
+  background as a layer over the base gradient (a background
+  never takes part in measurement), painting the identical
+  light; and while the sheet stands open, toggleQueueList pins
+  the window's height to the card's own height, so nothing
+  inside the sheet can stretch it again. The colours Oscar
+  praised are untouched — only the size is cured. The empty
+  line's off text now points at the lever above it, not at
+  Settings.
+
+Presentation impact: none — the change is shell-side (the
+panel's queue sheet); no page element, anchor, or flow moves.
+No relay owed.
+
 ## 1.4.208 — The splash's understudy (the white block, cured the spectrum's way)
 
 Oscar, opening the app: for a moment, very briefly, the splash screen's icon and animation turned into a white block — «tal y como estaba el bloque del espectro antes, pero esta vez para el splash screen». The shell's own frames are all dark by construction (the system splash background, the window, and the WebView's background are all #0A0A0F), so the block was born inside the page's splash itself: the medallion is a 240×240 animated layer whose entrance animated a blur over its whole face — the same family as the spectrum's block before 1.4.197: when that layer's frame is not ready, the phone shows the empty block for an instant.
