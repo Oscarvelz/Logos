@@ -1,3 +1,14 @@
+## 1.4.233 — Six predetermined places (2026-11-22)
+
+Oscar's order, with his photo of the bubble dragged to the left edge's middle: «Hay dos posiciones en las que me encantaría también que la burbuja se posicione determinadamente y es a mitad de la pantalla en su respectivo borde… Entonces serían seis lugares predeterminados.»
+
+- The bubble's home widens from four corners to **six predetermined places**: the four corners plus the middle of the left edge and the middle of the right edge (seats 4 and 5). Its memory still NAMES the place (the same prefs key, widened), and every seat is re-measured against the real screen each time: a middle seat's height is the screen's own middle, `(height − bubble) / 2`, on whatever screen the phone has today.
+- The old fraction memory, on its first run under the widened law, names its nearest of the six (top band → corner, bottom band → corner, middle band → edge middle) — his habitual right-side spot, a little above centre, now lands on the middle-right seat instead of a corner.
+- Release anywhere: the bubble glides to the nearest of the six seat centres.
+- The panel reads its arrangement off the seat as before — its side from the seat's side, its unfold direction from the seat's row. A middle seat has no row of its own: the panel unfolds **below** when its natural height fits below the graze, else **above** when it fits there, else below with the words window yielding (the 1.4.222 law) — judged against the same screen every time, so a middle seat gives the same arrangement every time too. The grip rides the free corner exactly as before.
+- Declared bound: the shell has no bench — the CI compile is its gate and Oscar's phone the judge. The web half of this release is the version stamp only.
+- Presentation impact: none — no anchor, surface or copy changes.
+
 ## 1.4.232 — The queue asks in both houses (2026-11-22)
 
 Oscar, from the Listen page's own queue sheet: the X's remove
