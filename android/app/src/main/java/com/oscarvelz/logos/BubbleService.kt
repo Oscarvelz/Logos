@@ -1260,14 +1260,28 @@ class BubbleService : Service() {
     // The queue transport's extra seats (1.4.205): the track keys
     // exist from the panel's birth but only take the row while a
     // copy queue stands; transportQueueMode is the shape the row
-    // currently wears, and shownCueMode the shape the sub-line's
-    // speed cue was last painted for (both die with the panel's
-    // views in spirit — the next birth re-arranges by force).
+    // currently wears, and shownSubMode the shape the sub-line was
+    // last painted for (both die with the panel's views in spirit —
+    // the next birth re-arranges by force).
     private var ctlTrackPrev: View? = null
     private var ctlTrackNext: View? = null
     private var controlsV: LinearLayout? = null
     private var transportQueueMode = false
-    private var shownCueMode = false
+    private var shownSubMode = false
+    // THE SPEED WHEEL (1.4.207, Oscar's combination lock): in the
+    // queue shape the rate leaves the counter's writing and stands
+    // as its own drum at the line's end — rateV. A vertical drag
+    // rolls it through wheelSteps in a loop, gear-detent by gear-
+    // detent, each step applied live through the absolute-rate
+    // door; a tap nudges one step up. wheelIdx is the step the
+    // drum currently shows; wheelLive stands while a hand is on
+    // the drum, so pushes never repaint it mid-roll.
+    private var rateV: TextView? = null
+    private val wheelSteps = listOf(0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0)
+    private var wheelIdx = -1
+    private var wheelLive = false
+    private var wheelDownY = 0f
+    private var wheelStepsApplied = 0
     private val handler = Handler(Looper.getMainLooper())
 
     /** The player's mirrored spectrum, drawn the way Listen draws it: bars ease
@@ -2499,13 +2513,24 @@ class BubbleService : Service() {
         }
         subV = TextView(this).apply {
             setTextColor(c["muted"]!!); textSize = 12f
-            // The counter is the rate's door in the queue shape
-            // (1.4.205, Oscar): the rate already lives in its second
-            // half, so its tap opens the speed list — but only while
-            // the queue shape stands; as the row stands, the counter
-            // is a label and takes no taps, exactly as before.
-            setOnClickListener { if (transportQueueMode) showSpeedCard() }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
+        // The speed drum (1.4.207): born hidden beside the counter;
+        // refreshPanel seats it only in the queue shape, when the
+        // counter's writing carries a rate to roll.
+        rateV = TextView(this).apply {
+            setTextColor(c["gold"]!!); textSize = 12f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+            contentDescription = s("Speed — drag up or down to roll it", "Velocidad — arrastra arriba o abajo para rodarla")
+            setPadding(dp(10), dp(5), dp(2), dp(5))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            setOnTouchListener { v, e -> judgeWheelTouch(v, e) }
+        }
+        val subRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        subRow.addView(subV)
+        subRow.addView(rateV)
         val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         titleRow.addView(titleV)
         val markB = TextView(this).apply {
@@ -2550,7 +2575,7 @@ class BubbleService : Service() {
         lockBtn = lockB
         titleRow.addView(lockB)
         card.addView(titleRow)
-        card.addView(subV)
+        card.addView(subRow)
         // THE WORDS (1.4.102): the panel reads along. A serif zone under the
         // status line — on the tablet, the sentence before and after ride
         // dimmed beside the one sounding; on the phone, the sounding
@@ -3646,77 +3671,64 @@ class BubbleService : Service() {
         handler.postDelayed(r, 9000)
     }
 
-    /** The speed list (Oscar, 1.4.205): in the queue shape the −/+
-     *  keys have left the row, and the rate lives where it is already
-     *  written — the sentence counter's second half. Its tap opens
-     *  this card in the hint cards' mould: the app's own rate steps,
-     *  the standing one in gold; a tap sets the rate through the
-     *  Bridge's absolute-rate door, and the choice stays written on
-     *  the counter, as it always was. */
-    private fun showSpeedCard() {
-        dismissSaveHint()
-        val w = wm ?: return
-        val c = cardPal()
-        val scrim = View(this).apply {
-            setBackgroundColor(if (panelLight) Color.argb(90, 62, 48, 28) else Color.argb(118, 10, 8, 5))
-            alpha = 0f
+    /** The drum's judgment (1.4.207, Oscar's combination lock —
+     *  the 205 speed card is retired: «¿Por qué no hacerlo de forma
+     *  que se pueda correr como se corre los números en un candado
+     *  con clave?»). DOWN takes the drum, seeding its step from the
+     *  counter's witness when it stands unset; MOVE rolls it — each
+     *  dp(26) of travel is one gear detent, up raising the rate and
+     *  down lowering it, the loop unbroken (past 2× comes 0.75×);
+     *  UP with no detent turned is a tap and nudges one step up. */
+    private fun judgeWheelTouch(v: View, e: MotionEvent): Boolean {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                wheelLive = true
+                wheelDownY = e.y
+                wheelStepsApplied = 0
+                if (wheelIdx < 0) wheelIdx = wheelIndexFor(currentRateFromSub())
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val want = ((wheelDownY - e.y) / dp(26).toFloat()).toInt()
+                while (wheelStepsApplied < want) { wheelStepsApplied++; rollWheel(1) }
+                while (wheelStepsApplied > want) { wheelStepsApplied--; rollWheel(-1) }
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                if (wheelStepsApplied == 0) rollWheel(1)
+                wheelLive = false
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> { wheelLive = false; return true }
         }
-        runCatching {
-            w.addView(scrim, WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, PixelFormat.TRANSLUCENT))
+        return false
+    }
+
+    /** One detent of the drum: the step turns (wrapping the loop),
+     *  the new writing rolls into its window from the side it came,
+     *  a tick sounds under the finger, and the rate applies live
+     *  through the Bridge's absolute-rate door. */
+    private fun rollWheel(dir: Int) {
+        if (wheelIdx < 0) wheelIdx = wheelIndexFor(currentRateFromSub())
+        wheelIdx = (wheelIdx + dir + wheelSteps.size) % wheelSteps.size
+        val v = wheelSteps[wheelIdx]
+        rateV?.let { rv ->
+            rv.animate().cancel()
+            rv.text = rateLabel(v)
+            rv.translationY = dir * dp(7).toFloat()
+            rv.alpha = 0.25f
+            rv.animate().translationY(0f).alpha(1f).setDuration(110).start()
+            rv.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
         }
-        saveHintScrim = scrim
-        scrim.animate().alpha(1f).setDuration(220).start()
-        val rim = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(mixCol(c["gold"]!!, c["ink"]!!, 0.18f), mixCol(c["gold"]!!, c["bg2"]!!, 0.50f), mixCol(c["gold"]!!, c["bg2"]!!, 0.68f))).apply {
-            cornerRadius = dp(21).toFloat()
-        }
-        val face = GradientDrawable().apply {
-            setColor(mixCol(c["bg1"]!!, c["bg2"]!!, 0.3f))
-            cornerRadius = dp(20).toFloat()
-        }
-        val stage = FrameLayout(this).apply {
-            background = android.graphics.drawable.LayerDrawable(arrayOf(rim, face)).apply { setLayerInset(1, dp(1), dp(1), dp(1), dp(1)) }
-            elevation = dp(10).toFloat()
-        }
-        val gold = c["gold"]!!
-        val sheenV = View(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.argb(26, Color.red(gold), Color.green(gold), Color.blue(gold)), Color.TRANSPARENT))
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(30), Gravity.TOP)
-        }
-        stage.addView(sheenV)
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(16), dp(18), dp(14))
-        }
-        card.addView(TextView(this).apply {
-            text = s("Speed", "Velocidad")
-            setTextColor(c["ink"]!!); textSize = 15f; typeface = Typeface.SERIF
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        val cur = currentRateFromSub()
-        for (v in listOf(0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0)) {
-            card.addView(TextView(this).apply {
-                text = rateLabel(v)
-                setTextColor(if (v == cur) c["gold"]!! else c["ink"]!!)
-                textSize = 14.5f; gravity = Gravity.CENTER
-                if (v == cur) setTypeface(typeface, Typeface.BOLD)
-                setPadding(dp(12), dp(9), dp(12), dp(9))
-                contentDescription = s("Speed", "Velocidad") + " " + rateLabel(v)
-                setOnClickListener { ratePick = v; dismissSaveHint(); pokeOrWake("rate") }
-            })
-        }
-        stage.addView(card, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-        val p = WindowManager.LayoutParams(dp(300), WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT).apply { gravity = Gravity.CENTER }
-        runCatching { w.addView(stage, p) }
-        saveHint = stage
-        stage.scaleX = 0.90f; stage.scaleY = 0.90f; stage.alpha = 0f
-        stage.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(230).setInterpolator(DecelerateInterpolator()).start()
-        val r = Runnable { dismissSaveHint() }
-        saveHintRun = r
-        handler.postDelayed(r, 9000)
+        ratePick = v
+        pokeOrWake("rate")
+    }
+
+    /** The wheel step nearest a rate the counter witnesses. */
+    private fun wheelIndexFor(v: Double): Int {
+        var best = 2; var bd = Double.MAX_VALUE
+        for (i in wheelSteps.indices) { val d = kotlin.math.abs(wheelSteps[i] - v); if (d < bd) { bd = d; best = i } }
+        return best
     }
 
     private fun rateLabel(v: Double): String = if (v == v.toInt().toDouble()) "${v.toInt()}×" else "$v×"
@@ -3822,12 +3834,12 @@ class BubbleService : Service() {
         dismissSaveHint()
         hideNameTag()
         val v = panel
-        panel = null; panelParams = null; titleV = null; subV = null; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; gripV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null; scrubTarget = -1; scrubMode = 0
+        panel = null; panelParams = null; titleV = null; subV = null; rateV = null; wheelIdx = -1; wheelLive = false; wheelStepsApplied = 0; toggleB = null; seekBar = null; seekHeld = false; spectrum = null; wordsV = null; gripV = null; lastWordsKey = ""; lastWi = -2; wordsScrollAnim?.cancel(); wordsScrollAnim = null; scrubTarget = -1; scrubMode = 0
         queueBtnV = null; queueBadgeV = null; queueListV = null; queueRowsV = null; queueHeadV = null; queueClearV = null; queueListOpen = false; queueLeverV = null
         // The shown-* diff memory describes these views (M-7): the
         // next panel is born blank, so its first refresh must paint
         // everything — the memory dies with the views it described.
-        shownTitle = null; shownSub = null; shownPlaying = null; shownSeek = -1; shownBarsKey = null; shownLock = null; shownCueMode = false
+        shownTitle = null; shownSub = null; shownPlaying = null; shownSeek = -1; shownBarsKey = null; shownLock = null; shownSubMode = false
         // The window is gone: the bubble takes its OWN opacity back
         // (1.4.197 — while the panel stood, it wore the panel's).
         bubble?.let { it.animate().cancel(); it.animate().alpha(awakeAlpha()).setDuration(160).start() }
@@ -4113,13 +4125,28 @@ class BubbleService : Service() {
                 else j?.optString("sub")?.ifBlank { s("Ready", "Listo") } ?: s("Ready", "Listo")
             if (scrubTarget >= 0 && lastCt > 0) sub = s("Sentence", "Oración") + " ${scrubTarget + 1} " + s("of", "de") + " $lastCt"
             arrangeTransport()
-            // In the queue shape the counter wears its door's sign
-            // (1.4.205): the trailing ▾ says the line can be tapped
-            // for the speed list. The cue is display only — shownSub
-            // keeps the page's own writing, so the diff stays honest.
-            if (sub != shownSub || transportQueueMode != shownCueMode) subV?.let {
-                it.text = if (transportQueueMode) "$sub ▾" else sub
-                shownSub = sub; shownCueMode = transportQueueMode
+            // The sub-line's two shapes (1.4.207): as the row stands,
+            // the counter carries the page's whole writing, rate and
+            // all. In the queue shape the rate leaves the writing and
+            // stands on the drum at the line's end — subV keeps the
+            // counting half, rateV the rate. shownSub keeps the page's
+            // own writing, so the diff stays honest; while a hand is
+            // on the drum (wheelLive) pushes never repaint it — the
+            // drum is showing the hand's own rolling.
+            if (sub != shownSub || transportQueueMode != shownSubMode) {
+                shownSub = sub; shownSubMode = transportQueueMode
+                val sep = if (transportQueueMode) sub.lastIndexOf(" · ") else -1
+                val rateTxt = if (sep >= 0) sub.substring(sep + 3) else ""
+                val rateVal = rateTxt.dropLast(1).toDoubleOrNull()
+                val hasRate = rateTxt.endsWith("×") && rateVal != null
+                subV?.text = if (hasRate) sub.substring(0, sep) else sub
+                rateV?.let { rv ->
+                    rv.visibility = if (hasRate) View.VISIBLE else View.GONE
+                    if (hasRate && !wheelLive) {
+                        rv.text = rateTxt
+                        wheelIdx = wheelIndexFor(rateVal!!)
+                    }
+                }
             }
             val locked = isLocked(this@BubbleService)
             if (locked != shownLock) lockBtn?.let { it.text = if (locked) "🔒" else "🔓"; shownLock = locked }

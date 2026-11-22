@@ -1,3 +1,15 @@
+## 1.4.207 — The speed wheel (Oscar's combination lock)
+
+Oscar's verdict on 205's speed card, with his phone's photo of it: the buttons were excellent, but the card is «ancho e innecesariamente espacioso» — his replacement design, verbatim in spirit: run the speed the way the numbers run on a combination lock; rotating the number like a gear takes no extra space and opens no window — drag down or up and the speeds roll in a loop. «Eso sí sería interesante de ver y más sencillo.»
+
+- **The card is gone.** `showSpeedCard` is deleted whole; nothing opens. The counter's «▾» cue goes with it.
+- **The drum.** In the queue shape, the rate leaves the counter's writing and stands as its own drum at the end of the sub-line: the counter keeps the counting half («Sentence 5 of 10»), and a gold bold `rateV` at the row's end carries the rate alone. Outside the queue shape — or whenever the writing carries no rate (a clip's time line) — the drum hides and the counter carries the whole writing, exactly as before 205.
+- **The roll.** A vertical drag on the drum turns it: every 26 dp of travel is one gear detent — up raises the rate, down lowers it, and the loop never ends (past 2× comes 0.75×). Each detent rolls the new writing into the window from the side it came (110 ms), ticks under the finger (CLOCK_TICK), and applies live through the Bridge's absolute-rate door — the same `ratePick` stamp the card used, so the page half is untouched since 204. A tap with no detent turned nudges one step up.
+- **Honest paint while rolling.** While a hand is on the drum (`wheelLive`), pushes never repaint it — the drum shows the hand's own rolling; the standing step re-syncs from the counter's witness on the next push after the hand lifts. The drum's step seeds from the rate the counter witnesses (`currentRateFromSub`, kept from 205) and thereafter from the pushes themselves.
+- **Presentation impact: NONE** — the panel is shell-native; no page element, anchor, or stage fiction changes. No relay owed.
+
+Shell-only wave (BubbleService.kt) plus the version stamps; the page is untouched. The drum's feel — detent size, roll, tick — is judged on Oscar's phone; CI is the compile gate.
+
 ## 1.4.206 — The queue's own lever, and Paste now jumps the line (Oscar, 2026-11-21)
 
 Two orders from Oscar's photos of the 1.4.201 panel, built the same evening 1.4.205 landed. Presentation impact: NONE — no anchor moves, no registry change; no relay owed.
