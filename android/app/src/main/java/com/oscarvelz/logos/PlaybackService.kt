@@ -625,13 +625,17 @@ class PlaybackService : Service() {
         // The disc rules the canvas (1.4.218): at r=158 the dark
         // ground still owned most of the pixels and the extractor
         // mixed its gradient from the ground's browns; at r=230 the
-        // gold family owns the extraction outright.
+        // gold family owned the extraction outright — and the ball
+        // behind the system's player grew too large for Oscar's eye
+        // (1.4.219: «la bola está demasiado grande… reducida de
+        // tamaño»), so it settles at r=190: the gold still owns the
+        // extraction, the ball breathes smaller behind the player.
         val discPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         discPaint.color = disc
         if (glow) discPaint.setShadowLayer(22f, 0f, 0f, accent)
-        cv.drawCircle(cx, cy, 230f, discPaint)
+        cv.drawCircle(cx, cy, 190f, discPaint)
         val lam = lambdaBitmap()
-        val lw = 300f
+        val lw = 252f
         val lh = lw * lam.height.toFloat() / lam.width.toFloat()
         val lamPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         lamPaint.colorFilter = PorterDuffColorFilter(ground, PorterDuff.Mode.SRC_IN)

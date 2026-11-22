@@ -1141,7 +1141,7 @@ class BubbleService : Service() {
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var halo: View? = null
     private var bubbleFaceV: FrameLayout? = null
-    private var bubbleLambdaV: TextView? = null
+    private var bubbleLambdaV: LambdaView? = null
     private var bubbleRingV: RingView? = null
     private var ringFracShown = -1f
     // The copy queue's panel face (1.4.198): what the last page push
@@ -1815,7 +1815,7 @@ class BubbleService : Service() {
                 bubbleRingV?.layoutParams = FrameLayout.LayoutParams(bubbleSize(), bubbleSize(), Gravity.CENTER)
                 repaintFace()
                 bubbleFaceV?.layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
-                bubbleLambdaV?.textSize = (if (isTablet()) 28f else 22f) * sizeFactor()
+                bubbleLambdaV?.invalidate()
                 b.animate().cancel(); b.alpha = if (panel != null) panelAlpha() else awakeAlpha()
                 handler.removeCallbacks(fadeRun)
                 if (panel == null) handler.postDelayed(fadeRun, 4000)
@@ -2036,6 +2036,60 @@ class BubbleService : Service() {
         else -> Triple(Color.rgb(58, 49, 35), Color.rgb(21, 17, 13), gold)
     }
 
+    private var lambdaStencil: android.graphics.Bitmap? = null
+    /** The TRUE λ (1.4.219, Oscar): the letterform lifted from the
+     *  bundled artwork — the same stencil the shade card's Ring
+     *  wears — kept as an alpha mask: each pixel's alpha is its
+     *  brightness above the art's dark ground (the recipe measured
+     *  in PlaybackService: the crop x 184..380, y 118..284 of the
+     *  512 file). Null when the artwork cannot be read; the face
+     *  then falls back to the serif glyph it wore before. */
+    private fun lambdaBitmap(): android.graphics.Bitmap? {
+        lambdaStencil?.let { return it }
+        val built = runCatching {
+            val src0 = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.media_art)
+            val src = android.graphics.Bitmap.createBitmap(src0, 184, 118, 196, 166)
+            val w = src.width; val h = src.height
+            val px = IntArray(w * h); src.getPixels(px, 0, w, 0, 0, w, h)
+            val op = IntArray(w * h)
+            for (i in px.indices) {
+                val p = px[i]
+                val lum = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
+                op[i] = Color.argb(((lum - 70) * 255 / 120).coerceIn(0, 255), 255, 255, 255)
+            }
+            val out = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+            out.setPixels(op, 0, w, 0, 0, w, h)
+            out
+        }.getOrNull()
+        lambdaStencil = built
+        return built
+    }
+
+    /** The bubble's face letter (1.4.219): the logo's own λ, drawn
+     *  from the artwork's stencil and tinted with the family's ring
+     *  colour — no longer a serif font's stand-in, which beside the
+     *  app icon read cheap («una versión más barata y pobre del
+     *  logo», Oscar). The ring, the ground and the colours around
+     *  it are untouched; only the letter changed. */
+    private inner class LambdaView : View(this) {
+        private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+        private val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.SERIF; textAlign = Paint.Align.CENTER }
+        override fun onDraw(c: Canvas) {
+            val col = facePaint().third
+            val st = lambdaBitmap()
+            if (st != null) {
+                p.colorFilter = android.graphics.PorterDuffColorFilter(col, android.graphics.PorterDuff.Mode.SRC_IN)
+                val lw = width * 0.52f
+                val lh = lw * st.height.toFloat() / st.width.toFloat()
+                c.drawBitmap(st, null, android.graphics.RectF((width - lw) / 2f, (height - lh) / 2f, (width + lw) / 2f, (height + lh) / 2f), p)
+            } else {
+                tp.color = col; tp.textSize = height * 0.52f
+                val fm = tp.fontMetrics
+                c.drawText("λ", width / 2f, height / 2f - (fm.ascent + fm.descent) / 2f, tp)
+            }
+        }
+    }
+
     /** Repaint the living bubble in the current family (a theme
      *  change lands while it floats — Oscar sees it turn). */
     /** The bubble's own Ring (Oscar, 1.4.197): the reading's
@@ -2103,7 +2157,7 @@ class BubbleService : Service() {
             colors = intArrayOf(top, deep)
             setStroke(dp(2), ring)
         }
-        bubbleLambdaV?.setTextColor(ring)
+        bubbleLambdaV?.invalidate()
         halo?.background = oval(ring, 0, 0, -1f).apply { alpha = 70 }
     }
 
@@ -2132,12 +2186,7 @@ class BubbleService : Service() {
             elevation = dp(5).toFloat()
             layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
         }
-        val lambda = TextView(this).apply {
-            text = "λ"
-            setTextColor(faceCols.third)
-            textSize = (if (isTablet()) 28f else 22f) * sizeFactor()
-            typeface = Typeface.SERIF
-            gravity = Gravity.CENTER
+        val lambda = LambdaView().apply {
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         face.addView(lambda)
