@@ -2042,24 +2042,34 @@ class BubbleService : Service() {
 
     private var lambdaStencil: android.graphics.Bitmap? = null
     /** The TRUE λ (1.4.219, Oscar): the letterform lifted from the
-     *  bundled artwork — the same stencil the shade card's Ring
-     *  wears — kept as an alpha mask: each pixel's alpha is its
-     *  brightness above the art's dark ground (the recipe measured
-     *  in PlaybackService: the crop x 184..380, y 118..284 of the
-     *  512 file). Null when the artwork cannot be read; the face
-     *  then falls back to the serif glyph it wore before. */
+     *  bundled artwork, kept as an alpha mask. 1.4.222 (Oscar's
+     *  photo: the letter read THICKER than the app icon's and off
+     *  centre) — the recipe is now measured against the artwork
+     *  itself, not borrowed from the medallion's: the composition's
+     *  true bounds are x 188..375, y 122..279 of the 512 file (the
+     *  letter, x 188..321, and its wave, x 357..375, as one group —
+     *  the old crop ran 59px too wide on the right, so the letter
+     *  landed left of centre and the wave spilled to the rim), and
+     *  the alpha ramp starts at the glow's ceiling (135) instead of
+     *  the ground's (70): the artwork's luminous halo used to pose
+     *  as ink at up to two-thirds strength, fattening every stroke.
+     *  The ramp now tracks the letter's body (full at 195), so the
+     *  bubble's λ keeps the icon's own weight. PlaybackService
+     *  keeps its wider medallion crop — a different seat, approved
+     *  there. Null when the artwork cannot be read; the face then
+     *  falls back to the serif glyph it wore before. */
     private fun lambdaBitmap(): android.graphics.Bitmap? {
         lambdaStencil?.let { return it }
         val built = runCatching {
             val src0 = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.media_art)
-            val src = android.graphics.Bitmap.createBitmap(src0, 184, 118, 196, 166)
+            val src = android.graphics.Bitmap.createBitmap(src0, 188, 122, 188, 158)
             val w = src.width; val h = src.height
             val px = IntArray(w * h); src.getPixels(px, 0, w, 0, 0, w, h)
             val op = IntArray(w * h)
             for (i in px.indices) {
                 val p = px[i]
                 val lum = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
-                op[i] = Color.argb(((lum - 70) * 255 / 120).coerceIn(0, 255), 255, 255, 255)
+                op[i] = Color.argb(((lum - 135) * 255 / 60).coerceIn(0, 255), 255, 255, 255)
             }
             val out = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
             out.setPixels(op, 0, w, 0, 0, w, h)
@@ -3478,7 +3488,18 @@ class BubbleService : Service() {
         val margin = dp(10)
         val cx = bp.x + bubbleHalf()
         val cy = bp.y + bubbleHalf()
-        val ph = panel?.height?.takeIf { it > 0 } ?: dp(320)
+        val phNow = panel?.height?.takeIf { it > 0 } ?: dp(320)
+        // The panel's height with the words window at its NATURAL
+        // height (1.4.222): a past seating may have shrunk the words
+        // (seatBelow), and every seat is judged against the honest
+        // size — the words take their height back whenever the room
+        // allows, below.
+        val wv = wordsV
+        val wvOn = wv != null && wv.visibility == View.VISIBLE
+        val wvNat = if (wvOn) wordsHeight() else 0
+        var wvH = if (wvOn) wv!!.layoutParams.height else 0
+        val ph = phNow - wvH + wvNat
+        if (wvOn && wvH != wvNat) { wv!!.layoutParams.height = wvNat; wv.requestLayout(); wvH = wvNat }
         // The corner travels the diagonal toward the circle — but the
         // panel's corners are rounded (24dp), which pulls the DRAWN
         // edge back along that same diagonal by R·(√2−1) ≈ 10dp. The
@@ -3503,14 +3524,32 @@ class BubbleService : Service() {
         // point beneath it (panelPivotX). Corners and borders keep the
         // corner seat exactly as it was; tablets keep it everywhere.
         val midRoom = !isTablet() && kotlin.math.abs((if (seatRight) p.x + pw else p.x) - cx) > dp(56)
+        // THE GRAZE OUTRANKS THE FIT (1.4.222, Oscar's photo): the
+        // bottom-fit clamp in the seat below used to drag a tall
+        // panel UP over the bubble — the λ left half-buried behind
+        // the panel's top edge, mid-edge («se queda ahí abajo»),
+        // instead of enthroned on its corner with the whole room
+        // free beneath. The seat is sacred now: when the room below
+        // runs short, the WORDS window gives up the overflow — it
+        // scrolls inside itself and the amber word stays centred —
+        // down to a floor of 36dp; only a panel too tall for even
+        // that falls back to the old clamp, saving its footer as a
+        // last resort.
+        fun seatBelow(topSeat: Int): Int {
+            var target = wvNat
+            if (wvOn && topSeat + ph > sh2 - margin) target = (wvNat - (topSeat + ph - (sh2 - margin))).coerceAtLeast(dp(36))
+            if (wvOn && target != wvH) { wv!!.layoutParams.height = target; wv.requestLayout(); wvH = target }
+            val phF = ph - (wvNat - target)
+            return if (topSeat + phF <= sh2 - margin) topSeat else (sh2 - phF - margin).coerceAtLeast(margin)
+        }
         if (midRoom) {
             val rest = r + dp(2)
             seatBottom = !(cy + rest + ph <= sh2 - margin) && (cy - rest - ph >= margin)
-            p.y = if (seatBottom) cy - rest - ph else (cy + rest).coerceAtMost((sh2 - ph - margin).coerceAtLeast(margin))
+            p.y = if (seatBottom) cy - rest - ph else seatBelow(cy + rest)
             panelPivotX = (cx - p.x).toFloat().coerceIn(0f, pw.toFloat())
         } else {
             seatBottom = !(cy + d + ph <= sh2 - margin) && (cy - d - ph >= margin)
-            p.y = if (seatBottom) cy - d - ph else (cy + d).coerceAtMost((sh2 - ph - margin).coerceAtLeast(margin))
+            p.y = if (seatBottom) cy - d - ph else seatBelow(cy + d)
             panelPivotX = null
         }
         // The grip rides the corner opposite the seated one — the free one.
@@ -4146,6 +4185,11 @@ class BubbleService : Service() {
         val wasGone = wv.visibility != View.VISIBLE
         wv.text = sb
         wv.visibility = View.VISIBLE
+        // A panel that GROWS re-seats under the same law (1.4.222):
+        // the words arriving can push a seated panel past the
+        // screen's foot — the GONE road already re-seated; the
+        // appearing road now does too.
+        if (wasGone) panel?.post { positionPanel() }
         gripV?.visibility = View.VISIBLE
         if (sentChanged) {
             wv.animate().cancel()
