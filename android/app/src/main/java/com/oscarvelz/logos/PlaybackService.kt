@@ -630,12 +630,17 @@ class PlaybackService : Service() {
         // (1.4.219: «la bola está demasiado grande… reducida de
         // tamaño»), so it settles at r=190: the gold still owns the
         // extraction, the ball breathes smaller behind the player.
+        // 1.4.220 (Oscar, same order as the breathing bubble):
+        // «reducir su tamaño para que no cubra todo el reproductor»
+        // — back to r=160, the size he had already called good
+        // («estaba bastante bien como estaba antes»); the amber now
+        // rides on the pre-compensated gold, not on the disc's size.
         val discPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         discPaint.color = disc
         if (glow) discPaint.setShadowLayer(22f, 0f, 0f, accent)
-        cv.drawCircle(cx, cy, 190f, discPaint)
+        cv.drawCircle(cx, cy, 160f, discPaint)
         val lam = lambdaBitmap()
-        val lw = 252f
+        val lw = 212f
         val lh = lw * lam.height.toFloat() / lam.width.toFloat()
         val lamPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         lamPaint.colorFilter = PorterDuffColorFilter(ground, PorterDuff.Mode.SRC_IN)

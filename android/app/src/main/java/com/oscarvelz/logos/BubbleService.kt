@@ -1165,6 +1165,7 @@ class BubbleService : Service() {
     private var queueLeverV: Switch? = null
     private var queueLeverFlipAt = 0L
     private var haloAnim: ObjectAnimator? = null
+    private var breathAnim: android.animation.AnimatorSet? = null
     private var seekBar: SeekBar? = null
     private var saveHint: View? = null
     private var saveHintScrim: View? = null
@@ -1344,6 +1345,7 @@ class BubbleService : Service() {
         lastInvite = now
         val h = halo ?: return
         rippleAnims.forEach { it.cancel() }
+        stopBreath()
         if (root.alpha < awakeAlpha()) root.animate().alpha(awakeAlpha()).setDuration(220).start()
         h.visibility = View.VISIBLE
         val sx = ObjectAnimator.ofFloat(h, "scaleX", 1f, 1.55f).apply { duration = 780; repeatCount = times - 1 }
@@ -1354,6 +1356,7 @@ class BubbleService : Service() {
                 override fun onAnimationEnd(a: android.animation.Animator) {
                     if (!playingNow) h.visibility = View.INVISIBLE
                     h.scaleX = 1f; h.scaleY = 1f
+                    if (!playingNow) startBreath()
                     handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 900)
                 }
             })
@@ -1371,6 +1374,7 @@ class BubbleService : Service() {
         lastCheer = now
         rippleAnims.forEach { it.cancel() }
         haloAnim?.cancel(); haloAnim = null
+        stopBreath()
         if (root.alpha < awakeAlpha()) root.animate().alpha(awakeAlpha()).setDuration(200).start()
         h.visibility = View.VISIBLE
         val sx = ObjectAnimator.ofFloat(h, "scaleX", 1f, 1.55f).apply { duration = 620; repeatCount = 1 }
@@ -2159,6 +2163,38 @@ class BubbleService : Service() {
         }
         bubbleLambdaV?.invalidate()
         halo?.background = oval(ring, 0, 0, -1f).apply { alpha = 70 }
+    }
+
+    /** The bubble BREATHES (1.4.220, Oscar's yes): while the jewel
+     *  floats idle — nothing playing, no ripple running — its halo
+     *  swells and settles on a slow lung (3.4 s each way: alpha and
+     *  a breath of scale), the living presence he imagined behind
+     *  the system's player, on a surface that is ours to animate.
+     *  The playing pulse (1.1 s) outranks it, the ripples borrow
+     *  the halo and hand it back, and a system asking for no motion
+     *  (animator scale 0) gets none. */
+    private fun startBreath() {
+        if (breathAnim != null || haloAnim != null) return
+        if (rippleAnims.any { it.isRunning }) return
+        val h = halo ?: return
+        val scale = runCatching { Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) }.getOrDefault(1f)
+        if (scale == 0f) return
+        h.visibility = View.VISIBLE
+        val al = ObjectAnimator.ofFloat(h, "alpha", 0.16f, 0.40f)
+        val sx = ObjectAnimator.ofFloat(h, "scaleX", 1f, 1.13f)
+        val sy = ObjectAnimator.ofFloat(h, "scaleY", 1f, 1.13f)
+        listOf(al, sx, sy).forEach { it.repeatMode = ValueAnimator.REVERSE; it.repeatCount = ValueAnimator.INFINITE }
+        breathAnim = android.animation.AnimatorSet().apply {
+            playTogether(al, sx, sy)
+            duration = 3400
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            start()
+        }
+    }
+
+    private fun stopBreath() {
+        breathAnim?.cancel(); breathAnim = null
+        halo?.let { it.scaleX = 1f; it.scaleY = 1f }
     }
 
     private fun showBubble() {
@@ -4334,14 +4370,18 @@ class BubbleService : Service() {
             updateWords(j)
             val h = halo
             if (playing && h != null) {
+                stopBreath()
                 if (haloAnim == null) {
                     h.visibility = View.VISIBLE
                     haloAnim = ObjectAnimator.ofFloat(h, "alpha", 0.25f, 0.85f).apply {
                         duration = 1100; repeatMode = ValueAnimator.REVERSE; repeatCount = ValueAnimator.INFINITE; start()
                     }
                 }
-            } else if (h != null && haloAnim != null) {
-                haloAnim?.cancel(); haloAnim = null; h.visibility = View.INVISIBLE
+            } else if (h != null) {
+                // Idle no longer means invisible (1.4.220): the pulse
+                // rests and the breath takes the halo.
+                if (haloAnim != null) { haloAnim?.cancel(); haloAnim = null }
+                startBreath()
             }
         }
     }
@@ -4430,6 +4470,7 @@ class BubbleService : Service() {
         bubbleFaceV = null
         bubbleLambdaV = null
         haloAnim?.cancel()
+        breathAnim?.cancel(); breathAnim = null
         if (onNow != null) onNow = null
         if (lookHook != null) lookHook = null
         running = false
