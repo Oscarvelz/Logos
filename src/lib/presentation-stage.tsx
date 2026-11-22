@@ -855,6 +855,7 @@ function StageCreate({ scenario }: { scenario: Scenario }) {
     <div className="create-page">
       <div className="pstage-eyebrow" data-present="create-head">● CREATE</div>
       <h2 className="pstage-title">Make an audio file</h2>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--accent)', margin: '12px 2px 6px' }}>The text</div>
       <div className="pstage-card">
         <textarea
           data-present="create-editor"
@@ -870,12 +871,16 @@ function StageCreate({ scenario }: { scenario: Scenario }) {
           <button type="button" className="pstage-chip" data-present="create-use-listen">Use my Listen text</button>
         </div>
       </div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--accent)', margin: '14px 2px 6px' }}>The voice</div>
       <div className="pstage-card">
         <div className="pstage-row" data-present="create-voice-row">
           <span>Voice</span><span className="pstage-grow" />
           <button type="button" className="pstage-chip" data-present="create-voice-chip" data-voice-id="auto">Auto</button>
           <span data-present="create-voice-chosen">Auto</span>
         </div>
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--accent)', margin: '14px 2px 6px' }}>The output</div>
+      <div className="pstage-card">
         <div className="pstage-row"><span data-present="create-speed">Speed</span><span className="pstage-grow" /><span>1×</span></div>
         <div className="pstage-row"><span data-present="create-format">Format</span><span className="pstage-grow" /><span>M4A</span></div>
         <div className="pstage-row"><span data-present="create-title">Title</span><span className="pstage-grow" /><span>My recording</span></div>
@@ -937,7 +942,7 @@ const STAGE_SETTING_INDEX: { anchor: string; title: string; sub: string; keys: s
   { anchor: 'set-card-language', title: 'Language', sub: 'The app’s own words — everything on screen.', keys: 'english español spanish idioma lenguaje inglés' },
   { anchor: 'set-presentations', title: 'Presentations', sub: 'Learn the whole app, guided, at your pace', keys: 'lessons tour guided learn presentaciones lecciones aprender guía' },
   { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy clips library copia respaldo exportar importar archivo biblioteca' },
-  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.212 · private, on-device text-to-speech', keys: 'version about acerca versión' },
+  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.213 · private, on-device text-to-speech', keys: 'version about acerca versión' },
 ]
 
 function StageSettings({ scenario }: { scenario: Scenario }) {
@@ -1119,8 +1124,8 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
 
       <div className="pstage-card" data-present="set-about">
         <strong>About Logos</strong>
-        <p className="pstage-note">Version 1.4.212 · private, on-device text-to-speech</p>
-        <p className="pstage-note" data-present="set-version">Version 1.4.212</p>
+        <p className="pstage-note">Version 1.4.213 · private, on-device text-to-speech</p>
+        <p className="pstage-note" data-present="set-version">Version 1.4.213</p>
       </div>
     </div>
   )

@@ -23,13 +23,13 @@ const pickerPreviews = new Map<string, Blob>()
  *  voice whose model could not render a single sentence. A voice
  *  with no preview asset used to get no button at all; now every
  *  voice is previewable, and a failed render says so. */
-function PreviewBtn({ v, tab }: { v: Voice; tab: number }) {
+export function PreviewBtn({ v, tab, anchor = true }: { v: Voice; tab: number; anchor?: boolean }) {
   const cp = useStore(clipPlayer)
   const [loading, setLoading] = useState(false)
   const key = `preview:${v.id}`
   const on = cp.key === key && cp.playing
   return (
-    <button className={`pick-play ${on ? 'on' : ''}`} data-present="voice-picker-row:preview" data-voice-id={v.id} tabIndex={tab} aria-label={on ? t('Stop {name} sample', { name: v.name }) : t('Hear {name}', { name: v.name })}
+    <button className={`pick-play ${on ? 'on' : ''}`} {...(anchor ? { 'data-present': 'voice-picker-row:preview', 'data-voice-id': v.id } : {})} tabIndex={tab} aria-label={on ? t('Stop {name} sample', { name: v.name }) : t('Hear {name}', { name: v.name })}
       onClick={async (e) => {
         e.stopPropagation()
         if (on) { stopClipPlayer(); return }

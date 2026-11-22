@@ -865,6 +865,39 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .vgroup.open .vgroup-body > div { padding-bottom: 10px; }
 
 /* ── Create ─────────────────────────────────────────────── */
+/* Create trays (1.4.213 — Oscar's direction B, «Three trays», chosen
+   2026-11-21): the Settings clusters' sunken paint brought to Create.
+   The page groups by territory — The text · The voice · The output —
+   each tray named in small gold caps above it; the cards inside keep
+   their own paint and sit above the tray. The voice chips obey an
+   even three-column grid (no ragged wrap, no orphan row), and the
+   chosen voice answers as a gold-rimmed bar with its own preview. */
+.create-tray-label { font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); padding: 0 6px 8px; }
+.create-tray {
+  background: color-mix(in srgb, var(--text) 4%, var(--bg));
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 9%, transparent), 0 1px 2px rgba(0, 0, 0, .16);
+  padding: 12px;
+}
+.create-tray .card { margin: 0; }
+[data-theme='light'] .create-tray { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), 0 1px 2px rgba(60, 45, 20, .10); }
+[data-theme='tron'] .create-tray {
+  border-color: rgba(0, 229, 255, .30);
+  box-shadow: inset 0 1px 0 rgba(0, 229, 255, .38), inset 0 0 24px rgba(0, 229, 255, .05), 0 1px 2px rgba(0, 0, 0, .4);
+}
+[data-theme='cyberpunk'] .create-tray { box-shadow: inset 0 3px 0 var(--accent), 0 1px 2px rgba(0, 0, 0, .35); }
+.create-voice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.create-voice-grid .chip { width: 100%; justify-content: center; padding: 0 6px; }
+.create-chosen {
+  display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 12px;
+  border-radius: 16px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft);
+}
+.create-chosen .pick-play { width: 38px; height: 38px; margin: 0; flex: none; }
+.create-chosen .pick-play svg { width: 15px; height: 15px; }
+.create-lang-line { margin-top: 10px; text-align: right; color: var(--muted); font-size: 12.5px; }
+.create-div { height: 1px; background: var(--line); }
+.create-summary { text-align: center; color: var(--muted); font-size: 13px; }
 .create-grid { display: grid; gap: 16px; }
 @media (min-width: 1100px) { .create-grid { grid-template-columns: minmax(0, 1.3fr) minmax(340px, 1fr); align-items: start; } }
 .field-label { font-size: 13px; font-weight: 700; color: var(--text-2); margin: 0 2px 8px; display: flex; justify-content: space-between; }

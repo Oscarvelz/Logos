@@ -1,3 +1,12 @@
+## 1.4.213 — Create, in three trays (2026-11-21)
+
+Create's first design treatment. Oscar asked for the page's buttons and chips to be treated under the wrap law («la forma no es esclava de la función»); three directions were rendered with his real text and judged on his phone, and he chose **B — Three trays** «cleaner and more professional by far», with the refinement that ornaments repeating what is already said (initial medallions beside names) are not wrap but noise — the wrap is not minimalism, but it is sharply not maximalism.
+
+- The page now groups by territory under small gold caps labels, in sunken trays wearing the Settings clusters' paint (theme variants included — Tron keeps its lit fillet, Cyberpunk its flat top fillet): **The text** (the editor card, unchanged inside) · **The voice** · **The output**.
+- The voice chips obey an even three-column grid — every chip the same width, no ragged wrap and no orphan «More…» row. The chosen voice answers beneath the grid as a gold-rimmed bar (the voice's own tile, name, accent badge, tagline) and gains the picker's own preview button, so the chosen voice can be heard before rendering; the auto-detect line rests at the card's foot.
+- The output tray divides Speed · Format · Title with hairlines; above Generate, a quiet summary line speaks the whole deed: words · ≈ duration · format · voice (accent).
+- Presentation impact: the stage's Create fiction mirrors the three trays (its cards now stand under The text / The voice / The output labels; the Generate and fx seats stay in the output card). No anchor moved; the preview button in the real page's chosen bar carries no anchor (the picker's PreviewBtn gained an opt-out, its own anchor untouched).
+
 ## 1.4.212 — One button, one face (2026-11-21)
 
 Oscar's eye, twice in one evening. First: the bubble panel's ⚑ flag and the

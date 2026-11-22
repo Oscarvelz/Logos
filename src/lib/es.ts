@@ -138,6 +138,9 @@ export const ES: Record<string, string> = {
   'About Logos': 'Acerca de Logos',
   // ── Settings clusters (1.4.171) ──
   'The voice': 'La voz',
+  // ── Create trays (1.4.213) ──
+  'The text': 'El texto',
+  'The output': 'La salida',
   'The voice that reads to you, and how it says your words.': 'La voz que te lee, y cómo dice tus palabras.',
   'Listening': 'La escucha',
   'How listening feels — here, and floating over your other apps.': 'Cómo se siente escuchar — aquí, y flotando sobre tus otras apps.',
