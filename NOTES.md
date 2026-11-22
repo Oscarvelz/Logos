@@ -1,3 +1,18 @@
+## 1.4.239 — The line keeps the copy order (2026-11-22)
+
+Oscar's law, stated plainly: «¿Cómo se decide el orden de las copias? Por orden de copiado, no por orden de entrada. El primer texto que copio gana su posición para ser escuchado de primero. El segundo, segundo puesto. El tercer texto que copio, tercer puesto y así consecutivamente, en lugar de ir montando de primero los últimos textos. Lo que define el orden de los audios es el orden de los textos copiados.»
+
+One road in the house broke that law — his own deed of 1.4.206: the panel's Paste key, with the copy queue on, asked «Put the last copy first?» and, on confirmation, the fresh copy jumped to the head of the line, took the stage, and the standing current was removed from the line altogether. Every hand paste re-ordered the line by recency — the last texts rode first.
+
+The road is retired, whole:
+
+- **The panel's Paste key** no longer asks about the front. It reads the clipboard, with the queue on or off alike. With the mode on, the page lines the delivery up at the tail in its copy turn; with the mode off, the key is exactly the key it has always been (the copy takes the stage at once).
+- **The page's arrival judge** is one road now: every shell delivery — caught automatically or delivered by the hand paste — joins the tail through `queueArrival`. `queueFrontArrival`, `enqueueFront` and the paste-front stamp's readers are gone; the shell's stamp plumbing (companion flag + Bridge door) stands inert and uncalled, declared here rather than silently kept.
+- Nothing already in the line is ever displaced or removed by an arrival; an arrival plays at once only when the line has no current and the stage is free — the courtesy the copies have always had.
+
+- Bench: the queue battery + presentation suites and fences are this wave's gates; the panel half (the retired card) is shell work with no bench — the CI compile is its gate and Oscar's phone the judge.
+- Presentation impact: none — no anchor, surface or copy changes (the retired card was a shell hint card, never an anchored surface).
+
 ## 1.4.238 — The corner controls answer again (2026-11-22)
 
 Oscar's report, over a photo of the panel's queue sheet: «no me permite desactivar la lista en bucle desde la ventana flotante. La toco y simplemente me saca de la lista.» The sheet's lever never asked its question — the tap closed the panel instead.

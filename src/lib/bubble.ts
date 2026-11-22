@@ -7,7 +7,7 @@
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
 import { listen, loadText, play, pauseFromShell, endSession, stepRate, setRate, seek, seekFraction, seekToMs, refreshVoices, voiceFor, sentenceProgress, wordClock, levels, registerTrackSkip } from '../player/listen.ts'
-import { queue, queueItems, currentItem, currentIndex, enqueue, enqueueFront, enqueueRef, noteStagedKey, setCurrent, removeItem as queueRemove, clearQueue, type QueueItem } from './queue.ts'
+import { queue, queueItems, currentItem, currentIndex, enqueue, enqueueRef, noteStagedKey, setCurrent, removeItem as queueRemove, clearQueue, type QueueItem } from './queue.ts'
 import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { cancelDevice } from '../engine/device-voice.ts'
 import { readClipboard } from './clipboard.ts'
@@ -329,29 +329,6 @@ export function queueArrival(raw: string): boolean {
   const idle = !clipBusy && (!s.active || s.finished)
   if (!currentItem() && idle) playQueueItem(item)
   else toast(t('Added to the queue · {n} in line', { n: queueItems().length }), undefined, 2500)
-  return true
-}
-
-/** The hand paste's second deed (Oscar, 1.4.206): with the mode on,
- *  Paste now no longer lines a copy up at the tail — behind its
- *  confirmation card in the panel, the fresh copy takes the FRONT
- *  of the line and the stage with it, substituting the line's
- *  standing current (it leaves the line; the rest keep their order
- *  behind the new head). Re-pasting the very text on stage simply
- *  plays it again from the top. A lone session on stage — not the
- *  line's — is replaced by the play, as any hand paste replaces.
- *  Returns true when the front road took the arrival. */
-export function queueFrontArrival(raw: string): boolean {
-  if (!settings.get().copyQueue) return false
-  const text = raw.trim()
-  if (!text) return true
-  seenClip(text)
-  const key = textKey(text)
-  const cur = currentItem()
-  if (cur && cur.key === key) { playQueueItem(cur); return true }
-  const item = enqueueFront(text, sessionTitle(text), estimateSeconds(text, 1))
-  if (cur) queueRemove(cur.id)
-  playQueueItem(item)
   return true
 }
 
@@ -863,19 +840,15 @@ export function initBubble() {
       stageKey = ''; resumeCard = null; saveResume()
     }
   })
-  // The confirmed front paste's stamp (1.4.206): the panel's Paste
-  // now, behind its card, flags the delivery it is about to make —
-  // pulled once at the Bridge, twenty seconds of life. Only a hand
-  // paste carries it; an automatic catch never sets it.
-  const takeFrontFlag = (): boolean => {
-    try { return d.bubblePasteFront?.() === '1' } catch { return false }
-  }
-  // Every shell delivery is judged here: a stamped one takes the
-  // front road; the rest join the line's tail as they always have.
-  const judgeArrival = (text: string): boolean => {
-    if (takeFrontFlag() && queueFrontArrival(text)) return true
-    return queueArrival(text)
-  }
+  // Every shell delivery is judged here (Oscar's law, 1.4.239):
+  // the line's order is the COPY order — every arrival, caught or
+  // hand-pasted, joins the tail in its turn, and nothing jumps
+  // the line. The front road that stood here (1.4.206's confirmed
+  // hand paste taking the head and the stage, ejecting the
+  // standing current) is retired by that law: «Lo que define el
+  // orden de los audios es el orden de los textos copiados… en
+  // lugar de ir montando de primero los últimos textos.»
+  const judgeArrival = (text: string): boolean => queueArrival(text)
   // A stored catch is pulled once (the shell clears it on the pull), so
   // pulling on every return is safe — and necessary: the 'clip' poke can
   // fall into a sleeping page and be lost, and a catch that only a poke
@@ -1091,11 +1064,6 @@ export function initBubble() {
       // Oscar re-copies a text the dedupe reads as no news, and only
       // his finger on the paste icon can say "again".
       if (!want && text === drafts.get().listen.trim()) { seenClip(text); return }
-      // The front paste (1.4.206): when the shell could not read
-      // the clipboard itself, the hand ask lands here instead —
-      // its stamp still names it, and the front road takes it
-      // before the tail can.
-      if (want && takeFrontFlag() && queueFrontArrival(text)) return
       // The queue mode (1.4.198): an arrival joins the line instead
       // of taking the stage, so there is nothing to ask permission
       // for — nothing is displaced. Hand asks line up too.

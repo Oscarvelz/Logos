@@ -3403,19 +3403,16 @@ class BubbleService : Service() {
             cv.drawRoundRect(front, rad, rad, fill)
             cv.drawRoundRect(front, rad, rad, p)
         }) {
-            // Paste now's second deed (Oscar, 1.4.206): while the
-            // copy queue stands ON, the key no longer promises the
-            // stage to the last copy — it asks first, in one short
-            // card, and the confirmed copy jumps the line: the stamp
-            // is set before the read, and the page judges the
-            // delivery by the front road. With the mode off, the key
-            // is exactly the key it has always been.
-            if (panelQueueMode) {
-                showHintCard(s("Put the last copy first?", "¿Poner la última copia al frente?"), s("The text you just copied will jump to the front of the line and take the place of what is playing. The rest of the line stays behind it.", "El texto que acabas de copiar saltará al frente de la fila y tomará el lugar de lo que está sonando. El resto de la fila queda detrás."), s("Put it first", "Ponerlo al frente"), s("Not now", "Ahora no")) {
-                    pasteFront = true
-                    readClip(true)
-                }
-            } else readClip(true)
+            // Paste now (Oscar's law, 1.4.239): the key reads the
+            // clipboard, with the queue on or off alike. The card
+            // that stood here (1.4.206 — «Put the last copy
+            // first?», the confirmed copy jumping the line and
+            // ejecting the standing current) is retired by his
+            // ruling that the line's order is the COPY order: with
+            // the mode on, the page lines the delivery up at the
+            // tail in its turn, like every arrival; with the mode
+            // off, the key is exactly the key it has always been.
+            readClip(true)
         }
         pasteB.layoutParams = LinearLayout.LayoutParams(dp(footDp), dp(footDp)).apply { leftMargin = dp(footM1) }
         clipRow.addView(pasteB)

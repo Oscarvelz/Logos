@@ -86,28 +86,6 @@ export function enqueue(text: string, title: string, secs: number): QueueItem | 
 }
 
 /**
- * Put a text at the FRONT of the line (Oscar, 1.4.206): the hand
- * paste's second deed while the mode is on. A text already in the
- * line moves to the head — it is one entry, never two; a new text
- * takes the head seat. Who plays it, and whose seat it takes on
- * stage, is bubble.ts' judgment, not the record's.
- */
-export function enqueueFront(text: string, title: string, secs: number): QueueItem {
-  const key = textKey(text)
-  const s = queue.get()
-  const existing = s.items.find((i) => i.key === key)
-  if (existing) {
-    if (s.items[0]?.id !== existing.id) {
-      queue.set({ items: [existing, ...s.items.filter((i) => i.id !== existing.id)] })
-    }
-    return existing
-  }
-  const item: QueueItem = { id: newId(), text, key, title, secs, at: Date.now(), kind: 'copy', ref: '' }
-  queue.set({ items: [item, ...s.items] })
-  return item
-}
-
-/**
  * Line up a Library resident — a book or a recording (Oscar,
  * 1.4.229). The same resident twice in a row is one entry, never
  * two: judged by kind + ref against the line's tail, the same law

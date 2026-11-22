@@ -1,7 +1,10 @@
-// 1.4.206 — the front seat of the line, judged on the record's own
-// laws: a fresh text takes the head, a lined-up text MOVES to the
-// head (one entry, never two), the head re-fronted is itself, and
-// the order behind the head is untouched.
+// 1.4.206 built the front seat of the line; 1.4.239 retired it
+// under Oscar's law — the line's order is the COPY order («Lo que
+// define el orden de los audios es el orden de los textos
+// copiados… en lugar de ir montando de primero los últimos
+// textos»). This bench now judges the law that stands: arrivals
+// only ever join the tail, in their turn, and the record offers
+// no front door at all.
 const mem = new Map<string, string>()
 ;(globalThis as unknown as { localStorage: unknown }).localStorage = {
   getItem: (k: string) => mem.get(k) ?? null,
@@ -9,7 +12,8 @@ const mem = new Map<string, string>()
   removeItem: (k: string) => { mem.delete(k) },
 }
 
-const { queueItems, enqueue, enqueueFront, clearQueue } = await import('../src/lib/queue.ts')
+const q = await import('../src/lib/queue.ts')
+const { queueItems, enqueue, clearQueue } = q
 
 let fails = 0
 const ok = (cond: boolean, name: string) => { console.log(`${cond ? 'PASS' : 'FAIL'} ${name}`); if (!cond) fails++ }
@@ -17,23 +21,16 @@ const ok = (cond: boolean, name: string) => { console.log(`${cond ? 'PASS' : 'FA
 const A = 'Alpha text. It speaks first.'
 const B = 'Bravo text. It speaks second.'
 const C = 'Charlie text. It speaks third.'
-const D = 'Delta text. It cuts the line.'
+const D = 'Delta text. It waits its turn.'
 
 clearQueue()
 enqueue(A, 'Alpha', 10); enqueue(B, 'Bravo', 20); enqueue(C, 'Charlie', 30)
-ok(queueItems().map((i) => i.title).join(',') === 'Alpha,Bravo,Charlie', 'the line stands in order')
+ok(queueItems().map((i) => i.title).join(',') === 'Alpha,Bravo,Charlie', 'the line stands in copy order')
 
-const d = enqueueFront(D, 'Delta', 40)
-ok(queueItems().length === 4 && queueItems()[0].id === d.id, 'a fresh text takes the head')
-ok(queueItems().map((i) => i.title).join(',') === 'Delta,Alpha,Bravo,Charlie', 'the rest keep their order behind it')
+enqueue(D, 'Delta', 40)
+ok(queueItems().map((i) => i.title).join(',') === 'Alpha,Bravo,Charlie,Delta', 'a late copy takes the tail — the last seat, never the first')
 
-const b = enqueueFront(B, 'Bravo', 20)
-ok(queueItems().length === 4, 'a lined-up text moves — it is never two entries')
-ok(queueItems()[0].title === 'Bravo' && b.title === 'Bravo', 'the moved text wears the head')
-ok(queueItems().map((i) => i.title).join(',') === 'Bravo,Delta,Alpha,Charlie', 'its old seat closes behind it')
+ok(!('enqueueFront' in q), 'the record offers no front door — the front road is retired')
 
-const again = enqueueFront(B, 'Bravo', 20)
-ok(again.id === b.id && queueItems().length === 4 && queueItems()[0].id === b.id, 'the head re-fronted is itself, unmoved')
-
-console.log(fails === 0 ? 'WAVE206 FRONT: ALL PASS' : `WAVE206 FRONT: ${fails} FAILURES`)
+console.log(fails === 0 ? 'WAVE239 COPY ORDER: ALL PASS' : `WAVE239 COPY ORDER: ${fails} FAILURES`)
 process.exit(fails === 0 ? 0 : 1)
