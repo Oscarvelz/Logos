@@ -18,13 +18,15 @@
     </script>
 
     <style>
-      #splash { position: fixed; inset: 0; z-index: 9999; background: #0a0a0f; display: grid; place-items: center; overflow: hidden; transition: opacity .55s ease, transform .55s cubic-bezier(.4,0,.2,1), filter .55s ease; }
+      #splash { position: fixed; inset: 0; z-index: 9999; background: #0a0a0f; display: grid; place-items: center; overflow: hidden; transition: opacity .55s ease, transform .55s cubic-bezier(.4,0,.2,1); }
       #splash.shell .sp-mark { opacity: 0; animation: spFadeIn .6s cubic-bezier(.2,.8,.2,1) .05s forwards, spLift 1.15s cubic-bezier(.55,0,.2,1) .7s forwards; }
-      @keyframes spFadeIn { from { opacity: 0; filter: blur(8px) } to { opacity: 1; filter: none } }
-      #splash.out { opacity: 0; transform: scale(1.06); filter: blur(10px); pointer-events: none; }
+      @keyframes spFadeIn { from { opacity: 0 } to { opacity: 1 } }
+      #splash.out { opacity: 0; transform: scale(1.06); pointer-events: none; }
       #splash .sp-amb { position: absolute; width: 140vmax; height: 140vmax; border-radius: 50%; background: radial-gradient(circle, rgba(233,189,114,.10) 0, rgba(233,189,114,.04) 26%, transparent 55%); opacity: 0; animation: spAmb 2.4s ease-out .2s forwards; }
       #splash .sp-lock { position: absolute; inset: 0; }
       #splash .sp-mark { position: absolute; left: 50%; top: 50%; width: 240px; height: 240px; margin: -130px 0 0 -120px; transform: scale(.98); animation: spLift 1.15s cubic-bezier(.55,0,.2,1) .7s forwards; }
+      #splash .sp-under { position: absolute; left: 50%; top: 50%; width: 240px; height: 240px; margin: -130px 0 0 -120px; transform: scale(.98); animation: spLift 1.15s cubic-bezier(.55,0,.2,1) .7s forwards; }
+      #splash .sp-under svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
       #splash .sp-box { rx: 200px; ry: 200px; animation: spBox 1.15s cubic-bezier(.55,0,.2,1) .7s forwards; }
       #splash .sp-in { transform-origin: 256px 256px; transform: scale(.91); animation: spIn 1.15s cubic-bezier(.55,0,.2,1) .7s forwards; }
       #splash .sp-mark svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
@@ -51,15 +53,33 @@
       @keyframes spShine { to { transform: translateX(380px) skewX(-18deg) } }
       @keyframes spRise { to { opacity: 1; transform: none; filter: none } }
       @keyframes spTag { to { opacity: 1 } }
-      @media (prefers-reduced-motion: reduce) { #splash *, #splash { animation: none !important; transition-duration: .2s !important } #splash .sp-arc { opacity: .5 } #splash .sp-word span, #splash .sp-tag { opacity: 1; transform: none; filter: none } #splash .sp-mark { transform: translateY(-62px) scale(.62) } #splash .sp-in { transform: none } }
+      @media (prefers-reduced-motion: reduce) { #splash *, #splash { animation: none !important; transition-duration: .2s !important } #splash .sp-arc { opacity: .5 } #splash .sp-word span, #splash .sp-tag { opacity: 1; transform: none; filter: none } #splash .sp-mark, #splash .sp-under { transform: translateY(-62px) scale(.62) } #splash .sp-in { transform: none } }
     </style>
-    <script type="module" crossorigin src="/Logos/assets/index-Bnh4-Vic.js"></script>
+    <script type="module" crossorigin src="/Logos/assets/index-CWo1OK1x.js"></script>
     <link rel="stylesheet" crossorigin href="/Logos/assets/index-ChxfApNr.css">
   </head>
   <body>
     <div id="splash" role="status" aria-label="Logos">
       <i class="sp-amb"></i>
       <div class="sp-lock">
+        <div class="sp-under" aria-hidden="true">
+          <svg viewBox="0 0 512 512">
+            <defs>
+              <radialGradient id="spbg2" cx="38%" cy="28%" r="85%"><stop offset="0" stop-color="#23202b"/><stop offset=".55" stop-color="#121118"/><stop offset="1" stop-color="#08080c"/></radialGradient>
+              <linearGradient id="spgold2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fbe3b0"/><stop offset=".45" stop-color="#e9bd72"/><stop offset="1" stop-color="#b9843a"/></linearGradient>
+              <radialGradient id="spglow2" cx="50%" cy="52%" r="50%"><stop offset="0" stop-color="#e9bd72" stop-opacity=".26"/><stop offset="1" stop-color="#e9bd72" stop-opacity="0"/></radialGradient>
+            </defs>
+            <rect width="512" height="512" rx="200" fill="url(#spbg2)"/>
+            <g transform="translate(256 256) scale(.91) translate(-256 -256)">
+            <circle cx="256" cy="268" r="200" fill="url(#spglow2)"/>
+            <g fill="none" stroke="url(#spgold2)" stroke-linecap="round">
+              <path d="M 364 156 A 146 146 0 0 1 364 380" stroke-width="7" opacity=".55"/>
+              <path d="M 398 118 A 190 190 0 0 1 398 418" stroke-width="5" opacity=".28"/>
+            </g>
+            <g fill="url(#spgold2)" transform="translate(-26 -6)"><path d="M 150 124 C 176 104 214 104 232 136 L 340 360 C 348 377 358 384 374 380 L 380 396 C 348 414 318 404 302 372 L 198 156 C 188 136 172 130 156 138 Z"/><path d="M 238 232 L 256 266 L 186 398 C 182 406 174 408 166 404 L 160 400 C 156 396 156 390 160 384 Z"/></g>
+            </g>
+          </svg>
+        </div>
         <div class="sp-mark">
           <svg viewBox="0 0 512 512" aria-hidden="true">
             <defs>
