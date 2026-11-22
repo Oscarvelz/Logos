@@ -842,6 +842,37 @@ class MainActivity : Activity() {
             return ctx
         }
 
+        /** One queue row the panel chose to save to Listen later
+         *  (1.4.232): the drop pull's twin, with its own seats. */
+        @JavascriptInterface fun bubbleQueueSave(): String {
+            val i = BubbleService.queueSaveIdx
+            BubbleService.queueSaveIdx = -1
+            if (i < 0) return ""
+            if (System.currentTimeMillis() - BubbleService.queueSaveAt > 20_000) {
+                BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored queue choice went stale", "una elección de la cola guardada caducó"))
+                return ""
+            }
+            val ctx = BubbleService.queueSaveCtx
+            if (ctx.isNotEmpty()) {
+                val cur = BubbleService.currentContext()
+                if (cur.isNotEmpty() && cur != ctx) {
+                    BubbleService.noteTry(this@MainActivity, BubbleService.s("a stored queue choice's session had moved on", "la sesión de una elección de la cola había cambiado"))
+                    return ""
+                }
+            }
+            BubbleService.lastTakenQueueSaveCtx = ctx
+            BubbleService.queueSaveCtx = ""
+            return i.toString()
+        }
+
+        /** The context stamp of the queue-save most recently
+         *  collected (1.4.232). */
+        @JavascriptInterface fun bubbleQueueSaveCtx(): String {
+            val ctx = BubbleService.lastTakenQueueSaveCtx
+            BubbleService.lastTakenQueueSaveCtx = ""
+            return ctx
+        }
+
         @JavascriptInterface fun bubble(on: Boolean) {
             BubbleService.prefs(this@MainActivity).edit().putBoolean("on", on).apply()
             runOnUiThread {

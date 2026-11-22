@@ -1,3 +1,38 @@
+## 1.4.232 — The queue asks in both houses (2026-11-22)
+
+Oscar, from the Listen page's own queue sheet: the X's remove
+without asking, the little book saves without asking, and the
+lever turns the queue off without asking — while the floating
+panel's list asks before all of its deeds. And his follow-up,
+with the panel's list in hand: what stands in one house stands
+in the other, so whoever learns one surface already knows the
+other — and the panel's list lacks the little book entirely.
+
+- The app sheet now asks, in the panel's own words, in the
+  app's one question window: removing a row ("Remove from the
+  queue" — "“title” will leave the line."), saving one row
+  ("Save to Listen later" — "“title” will be saved in the
+  Library to hear later."), emptying the line ("Empty the
+  queue" — "Every text in the line will be removed. What is
+  playing keeps playing."), and the lever both ways ("Turn on
+  the copy queue?" / "Turn off the copy queue?", the off card
+  saying plainly that the line will be erased). A declined
+  question changes nothing — the lever stays where it stood.
+- The panel's queue list gains the little book per row — the
+  Lucide book-down drawn in the row's muted tone, for copied
+  texts only (books and recordings already live in the
+  Library, as in the app since 1.4.229). Tapping it opens the
+  panel's quick confirmation card with the same words, and the
+  confirmed deed travels a new stamped road
+  (queuesaveitem → bubbleQueueSave) to the page, which saves
+  that one item to Listen later. The push now also carries
+  each item's kind (qk) so the shell knows which rows earn
+  the book.
+
+Presentation impact: none — no anchor moved; the sheet's
+controls keep their seats, only their deeds gained the
+question, and the panel's list is shell furniture.
+
 ## 1.4.231 — The bubble's home is a corner (2026-11-22)
 
 Oscar's ruling, with five screenshots of the panel standing over

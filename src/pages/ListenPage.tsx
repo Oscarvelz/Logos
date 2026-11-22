@@ -27,7 +27,7 @@ import { WebImport } from '../components/webimport.tsx'
 import { isJustUrl, normalizeUrl } from '../lib/webtext.ts'
 import { Visualizer } from '../components/Visualizer.tsx'
 import { EngineNote, JumpKey, StatusPill, VoicePicker } from '../components/chrome.tsx'
-import { Sheet, Switch, toast, useMediaQuery } from '../components/ui.tsx'
+import { Sheet, Switch, confirmAsk, toast, useMediaQuery } from '../components/ui.tsx'
 import { t } from '../lib/i18n.ts'
 import { TabletDesk, TextMap } from '../components/desk.tsx'
 
@@ -45,6 +45,17 @@ export function ListenPage() {
   const [markAsk, setMarkAsk] = useState(false)
   const [queueOpen, setQueueOpen] = useState(false)
   const q = useStore(queue)
+  // The queue's deeds ask first in this house too (1.4.232, Oscar):
+  // the floating panel's list has asked since 1.4.201/206, and the
+  // app's sheet acted on the tap — the same deeds wear the same
+  // questions here, in the panel's own words, short and direct.
+  const askQueueMode = async (v: boolean) => {
+    if (v) {
+      if (await confirmAsk(t('Turn on the copy queue?'), t('What you copy will line up and play one text after the next, instead of replacing what is playing.'), t('Turn it on'))) settings.set({ copyQueue: true })
+    } else if (await confirmAsk(t('Turn off the copy queue?'), t('The line will be erased, and copies will stop lining up — a copy will take the stage as it did before.'), t('Turn it off'))) {
+      settings.set({ copyQueue: false })
+    }
+  }
   const [webUrl, setWebUrl] = useState<string | null>(null)
   // Save-once for the mark door (cure M-5): the gate is keyed by the
   // mark's target (this text, this sentence), so a double-tap files
@@ -390,7 +401,7 @@ export function ListenPage() {
       <Sheet open={queueOpen} onClose={() => setQueueOpen(false)} title={t('Copy queue')} present="listen-queue-sheet">
         <div className="row between" style={{ marginBottom: 6 }}>
           <div className="t">{t('Queue what I copy')}</div>
-          <Switch label={t('Queue what I copy')} on={st.copyQueue} onChange={(v) => settings.set({ copyQueue: v })} />
+          <Switch label={t('Queue what I copy')} on={st.copyQueue} onChange={(v) => { void askQueueMode(v) }} />
         </div>
         <p className="muted small" style={{ margin: '0 4px 12px' }}>{t('On: every text you copy lines up behind the one playing, and the line plays through in order. Off: the line is erased and a copy takes the stage as always.')}</p>
         {q.items.length === 0
@@ -405,14 +416,14 @@ export function ListenPage() {
                       <span className="qrow-title">{it.title || t('Copied text')}</span>
                       <span className="muted small">{formatDuration(it.secs)}</span>
                     </button>
-                    {it.kind === 'copy' && <button className="icon-btn" onClick={() => void saveQueueItemToLater(it)} aria-label={t('Save to Listen later')} title={t('Save to Listen later')}><BookDown size={17} /></button>}
-                    <button className="icon-btn" onClick={() => dropQueueItem(it.id)} aria-label={t('Remove from the queue')} title={t('Remove')}><X size={17} /></button>
+                    {it.kind === 'copy' && <button className="icon-btn" onClick={() => { void (async () => { if (await confirmAsk(t('Save to Listen later'), t('"{x}" will be saved in the Library to hear later.', { x: it.title || t('Copied text') }), t('Save'))) void saveQueueItemToLater(it) })() }} aria-label={t('Save to Listen later')} title={t('Save to Listen later')}><BookDown size={17} /></button>}
+                    <button className="icon-btn" onClick={() => { void (async () => { if (await confirmAsk(t('Remove from the queue'), t('"{x}" will leave the line.', { x: it.title || t('Copied text') }), t('Remove'))) dropQueueItem(it.id) })() }} aria-label={t('Remove from the queue')} title={t('Remove')}><X size={17} /></button>
                   </div>
                 )
               })}
               <div className="row" style={{ gap: 8, marginTop: 12 }}>
                 <button className="btn primary" style={{ flex: 1 }} onClick={() => { void sendQueueToLater(); setQueueOpen(false) }}>{t('Send all to Listen later')}</button>
-                <button className="btn ghost" onClick={() => clearQueue()}>{t('Clear')}</button>
+                <button className="btn ghost" onClick={() => { void (async () => { if (await confirmAsk(t('Empty the queue'), t('Every text in the line will be removed. What is playing keeps playing.'), t('Empty it'))) clearQueue() })() }}>{t('Clear')}</button>
               </div>
             </div>}
       </Sheet>

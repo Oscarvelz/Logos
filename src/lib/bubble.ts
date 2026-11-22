@@ -45,6 +45,8 @@ type DroidBubble = {
   bubbleQueuePlayCtx?: () => string
   bubbleQueueDrop?: () => string
   bubbleQueueDropCtx?: () => string
+  bubbleQueueSave?: () => string
+  bubbleQueueSaveCtx?: () => string
   bubblePendingCmd?: () => string
   bubblePendingCtx?: () => string
   bubbleNative?: (text: string, title: string, idx: number) => void
@@ -783,6 +785,13 @@ export function initBubble() {
     const idx = pullQueueIdx(d.bubbleQueueDrop?.(), d.bubbleQueueDropCtx?.())
     if (idx >= 0) dropQueueAt(idx)
   })
+  // 1.4.232: the panel list's own little book — one row's text to
+  // Listen later, behind the panel's quick confirmation card.
+  addEventListener('logosandroid-queuesaveitem', () => {
+    const idx = pullQueueIdx(d.bubbleQueueSave?.(), d.bubbleQueueSaveCtx?.())
+    const item = idx >= 0 ? queueItems()[idx] : undefined
+    if (item) void saveQueueItemToLater(item)
+  })
   addEventListener('logosandroid-savequeue', () => { void sendQueueToLater() })
   // 1.4.201: the panel list's Empty-the-whole-list key (behind its
   // confirmation card) — the queue record clears; what is playing
@@ -963,7 +972,7 @@ export function initBubble() {
     // The copy queue rides every push (1.4.198): the panel's queue
     // key wears the count, its list reads the titles, and the shell
     // knows whether the line's mode stands at all.
-    const qInfo = { queue: queueItems().length, qcur: currentIndex(), qmode: settings.get().copyQueue ? 1 : 0, qt: queueItems().map((i) => i.title.slice(0, 60)) }
+    const qInfo = { queue: queueItems().length, qcur: currentIndex(), qmode: settings.get().copyQueue ? 1 : 0, qt: queueItems().map((i) => i.title.slice(0, 60)), qk: queueItems().map((i) => (i.kind === 'copy' ? 1 : 0)) }
     if (cp) {
       // The recording's face: its title, its clock, its fraction. No
       // sentences, no words — it is a recording, and the panel says so

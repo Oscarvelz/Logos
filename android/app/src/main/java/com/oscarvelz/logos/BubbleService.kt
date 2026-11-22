@@ -722,8 +722,13 @@ class BubbleService : Service() {
         @Volatile var queueDropAt = 0L
         @Volatile var queueDropCtx: String = ""
         @Volatile var lastTakenQueueDropCtx: String = ""
+        @Volatile var queueSaveIdx = -1
+        @Volatile var queueSaveAt = 0L
+        @Volatile var queueSaveCtx: String = ""
+        @Volatile var lastTakenQueueSaveCtx: String = ""
         fun storeQueuePlay(idx: Int) { queuePlayIdx = idx; queuePlayAt = System.currentTimeMillis(); queuePlayCtx = currentContext() }
         fun storeQueueDrop(idx: Int) { queueDropIdx = idx; queueDropAt = System.currentTimeMillis(); queueDropCtx = currentContext() }
+        fun storeQueueSave(idx: Int) { queueSaveIdx = idx; queueSaveAt = System.currentTimeMillis(); queueSaveCtx = currentContext() }
         /** Set by the service: wave the bubble (leaving-Logos trigger). */
         var inviteHook: (() -> Unit)? = null
         private var lastKey: String? = null
@@ -1183,6 +1188,7 @@ class BubbleService : Service() {
     @Volatile private var panelQueueCur = -1
     @Volatile private var panelQueueMode = false
     @Volatile private var panelQueueTitles: List<String> = emptyList()
+    @Volatile private var panelQueueKinds: List<Boolean> = emptyList()
     private var queueBtnV: View? = null
     private var queueBadgeV: TextView? = null
     private var queueListV: FrameLayout? = null
@@ -3761,6 +3767,49 @@ class BubbleService : Service() {
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 setOnClickListener { storeQueuePlay(i); pokeOrWake("queueplay"); toggleQueueList() }
             })
+            // The row's own little book (1.4.232, Oscar): the app
+            // sheet has one per copy since 1.4.229, so the panel's
+            // list wears it too — same deed, same face, and the
+            // same quick question before it saves. Copies only:
+            // books and recordings already live in the Library.
+            if (panelQueueKinds.getOrNull(i) == true) {
+                row.addView(object : View(this) {
+                    override fun onDraw(cv: android.graphics.Canvas) {
+                        super.onDraw(cv)
+                        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                            color = c["muted"]!!; style = android.graphics.Paint.Style.STROKE
+                            strokeWidth = dp(3) / 2f; strokeCap = android.graphics.Paint.Cap.ROUND; strokeJoin = android.graphics.Paint.Join.ROUND
+                        }
+                        val cx = width / 2f; val cy = height / 2f; val u = dp(15) / 24f
+                        fun px(x: Float) = cx + (x - 12f) * u
+                        fun py(y: Float) = cy + (y - 12f) * u
+                        val path = android.graphics.Path()
+                        path.moveTo(px(4f), py(19.5f))
+                        path.lineTo(px(4f), py(4.5f))
+                        path.quadTo(px(4f), py(2f), px(6.5f), py(2f))
+                        path.lineTo(px(19f), py(2f))
+                        path.quadTo(px(20f), py(2f), px(20f), py(3f))
+                        path.lineTo(px(20f), py(21f))
+                        path.quadTo(px(20f), py(22f), px(19f), py(22f))
+                        path.lineTo(px(6.5f), py(22f))
+                        path.lineTo(px(6.5f), py(17f))
+                        path.lineTo(px(20f), py(17f))
+                        cv.drawPath(path, p)
+                        val arrow = android.graphics.Path()
+                        arrow.moveTo(px(12f), py(7f)); arrow.lineTo(px(12f), py(13f))
+                        arrow.moveTo(px(9f), py(10f)); arrow.lineTo(px(12f), py(13f)); arrow.lineTo(px(15f), py(10f))
+                        cv.drawPath(arrow, p)
+                    }
+                }.apply {
+                    layoutParams = LinearLayout.LayoutParams(dp(26), dp(26))
+                    contentDescription = s("Save to Listen later", "Guardar en Escuchar después")
+                    setOnClickListener {
+                        showHintCard(s("Save to Listen later", "Guardar en Escuchar después"), s("“$title” will be saved in the Library to hear later.", "«$title» se guardará en la Biblioteca para escucharlo luego."), s("Save", "Guardar"), s("Not now", "Ahora no")) {
+                            storeQueueSave(i); pokeOrWake("queuesaveitem")
+                        }
+                    }
+                })
+            }
             row.addView(TextView(this).apply {
                 text = "✕"; setTextColor(c["muted"]!!); textSize = 12f; gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(dp(26), dp(26))
@@ -4403,6 +4452,8 @@ class BubbleService : Service() {
             panelQueueMode = rawJ.optInt("qmode", 0) == 1
             val arr = rawJ.optJSONArray("qt")
             panelQueueTitles = if (arr != null) (0 until arr.length()).map { arr.optString(it) } else emptyList()
+            val karr = rawJ.optJSONArray("qk")
+            panelQueueKinds = if (karr != null) (0 until karr.length()).map { karr.optInt(it) == 1 } else emptyList()
             handler.post { syncQueueUi() }
         }
         val native = NativeSpeaker.active
