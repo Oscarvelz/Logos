@@ -2183,11 +2183,25 @@ class BubbleService : Service() {
      *  session, no ring. */
     private fun updateBubbleRing() {
         val v = bubbleRingV ?: return
-        val j = runCatching { JSONObject(nowJson) }.getOrNull()
-        if (j?.optBoolean("active") != true) {
-            if (v.visibility != View.INVISIBLE) v.visibility = View.INVISIBLE
-            v.frac = -1f; ringSeatFrac = -1f; ringSeatAt = 0L; ringVel = 0f; ringCi = -1; ringCt = 0; ringPlayingNow = false
-            return
+        // The ring eats from the same table as the panel (1.4.226):
+        // while the device voice speaks, the page's own session is
+        // not the driver and its pushes stop feeding the ring — the
+        // panel lived (it reads panelJson on this road) while the
+        // ring starved and never showed at all. panelJson carries
+        // the same seat fields (frac with word progress, ci, ct,
+        // playing), so the ring takes its seat from there too.
+        val native = NativeSpeaker.active
+        val j: JSONObject
+        if (native) {
+            j = NativeSpeaker.panelJson()
+        } else {
+            val pj = runCatching { JSONObject(nowJson) }.getOrNull()
+            if (pj?.optBoolean("active") != true) {
+                if (v.visibility != View.INVISIBLE) v.visibility = View.INVISIBLE
+                v.frac = -1f; ringSeatFrac = -1f; ringSeatAt = 0L; ringVel = 0f; ringCi = -1; ringCt = 0; ringPlayingNow = false
+                return
+            }
+            j = pj
         }
         if (v.visibility != View.VISIBLE) v.visibility = View.VISIBLE
         val f = j.optDouble("frac", 0.0).toFloat().coerceIn(0f, 1f)
