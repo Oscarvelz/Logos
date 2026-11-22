@@ -871,11 +871,11 @@ class MainActivity : Activity() {
          *  standing panel flip (T2-17). */
         @JavascriptInterface fun bubbleAuto(): Boolean = BubbleService.pageLeverPull(this@MainActivity)
 
-        /** The floating window's look (1.4.157): opacities, idle fade, size — from Settings, via the page. */
+        /** The floating window's look (1.4.157): opacities, size — from Settings, via the page. */
         @JavascriptInterface fun bubbleLook(json: String) {
             runCatching {
                 val j = JSONObject(json)
-                BubbleService.setLook(this@MainActivity, j.optInt("ba", 100), j.optInt("pa", 100), j.optBoolean("fade", true), j.optString("size", "m"))
+                BubbleService.setLook(this@MainActivity, j.optInt("ba", 100), j.optInt("pa", 100), j.optString("size", "m"))
                 if (j.has("jb") || j.has("jf")) BubbleService.setJump(this@MainActivity, j.optInt("jb", 15), j.optInt("jf", 30))
                 if (j.has("th")) BubbleService.setTheme(this@MainActivity, j.optString("th", "dark"))
             }

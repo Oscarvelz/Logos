@@ -36,8 +36,6 @@ export type Settings = {
   bubbleAlpha: number
   /** The panel card's opacity, percent. */
   panelAlpha: number
-  /** The bubble dims to a whisper when idle. */
-  bubbleFade: boolean
   /** The bubble's size: 's' | 'm' | 'l'. */
   bubbleSize: string
   highlight: boolean
@@ -79,7 +77,6 @@ const DEFAULTS: Settings = {
   bubbleText: true,
   bubbleAlpha: 100,
   panelAlpha: 100,
-  bubbleFade: true,
   bubbleSize: 'm',
   highlight: true,
   wordLeadMs: 90,
@@ -156,7 +153,7 @@ function load(): Settings {
     if (!['en', 'es', 'auto'].includes(out.langMode)) out.langMode = DEFAULTS.langMode
     if (!['mp3', 'wav'].includes(out.format)) out.format = DEFAULTS.format
     if (!['s', 'm', 'l'].includes(out.bubbleSize)) out.bubbleSize = DEFAULTS.bubbleSize
-    for (const k of ['autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'copyQueue', 'bubbleText', 'bubbleFade', 'highlight'] as const) {
+    for (const k of ['autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'copyQueue', 'bubbleText', 'highlight'] as const) {
       if (typeof out[k] !== 'boolean') out[k] = DEFAULTS[k]
     }
     for (const k of ['listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec'] as const) {

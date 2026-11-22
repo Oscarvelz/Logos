@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.223'
+const VERSION = '1.4.224'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -471,13 +471,6 @@ export function SettingsPage() {
         <div className="list-row col">
           <div className="row between"><div className="t">{t('Panel transparency')}</div><span className="mono muted">{st.panelAlpha}%</span></div>
           <Range guarded label={t('Panel transparency')} min={0} max={100} step={5} value={st.panelAlpha} onChange={(v) => settings.set({ panelAlpha: v })} />
-        </div>
-        <div className="list-row">
-          <div className="grow">
-            <div className="t">{t('Dim when idle')}</div>
-            <div className="d">{t('Untouched for a few seconds, the bubble fades to a whisper so it never competes with what you are doing. Off: it keeps the transparency you set, always.')}</div>
-          </div>
-          <Switch label={t('Dim when idle')} on={st.bubbleFade} onChange={(v) => settings.set({ bubbleFade: v })} />
         </div>
         <div className="list-row col">
           <div className="t">{t('Bubble size')}</div>

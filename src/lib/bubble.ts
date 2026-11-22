@@ -460,10 +460,10 @@ export function initBubble() {
     const th = st.theme
     const light = th === 'light' || (th === 'system' && !window.matchMedia('(prefers-color-scheme: dark)').matches)
     const fam = th === 'tron' ? 'tron' : th === 'cyberpunk' ? 'cyberpunk' : light ? 'light' : 'dark'
-    const key = `${st.bubbleAlpha}|${st.panelAlpha}|${st.bubbleFade}|${st.bubbleSize}|${st.jumpBackSec}|${st.jumpFwdSec}|${fam}`
+    const key = `${st.bubbleAlpha}|${st.panelAlpha}|${st.bubbleSize}|${st.jumpBackSec}|${st.jumpFwdSec}|${fam}`
     if (key === pushedLook) return
     pushedLook = key
-    try { d.bubbleLook?.(JSON.stringify({ ba: st.bubbleAlpha, pa: st.panelAlpha, fade: st.bubbleFade, size: st.bubbleSize, jb: st.jumpBackSec, jf: st.jumpFwdSec, th: fam })) } catch { /* ignore */ }
+    try { d.bubbleLook?.(JSON.stringify({ ba: st.bubbleAlpha, pa: st.panelAlpha, size: st.bubbleSize, jb: st.jumpBackSec, jf: st.jumpFwdSec, th: fam })) } catch { /* ignore */ }
   }
   pushLook()
   settings.subscribe(pushLook)

@@ -234,7 +234,7 @@ export async function exportBackup(): Promise<ExportReport> {
  */
 const SETTINGS_KNOWN_KEYS = new Set([
   'theme', 'lastLegacy', 'uiLang', 'langMode', 'format',
-  'autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'bubbleText', 'bubbleFade', 'highlight',
+  'autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'bubbleText', 'highlight',
   'listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec',
   'bubbleSize', 'voiceOverride', 'favorites', 'defaultVoice',
 ])
@@ -270,7 +270,7 @@ function settingsPatch(raw: unknown): { patch: Partial<Settings>; favoritesWithh
   if (r.uiLang === 'en' || r.uiLang === 'es') patch.uiLang = r.uiLang
   if (r.langMode === 'en' || r.langMode === 'es' || r.langMode === 'auto') patch.langMode = r.langMode
   if (r.format === 'mp3' || r.format === 'wav') patch.format = r.format
-  for (const k of ['autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'bubbleText', 'bubbleFade', 'highlight'] as const) {
+  for (const k of ['autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'bubbleText', 'highlight'] as const) {
     if (typeof r[k] === 'boolean') patch[k] = r[k] as boolean
   }
   for (const k of ['listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec'] as const) {

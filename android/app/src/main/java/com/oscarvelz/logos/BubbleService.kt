@@ -826,16 +826,18 @@ class BubbleService : Service() {
         fun lever(c: Context) = prefs(c).getBoolean("auto", true)
 
         /** The floating window's look (1.4.157), set from Settings via
-         *  the page: the bubble's resting opacity, the panel's opacity,
-         *  the idle fade, the bubble's size. Kept here so a service
-         *  reborn mid-session dresses the same way. */
+         *  the page: the bubble's opacity, the panel's opacity, the
+         *  bubble's size. Kept here so a service reborn mid-session
+         *  dresses the same way. (The idle fade that once rode along
+         *  was retired in 1.4.224 — Oscar's law: the opacity he sets
+         *  by hand is the only one; no second, hidden amount may
+         *  contradict it.) */
         @Volatile var lookHook: (() -> Unit)? = null
         fun lookBa(c: Context) = prefs(c).getInt("look_ba", 100).coerceIn(0, 100) / 100f
         fun lookPa(c: Context) = prefs(c).getInt("look_pa", 100).coerceIn(0, 100) / 100f
-        fun lookFade(c: Context) = prefs(c).getBoolean("look_fade", true)
         fun lookSize(c: Context) = prefs(c).getString("look_size", "m") ?: "m"
-        fun setLook(c: Context, ba: Int, pa: Int, fade: Boolean, size: String) {
-            prefs(c).edit().putInt("look_ba", ba).putInt("look_pa", pa).putBoolean("look_fade", fade).putString("look_size", size).apply()
+        fun setLook(c: Context, ba: Int, pa: Int, size: String) {
+            prefs(c).edit().putInt("look_ba", ba).putInt("look_pa", pa).putString("look_size", size).apply()
             lookHook?.invoke()
         }
 
@@ -1326,17 +1328,6 @@ class BubbleService : Service() {
         }
     }
 
-    // The ghost rest: four seconds untouched and the bubble fades to a
-    // whisper. On tablets the whisper is shallower (Oscar): a longer
-    // screen makes a 15% ghost genuinely hard to find, so the tablet's
-    // rest keeps 45% of the bubble — still resting, still findable.
-    private val fadeRun = Runnable {
-        val b = bubble ?: return@Runnable
-        if (panel != null || dragTargets.isNotEmpty()) return@Runnable
-        if (!lookFade(this)) return@Runnable
-        b.animate().alpha(idleAlpha()).setDuration(700).start()
-    }
-
     private fun invite(times: Int = 3, force: Boolean = false) {
         val root = bubble ?: return
         if (panel != null || dragTargets.isNotEmpty() || playingNow) return
@@ -1357,7 +1348,6 @@ class BubbleService : Service() {
                     if (!playingNow) h.visibility = View.INVISIBLE
                     h.scaleX = 1f; h.scaleY = 1f
                     if (!playingNow) startBreath()
-                    handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 900)
                 }
             })
         }
@@ -1770,10 +1760,8 @@ class BubbleService : Service() {
     }
 
     private fun wakeBubble(schedule: Boolean = true) {
-        handler.removeCallbacks(fadeRun)
         val b = bubble ?: return
         if (b.alpha < awakeAlpha()) b.animate().alpha(awakeAlpha()).setDuration(140).start()
-        if (schedule) handler.postDelayed(fadeRun, 4000)
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
@@ -1796,13 +1784,15 @@ class BubbleService : Service() {
     private fun bubbleFace() = ((if (isTablet()) dp(60) else dp(46)) * sizeFactor()).toInt()
     private fun bubbleHalo() = ((if (isTablet()) dp(66) else dp(52)) * sizeFactor()).toInt()
 
-    /** The look's alphas (1.4.157): the bubble at rest wears the
-     *  opacity Oscar set; the idle whisper is that same opacity at
-     *  the house's fade depth (45% tablet, 15% phone — at 100% these
-     *  are exactly the values the bubble has always faded to). */
+    /** The look's alphas (1.4.157): the bubble wears the opacity
+     *  Oscar set — at rest, at work, always (1.4.224: the automatic
+     *  idle whisper that used to multiply it down to 15%/45% is
+     *  retired; a second amount he never set contradicted the one
+     *  he did — «sin datos contradictorios»). The one other hand on
+     *  it is his own order of 1.4.197: while the panel stands open,
+     *  the bubble wears the PANEL's set opacity. */
     private fun awakeAlpha() = lookBa(this)
     private fun panelAlpha() = lookPa(this)
-    private fun idleAlpha() = if (!lookFade(this)) awakeAlpha() else awakeAlpha() * if (isTablet()) 0.45f else 0.15f
 
     /** Repaint the floating window with the look as it now stands:
      *  sizes relaid out in place, alphas set, the fade re-armed. */
@@ -1821,8 +1811,6 @@ class BubbleService : Service() {
                 bubbleFaceV?.layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
                 bubbleLambdaV?.invalidate()
                 b.animate().cancel(); b.alpha = if (panel != null) panelAlpha() else awakeAlpha()
-                handler.removeCallbacks(fadeRun)
-                if (panel == null) handler.postDelayed(fadeRun, 4000)
             }
             panel?.let { it.alpha = panelAlpha() }
         }
@@ -2285,7 +2273,6 @@ class BubbleService : Service() {
         bubble = root
         root.alpha = 0f; root.scaleX = 0.5f; root.scaleY = 0.5f
         root.animate().alpha(awakeAlpha()).scaleX(1f).scaleY(1f).setDuration(240).setInterpolator(DecelerateInterpolator()).start()
-        handler.postDelayed(fadeRun, 4000)
         handler.postDelayed({ invite(2, force = true) }, 420)
     }
 
@@ -3447,7 +3434,6 @@ class BubbleService : Service() {
         runCatching { w.addView(stage, p) }
         panel = stage
         positionPanel()
-        handler.removeCallbacks(fadeRun)
         // While the window is open, the bubble wears the WINDOW's
         // opacity (Oscar, 1.4.197): it does not look right for the λ
         // to stay at its own transparency beside a panel at another
@@ -4078,7 +4064,6 @@ class BubbleService : Service() {
         // The window is gone: the bubble takes its OWN opacity back
         // (1.4.197 — while the panel stood, it wore the panel's).
         bubble?.let { it.animate().cancel(); it.animate().alpha(awakeAlpha()).setDuration(160).start() }
-        if (!now) { handler.removeCallbacks(fadeRun); handler.postDelayed(fadeRun, 4000) }
         if (!now && deliveries != lastDeliverySeen) {
             lastDeliverySeen = deliveries
             if (System.currentTimeMillis() - lastDeliveryAt < 20000) handler.postDelayed({ invite(2, force = true) }, 250)
@@ -4529,7 +4514,6 @@ class BubbleService : Service() {
         Backstage.evictAndDestroy()
         releaseWakeLock()
         retireHoldFile(this)
-        handler.removeCallbacks(fadeRun)
         hideTargets()
         // The hint card and its veil die with the house, instantly —
         // a dimmed world must never outlive the bubble (1.4.152).
