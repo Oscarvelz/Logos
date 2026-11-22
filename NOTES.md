@@ -1,3 +1,13 @@
+## 1.4.235 — The sphere understands the gesture (2026-11-22)
+
+Oscar's order: «Haz que la esfera de widget reconozca el tipo de gesto. Si hago un gesto hacia abajo con ella, quiere decir que se va a su posición más cerca… Si hago un gesto hacia la izquierda, se iría a la izquierda y continuaría en el centro del borde… Si lo hago en diagonal, la esfera se va a la esquina inferior izquierda. Es una forma más inteligente de usar el widget.» His complaint underneath it: a short swipe meant to move the bubble out of the way changed nothing, because the release was judged only by where the finger stopped.
+
+- The bubble now reads the gesture's KIND. A **short, quick swipe** (at least 24dp of travel, under 400 ms, moving faster than a careful drag) is a flick: it names a direction, not a point. On release the sphere glides to the predetermined place that lies most nearly **in that direction from its current home** — down one step on its own edge (top corner → edge middle → bottom corner), across to the other edge on its own row, or diagonally to the place the diagonal points at (from the left middle, a down-left flick lands on the bottom-left corner, as he described).
+- A gesture aimed where no place lies — up, from a top corner — wins nothing: the sphere stays home.
+- A **long, unhurried drag** keeps the 1.4.233 law: carried by the hand, it rests at the place nearest the release point. A drop on a drag gate (Remove / Open Logos) still belongs to the gate — the flick is judged only when no gate is targeted.
+- Declared bound: the shell has no bench — the CI compile is its gate and Oscar's phone the judge. The web half of this release is the version stamp only.
+- Presentation impact: none — no anchor, surface or copy changes.
+
 ## 1.4.234 — The shadow without the square (2026-11-22)
 
 Oscar's find, with two close-ups of the bubble against a light wall: «se ve el cuadrado de la sombra, precisamente porque hasta ahí llega el corte del ícono flotante. No quiero ese cuadrado… no se ve terminado o premium.»

@@ -2411,7 +2411,19 @@ class BubbleService : Service() {
                             settleBubble(v, p)
                             runCatching { startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)) }
                         }
-                        else -> settleBubble(v, p)
+                        else -> {
+                            // A short, quick swipe is read as a gesture
+                            // (1.4.235) before the release point is
+                            // judged: it names a direction, not a place.
+                            val fdx = e.rawX - downX; val fdy = e.rawY - downY
+                            val dist = Math.hypot(fdx.toDouble(), fdy.toDouble())
+                            val dur = e.eventTime - e.downTime
+                            val flick = if (dist >= dp(24) && dur in 1..400 && dist / dur >= 0.45) flickTarget(fdx, fdy) else null
+                            if (flick != null) {
+                                getSharedPreferences("bubble", MODE_PRIVATE).edit().putInt("corner", flick).apply()
+                                seatBubbleInCorner(true)
+                            } else settleBubble(v, p)
+                        }
                     }
                     true
                 }
@@ -2588,6 +2600,33 @@ class BubbleService : Service() {
         }
         getSharedPreferences("bubble", MODE_PRIVATE).edit().putInt("corner", best).apply()
         seatBubbleInCorner(true)
+    }
+
+    // THE GESTURE (1.4.235, Oscar, 2026-11-22): «Haz que la esfera
+    // reconozca el tipo de gesto. Si hago un gesto hacia abajo…
+    // se va a su posición más cerca.» A flick names a DIRECTION:
+    // the sphere answers with the predetermined place that lies
+    // most nearly in that direction from its current home — down
+    // one step on its own edge, across to the other edge on its
+    // own row, diagonally to the diagonal corner. A gesture aimed
+    // where no place lies (up, from a top corner) wins nothing and
+    // the release is judged as a plain drag.
+    private fun flickTarget(dx: Float, dy: Float): Int? {
+        val len = Math.hypot(dx.toDouble(), dy.toDouble())
+        if (len < 1.0) return null
+        val ux = dx / len; val uy = dy / len
+        val home = bubbleCorner()
+        val (hx, hy) = cornerSeat(home)
+        var best: Int? = null; var bestDot = 0.35
+        for (s in 0..5) {
+            if (s == home) continue
+            val (sx, sy) = cornerSeat(s)
+            val vx = (sx - hx).toDouble(); val vy = (sy - hy).toDouble()
+            val vl = Math.hypot(vx, vy); if (vl < 1.0) continue
+            val dot = ux * (vx / vl) + uy * (vy / vl)
+            if (dot > bestDot) { bestDot = dot; best = s }
+        }
+        return best
     }
 
     private var outsideClosedAt = 0L
