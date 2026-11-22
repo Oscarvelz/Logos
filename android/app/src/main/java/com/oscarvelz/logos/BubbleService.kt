@@ -1171,7 +1171,7 @@ class BubbleService : Service() {
     private var saveHintRun: Runnable? = null
     private var nameTag: View? = null
     private var nameTagRun: Runnable? = null
-    private var lockBtn: TextView? = null
+    private var lockBtn: View? = null
     private var spectrum: SpectrumView? = null
     private var seekHeld = false
     // The sentence scrub (1.4.119): the reading-along text is a handle.
@@ -2513,7 +2513,10 @@ class BubbleService : Service() {
         }
         subV = TextView(this).apply {
             setTextColor(c["muted"]!!); textSize = 12f
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            // 1.4.216 (Oscar's pick, «Cerca»): the counter hugs its own
+            // words — no weight — so the drum stands right after it
+            // instead of exiled at the line's far end.
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
         // The speed drum (1.4.207): born hidden beside the counter;
         // refreshPanel seats it only in the queue shape, when the
@@ -2525,7 +2528,10 @@ class BubbleService : Service() {
             visibility = View.GONE
             contentDescription = s("Speed — drag up or down to roll it", "Velocidad — arrastra arriba o abajo para rodarla")
             setPadding(dp(10), dp(5), dp(2), dp(5))
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            // «Cerca» (1.4.216): the margin plus the drum's own left
+            // padding seat the rate ~14dp after the counter's last
+            // digit — close, with air, so the numbers never blur.
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(4) }
             setOnTouchListener { v, e -> judgeWheelTouch(v, e) }
         }
         val subRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -2599,14 +2605,34 @@ class BubbleService : Service() {
         titleRow.addView(saveB)
         // The stage lock: while it holds, a fresh copy cannot evict what's
         // playing — the audiobook keeps the stage (Oscar's scenario).
-        val lockB = TextView(this).apply {
-            text = if (isLocked(this@BubbleService)) "🔒" else "🔓"
-            setTextColor(c["gold"]!!); textSize = 10.5f; gravity = Gravity.CENTER
-            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(c["disc"]!!); setStroke(dp(1), c["discLine"]!!) }
-            contentDescription = "Lock the stage"
-            layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(6) }
-            setOnClickListener { showLockHint() }
-        }
+        // 1.4.216 (Oscar): the lock leaves the emoji behind and is
+        // DRAWN like its neighbours — the Lucide lock in gold line on
+        // the same disc, «por fin el mismo tema» — and drawn a touch
+        // larger than them (its grid unit runs 1.15×), because beside
+        // the bookmark and the book it read small. The shackle stands
+        // open while the stage is unlocked; a state change repaints.
+        val lockB = glyphDiscKey("Lock the stage", c["disc"]!!, c["discLine"]!!, { cv, cx, cy, u ->
+            val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = c["gold"]!!; style = android.graphics.Paint.Style.STROKE
+                strokeWidth = dp(3) / 2f; strokeCap = android.graphics.Paint.Cap.ROUND; strokeJoin = android.graphics.Paint.Join.ROUND
+            }
+            val uu = u * 1.15f
+            fun px(x: Float) = cx + (x - 12f) * uu
+            fun py(y: Float) = cy + (y - 12f) * uu
+            val locked = isLocked(this@BubbleService)
+            val shackle = android.graphics.Path()
+            shackle.moveTo(px(7f), py(11f))
+            shackle.lineTo(px(7f), py(7f))
+            if (locked) {
+                shackle.arcTo(android.graphics.RectF(px(7f), py(2f), px(17f), py(12f)), 180f, 180f)
+                shackle.lineTo(px(17f), py(11f))
+            } else {
+                shackle.arcTo(android.graphics.RectF(px(7f), py(2f), px(17f), py(12f)), 180f, 140f)
+            }
+            cv.drawPath(shackle, p)
+            cv.drawRoundRect(android.graphics.RectF(px(3f), py(11f), px(21f), py(22f)), 2f * uu, 2f * uu, p)
+        }) { showLockHint() }
+        lockB.layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginStart = dp(6) }
         lockBtn = lockB
         titleRow.addView(lockB)
         card.addView(titleRow)
@@ -3816,12 +3842,12 @@ class BubbleService : Service() {
         if (isLocked(this)) {
             showHintCard(s("Unlock the stage", "Desbloquear la escena"), s("Unlocked: a fresh copy will replace what is playing.", "Desbloqueada: una copia nueva reemplazará lo que suena."), s("Unlock", "Desbloquear"), s("Keep locked", "Dejar bloqueado")) {
                 setLocked(this@BubbleService, false)
-                lockBtn?.text = "🔓"
+                lockBtn?.invalidate()
             }
         } else {
             showHintCard(s("Lock the stage", "Bloquear la escena"), s("Locked: a copied text won't replace what you're hearing.", "Bloqueada: un texto copiado no reemplazará lo que estás oyendo."), s("Lock", "Bloquear"), s("Not now", "Ahora no")) {
                 setLocked(this@BubbleService, true)
-                lockBtn?.text = "🔒"
+                lockBtn?.invalidate()
             }
         }
     }
@@ -4216,7 +4242,7 @@ class BubbleService : Service() {
                 }
             }
             val locked = isLocked(this@BubbleService)
-            if (locked != shownLock) lockBtn?.let { it.text = if (locked) "🔒" else "🔓"; shownLock = locked }
+            if (locked != shownLock) lockBtn?.let { it.invalidate(); shownLock = locked }
             if (playing != shownPlaying && toggleB != null) {
                 shownPlaying = playing
                 if (playing) {

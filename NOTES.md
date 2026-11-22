@@ -1,3 +1,11 @@
+## 1.4.216 — Cerca: the drum beside the counter, and the lock joins the theme (2026-11-21)
+
+Oscar's two panel orders. (1) The speed drum exiled at the sub-line's far end moves close to the sentence counter: three distances were rendered on one base and he picked «1 · Cerca» — the counter now hugs its own words (its weight is gone) and the drum stands ~14dp after the last digit (a 4dp margin plus the drum's own left padding), close with air, so the numbers never blur into each other. The wheel itself is untouched: drag rolls, tap steps. (2) The stage lock was the panel's last emoji — a 🔒 TextView at 10.5sp sitting beside two gold line-drawn keys; Oscar saw it drawn in the mock in the theme's own line and ordered it so («por fin el mismo tema»), a touch larger: the lock is now a glyphDiscKey drawing the Lucide lock (shackle closed, or open while unlocked) at a 1.15× grid unit, and its state changes repaint instead of swapping emoji.
+
+- BubbleService.kt only, plus the version stamps. The lock's field is a View now; showLockHint and refreshPanel invalidate it where they once set its text.
+- Presentation impact: none — the panel is the shell's own surface; no page, anchor or fiction seat is involved.
+- Numbering note: this wave carries the pick Oscar made as «214» and ships as 216, because 215 (the system player's accent) went out first; the version never walks backwards.
+
 ## 1.4.215 — The system player's bar wears the theme's accent (2026-11-21)
 
 Oscar's photo of the system's media panel (the «This phone» player): its progress bar stood in a burnt orange-red, and he ordered it amber — Legacy's colour — adjusted to the theme. Diagnosis, verified in the shell: the notification already carried `setColor(accent)` since 1.4.196, but the system's media panel does not take its scrubber colour from there — it extracts a palette from the session's artwork, and the artwork was the Ring: nine-tenths dark ground with the accent in fine strokes, whose extraction Samsung saturates into orange.
