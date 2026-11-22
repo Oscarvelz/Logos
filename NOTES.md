@@ -1,3 +1,34 @@
+## 1.4.228 — The main player follows the floating one (2026-11-22)
+
+Oscar's word (09:05): in the main Listen player, while the
+copy-queue listening stands, the 15/30 jump keys must become the
+previous/next track keys, exactly as the floating panel already
+does — two important icons hold the row's ends in that view, so
+the jumps have no seat there. When he turns queue listening off,
+or the line is emptied, the jump keys return with whatever
+seconds Settings holds.
+
+- The swap condition mirrors the panel's own: the line stands
+  when the queue mode is on AND the line holds texts
+  (`copyQueue && items.length > 0`). Turning the mode off erases
+  the line (1.4.198), so both of his return conditions are this
+  one count.
+- The track keys wake only while a queued text holds the stage
+  (`currentId` set) — pressed otherwise they could do nothing,
+  and a key that does nothing is worse than no key. They step
+  through `stepQueue`, the panel's own road: past the end a press
+  is claimed and rests; before the start it replays the current
+  text.
+- The seats keep their names (`listen-prev` / `listen-next`) —
+  the anchors name the seat; its deed gains the queue mode.
+  Faces: Lucide SkipBack / SkipForward, filled, in the jump
+  keys' own seat classes.
+
+Presentation impact: the stage fiction renders its own transport
+keys and holds no queue, so the fiction stays truthful as it
+stands; the real seats' deed gaining a mode is declared here and
+relayed to the Presentation lane.
+
 ## 1.4.227 — The bubble sits ON its window, never behind it (2026-11-22)
 
 Oscar's standing complaint, sharpened by two more photos: «sigue siendo el posicionamiento de la burbuja… donde sí tiene espacio no debería mostrarse detrás de la ventana, sino muy bien posicionada». The seat geometry was already honest (1.4.222 made the graze outrank the fit), but the panel's window is BORN AFTER the bubble's, so Android paints the card over the jewel: the bubble's lower cap slid under the panel's top edge in every territory, however well the corner seated. The cure is rank, not geometry: the moment the panel is born, openPanel re-raises the bubble's window above it (removeView + addView with its own params), so the settled graze now reads as what it always meant to be — the λ enthroned ON its window, whole in its corner — while any later window (a hint card, a drag target) still rises above them both. The bubble's own placement never moves; only who paints over whom changed. Presentation impact: none.

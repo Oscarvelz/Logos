@@ -248,7 +248,7 @@ function playQueueItem(item: QueueItem) {
  *  but does nothing — the press was for the line, not for a
  *  sentence — while the finish judge clears the stage's claim and
  *  lets the last item park, as any finished reading does. */
-function stepQueue(dir: 1 | -1, auto = false): boolean {
+export function stepQueue(dir: 1 | -1, auto = false): boolean {
   const items = queueItems()
   const idx = currentIndex()
   if (idx < 0) return false

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPE } from 'react'
 import { readClipboard } from '../lib/clipboard.ts'
-import { AudioLines, BookDown, BookOpen, Bookmark, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, ListMusic, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, X } from 'lucide-react'
+import { AudioLines, BookDown, BookOpen, Bookmark, ClipboardPaste, Clock, Eraser, Gauge, Globe, Languages, Library as LibraryIcon, ListMusic, Loader2, Moon, PanelBottomClose, PanelBottomOpen, Pause, PenLine, Play, SkipBack, SkipForward, X } from 'lucide-react'
 import { queue } from '../lib/queue.ts'
-import { playQueueAt, sendQueueToLater, saveQueueItemToLater } from '../lib/bubble.ts'
+import { playQueueAt, sendQueueToLater, saveQueueItemToLater, stepQueue } from '../lib/bubble.ts'
 import { removeItem as dropQueueItem, clearQueue } from '../lib/queue.ts'
 import { useStore } from '../lib/store.ts'
 import { drafts } from '../lib/drafts.ts'
@@ -205,6 +205,14 @@ export function ListenPage() {
   })
 
   const reading = s.active && !editing
+  // 1.4.228 (Oscar): while the copy queue stands, the player's jump
+  // seats become the line's track keys — the same swap the floating
+  // panel makes. The line stands when the mode is on AND it holds
+  // texts (turning the mode off erases it, so both of his return
+  // conditions are this one count); the keys wake only while a
+  // queued text holds the stage, so they never sit dead.
+  const queueMode = st.copyQueue && q.items.length > 0
+  const queueLive = q.currentId != null
   const wide = useMediaQuery('(min-width: 1100px)')
   const big = useMediaQuery('(min-width: 1500px)')
   const remaining = reading ? estimateSeconds(s.segments.slice(s.current).map((g) => g.text).join(' '), st.listenSpeed) : estimateSeconds(text, st.listenSpeed)
@@ -314,11 +322,15 @@ export function ListenPage() {
             {s.playing
               ? <button className="icon-btn" data-present="listen-nav-pin" onClick={() => navPin.set({ pinned: !pin.pinned })} aria-label={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')} title={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')}>{pin.pinned ? <PanelBottomClose size={20} /> : <PanelBottomOpen size={20} />}</button>
               : <span aria-hidden />}
-            <JumpKey dir="back" size={25} disabled={!reading} present="listen-prev" />
+            {queueMode
+              ? <button className="icon-btn jump-key filled" data-present="listen-prev" onClick={() => stepQueue(-1)} disabled={!queueLive} aria-label={t('Previous in the queue')} title={t('Previous in the queue')}><SkipBack size={25} fill="currentColor" /></button>
+              : <JumpKey dir="back" size={25} disabled={!reading} present="listen-prev" />}
             <button className={`play-btn ${s.buffering ? 'busy' : ''}`} onClick={reading ? toggle : start} aria-label={s.playing ? t('Pause') : t('Play')}>
               <span className="pb-icon" key={s.buffering ? 'b' : s.playing ? 'p' : 'l'}>{s.buffering ? <Loader2 size={32} className="spin" /> : s.playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" style={{ marginLeft: 4 }} />}</span>
             </button>
-            <JumpKey dir="fwd" size={25} disabled={!reading} present="listen-next" />
+            {queueMode
+              ? <button className="icon-btn jump-key filled" data-present="listen-next" onClick={() => stepQueue(1)} disabled={!queueLive} aria-label={t('Next in the queue')} title={t('Next in the queue')}><SkipForward size={25} fill="currentColor" /></button>
+              : <JumpKey dir="fwd" size={25} disabled={!reading} present="listen-next" />}
             <button className="icon-btn" data-present="listen-mark" onClick={doMark} disabled={!reading || markBusy} aria-label={t('Mark this moment')} title={t('Mark this moment')}><Bookmark size={20} /></button>
           </div>
 

@@ -611,6 +611,8 @@ export const ES: Record<string, string> = {
   'The line is empty. Copy a text and it will stand here.': 'La fila está vacía. Copia un texto y aparecerá aquí.',
   'Already in the queue': 'Ya está en la cola',
   'Added to the queue · {n} in line': 'Añadido a la cola · {n} en fila',
+  'Previous in the queue': 'Anterior en la fila',
+  'Next in the queue': 'Siguiente en la fila',
   '{n} texts are waiting in Listen later': '{n} textos esperan en Escuchar después',
   'Send all to Listen later': 'Enviar todo a Escuchar después',
   'Play in order': 'Escuchar en orden',
