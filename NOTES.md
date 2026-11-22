@@ -1,3 +1,16 @@
+## 1.4.238 — The corner controls answer again (2026-11-22)
+
+Oscar's report, over a photo of the panel's queue sheet: «no me permite desactivar la lista en bucle desde la ventana flotante. La toco y simplemente me saca de la lista.» The sheet's lever never asked its question — the tap closed the panel instead.
+
+The mechanism, measured on the seats themselves: the bubble's window lies OVER the panel's corner (1.4.227's re-raise), and since 1.4.234 that window carries 14dp of breathing room on every side for the drawn shadow. The panel seats itself a graze away from the jewel's centre, so the window's touch bounds reach some 16dp into the panel's corner — exactly where the queue sheet's lever and the title row's lock live. A tap aimed at the lever's thumb (its natural target, at the switch's right end) landed on the bubble's window, and a bubble tap with the panel open closes the panel. Before 234 the window was the jewel's own size and its bounds ended where the jewel ends; the shadow's room is what grew the overlap.
+
+The cure keeps both laws: **while the panel stands, the bubble's window wears its visual size** — its touch bounds end where the jewel ends, as they did before 234 — **and the drawn shadow hugs the jewel** (face + 6dp instead of + 18dp; over the panel's own card, the wide fall of shadow is not what is missed). The moment the panel closes, the window takes its breathing room and the full shadow back. Both transitions reseat the bubble in the same act, so the jewel itself never moves a hair — only the window's invisible bounds step back off the panel's corner, and return.
+
+This wave jumped the queue ahead of the diagonal-gesture tuning (which follows as 1.4.239): a control that cannot be touched at all is worse than a gesture that needs tuning.
+
+- Declared bound: shell work — no bench exists for it; the CI compile is its gate and Oscar's phone the judge. The web half of this release is the version stamp only.
+- Presentation impact: none — no anchor, surface or copy changes.
+
 ## 1.4.237 — The ring retires at the end (2026-11-22)
 
 Oscar's new principle, over a photo of the finished «Sobre sube» (Sentence 18 of 18, the bubble wearing its complete ring): «cuando el aro termina de llenarse porque el audio terminó de reproducirse, desaparece, en lugar de que quede el aro completo con su vuelta… Como ya terminó, no es necesario.» A complete ring resting on a finished reading is a leftover, not information.

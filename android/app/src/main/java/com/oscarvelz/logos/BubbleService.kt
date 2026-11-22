@@ -1827,8 +1827,19 @@ class BubbleService : Service() {
     // square bounds clipped it — the cut showed against light
     // walls («se ve el cuadrado de la sombra… no se ve terminado
     // o premium», Oscar, 2026-11-22).
-    private fun bubbleWindow() = bubbleSize() + dp(28)
-    private fun bubbleShadow() = bubbleFace() + dp(18)
+    // WHILE THE PANEL STANDS, the window wears the visual size
+    // (1.4.238): the re-raised bubble window lies OVER the panel's
+    // corner (1.4.227), and its 14dp of breathing room reached
+    // ~16dp into that corner's touch territory — the taps aimed at
+    // the controls seated there (the queue sheet's lever, the
+    // title row's lock) landed on the bubble instead, and the tap
+    // shut the panel: «la toco y simplemente me saca de la lista»
+    // (Oscar, 2026-11-22). At the visual size the window's bounds
+    // end where the jewel ends, as they did before 234; the shadow
+    // hugs the jewel for the panel's stay, and collapsePanel
+    // restores the room the moment the panel closes.
+    private fun bubbleWindow() = if (panel != null) bubbleSize() else bubbleSize() + dp(28)
+    private fun bubbleShadow() = bubbleFace() + if (panel != null) dp(6) else dp(18)
 
     /** The look's alphas (1.4.157): the bubble wears the opacity
      *  Oscar set — at rest, at work, always (1.4.224: the automatic
@@ -3663,6 +3674,12 @@ class BubbleService : Service() {
         // of the phone — and a later window (a hint card, a drag
         // target) still rises above them both, as it should.
         bubble?.let { b -> runCatching { wm?.removeView(b); wm?.addView(b, bubbleParams) } }
+        // The window shrinks to the jewel for the panel's stay
+        // (1.4.238, see bubbleWindow()): reseated in the same act,
+        // so the jewel itself does not move a hair — only its
+        // window's touch bounds step back off the panel's corner.
+        applyLook()
+        seatBubbleInCorner(false)
         positionPanel()
         // While the window is open, the bubble wears the WINDOW's
         // opacity (Oscar, 1.4.197): it does not look right for the λ
@@ -4347,6 +4364,13 @@ class BubbleService : Service() {
         // The window is gone: the bubble takes its OWN opacity back
         // (1.4.197 — while the panel stood, it wore the panel's).
         bubble?.let { it.animate().cancel(); it.animate().alpha(awakeAlpha()).setDuration(160).start() }
+        // The window takes its breathing room back (1.4.238): the
+        // wide window and the full shadow return, reseated so the
+        // jewel does not move. (A drag that collapsed the panel on
+        // its first MOVE overwrites the seat with its own math in
+        // the same event, so the drag never feels this.)
+        applyLook()
+        if (bubble != null) seatBubbleInCorner(false)
         if (!now && deliveries != lastDeliverySeen) {
             lastDeliverySeen = deliveries
             if (System.currentTimeMillis() - lastDeliveryAt < 20000) handler.postDelayed({ invite(2, force = true) }, 250)
