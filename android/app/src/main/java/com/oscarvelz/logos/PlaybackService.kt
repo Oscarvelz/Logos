@@ -598,12 +598,21 @@ class PlaybackService : Service() {
         val cv = Canvas(bmp)
         val ground: Int
         val accent: Int
+        // The disc's own colour (1.4.218): the system's extractor
+        // saturates what it finds — 215's pure-accent disc still
+        // came back burnt orange on Oscar's phone, because Legacy's
+        // pale gold at full saturation IS orange. The disc therefore
+        // wears a PRE-COMPENSATED gold: paler and a breath yellower
+        // than the accent, so the extraction lands on amber instead
+        // of overshooting it. The already-saturated families (Tron,
+        // Cyberpunk) need no compensation and wear the pure accent.
+        val disc: Int
         val glow: Boolean
         when (fam) {
-            "light" -> { ground = Color.rgb(245, 241, 232); accent = Color.rgb(154, 102, 20); glow = false }
-            "tron" -> { ground = Color.rgb(2, 10, 16); accent = Color.rgb(0, 229, 255); glow = true }
-            "cyberpunk" -> { ground = Color.rgb(11, 10, 8); accent = Color.rgb(255, 42, 109); glow = false }
-            else -> { ground = Color.rgb(23, 19, 16); accent = Color.rgb(233, 189, 114); glow = false }
+            "light" -> { ground = Color.rgb(245, 241, 232); accent = Color.rgb(154, 102, 20); disc = Color.rgb(198, 148, 66); glow = false }
+            "tron" -> { ground = Color.rgb(2, 10, 16); accent = Color.rgb(0, 229, 255); disc = accent; glow = true }
+            "cyberpunk" -> { ground = Color.rgb(11, 10, 8); accent = Color.rgb(255, 42, 109); disc = accent; glow = false }
+            else -> { ground = Color.rgb(23, 19, 16); accent = Color.rgb(233, 189, 114); disc = Color.rgb(243, 208, 141); glow = false }
         }
         cv.drawColor(ground)
         val cx = size / 2f
@@ -613,12 +622,16 @@ class PlaybackService : Service() {
             intArrayOf(Color.argb(if (glow) 120 else 64, Color.red(accent), Color.green(accent), Color.blue(accent)), Color.TRANSPARENT),
             null, Shader.TileMode.CLAMP)
         cv.drawCircle(cx, cy, 250f, haloPaint)
+        // The disc rules the canvas (1.4.218): at r=158 the dark
+        // ground still owned most of the pixels and the extractor
+        // mixed its gradient from the ground's browns; at r=230 the
+        // gold family owns the extraction outright.
         val discPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        discPaint.color = accent
+        discPaint.color = disc
         if (glow) discPaint.setShadowLayer(22f, 0f, 0f, accent)
-        cv.drawCircle(cx, cy, 158f, discPaint)
+        cv.drawCircle(cx, cy, 230f, discPaint)
         val lam = lambdaBitmap()
-        val lw = 218f
+        val lw = 300f
         val lh = lw * lam.height.toFloat() / lam.width.toFloat()
         val lamPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         lamPaint.colorFilter = PorterDuffColorFilter(ground, PorterDuff.Mode.SRC_IN)
