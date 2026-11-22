@@ -1150,6 +1150,7 @@ class BubbleService : Service() {
     private var bubbleFaceV: FrameLayout? = null
     private var bubbleLambdaV: LambdaView? = null
     private var bubbleRingV: RingView? = null
+    private var bubbleShadowV: View? = null
     // The ring's seat (1.4.225): the pushed fraction arrives in steps
     // — a word at a time from the page's voices, a whole sentence at
     // a time from the device voice — so between seats the ring
@@ -1819,6 +1820,15 @@ class BubbleService : Service() {
     private fun bubbleSize() = ((if (isTablet()) dp(76) else dp(58)) * sizeFactor()).toInt()
     private fun bubbleFace() = ((if (isTablet()) dp(60) else dp(46)) * sizeFactor()).toInt()
     private fun bubbleHalo() = ((if (isTablet()) dp(66) else dp(52)) * sizeFactor()).toInt()
+    // The window is wider than the bubble (1.4.234): the shadow is
+    // DRAWN, and a drawn shadow needs room to fall and fade inside
+    // its own window. While the window was the bubble's own size,
+    // the face's elevation shadow ran past it and the window's
+    // square bounds clipped it — the cut showed against light
+    // walls («se ve el cuadrado de la sombra… no se ve terminado
+    // o premium», Oscar, 2026-11-22).
+    private fun bubbleWindow() = bubbleSize() + dp(28)
+    private fun bubbleShadow() = bubbleFace() + dp(18)
 
     /** The look's alphas (1.4.157): the bubble wears the opacity
      *  Oscar set — at rest, at work, always (1.4.224: the automatic
@@ -1838,10 +1848,11 @@ class BubbleService : Service() {
             if (b != null) {
                 val bp = bubbleParams
                 if (bp != null) {
-                    bp.width = bubbleSize(); bp.height = bubbleSize()
+                    bp.width = bubbleWindow(); bp.height = bubbleWindow()
                     runCatching { wm?.updateViewLayout(b, bp) }
                 }
                 halo?.layoutParams = FrameLayout.LayoutParams(bubbleHalo(), bubbleHalo(), Gravity.CENTER)
+                bubbleShadowV?.layoutParams = FrameLayout.LayoutParams(bubbleShadow(), bubbleShadow(), Gravity.CENTER)
                 bubbleRingV?.layoutParams = FrameLayout.LayoutParams(bubbleSize(), bubbleSize(), Gravity.CENTER)
                 repaintFace()
                 bubbleFaceV?.layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
@@ -1851,7 +1862,7 @@ class BubbleService : Service() {
             panel?.let { it.alpha = panelAlpha() }
         }
     }
-    private fun bubbleHalf() = bubbleSize() / 2
+    private fun bubbleHalf() = bubbleWindow() / 2
     // The panel's width: the words (1.4.102) earn the tablet a wider window.
     private fun panelWidth(): Int {
         val base = if (wordsOn && isTablet()) dp(360) else dp(302)
@@ -2288,7 +2299,7 @@ class BubbleService : Service() {
     private fun showBubble() {
         val w = getSystemService(WindowManager::class.java)
         wm = w
-        val size = bubbleSize() // the window carries a halo ring around the face
+        val size = bubbleWindow() // the window carries the drawn shadow's breathing room (1.4.234)
         val root = FrameLayout(this)
         val faceCols = facePaint()
         val haloV = View(this).apply {
@@ -2296,6 +2307,21 @@ class BubbleService : Service() {
             layoutParams = FrameLayout.LayoutParams(bubbleHalo(), bubbleHalo(), Gravity.CENTER)
             visibility = View.INVISIBLE
         }
+        // The shadow, drawn (1.4.234): a soft black oval that fades
+        // to nothing well inside the window — no elevation, so no
+        // square cut can ever show. It sits a breath below centre,
+        // where a real shadow falls.
+        val shadowV = View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                gradientType = GradientDrawable.RADIAL_GRADIENT
+                gradientRadius = bubbleShadow() / 2f
+                colors = intArrayOf(Color.argb(105, 0, 0, 0), Color.argb(42, 0, 0, 0), Color.argb(0, 0, 0, 0))
+            }
+            layoutParams = FrameLayout.LayoutParams(bubbleShadow(), bubbleShadow(), Gravity.CENTER)
+            translationY = dp(3).toFloat()
+        }
+        bubbleShadowV = shadowV
         val face = FrameLayout(this).apply {
             // A small jewel, not a coin (Oscar: smaller and prettier): a warm
             // radial sheen falling from the top-left, the gold ring, a soft shadow.
@@ -2307,7 +2333,9 @@ class BubbleService : Service() {
                 colors = intArrayOf(faceCols.first, faceCols.second)
                 setStroke(dp(2), faceCols.third)
             }
-            elevation = dp(5).toFloat()
+            // No elevation (1.4.234): its shadow was the one the
+            // window clipped into a square. The drawn shadowV below
+            // carries the depth now.
             layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
         }
         val lambda = LambdaView().apply {
@@ -2317,10 +2345,11 @@ class BubbleService : Service() {
         bubbleFaceV = face
         bubbleLambdaV = lambda
         root.addView(haloV)
+        root.addView(shadowV)
         root.addView(face)
         halo = haloV
         val ringV = RingView()
-        ringV.layoutParams = FrameLayout.LayoutParams(size, size, Gravity.CENTER)
+        ringV.layoutParams = FrameLayout.LayoutParams(bubbleSize(), bubbleSize(), Gravity.CENTER)
         ringV.visibility = View.INVISIBLE
         root.addView(ringV)
         bubbleRingV = ringV
@@ -2495,14 +2524,19 @@ class BubbleService : Service() {
     private fun cornerSeat(corner: Int): Pair<Int, Int> {
         val sw2 = resources.displayMetrics.widthPixels
         val sh2 = resources.displayMetrics.heightPixels
+        // The seat is computed for the bubble's visible span, as it
+        // has been since 1.4.231 — then shifted by the shadow's
+        // breathing room (1.4.234), so the jewel itself lands in
+        // exactly the same place while its window reaches further.
         val bw = bubbleSize()
+        val m = (bubbleWindow() - bw) / 2
         val x = if (corner % 2 == 1) sw2 - bw - dp(4) else dp(4)
         val y = when {
             corner >= 4 -> (sh2 - bw) / 2
             corner >= 2 -> sh2 - bw - dp(24)
             else -> dp(28)
         }
-        return Pair(x, y)
+        return Pair(x - m, y - m)
     }
 
     private fun seatBubbleInCorner(animate: Boolean) {
@@ -2543,12 +2577,12 @@ class BubbleService : Service() {
         // The hand may carry the bubble anywhere; where it RESTS is
         // the nearest of the six predetermined places (Oscar,
         // 2026-11-22), and that place is what the bubble remembers.
-        val bw = bubbleSize()
-        val cx = p.x + bw / 2; val cy = p.y + bw / 2
+        val hw = bubbleHalf()
+        val cx = p.x + hw; val cy = p.y + hw
         var best = 3; var bestD = Long.MAX_VALUE
         for (s in 0..5) {
             val (sx, sy) = cornerSeat(s)
-            val dx = (sx + bw / 2 - cx).toLong(); val dy = (sy + bw / 2 - cy).toLong()
+            val dx = (sx + hw - cx).toLong(); val dy = (sy + hw - cy).toLong()
             val dd = dx * dx + dy * dy
             if (dd < bestD) { bestD = dd; best = s }
         }

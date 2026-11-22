@@ -1,3 +1,13 @@
+## 1.4.234 — The shadow without the square (2026-11-22)
+
+Oscar's find, with two close-ups of the bubble against a light wall: «se ve el cuadrado de la sombra, precisamente porque hasta ahí llega el corte del ícono flotante. No quiero ese cuadrado… no se ve terminado o premium.»
+
+- The diagnosis: the bubble's window was exactly the bubble's own size, and the face's elevation shadow spreads wider than that — so the window's square bounds clipped the shadow, and the cut showed as a straight-edged square around the jewel on light backgrounds.
+- The cure retires the elevation shadow entirely. The shadow is now **drawn**: a soft black oval under the face that fades to nothing (three-stop radial falloff), seated a breath below centre where a real shadow falls. And the bubble's **window grows by 14dp on every side** — pure breathing room — so the drawn shadow falls and fades entirely inside it. No elevation, no clip, no square.
+- The jewel itself does not move: seats are still computed for the visible span exactly as 1.4.231/233 settled them, then shifted by the breathing room, so the λ lands in precisely the same place in all six homes; centres everywhere (panel graze, drag settle, gate hover) are read off the window's centre, which is the jewel's centre.
+- Declared bound: the shell has no bench — the CI compile is its gate and Oscar's phone the judge. The web half of this release is the version stamp only.
+- Presentation impact: none — no anchor, surface or copy changes.
+
 ## 1.4.233 — Six predetermined places (2026-11-22)
 
 Oscar's order, with his photo of the bubble dragged to the left edge's middle: «Hay dos posiciones en las que me encantaría también que la burbuja se posicione determinadamente y es a mitad de la pantalla en su respectivo borde… Entonces serían seis lugares predeterminados.»
