@@ -472,6 +472,15 @@ class BubbleService : Service() {
                 if (value != null) clipTextAt = System.currentTimeMillis()
             }
         var clipManual = false
+        /** The copy-queue mode as the page last reported it (its
+         *  pushes carry it; refreshPanel mirrors it here, 1.4.241).
+         *  deliver() reads it at the lock's door: the stage lock
+         *  holds a catch back only when the catch would REPLACE
+         *  what is playing — with the queue on, a catch only lines
+         *  up and waits its turn, and the lock's own card has only
+         *  ever promised the replacement hold. Before the first
+         *  push of a fresh service this reads off. */
+        @Volatile var queueModeSeen = false
         /** The dedupe key of the catch currently waiting, and of the
          *  last catch the page CONFIRMED it pulled (T2-7). The key
          *  used to be committed in deliver(), before any
@@ -1052,7 +1061,7 @@ class BubbleService : Service() {
             // last definite press described is being replaced, so no
             // tap may be judged against its ghost.
             clearCommanded()
-            if (!manual && isLocked(c)) { noteTry(c, s("the lock held a copy back", "el candado retuvo una copia")); return }
+            if (!manual && isLocked(c) && !queueModeSeen) { noteTry(c, s("the lock held a copy back", "el candado retuvo una copia")); return }
             val key = clipKey(text)
             // The dedupe judges against the COMMITTED key — the last
             // catch the page confirmed it pulled, in this process or
@@ -4284,7 +4293,7 @@ class BubbleService : Service() {
                 lockBtn?.invalidate()
             }
         } else {
-            showHintCard(s("Lock the stage", "Bloquear la escena"), s("Locked: a copied text won't replace what you're hearing.", "Bloqueada: un texto copiado no reemplazará lo que estás oyendo."), s("Lock", "Bloquear"), s("Not now", "Ahora no")) {
+            showHintCard(s("Lock the stage", "Bloquear la escena"), s("Locked: a copied text won't replace what you're hearing. With the copy queue on, copies still line up and wait their turn.", "Bloqueada: un texto copiado no reemplazará lo que estás oyendo. Con la cola de copias encendida, las copias sí se forman y esperan su turno."), s("Lock", "Bloquear"), s("Not now", "Ahora no")) {
                 setLocked(this@BubbleService, true)
                 lockBtn?.invalidate()
             }
@@ -4630,6 +4639,7 @@ class BubbleService : Service() {
             panelQueueCount = rawJ.optInt("queue", 0)
             panelQueueCur = rawJ.optInt("qcur", -1)
             panelQueueMode = rawJ.optInt("qmode", 0) == 1
+            queueModeSeen = panelQueueMode
             val arr = rawJ.optJSONArray("qt")
             panelQueueTitles = if (arr != null) (0 until arr.length()).map { arr.optString(it) } else emptyList()
             val karr = rawJ.optJSONArray("qk")

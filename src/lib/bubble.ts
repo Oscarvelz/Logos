@@ -1052,8 +1052,10 @@ export function initBubble() {
     let want = false
     try { want = d.bubbleWantClip?.() === true } catch { /* old shell */ }
     if (!want && !settings.get().bubbleAuto) return
-    // The stage lock: an automatic arrival read honours it; a hand ask (want) lands.
-    if (!want) { try { if (d.bubbleLock?.()) return } catch { /* old shell */ } }
+    // The stage lock: an automatic arrival read honours it — unless
+    // the copy queue is on, when the arrival only lines up and the
+    // stage is never at stake (1.4.241). A hand ask (want) lands.
+    if (!want && !settings.get().copyQueue) { try { if (d.bubbleLock?.()) return } catch { /* old shell */ } }
     void readClipboard().then((rawClip) => {
       const text = rawClip.trim()
       if (!text) return

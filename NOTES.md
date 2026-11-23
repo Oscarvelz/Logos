@@ -1,3 +1,18 @@
+## 1.4.241 — The lock guards the stage, not the line (2026-11-22)
+
+Oscar's report, with two photos: «el botón de copiados en cola no está funcionando… lo toco, lo activo y lo desactivo, pero no funciona… cuando copio texto en cola, no se guarda ni uno solo, por mucho que muestre que está activo.» The panel's queue sheet showed the lever on and the line empty; the transport never swapped to its track keys, because the line never grew.
+
+The diagnosis, in plain words: his stage lock was on. The lock's own card has only ever promised one hold — «a copied text won't replace what you're hearing» — but the shell's delivery door implemented it as a blanket hold: with the lock on, every automatic catch died at the door, queue or no queue. When the queue was born (1.4.198) its arrivals stopped being replacements — they line up and wait their turn, displacing nothing — and the door was never told. His hand pastes still landed (a hand ask was never the lock's business), which is why the line had worked in the morning and silently refused his copies from the chats.
+
+The cure — the lock keeps its promise, exactly:
+
+- **The shell's door** (`deliver`): the lock holds a catch back only when the queue mode is off. The shell now keeps the mode as the page last reported it (`queueModeSeen`, mirrored from the same pushes that feed the panel's count and titles) and consults it at the lock's door. Manual deliveries were never held and are not now.
+- **The app's own arrival road** (the visibility read) honours the lock under the same condition: queue on, the read proceeds and the copy lines up; queue off, the lock still holds it, as before.
+- **The lock's card now says the whole truth**: locked, a copy won't replace what you're hearing — and with the copy queue on, copies still line up and wait their turn.
+
+- Declared bound: `queueModeSeen` is the shell's last-seen mode from the page's own pushes; before a fresh service's first push it reads off, so a catch in that first breath, with the lock on, would be held once — the panel's first push lands within moments of the bubble's birth. Shell work has no bench; the CI compile is its gate and Oscar's phone the judge. The page half's condition is a one-line gate beside the road's existing lock check.
+- Presentation impact: none — no anchor, surface or copy changes beyond the lock card's own sentence, which is the shell's, not the stage's.
+
 ## 1.4.240 — The diagonal's line decides (2026-11-22)
 
 Oscar's verdict on the gesture work, the same afternoon it landed: «Has progresado enormemente, donde falta afinar todavía son los gestos diagonales que te llevan a la mitad de la pantalla ya sea a la izquierda o a la derecha. Los gestos son diagonales nada más.» — and, clarified a breath later: he meant the diagonal gestures, only those.
