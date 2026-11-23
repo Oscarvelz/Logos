@@ -25,7 +25,7 @@ import { useStore } from './store.ts'
 import { VOICES, ACCENT_LABEL, ENGINE_LABEL, type Voice } from './voices.ts'
 import { isJustUrl } from './webtext.ts'
 import type { Scenario } from './presentation/scenario/index.ts'
-import { stageNav, stageUi, stageFields, stageVoices, stagePrime, stageBookTemp, stageActiveClip, stageToggleFav, stageSetDefaultVoice, stageGo, stageBump, stagePatch, type StageSurface, type StageUiState } from './presentation-host.tsx'
+import { stageNav, stageUi, stageFields, stageVoices, stagePrime, stageBookTemp, stageActiveClip, stageToggleFav, stageSetDefaultVoice, stageGo, stageBump, stagePatch, trayForAnchor, type StageSurface, type StageUiState } from './presentation-host.tsx'
 import './presentation-stage.css'
 
 export const sentencesOf = (text: string): string[] =>
@@ -933,6 +933,20 @@ function StageCreate({ scenario }: { scenario: Scenario }) {
 // lines, the same card titles and subs, About loose at the foot.
 // Every card keeps its mint and its interior anchors exactly as
 // before — the dressing changed; the resolution did not.
+// 1.4.247: the fiction follows the app into list-detail (1.4.246) —
+// at the two-pane tier the five trays stand as a list at the left
+// and only the seated tray's cards stand in the detail. The seat
+// lives in stageUi (settingsTray): a tap on the fiction's list
+// seats it, and the resolver seats it ahead of any beat that
+// points at a card, so no anchor is ever resolved against a card
+// that is not displayed. Below the tier the trays stack as before.
+const STAGE_TRAYS: { id: string; name: string; line: string }[] = [
+  { id: 'voice', name: 'The voice', line: 'The voice that reads to you, and how it says your words.' },
+  { id: 'listening', name: 'Listening', line: 'How listening feels — here, and floating over your other apps.' },
+  { id: 'screen', name: 'The screen', line: 'How Logos looks, and the language it speaks.' },
+  { id: 'learn', name: 'Learn', line: 'Guided lessons that walk the whole app with you.' },
+  { id: 'data', name: 'Your data', line: 'Your whole library in one file — out, and back in.' },
+]
 const STAGE_SETTING_INDEX: { anchor: string; title: string; sub: string; keys: string }[] = [
   { anchor: 'set-neural', title: 'Neural voice', sub: 'The reading voice — it lives on this device, downloads once, then works offline.', keys: 'voice engine download model storage protect protected cleanup delete offline voz neuronal descargar motor almacenamiento proteger' },
   { anchor: 'set-pron', title: 'Pronunciation', sub: 'Words said your way — names, places, terms of art.', keys: 'pronounce names words say dictionary say it your way pronunciación nombres palabras diccionario' },
@@ -942,12 +956,13 @@ const STAGE_SETTING_INDEX: { anchor: string; title: string; sub: string; keys: s
   { anchor: 'set-card-language', title: 'Language', sub: 'The app’s own words — everything on screen.', keys: 'english español spanish idioma lenguaje inglés' },
   { anchor: 'set-presentations', title: 'Presentations', sub: 'Learn the whole app, guided, at your pace', keys: 'lessons tour guided learn presentaciones lecciones aprender guía' },
   { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy clips library copia respaldo exportar importar archivo biblioteca' },
-  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.246 · private, on-device text-to-speech', keys: 'version about acerca versión' },
+  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.247 · private, on-device text-to-speech', keys: 'version about acerca versión' },
 ]
 
 function StageSettings({ scenario }: { scenario: Scenario }) {
   const st = scenario.getSettings()
   const pron = scenario.pronounce.list()
+  const ui = useStore(stageUi)
   const [query, setQuery] = useState('')
   const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   const hits = useMemo(() => {
@@ -960,10 +975,14 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
   }, [query])
   const land = (anchor: string) => {
     setQuery('')
-    document.querySelector(`[data-present="${anchor}"]`)?.scrollIntoView({ block: 'start' })
+    // As the real search does since 1.4.246: seat the owning tray
+    // first, then land on the card.
+    const owner = trayForAnchor(anchor)
+    if (owner) stagePatch({ settingsTray: owner })
+    window.setTimeout(() => document.querySelector(`[data-present="${anchor}"]`)?.scrollIntoView({ block: 'start' }), 90)
   }
   return (
-    <div>
+    <div data-stage-ldtray data-ldtray={ui.settingsTray}>
       <div className="pstage-eyebrow" data-present="set-page-head">● SETTINGS</div>
       <h2 className="pstage-title">Settings</h2>
 
@@ -990,7 +1009,16 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
         ))}
       </div>
 
-      <div className="set-cluster">
+      <div className="pstage-ld-nav">
+        {STAGE_TRAYS.map((tr) => (
+          <button key={tr.id} type="button" className="pstage-ld-row" data-tray={tr.id} onClick={() => stagePatch({ settingsTray: tr.id })}>
+            <span className="pstage-ld-name">{tr.name}</span>
+            <span className="pstage-ld-line">{tr.line}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="set-cluster" data-tray="voice">
         <div className="set-cluster-h">
           <div className="set-cluster-name">The voice</div>
           <div className="set-cluster-line">The voice that reads to you, and how it says your words.</div>
@@ -1030,7 +1058,7 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
         </div>
       </div>
 
-      <div className="set-cluster">
+      <div className="set-cluster" data-tray="listening">
         <div className="set-cluster-h">
           <div className="set-cluster-name">Listening</div>
           <div className="set-cluster-line">How listening feels — here, and floating over your other apps.</div>
@@ -1068,7 +1096,7 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
         </div>
       </div>
 
-      <div className="set-cluster">
+      <div className="set-cluster" data-tray="screen">
         <div className="set-cluster-h">
           <div className="set-cluster-name">The screen</div>
           <div className="set-cluster-line">How Logos looks, and the language it speaks.</div>
@@ -1093,7 +1121,7 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
         </div>
       </div>
 
-      <div className="set-cluster">
+      <div className="set-cluster" data-tray="learn">
         <div className="set-cluster-h">
           <div className="set-cluster-name">Learn</div>
           <div className="set-cluster-line">Guided lessons that walk the whole app with you.</div>
@@ -1105,7 +1133,7 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
         </div>
       </div>
 
-      <div className="set-cluster">
+      <div className="set-cluster" data-tray="data">
         <div className="set-cluster-h">
           <div className="set-cluster-name">Your data</div>
           <div className="set-cluster-line">Your whole library in one file — out, and back in.</div>
@@ -1122,10 +1150,10 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
         </div>
       </div>
 
-      <div className="pstage-card" data-present="set-about">
+      <div className="pstage-card" data-present="set-about" data-tray="data">
         <strong>About Logos</strong>
-        <p className="pstage-note">Version 1.4.246 · private, on-device text-to-speech</p>
-        <p className="pstage-note" data-present="set-version">Version 1.4.246</p>
+        <p className="pstage-note">Version 1.4.247 · private, on-device text-to-speech</p>
+        <p className="pstage-note" data-present="set-version">Version 1.4.247</p>
       </div>
     </div>
   )

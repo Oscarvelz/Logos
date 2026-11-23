@@ -1,3 +1,11 @@
+## 1.4.247 — The stage's Settings learns the list-detail
+
+The Presentation stage's fiction is the app's true form or it teaches a Settings that no longer exists — so the fiction follows the app into list-detail (1.4.246), at the same tier and in the same shape. At 1200px and wider, the stage's Settings surface stands with the five trays as a list at the left and the seated tray's cards as the detail beside it; below the tier, the trays stack exactly as before, and on the phone nothing changes.
+
+The seat is shared machinery, not a fiction-local habit: it lives in the stage's UI store (settingsTray), the stage's DOM sync keeps the painted attribute ahead of React, and the anchor resolver seats the tray before it resolves any beat that points at a Settings card — the Library's two tabs taught the pattern, and the Settings search in the fiction performs the same deed (seat the owning tray, then land). No beat can ever be resolved against a card that is not displayed. The tray map is the app's own: Neural voice and Pronunciation under The voice; Playback and the Floating player under Listening; Appearance and Language under The screen; Presentations under Learn; Backup and About under Your data.
+
+Bench-verified at 1280×800: a lesson about the Floating Player stands on the Settings surface with Listening already seated by the resolver and the Playback card in the detail — one tray, and only one, on display. No anchors minted or retired; the registry is untouched.
+
 ## 1.4.246 — Settings in list and detail
 
 The last restructure of the pane system (direction A): at the two-pane tier, Settings stops being a masonry of trays and becomes a list-detail. The five trays are the list — a sticky 320px column at the left, each row carrying the tray's icon, its name and its one line, the chosen one lit with the surface, the edge and a gold inset bar. The chosen tray's cards stand as the detail beside it, inside the tray's own sunken paint, capped at 840 so the rows of controls keep their measure at the widest tier. The tray's own header hides in this form — the list already names it.

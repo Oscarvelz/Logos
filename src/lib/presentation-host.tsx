@@ -86,8 +86,14 @@ export interface StageUiState {
    *  Index into the ladder [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
    *  born at 1× (index 2), the chip's resting face. */
   speedIdx: number
+  /** The Settings fiction's seated tray (1.4.247, mirroring the
+   *  app's list-detail): at the two-pane tier only the seated
+   *  tray's cards stand in the detail, so a beat that points at a
+   *  card first seats its tray — the resolver does, below — or the
+   *  anchor would resolve against a card that is not displayed. */
+  settingsTray: string
 }
-export const stageUi = createStore<StageUiState>({ sheet: null, menu: null, selecting: false, confirm: null, panel: null, libTab: 'saved', voicesSection: null, fx: null, keepBusy: false, listenError: false, speedIdx: 2 })
+export const stageUi = createStore<StageUiState>({ sheet: null, menu: null, selecting: false, confirm: null, panel: null, libTab: 'saved', voicesSection: null, fx: null, keepBusy: false, listenError: false, speedIdx: 2, settingsTray: 'voice' })
 export function stagePatch(patch: Partial<StageUiState>) {
   stageUi.set({ ...stageUi.get(), ...patch })
   stageBump()
@@ -110,6 +116,10 @@ export function syncStageDom() {
   document.querySelectorAll('[data-stage-tab]').forEach((el) => {
     const name = el.getAttribute('data-stage-tab')
     if (name) (el as HTMLElement).hidden = name !== tab
+  })
+  const tray = stageUi.get().settingsTray
+  document.querySelectorAll('[data-stage-ldtray]').forEach((el) => {
+    el.setAttribute('data-ldtray', tray)
   })
 }
 
@@ -199,6 +209,21 @@ function surfaceForAnchor(anchorId: string): StageSurface | null {
   if (anchorId.startsWith('set-')) return 'settings'
   if (anchorId === 'bubble-lambda') return null
   if (anchorId.startsWith('bubble-')) return 'bubble'
+  return null
+}
+
+/** The Settings tray a settings anchor lives in (1.4.247): the
+ *  fiction's list-detail seats one tray at a time, so a beat that
+ *  points at a card seats its tray first — the same deed the real
+ *  Settings search performs since 1.4.246. Anchors that live above
+ *  the list (the page head, the search itself) return null: they
+ *  stand in every tray's company. */
+export function trayForAnchor(anchorId: string): string | null {
+  if (anchorId.startsWith('set-presentations')) return 'learn'
+  if (anchorId.startsWith('set-neural') || anchorId.startsWith('set-pron') || anchorId.startsWith('set-storage') || anchorId.startsWith('set-auto-download') || anchorId.startsWith('set-device-bridge')) return 'voice'
+  if (anchorId.startsWith('set-playback') || anchorId.startsWith('set-speed') || anchorId.startsWith('set-sentence-pause') || anchorId.startsWith('set-highlight') || anchorId.startsWith('set-reader-size') || anchorId.startsWith('set-word-timing') || anchorId.startsWith('set-bubble') || anchorId.startsWith('set-copy-queue')) return 'listening'
+  if (anchorId.startsWith('set-card-appearance') || anchorId.startsWith('set-theme') || anchorId.startsWith('set-card-language') || anchorId.startsWith('set-ui-lang')) return 'screen'
+  if (anchorId.startsWith('set-backup') || anchorId.startsWith('set-about') || anchorId.startsWith('set-version')) return 'data'
   return null
 }
 
@@ -421,6 +446,16 @@ function stageResolver(scenario: Scenario): AnchorResolver {
       const want = anchorId.startsWith('bk-') ? 'books' : 'saved'
       if (stageUi.get().libTab !== want && !anchorId.startsWith('lib-split')) {
         stagePatch({ libTab: want })
+        syncStageDom()
+      }
+    }
+    // The Settings list-detail's trays are rooms of their own too
+    // (1.4.247): a card stands only while its tray is seated, so
+    // seat the tray before the anchor is resolved against the DOM.
+    if (target === 'settings') {
+      const wantTray = trayForAnchor(anchorId)
+      if (wantTray && stageUi.get().settingsTray !== wantTray) {
+        stagePatch({ settingsTray: wantTray })
         syncStageDom()
       }
     }

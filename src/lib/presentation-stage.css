@@ -167,6 +167,27 @@
   /* Settings: the real page caps at 1180, centred (its .set-cols
      live inside that measure). */
   [data-stage-surface='settings'] > div { max-width: 1180px; margin: 0 auto; }
+  /* Settings list-detail (1.4.247, mirroring the app's 1.4.246):
+     the five trays as a list at the left, the seated tray as the
+     detail. The seat is the root's data-ldtray attribute (stageUi's
+     settingsTray, kept in the DOM by syncStageDom ahead of React),
+     so the resolver's seating and the painted form never disagree.
+     The cluster headers hide — the list names the tray — and the
+     About card rides with the data tray, as in the app. */
+  [data-stage-surface='settings'] [data-ldtray] { display: grid; grid-template-columns: 320px minmax(0, 1fr); column-gap: 24px; align-items: start; }
+  [data-stage-surface='settings'] [data-ldtray] > .pstage-eyebrow, [data-stage-surface='settings'] [data-ldtray] > .pstage-title, [data-stage-surface='settings'] [data-ldtray] > .set-search { grid-column: 1 / -1; }
+  [data-stage-surface='settings'] [data-ldtray] > .set-cluster, [data-stage-surface='settings'] [data-ldtray] > .pstage-card[data-tray] { grid-column: 2; min-width: 0; }
+  [data-stage-surface='settings'] [data-ldtray] .set-cluster-h { display: none; }
+  [data-stage-surface='settings'] [data-ldtray="voice"] > [data-tray]:not([data-tray="voice"]),
+  [data-stage-surface='settings'] [data-ldtray="listening"] > [data-tray]:not([data-tray="listening"]),
+  [data-stage-surface='settings'] [data-ldtray="screen"] > [data-tray]:not([data-tray="screen"]),
+  [data-stage-surface='settings'] [data-ldtray="learn"] > [data-tray]:not([data-tray="learn"]),
+  [data-stage-surface='settings'] [data-ldtray="data"] > [data-tray]:not([data-tray="data"]) { display: none; }
+  [data-stage-surface='settings'] [data-ldtray="voice"] .pstage-ld-row[data-tray="voice"],
+  [data-stage-surface='settings'] [data-ldtray="listening"] .pstage-ld-row[data-tray="listening"],
+  [data-stage-surface='settings'] [data-ldtray="screen"] .pstage-ld-row[data-tray="screen"],
+  [data-stage-surface='settings'] [data-ldtray="learn"] .pstage-ld-row[data-tray="learn"],
+  [data-stage-surface='settings'] [data-ldtray="data"] .pstage-ld-row[data-tray="data"] { background: var(--surface); border-color: var(--line); box-shadow: inset 3px 0 0 var(--accent); }
 }
 @media (min-width: 1600px) {
   /* The real app's third ladder (styles.css .listen-grid ≥1600):
@@ -175,6 +196,19 @@
      desk-tablet anchor and turn AD13's beats into misses. */
   [data-stage-surface] .listen-page { grid-template-columns: minmax(0, 1fr) 380px 360px; }
   [data-stage-surface] .listen-page > .pstage-desk { grid-column: 3; }
+  /* Settings: the real page's composition cap at this tier. */
+  [data-stage-surface='settings'] > div { max-width: 1560px; }
+}
+
+/* Settings list-detail furniture (1.4.247): the tray list exists
+   only at the two-pane tier; below it the fiction stacks its
+   trays exactly as before. */
+[data-stage-surface='settings'] .pstage-ld-nav { display: none; }
+@media (min-width: 1200px) {
+  [data-stage-surface='settings'] .pstage-ld-nav { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 28px; }
+  [data-stage-surface='settings'] .pstage-ld-row { display: block; width: 100%; text-align: left; padding: 14px 16px; border-radius: 16px; border: 1px solid transparent; background: none; color: inherit; font: inherit; cursor: pointer; }
+  [data-stage-surface='settings'] .pstage-ld-name { display: block; font-size: 16px; font-weight: 650; }
+  [data-stage-surface='settings'] .pstage-ld-line { display: block; font-size: 12.5px; color: var(--muted, #a89e8a); margin-top: 3px; line-height: 1.45; }
 }
 
 [data-stage-surface][hidden] { display: none !important; }
