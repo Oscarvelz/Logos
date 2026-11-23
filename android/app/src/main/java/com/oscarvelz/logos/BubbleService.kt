@@ -2870,8 +2870,8 @@ class BubbleService : Service() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
         // The speed drum (1.4.207): born hidden beside the counter;
-        // refreshPanel seats it only in the queue shape, when the
-        // counter's writing carries a rate to roll.
+        // refreshPanel seats it whenever the counter's writing
+        // carries a rate to roll, in either shape (1.4.242).
         rateV = TextView(this).apply {
             setTextColor(c["gold"]!!); textSize = 12f
             setTypeface(typeface, Typeface.BOLD)
@@ -4687,6 +4687,13 @@ class BubbleService : Service() {
             // own writing, so the diff stays honest; while a hand is
             // on the drum (wheelLive) pushes never repaint it — the
             // drum is showing the hand's own rolling.
+            // 1.4.242 (Oscar, the same night the lock starved his
+            // queue): the rate stands on the drum in BOTH shapes —
+            // the «1×» was dead text in the normal shape, at the
+            // very seat where the drum lives in the queue shape,
+            // and the rate is the rate in either. His word: make it
+            // work from there too, WITHOUT removing the − and +
+            // keys — they stay, both roads stepping the same rate.
             // 1.4.221 (Oscar's find): the line is remembered as shown
             // ONLY when a living view received it — the title's own
             // discipline, which this block alone had skipped. It used
@@ -4701,7 +4708,7 @@ class BubbleService : Service() {
                 if (sv != null) {
                     shownSub = sub; shownSubMode = transportQueueMode
                     val subW = sub ?: ""
-                    val sep = if (transportQueueMode) subW.lastIndexOf(" · ") else -1
+                    val sep = subW.lastIndexOf(" · ")
                     val rateTxt = if (sep >= 0) subW.substring(sep + 3) else ""
                     val rateVal = rateTxt.dropLast(1).toDoubleOrNull()
                     val hasRate = rateTxt.endsWith("×") && rateVal != null

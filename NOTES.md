@@ -1,3 +1,18 @@
+## 1.4.242 — The drum stands in both shapes (2026-11-22)
+
+The same night the stage lock starved his queue (1.4.241), Oscar found the speed drum dead: «¿Qué fue lo que hiciste que ahora ni siquiera está funcionando el botón para acelerar el audio o desacelerarlo?» Nothing shipped that day had touched the drum — the mechanism was older and quieter: since 1.4.207 the drum stood only in the panel's QUEUE shape, because there the transport's − and + keys give their seats to the track keys and the rate needed another home. In the normal shape the rate stayed printed inside the counter's line — «Sentence 6 of 26 · 1×» — as dead text, at the very seat where the drum lives in the other shape. With his line empty all evening, the panel never changed shape, and the «1×» he tapped was print, not a control.
+
+His ruling, when the mechanism was laid out: «Tendrás que hacer que sirva también para cambiarlo desde ahí sin remover el botón de menos y más.» — the drum must work from there too, and the − and + keys stay.
+
+The cure is one condition removed:
+
+- **The rate splits onto the drum whenever the counter's writing carries one** — the last « · » in the sub-line — in the queue shape and the normal shape alike. subV keeps the counting half; the drum rolls the rate (drag loops the steps, a tap steps up, each detent applies live through the Bridge's rate door — the drum's deed since 1.4.207, unchanged).
+- **The − and + keys are untouched**: in the normal shape both roads now stand — the keys step the rate from the transport, the drum rolls it from the counter line. One rate, two roads, as the queue shape already had the drum beside its track keys.
+- Writings with no rate (a recording's clock, the seek scrub's counting line) carry no «×» after the separator, so no drum stands there — the split's own test, as before.
+
+- Declared bound: shell work — no bench exists for it; the change is a single condition in refreshPanel's sub block plus its comments, verified by reading the seats before and after. The CI compile is its gate and Oscar's phone the judge.
+- Presentation impact: none — no anchor, surface or copy changes.
+
 ## 1.4.241 — The lock guards the stage, not the line (2026-11-22)
 
 Oscar's report, with two photos: «el botón de copiados en cola no está funcionando… lo toco, lo activo y lo desactivo, pero no funciona… cuando copio texto en cola, no se guarda ni uno solo, por mucho que muestre que está activo.» The panel's queue sheet showed the lever on and the line empty; the transport never swapped to its track keys, because the line never grew.
