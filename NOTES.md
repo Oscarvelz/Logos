@@ -1,3 +1,13 @@
+## 1.4.246 — Settings in list and detail
+
+The last restructure of the pane system (direction A): at the two-pane tier, Settings stops being a masonry of trays and becomes a list-detail. The five trays are the list — a sticky 320px column at the left, each row carrying the tray's icon, its name and its one line, the chosen one lit with the surface, the edge and a gold inset bar. The chosen tray's cards stand as the detail beside it, inside the tray's own sunken paint, capped at 840 so the rows of controls keep their measure at the widest tier. The tray's own header hides in this form — the list already names it.
+
+Nothing moved house. The trays never unmount: the unselected ones are simply not displayed, so every card keeps its state, its fold and its anchor, and the clusters law stands untouched — pieces intact inside their tray, in their order. The search learned the new geography: a result first selects the tray that owns its card, then opens the card and scrolls to it, exactly as it lands below the tier. Below 1200px the page is byte-for-byte the Settings Oscar already knows — tray masonry, headers and all — and the phone never sees the list at all.
+
+Presentation impact: the Settings anchors are unchanged (every card keeps its data-present id and its home tray); the stage's Settings fiction still shows the tray masonry at wide widths — mirroring the list-detail on the stage is the lane's call, relayed with this wave.
+
+Bench-verified at 1280×800 (list and detail composed; tray switching by tap; a search for "backup" selects Your data and lands on the Backup card, open), at 1920×1200 (detail capped, composition centred), and on the phone (unchanged). Web only.
+
 ## 1.4.244 — The stage's tablet rules stay on the stage (2026-11-22)
 
 Oscar's tablet report: «My tablet look AWFUL. Not optimization whatsoever. The text is not showing, and there are large blank black empty spaces. Horrible looking. Settings is decent but not very well. Listen is full of gaps, as the rest.»

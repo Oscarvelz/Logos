@@ -1296,6 +1296,34 @@ html, body { overflow-x: clip; }
   .set-group > .section-label:first-child { margin-top: 0; }
 }
 
+/* ── Settings list-detail (1.4.246) — the two-pane tier only ──
+   The page becomes a grid: the five trays as a sticky list at the
+   left (320), the chosen tray as the detail. Unselected trays are
+   display:none — never unmounted — so every card keeps its state
+   and its anchor, and the search selects the owning tray before it
+   lands. The cluster's own header hides: the list already names
+   the tray. Below the tier none of this applies. */
+@media (min-width: 1200px) {
+  .settings-page[data-ld] { display: grid; grid-template-columns: 320px minmax(0, 1fr); column-gap: 24px; align-items: start; }
+  .settings-page[data-ld] > .page-head, .settings-page[data-ld] > .set-search, .settings-page[data-ld] > .set-version { grid-column: 1 / -1; }
+  .set-ld-nav { position: sticky; top: 28px; display: flex; flex-direction: column; gap: 8px; }
+  .set-ld-row { display: flex; gap: 12px; align-items: flex-start; width: 100%; text-align: left; padding: 14px 16px; border-radius: 16px; border: 1px solid transparent; background: none; color: inherit; font: inherit; cursor: pointer; }
+  .set-ld-row:hover { background: var(--surface); }
+  .set-ld-row.on { background: var(--surface); border-color: var(--line); box-shadow: inset 3px 0 0 var(--accent); }
+  .set-ld-name { display: block; font-size: 16px; font-weight: 650; }
+  .set-ld-line { display: block; font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.45; }
+  .settings-page[data-ld] .set-cols { column-count: 1; min-width: 0; max-width: 840px; }
+  .settings-page[data-ld] .set-cluster { display: none; }
+  .settings-page[data-ld="voice"] .set-cluster[data-tray="voice"],
+  .settings-page[data-ld="listening"] .set-cluster[data-tray="listening"],
+  .settings-page[data-ld="screen"] .set-cluster[data-tray="screen"],
+  .settings-page[data-ld="learn"] .set-cluster[data-tray="learn"],
+  .settings-page[data-ld="data"] .set-cluster[data-tray="data"] { display: block; }
+  .settings-page[data-ld] .set-cluster-h { display: none; }
+  .settings-page[data-ld] .set-cols > .set-group[data-tray] { display: none; }
+  .settings-page[data-ld="data"] .set-cols > .set-group[data-tray="data"] { display: block; }
+}
+
 /* ── Tablet desk (1.4.36) — phone layout untouched ─────── */
 .listen-side { display: contents; }
 .rail-status { display: none; }

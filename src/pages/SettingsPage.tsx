@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { exportBackup, importBackup, BackupImportError } from '../lib/backup.ts'
-import { Check, ChevronDown, ChevronRight, Cpu, Download, HardDrive, Languages, Loader2, Mic, Palette, PictureInPicture2, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Cpu, Download, GraduationCap, HardDrive, Languages, Loader2, Mic, Palette, PictureInPicture2, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { t } from '../lib/i18n.ts'
 import { useStore } from '../lib/store.ts'
 import { settings, applyTheme, READER_SCALES, stepReaderScale, type Theme, type LegacyTheme } from '../lib/settings.ts'
@@ -8,14 +8,14 @@ import { bubbleSupported, bubbleNativeState, setBubble, openBubblePermission, ty
 import { keep } from '../engine/keep.ts'
 import { engine, ensureModel, deleteModel, storageEstimate, POCKET_SIZE_MB, PHONON_SIZE_MB, modelCacheBytes } from '../engine/engine.ts'
 import { formatBytes } from '../lib/audio.ts'
-import { Range, Seg, Switch, toast, confirmDelete } from '../components/ui.tsx'
+import { Range, Seg, Switch, toast, confirmDelete, useMediaQuery } from '../components/ui.tsx'
 import { endSession } from '../player/listen.ts'
 import { PresentationsCard } from '../lib/presentation/presentation-index.tsx'
 import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.245'
+const VERSION = '1.4.246'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -126,9 +126,9 @@ function SetCard({ icon, title, sub, children, defaultOpen, present }: { icon: R
  *  keep their content, anchors and order within the tray; the tray
  *  itself is painted from the active theme's tokens under the
  *  Calibration Law (one tone under the page, the 1px edge stack). */
-function SetCluster({ name, line, children }: { name: string; line: string; children: ReactNode }) {
+function SetCluster({ name, line, tray, children }: { name: string; line: string; tray?: string; children: ReactNode }) {
   return (
-    <div className="set-cluster">
+    <div className="set-cluster" data-tray={tray}>
       <div className="set-cluster-h">
         <div className="set-cluster-name">{name}</div>
         <div className="set-cluster-line">{line}</div>
@@ -136,6 +136,17 @@ function SetCluster({ name, line, children }: { name: string; line: string; chil
       {children}
     </div>
   )
+}
+
+/** Open a Settings card where it lives and scroll it into view —
+ *  the search's landing, shared by both layouts. */
+function landOnCard(anchor: string) {
+  const root = document.querySelector(`[data-present="${anchor}"]`)
+  if (!root) return
+  const head = root.querySelector<HTMLElement>('.set-card-h[aria-expanded="false"]')
+  if (head) head.click()
+  window.setTimeout(() => root.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60)
+  window.setTimeout(() => root.scrollIntoView({ block: 'start', behavior: 'smooth' }), 480)
 }
 
 // ── The Settings search (1.4.177, Oscar) ────────────────────────
@@ -166,7 +177,7 @@ const SETTING_INDEX: { anchor: string; title: string; sub: string; keys: string 
   { anchor: 'set-about', title: 'About Logos', sub: 'Version {v} · private, on-device text-to-speech', keys: 'version about acerca versión' },
 ]
 
-function SettingsSearch() {
+function SettingsSearch({ onLand }: { onLand?: (anchor: string) => void }) {
   const [query, setQuery] = useState('')
   const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   const hits = useMemo(() => {
@@ -179,12 +190,11 @@ function SettingsSearch() {
   }, [query])
   const land = (anchor: string) => {
     setQuery('')
-    const root = document.querySelector(`[data-present="${anchor}"]`)
-    if (!root) return
-    const head = root.querySelector<HTMLElement>('.set-card-h[aria-expanded="false"]')
-    if (head) head.click()
-    window.setTimeout(() => root.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60)
-    window.setTimeout(() => root.scrollIntoView({ block: 'start', behavior: 'smooth' }), 480)
+    // In the list-detail layout the page first selects the tray that
+    // owns the card (an unselected tray is not displayed), then the
+    // shared landing opens and scrolls to it.
+    if (onLand) { onLand(anchor); return }
+    landOnCard(anchor)
   }
   return (
     <div className="set-search">
@@ -272,8 +282,36 @@ export function SettingsPage() {
     toast(t('“{from}” will be read as “{to}”', { from, to }))
   }
 
+  // 1.4.246 — Settings as list-detail at the two-pane tier (the pane
+  // system's last restructure, Oscar's direction A): the five trays
+  // become the list, the chosen tray's cards the detail. Below the
+  // tier the page keeps its tray masonry exactly as it was. The
+  // trays never unmount — the unselected ones are simply not
+  // displayed — so every card keeps its state and its anchor.
+  const wideLd = useMediaQuery('(min-width: 1200px)')
+  const [tray, setTray] = useState('voice')
+  const TRAYS: { id: string; name: string; line: string; icon: ReactNode }[] = [
+    { id: 'voice', name: t('The voice'), line: t('The voice that reads to you, and how it says your words.'), icon: <Mic size={19} /> },
+    { id: 'listening', name: t('Listening'), line: t('How listening feels — here, and floating over your other apps.'), icon: <SlidersHorizontal size={19} /> },
+    { id: 'screen', name: t('The screen'), line: t('How Logos looks, and the language it speaks.'), icon: <Palette size={19} /> },
+    { id: 'learn', name: t('Learn'), line: t('Guided lessons that walk the whole app with you.'), icon: <GraduationCap size={19} /> },
+    { id: 'data', name: t('Your data'), line: t('Your whole library in one file — out, and back in.'), icon: <HardDrive size={19} /> },
+  ]
+  const TRAY_OF: Record<string, string> = {
+    'set-neural': 'voice', 'set-pron': 'voice',
+    'set-playback': 'listening', 'set-bubble': 'listening',
+    'set-card-appearance': 'screen', 'set-card-language': 'screen',
+    'set-presentations': 'learn',
+    'set-backup': 'data', 'set-about': 'data',
+  }
+  const searchLand = (anchor: string) => {
+    const owner = TRAY_OF[anchor]
+    if (owner) setTray(owner)
+    window.setTimeout(() => landOnCard(anchor), 90)
+  }
+
   return (
-    <div className="page settings-page">
+    <div className="page settings-page" data-ld={wideLd ? tray : undefined}>
       <div className="page-head" data-present="set-page-head">
         <div>
           <h1 className="page-title">{t('Settings')}</h1>
@@ -281,10 +319,24 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <SettingsSearch />
+      <SettingsSearch onLand={wideLd ? searchLand : undefined} />
+
+      {wideLd && (
+        <nav className="set-ld-nav" aria-label={t('Settings')}>
+          {TRAYS.map((tr) => (
+            <button key={tr.id} className={`set-ld-row ${tray === tr.id ? 'on' : ''}`} onClick={() => setTray(tr.id)} aria-pressed={tray === tr.id}>
+              <span className="set-ic">{tr.icon}</span>
+              <span className="grow" style={{ minWidth: 0 }}>
+                <span className="set-ld-name">{tr.name}</span>
+                <span className="set-ld-line">{tr.line}</span>
+              </span>
+            </button>
+          ))}
+        </nav>
+      )}
 
       <div className="set-cols">
-      <SetCluster name={t('The voice')} line={t('The voice that reads to you, and how it says your words.')}>
+      <SetCluster name={t('The voice')} line={t('The voice that reads to you, and how it says your words.')} tray="voice">
       <section className="set-group">
       <SetCard present="set-neural" defaultOpen={e.status === 'loading' || e.status === 'error' || (e.status !== 'ready' && !e.cached)} icon={<Cpu size={19} />} title={t('Neural voice')} sub={t('The reading voice — it lives on this device, downloads once, then works offline.')}>
       <div className="engine-card stack">
@@ -375,7 +427,7 @@ export function SettingsPage() {
       </SetCard>
       </section>
       </SetCluster>
-      <SetCluster name={t('Listening')} line={t('How listening feels — here, and floating over your other apps.')}>
+      <SetCluster name={t('Listening')} line={t('How listening feels — here, and floating over your other apps.')} tray="listening">
       <section className="set-group">
       <SetCard present="set-playback" icon={<SlidersHorizontal size={19} />} title={t('Playback')} sub={t('How listening feels, sentence by sentence.')}>
       <div className="list">
@@ -482,7 +534,7 @@ export function SettingsPage() {
       </SetCard>
       </section>
       </SetCluster>
-      <SetCluster name={t('The screen')} line={t('How Logos looks, and the language it speaks.')}>
+      <SetCluster name={t('The screen')} line={t('How Logos looks, and the language it speaks.')} tray="screen">
       <section className="set-group">
       <SetCard present="set-card-appearance" icon={<Palette size={19} />} title={t('Appearance')} sub={t('The light of the room.')}>
       <div className="list">
@@ -527,17 +579,17 @@ export function SettingsPage() {
       </SetCard>
       </section>
       </SetCluster>
-      <SetCluster name={t('Learn')} line={t('Guided lessons that walk the whole app with you.')}>
+      <SetCluster name={t('Learn')} line={t('Guided lessons that walk the whole app with you.')} tray="learn">
       <section className="set-group" data-present="set-presentations">
       <PresentationsCard onLaunch={launchPresentation} searchSlot={<PresentationSearch />} />
       </section>
       </SetCluster>
-      <SetCluster name={t('Your data')} line={t('Your whole library in one file — out, and back in.')}>
+      <SetCluster name={t('Your data')} line={t('Your whole library in one file — out, and back in.')} tray="data">
       <section className="set-group">
       <BackupCard />
       </section>
       </SetCluster>
-      <section className="set-group">
+      <section className="set-group" data-tray="data">
       <SetCard present="set-about" icon={<img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="" />} title={t('About Logos')} sub={t('Version {v} · private, on-device text-to-speech', { v: VERSION })}>
       <div className="credits">
         <p><strong>Based on <a href="https://github.com/SysAdminDoc/BetterTTS" target="_blank" rel="noreferrer">BetterTTS</a> by SysAdminDoc</strong> (MIT License). Logos is a simplified, phone-first rebuild; its listening player, export and service-worker isolation grew out of it.</p>
