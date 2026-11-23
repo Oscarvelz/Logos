@@ -88,7 +88,7 @@ export function LibraryPage() {
   const [shelf, setShelfState] = useState<'saved' | 'books'>(() => (location.hash.includes('books') || localStorage.getItem('logos.shelf') === 'books' ? 'books' : 'saved'))
   const setShelf = (v: 'saved' | 'books') => { setShelfState(v); localStorage.setItem('logos.shelf', v); endSelect() }
   const bk = useStore(books)
-  const big = useMediaQuery('(min-width: 1500px)')
+  const big = useMediaQuery('(min-width: 1600px)')
   const picker = useBookPicker()
   // No mount-time refreshLibrary() (1.4.148): it re-read every clip —
   // audio blobs included — from IndexedDB on EVERY visit, and the cost

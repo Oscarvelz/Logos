@@ -62,7 +62,7 @@ export function CreatePage() {
   const elapsed = (Date.now() - job.startedAt) / 1000
   const eta = job.done > 0 ? (elapsed / job.done) * (job.total - job.done) : NaN
 
-  const big = useMediaQuery('(min-width: 1500px)')
+  const big = useMediaQuery('(min-width: 1600px)')
   const generate = () => {
     if (!speakable) { toast(t('Add some words first — punctuation alone has nothing to read')); return }
     const r = queueExport(text, { voice, speed: st.exportSpeed, format: st.format, title, origin: 'create' })

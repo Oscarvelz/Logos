@@ -14,16 +14,16 @@
    real app's 1.4.159 fold): present, quiet, out of the way. */
 .pstage-card.folded { opacity: .45; }
 /* The book's Contents: a sheet on the phone when opened, a pinned
-   side panel past 1100px where it never closes. */
+   side panel past 1200px where it never closes. */
 .pstage-side-toc { display: none; }
 .pstage-side-toc.open { display: block; }
-@media (min-width: 1100px) {
+@media (min-width: 1200px) {
   .pstage-side-toc { display: block; }
 }
 /* The book's info panel: the same two presentations. */
 .pstage-side-info { display: none; }
 .pstage-side-info.open { display: block; }
-@media (min-width: 1100px) {
+@media (min-width: 1200px) {
   .pstage-side-info { display: block; }
 }
 .pstage-editor { width: 100%; min-height: 120px; resize: none; border: 0; outline: none; background: transparent; color: var(--text); font-size: 16px; line-height: 1.55; font-family: inherit; }
@@ -51,7 +51,7 @@
    bottom bar for the rail and grows the desk beside the player. */
 .pstage-rail { display: none; }
 .pstage-desk { display: none; }
-@media (min-width: 1100px) {
+@media (min-width: 1200px) {
   .pstage { padding-left: 226px; }
   /* R2-T6-8 (tablet truth): NO cap — the stage spans the real content
      width beside its rail, as the real app does. The old 860px cap
@@ -129,21 +129,23 @@
 
 /* ── R2-T6-8 — TABLET TRUTH: the stage wears the real app's wide
    arrangements, surface by surface, at the real app's own
-   breakpoints (styles.css: .listen-grid ≥1100, .voice-grid ≥640 /
-   ≥1180, .clips ≥840, .create-grid ≥1100). Below those widths
-   nothing in this section applies and the phone stage is untouched. */
+   breakpoints (styles.css, since 1.4.245's pane system: two panes
+   ≥1200, three ≥1600; .voice-grid ≥640 / ≥1200, .clips ≥840).
+   Below those widths nothing in this section applies and the
+   phone stage is untouched. */
 .pstage-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 .pstage-grid .pstage-card { margin-bottom: 0; }
 @media (min-width: 640px) { .pstage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 1180px) { .pstage-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .pstage-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .pstage-clips { display: grid; gap: 12px; }
 .pstage-clips .pstage-card { margin-bottom: 0; }
 @media (min-width: 840px) { .pstage-clips { grid-template-columns: 1fr 1fr; } }
 
-@media (min-width: 1100px) {
+@media (min-width: 1200px) {
   /* Listen: the real listen-grid — editor/reader in the main column,
-     Continue + player + desk in the side column. Column-definite
-     auto-placement keeps the DOM (and the phone) exactly as it was.
+     Continue + player + desk in the fixed 360 side pane. Column-
+     definite auto-placement keeps the DOM (and the phone) exactly
+     as it was.
      1.4.244: every rule in this section is scoped to the stage —
      the unscoped roots (.listen-page / .create-page as display:grid)
      also matched the REAL pages at ≥1100px and crushed their
@@ -152,26 +154,26 @@
      huddled over a black void). The fiction's roots live inside
      [data-stage-surface] by construction, so the scope costs the
      stage nothing and frees the app. */
-  [data-stage-surface] .listen-page { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr); gap: 16px; align-items: start; }
+  [data-stage-surface] .listen-page { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
   [data-stage-surface] .listen-page > .pstage-eyebrow, [data-stage-surface] .listen-page > .listen-head { grid-column: 1 / -1; }
   [data-stage-surface] .listen-page > .pstage-listen-editor, [data-stage-surface] .listen-page > .pstage-reader, [data-stage-surface] .listen-page > [data-present='listen-back-to-book'] { grid-column: 1; }
   [data-stage-surface] .listen-page > .continue-card, [data-stage-surface] .listen-page > .pstage-player, [data-stage-surface] .listen-page > .pstage-desk { grid-column: 2; }
   [data-stage-surface] .listen-page > .pstage-desk { margin-top: 0; }
   /* Create: the real create-grid — text in the wide column, the
-     options in the narrow one. */
-  [data-stage-surface] .create-page { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(340px, 1fr); gap: 16px; align-items: start; }
+     options in the fixed 360 pane. */
+  [data-stage-surface] .create-page { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
   [data-stage-surface] .create-page > .pstage-eyebrow, [data-stage-surface] .create-page > .pstage-title { grid-column: 1 / -1; }
   [data-stage-surface] .create-page > .pstage-card { margin-bottom: 0; }
   /* Settings: the real page caps at 1180, centred (its .set-cols
      live inside that measure). */
   [data-stage-surface='settings'] > div { max-width: 1180px; margin: 0 auto; }
 }
-@media (min-width: 1500px) {
-  /* The real app's third ladder (styles.css .listen-grid ≥1500):
-     main | 440px player side | 380px desk column. The desk stays
+@media (min-width: 1600px) {
+  /* The real app's third ladder (styles.css .listen-grid ≥1600):
+     main | 380px player side | 360px desk column. The desk stays
      one stacked item — display:contents would un-box the
      desk-tablet anchor and turn AD13's beats into misses. */
-  [data-stage-surface] .listen-page { grid-template-columns: minmax(0, 1fr) 440px 380px; }
+  [data-stage-surface] .listen-page { grid-template-columns: minmax(0, 1fr) 380px 360px; }
   [data-stage-surface] .listen-page > .pstage-desk { grid-column: 3; }
 }
 

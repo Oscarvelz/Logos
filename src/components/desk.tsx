@@ -79,7 +79,7 @@ export function TabletDesk({ onOpen, onVoice }: { onOpen: (text: string) => void
   )
 }
 
-/** Big tablet (≥1500 px): what's in the text, and the reader's books.
+/** Big tablet (≥1600 px): what's in the text, and the reader's books.
     Until 1.4.167 the second card mapped the text's paragraphs — the
     very words already on stage in the main window. Oscar (2026-11-14):
     that column earns its place as his books instead, the ones he

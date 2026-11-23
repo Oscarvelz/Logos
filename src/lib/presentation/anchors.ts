@@ -134,8 +134,8 @@ const PC_SHELL = 'shell present (bubbleSupported() true); in a browser this anch
 const PC_SHEET = 'owning sheet open — the scene performs the opening tap on the door anchor first'
 const PC_MENU = 'item menu open'
 const PC_SELECTION = 'selection mode (480 ms long-press on lib-clip-card or lib-select-toggle)'
-const PC_1500 = '≥1500px only'
-const PC_1100 = '≥1100px only'
+const PC_1600 = '≥1600px only'
+const PC_1200 = '≥1200px only'
 
 /* ------------------------------------------------------------------ */
 /* 1A · Listen — src/pages/ListenPage.tsx unless noted                  */
@@ -241,10 +241,10 @@ const C_CONTRACT: AnchorRecord[] = [
 /* ------------------------------------------------------------------ */
 
 const D_SAVED: AnchorRecord[] = [
-  r('lib-shelf-tabs', 'web', 'MINT', ['C-1'], ['Q4', 'AD6'], DP, { file: LIB, precondition: '<1500px only; replaced by lib-split at ≥1500px' }),
-  r('lib-split', 'web', 'CLASS', ['C-2', 'F-28'], ['AD13'], cls('.lib-split'), { file: LIB, probe: [pr(LIB, 'lib-split')], precondition: PC_1500 }),
-  r('lib-split-saved', 'web', 'MINT', ['F-28'], ['AD13'], DP, { file: LIB, precondition: PC_1500 }),
-  r('lib-split-books', 'web', 'MINT', ['F-28'], ['AD13'], DP, { file: LIB, precondition: PC_1500 }),
+  r('lib-shelf-tabs', 'web', 'MINT', ['C-1'], ['Q4', 'AD6'], DP, { file: LIB, precondition: '<1600px only; replaced by lib-split at ≥1600px' }),
+  r('lib-split', 'web', 'CLASS', ['C-2', 'F-28'], ['AD13'], cls('.lib-split'), { file: LIB, probe: [pr(LIB, 'lib-split')], precondition: PC_1600 }),
+  r('lib-split-saved', 'web', 'MINT', ['F-28'], ['AD13'], DP, { file: LIB, precondition: PC_1600 }),
+  r('lib-split-books', 'web', 'MINT', ['F-28'], ['AD13'], DP, { file: LIB, precondition: PC_1600 }),
   r('lib-head-count', 'web', 'MINT', ['C-3'], ['AD6', 'AD14'], DP, { file: LIB }),
   r('lib-add', 'web', 'MINT', ['C-4', 'C-67'], ['Q4', 'Q5'], DP, { file: LIB }),
   r('lib-select-toggle', 'web', 'MINT', ['C-5', 'C-21'], ['AD6'], DP, { file: LIB }),
@@ -330,11 +330,11 @@ const F_BOOK: AnchorRecord[] = [
   r('book-missing', 'web', 'MINT', ['C-83'], ['AD7'], DP, { file: BOOK }),
   r('book-head-back', 'web', 'MINT', ['C-84'], ['Q5'], DP, { file: BOOK }),
   r('book-head-search', 'web', 'MINT', ['C-84'], ['Q5', 'AD7'], DP, { file: BOOK }),
-  r('book-head-toc', 'web', 'MINT', ['C-84'], ['Q5'], DP, { file: BOOK, precondition: '<1100px only; at ≥1100px it disappears and book-side-toc replaces it' }),
+  r('book-head-toc', 'web', 'MINT', ['C-84'], ['Q5'], DP, { file: BOOK, precondition: '<1200px only; at ≥1200px it disappears and book-side-toc replaces it' }),
   r('book-head-type', 'web', 'MINT', ['C-84'], ['Q5', 'AD7'], DP, { file: BOOK }),
   r('book-eyebrow', 'web', 'MINT', ['C-85'], ['AD7'], DP, { file: BOOK }),
   r('book-block:{i}', 'web', 'EXISTING', ['C-86', 'C-87', 'C-93', 'C-101', 'C-103', 'C-104'], ['Q5', 'AD7', 'AD9'], exa('data-b'), { file: BOOK, family: 'i', probe: [pr(BOOK, "'data-b':", 'bk-${i}')] }),
-  r('book-side-toc', 'web', 'MINT', ['C-88', 'F-26'], ['AD13', 'AD7'], DP, { file: BOOK, precondition: PC_1100 }),
+  r('book-side-toc', 'web', 'MINT', ['C-88', 'F-26'], ['AD13', 'AD7'], DP, { file: BOOK, precondition: PC_1200 }),
   r('book-toc-current', 'web', 'CLASS', ['C-89'], ['AD7'], cls('.bk-toc-i.cur'), { file: BOOK, probe: [pr(BOOK, 'bk-toc-i', "'cur'")] }),
   r('book-toc-tabs', 'web', 'MINT', ['C-90'], ['Q5', 'AD7'], DP, { file: BOOK }),
   r('book-toc-list', 'web', 'MINT', ['C-90'], ['AD7'], DP, { file: BOOK }),
@@ -370,13 +370,13 @@ const F_BOOK: AnchorRecord[] = [
   r('book-type-size-plus', 'web', 'MINT', ['C-114'], ['AD7'], DP, { file: BOOK, precondition: PC_TYPE_SHEET }),
   r('book-type-font', 'web', 'MINT', ['C-115'], ['AD7'], DP, { file: BOOK, precondition: PC_TYPE_SHEET }),
   r('book-type-lines', 'web', 'MINT', ['C-115'], ['AD7'], DP, { file: BOOK, precondition: PC_TYPE_SHEET }),
-  r('book-info', 'web', 'MINT', ['C-116', 'F-29'], ['AD13'], DP, { file: BOOK, precondition: PC_1500 }),
-  r('book-info-listen', 'web', 'MINT', ['C-117'], ['AD13'], DP, { file: BOOK, precondition: PC_1500 }),
-  r('book-info-search', 'web', 'MINT', ['C-117'], ['AD13'], DP, { file: BOOK, precondition: PC_1500 }),
-  r('book-info-type', 'web', 'MINT', ['C-117'], ['AD13'], DP, { file: BOOK, precondition: PC_1500 }),
-  r('book-info-marks', 'web', 'MINT', ['C-118'], ['AD13', 'AD9'], DP, { file: BOOK, precondition: PC_1500 }),
-  r('book-info-stats', 'web', 'MINT', ['C-119'], ['AD13'], DP, { file: BOOK, precondition: PC_1500 }),
-  r('book-info-audiobook', 'web', 'MINT', ['C-120'], ['AD13', 'AD8'], DP, { file: BOOK, precondition: '≥1500px only — there is no phone door; Q5 must never promise it' }),
+  r('book-info', 'web', 'MINT', ['C-116', 'F-29'], ['AD13'], DP, { file: BOOK, precondition: PC_1600 }),
+  r('book-info-listen', 'web', 'MINT', ['C-117'], ['AD13'], DP, { file: BOOK, precondition: PC_1600 }),
+  r('book-info-search', 'web', 'MINT', ['C-117'], ['AD13'], DP, { file: BOOK, precondition: PC_1600 }),
+  r('book-info-type', 'web', 'MINT', ['C-117'], ['AD13'], DP, { file: BOOK, precondition: PC_1600 }),
+  r('book-info-marks', 'web', 'MINT', ['C-118'], ['AD13', 'AD9'], DP, { file: BOOK, precondition: PC_1600 }),
+  r('book-info-stats', 'web', 'MINT', ['C-119'], ['AD13'], DP, { file: BOOK, precondition: PC_1600 }),
+  r('book-info-audiobook', 'web', 'MINT', ['C-120'], ['AD13', 'AD8'], DP, { file: BOOK, precondition: '≥1600px only — there is no phone door; Q5 must never promise it' }),
 ]
 
 /* ------------------------------------------------------------------ */
@@ -439,7 +439,7 @@ const H_CREATE: AnchorRecord[] = [
   r('create-result-share', 'web', 'MINT', ['D-51'], ['AD8'], DP, { file: CREATE }),
   r('create-result-library', 'web', 'MINT', ['D-52'], ['AD8'], DP, { file: CREATE }),
   r('create-result-new', 'web', 'MINT', ['D-52'], ['AD8'], DP, { file: CREATE }),
-  r('create-recordings', 'web', 'MINT', ['D-53', 'F-30'], ['AD13'], DP, { file: DESK, precondition: PC_1500 }),
+  r('create-recordings', 'web', 'MINT', ['D-53', 'F-30'], ['AD13'], DP, { file: DESK, precondition: PC_1600 }),
 ]
 
 /* ------------------------------------------------------------------ */
@@ -556,11 +556,11 @@ const K_SHELL: AnchorRecord[] = [
   r('shell-sheet-scrim', 'web', 'MINT', ['F-37'], ['Engine'], DP, { file: UI }),
   r('shell-toast-region', 'web', 'CLASS', ['F-39'], ['Engine', 'AD6', 'AD14'], cls('.toasts'), { file: UI, probe: [pr(UI, 'toasts')] }),
   r('shell-confirm-host', 'web', 'MINT', ['F-40', 'C-25', 'C-34', 'C-47', 'C-66', 'E-12'], ['AD14', 'AD6', 'AD9'], DP, { file: UI }),
-  r('desk-tablet', 'web', 'MINT', ['F-25'], ['AD13'], DP, { file: DESK, precondition: PC_1100 }),
-  r('desk-book', 'web', 'MINT', ['F-25'], ['AD13'], DP, { file: DESK, precondition: PC_1100 }),
-  r('desk-fav-voices', 'web', 'MINT', ['F-25'], ['AD13'], DP, { file: DESK, precondition: PC_1100 + '; also hidden when viewport height ≤900px' }),
-  r('desk-recent', 'web', 'MINT', ['F-25'], ['AD13'], DP, { file: DESK, precondition: PC_1100 }),
-  r('desk-textmap-stats', 'web', 'MINT', ['F-27'], ['AD13'], DP, { file: DESK, precondition: PC_1500 }),
+  r('desk-tablet', 'web', 'MINT', ['F-25'], ['AD13'], DP, { file: DESK, precondition: PC_1200 }),
+  r('desk-book', 'web', 'MINT', ['F-25'], ['AD13'], DP, { file: DESK, precondition: PC_1200 }),
+  r('desk-fav-voices', 'web', 'MINT', ['F-25'], ['AD13'], DP, { file: DESK, precondition: PC_1200 }),
+  r('desk-recent', 'web', 'MINT', ['F-25'], ['AD13'], DP, { file: DESK, precondition: PC_1200 }),
+  r('desk-textmap-stats', 'web', 'MINT', ['F-27'], ['AD13'], DP, { file: DESK, precondition: PC_1600 }),
   r('desk-textmap-paragraphs', 'web', 'MINT', ['F-27'], ['AD13'], DP, { file: DESK, precondition: 'retired at 1.4.167 — the real card now shows favourite books and carries no mint; no element carries this mint anywhere (the M-36 cure: the record survives so AD13’s beat resolves as a declared miss until the script is refreshed)' }),
 ]
 

@@ -224,8 +224,8 @@ export function ListenPage() {
   // queued text holds the stage, so they never sit dead.
   const queueMode = st.copyQueue && q.items.length > 0
   const queueLive = q.currentId != null
-  const wide = useMediaQuery('(min-width: 1100px)')
-  const big = useMediaQuery('(min-width: 1500px)')
+  const wide = useMediaQuery('(min-width: 1200px)')
+  const big = useMediaQuery('(min-width: 1600px)')
   const remaining = reading ? estimateSeconds(s.segments.slice(s.current).map((g) => g.text).join(' '), st.listenSpeed) : estimateSeconds(text, st.listenSpeed)
 
   return (
