@@ -1,3 +1,18 @@
+## 1.4.244 — The stage's tablet rules stay on the stage (2026-11-22)
+
+Oscar's tablet report: «My tablet look AWFUL. Not optimization whatsoever. The text is not showing, and there are large blank black empty spaces. Horrible looking. Settings is decent but not very well. Listen is full of gaps, as the rest.»
+
+Reproduced on the bench at 1280×800 before touching anything — every word of it, and the mechanism measured in the DOM: on Create, the real `.create-grid` stood 475px wide at the page's right edge, its text column computed at 119px, the placeholder wrapping letter by letter («Wha/t/shou/ld/Logo/s/reco/rd?»); on Listen, the real `.listen-grid` stood 627px wide with the page's remaining ~480px a black void. Settings and Voices were spared — the fingerprint that named the culprit.
+
+The mechanism: the Presentation stage's «TABLET TRUTH» section (presentation-stage.css, R2-T6-8) dresses the stage's fiction pages in the app's wide arrangements. Its child rules name stage-only classes, but its two root rules were never scoped — `.listen-page { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr) }` and the twin `.create-page` rule (plus the ≥1500 three-column template) match the REAL pages too, because the fiction borrows the real pages' own class names. At any window ≥1100px wide the real Listen and Create pages became two-column grids whose first column took the page head and whose second crushed the content grid to its minimum. The phone never saw it (below the breakpoint the section sleeps), and portrait tablets neither — the wide landscape window is the only country it ruled.
+
+The cure: **the whole section is scoped to the stage** — every rule now hangs from `[data-stage-surface]`, where the fiction's roots live by construction (presentation-stage.tsx wraps each surface in its named container). The stage keeps its tablet truth; the real pages fall back to their own wide rules in styles.css, which were correct all along and simply never got to rule. No real-app CSS changed; no stage behaviour changed.
+
+Verified on the bench at 1280×800 and 1920×1200 after the fix: Create's text column takes its wide share with the placeholder on one line, Listen's grid spans the page (text | player + desk, and the three-column ladder at ≥1500), Library and Voices unchanged, Settings untouched. The presentation suites and fences stand as the stage's gates.
+
+- Declared bound: the stage's own wide fiction was verified by its suites and by the scoping's construction (its roots are inside the containers the selectors now require); a guided Presentation walked on a wide screen remains the lane's to eyeball.
+- Presentation impact: the stage's CSS is scoped, its arrangements unchanged — declared to the lane with this wave's relay.
+
 ## 1.4.243 — The lock has a voice (2026-11-22)
 
 Oscar's own closing of the lock evening: «Hay una forma de dejarle saber al usuario de que el candado está puesto y cuáles son las consecuencias de eso, porque si las hubiera tenido, no te hubiera siquiera preguntado, porque siempre fue eso y nunca me di cuenta de ese error.» The lock had been holding his copies in silence — its only receipt was a line in a log no one reads in the moment — and every symptom (the empty line, the unswapped keys, the absent drum) presented as some other part failing.
