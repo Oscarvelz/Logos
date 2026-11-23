@@ -447,7 +447,14 @@ class BubbleService : Service() {
 
         /** The stage lock (Oscar): while on, a fresh copy cannot evict what's playing. */
         fun isLocked(c: Context) = prefs(c).getBoolean("lock", false)
-        fun setLocked(c: Context, on: Boolean) { prefs(c).edit().putBoolean("lock", on).apply() }
+        fun setLocked(c: Context, on: Boolean) { prefs(c).edit().putBoolean("lock", on).apply(); lockHoldTold = false }
+        /** The lock has spoken about a hold since it was last set
+         *  (1.4.243): the first copy it holds back is announced
+         *  aloud; later holds stay silent until the lock is set
+         *  anew — Oscar's ruling after an evening of silent holds:
+         *  the user must be told the lock is on and what it does,
+         *  at the moment it does it. */
+        @Volatile var lockHoldTold = false
 
         /** The one lock over a catch's three facts — its text, its
          *  manual flag and its uncommitted dedupe key (R3-T2-4):
@@ -1061,7 +1068,19 @@ class BubbleService : Service() {
             // last definite press described is being replaced, so no
             // tap may be judged against its ghost.
             clearCommanded()
-            if (!manual && isLocked(c) && !queueModeSeen) { noteTry(c, s("the lock held a copy back", "el candado retuvo una copia")); return }
+            if (!manual && isLocked(c) && !queueModeSeen) {
+                noteTry(c, s("the lock held a copy back", "el candado retuvo una copia"))
+                // The hold speaks (1.4.243): a silent hold cost
+                // Oscar an evening of «the queue doesn't work» —
+                // the lock held every copy and said nothing. The
+                // first hold after each setting of the lock is
+                // announced where he stands; the rest stay silent.
+                if (!lockHoldTold) {
+                    lockHoldTold = true
+                    Toast.makeText(c, s("The stage is locked — a copy was held back", "La escena está bloqueada — una copia fue retenida"), Toast.LENGTH_LONG).show()
+                }
+                return
+            }
             val key = clipKey(text)
             // The dedupe judges against the COMMITTED key — the last
             // catch the page confirmed it pulled, in this process or

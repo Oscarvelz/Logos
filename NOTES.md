@@ -1,3 +1,16 @@
+## 1.4.243 — The lock has a voice (2026-11-22)
+
+Oscar's own closing of the lock evening: «Hay una forma de dejarle saber al usuario de que el candado está puesto y cuáles son las consecuencias de eso, porque si las hubiera tenido, no te hubiera siquiera preguntado, porque siempre fue eso y nunca me di cuenta de ese error.» The lock had been holding his copies in silence — its only receipt was a line in a log no one reads in the moment — and every symptom (the empty line, the unswapped keys, the absent drum) presented as some other part failing.
+
+The cure: **a hold announces itself at the moment it happens.**
+
+- When the stage lock holds a copy back (the queue off — with the queue on there is no hold since 1.4.241), a brief toast stands over whatever screen he is on: «The stage is locked — a copy was held back» / «La escena está bloqueada — una copia fue retenida». The state and its consequence, in one breath, at the only moment they matter.
+- **Once per setting of the lock**: the first hold after the lock is set speaks; later holds stay silent, so copying five texts is not five announcements. Setting the lock again — off and on — arms the voice again (`setLocked` resets the flag; the flag starts unspoken at the service's birth, so a lock left on across a restart also speaks at its first hold).
+- The lock's card keeps the full explanation (1.4.241); the toast is its herald, not its replacement. Nothing else about the lock changes: hand pastes were never held, and are not now.
+
+- Declared bound: shell work — no bench exists for it; the toast rides the same service-context road the blink's «Clipboard is empty» toast already travels. The CI compile is its gate and Oscar's phone the judge.
+- Presentation impact: none — no anchor, surface or copy changes beyond the toast's own sentence.
+
 ## 1.4.242 — The drum stands in both shapes (2026-11-22)
 
 The same night the stage lock starved his queue (1.4.241), Oscar found the speed drum dead: «¿Qué fue lo que hiciste que ahora ni siquiera está funcionando el botón para acelerar el audio o desacelerarlo?» Nothing shipped that day had touched the drum — the mechanism was older and quieter: since 1.4.207 the drum stood only in the panel's QUEUE shape, because there the transport's − and + keys give their seats to the track keys and the rate needed another home. In the normal shape the rate stayed printed inside the counter's line — «Sentence 6 of 26 · 1×» — as dead text, at the very seat where the drum lives in the other shape. With his line empty all evening, the panel never changed shape, and the «1×» he tapped was print, not a control.
