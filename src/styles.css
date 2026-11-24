@@ -87,9 +87,10 @@
 /* ── Tron (1.4.165) ─────────────────────────────────────────
    Light lines on the deep black of the Grid. Cyan #00e5ff is
    the one sovereign light — contours, focus, the brand.
-   Amber #ea9e17 is the light cycle, sampled from the poster —
-   one trace in the field, the return beam, a seam on cards
-   and trays, the spoken word. It never takes the interior. Ares red (--ares) is light
+   Amber #f5c20a is the light cycle's hot core — yellow, not
+   orange. One trace in the field, the return beam, a seam on
+   cards, the spoken word, and a touch at the centre of the
+   spectrum. It never takes the interior. Ares red (--ares) is light
    only, never ink, and rare. A night theme. */
 [data-theme='tron'] {
   --bg: #02060c;
@@ -108,7 +109,8 @@
   --accent-ink: #001319;
   --accent-soft: rgba(0, 229, 255, 0.13);
   --accent-glow: rgba(0, 229, 255, 0.4);
-  --amber: #ea9e17;
+  --amber: #f5c20a;
+  --viz-core: #f5c20a;
   --violet: var(--amber);
   --ares: #ff1e14;
   --fav-first: var(--amber);
@@ -118,7 +120,7 @@
   --shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.8);
   --glass: rgba(4, 16, 29, 0.78);
   --aurora-a: rgba(0, 229, 255, 0.1);
-  --aurora-b: rgba(234, 158, 23, 0.07);
+  --aurora-b: rgba(245, 194, 10, 0.07);
   --sheen: rgba(0, 229, 255, 0.05);
   --font-display: 'Orbitron', 'Manrope Variable', sans-serif;
   --radius-s: 8px;
@@ -127,16 +129,16 @@
   color-scheme: dark;
 }
 [data-theme='tron'] body {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%2300e5ff' stroke-opacity='.15'%3E%3Cpath d='M10 110 H90 L110 90 V30'/%3E%3Cpath d='M210 60 H140 L120 80 V150'/%3E%3Cpath d='M40 210 V160 L60 140 H130'/%3E%3C/g%3E%3Cg fill='none' stroke='%23ea9e17' stroke-opacity='.5'%3E%3Cpath d='M160 210 V178 L188 150 H210'/%3E%3C/g%3E%3Cg fill='%2300e5ff'%3E%3Ccircle cx='110' cy='30' r='2.5' fill-opacity='.4'/%3E%3Ccircle cx='120' cy='150' r='2.5' fill-opacity='.3'/%3E%3Ccircle cx='40' cy='160' r='2' fill-opacity='.35'/%3E%3C/g%3E%3Ccircle cx='188' cy='150' r='2.2' fill='%23ea9e17' fill-opacity='.8'/%3E%3C/svg%3E"), linear-gradient(rgba(0, 229, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 229, 255, 0.04) 1px, transparent 1px);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%2300e5ff' stroke-opacity='.15'%3E%3Cpath d='M10 110 H90 L110 90 V30'/%3E%3Cpath d='M210 60 H140 L120 80 V150'/%3E%3Cpath d='M40 210 V160 L60 140 H130'/%3E%3C/g%3E%3Cg fill='none' stroke='%23f5c20a' stroke-opacity='.5'%3E%3Cpath d='M160 210 V178 L188 150 H210'/%3E%3C/g%3E%3Cg fill='%2300e5ff'%3E%3Ccircle cx='110' cy='30' r='2.5' fill-opacity='.4'/%3E%3Ccircle cx='120' cy='150' r='2.5' fill-opacity='.3'/%3E%3Ccircle cx='40' cy='160' r='2' fill-opacity='.35'/%3E%3C/g%3E%3Ccircle cx='188' cy='150' r='2.2' fill='%23f5c20a' fill-opacity='.8'/%3E%3C/svg%3E"), linear-gradient(rgba(0, 229, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 229, 255, 0.04) 1px, transparent 1px);
   background-size: 220px 220px, 48px 48px, 48px 48px;
 }
 [data-theme='tron'] .card {
   background:
-    linear-gradient(#ea9e17, #ea9e17) 0 0 / 16px 1px no-repeat,
-    linear-gradient(#ea9e17, #ea9e17) 0 0 / 1px 16px no-repeat,
+    linear-gradient(#f5c20a, #f5c20a) 0 0 / 16px 1px no-repeat,
+    linear-gradient(#f5c20a, #f5c20a) 0 0 / 1px 16px no-repeat,
     linear-gradient(180deg, var(--sheen), transparent 46%),
     var(--surface);
-  box-shadow: inset 0 1px 0 rgba(0, 229, 255, 0.2), inset 1px 0 0 rgba(234, 158, 23, 0.55), 0 0 18px rgba(0, 229, 255, 0.045);
+  box-shadow: inset 0 1px 0 rgba(0, 229, 255, 0.2), inset 1px 0 0 rgba(245, 194, 10, 0.55), 0 0 18px rgba(0, 229, 255, 0.045);
 }
 [data-theme='tron'] ::selection { background: rgba(0, 229, 255, 0.35); }
 
@@ -273,10 +275,10 @@
 [data-theme='cyberpunk'] .topbar::before { height: 3px; background: linear-gradient(90deg, transparent, rgba(252, 238, 10, 0.45) 45%, #fcee0a 96%, transparent); }
 [data-theme='tron'] .topbar::after {
   left: 0; bottom: -1px; width: 18%; height: 2px;
-  background: linear-gradient(270deg, transparent, rgba(234, 158, 23, 0.35) 40%, #ea9e17 78%, #ffe7c2 96%, transparent); box-shadow: 0 0 8px rgba(234, 158, 23, 0.55);
+  background: linear-gradient(270deg, transparent, rgba(245, 194, 10, 0.35) 40%, #f5c20a 78%, #ffe7c2 96%, transparent); box-shadow: 0 0 8px rgba(245, 194, 10, 0.55);
 }
 [data-theme='tron'] .nav::before, [data-theme='cyberpunk'] .nav::before { left: 0; top: 0; width: 22%; }
-[data-theme='tron'] .nav::before { height: 1.5px; background: linear-gradient(270deg, transparent, rgba(234, 158, 23, 0.35) 40%, #ea9e17 78%, #ffe7c2 96%, transparent); box-shadow: 0 0 8px rgba(234, 158, 23, 0.55); }
+[data-theme='tron'] .nav::before { height: 1.5px; background: linear-gradient(270deg, transparent, rgba(245, 194, 10, 0.35) 40%, #f5c20a 78%, #ffe7c2 96%, transparent); box-shadow: 0 0 8px rgba(245, 194, 10, 0.55); }
 [data-theme='cyberpunk'] .nav::before { height: 2.5px; background: linear-gradient(270deg, transparent, rgba(255, 42, 109, 0.45) 45%, #ff2a6d 96%, transparent); }
 [data-theme='tron'] .rail::before, [data-theme='cyberpunk'] .rail::before { right: -1px; top: 0; width: 2px; height: 18%; }
 [data-theme='tron'] .rail::before { background: linear-gradient(180deg, transparent, rgba(0, 229, 255, 0.35) 40%, #00e5ff 78%, #ffffff 96%, transparent); box-shadow: 0 0 8px rgba(0, 229, 255, 0.6); }
@@ -284,7 +286,7 @@
 @media (prefers-reduced-motion: no-preference) {
   [data-theme='tron'] .card { transition: box-shadow .35s ease; }
   [data-theme='tron'] .card:hover {
-    box-shadow: inset 0 1px 0 rgba(0, 229, 255, 0.36), inset 1px 0 0 #ea9e17, 0 0 26px rgba(0, 229, 255, 0.1);
+    box-shadow: inset 0 1px 0 rgba(0, 229, 255, 0.36), inset 1px 0 0 #f5c20a, 0 0 26px rgba(0, 229, 255, 0.1);
   }
   [data-theme='tron'] .brand-name { animation: tron-filament 5.5s ease-in-out infinite; }
   [data-theme='tron'] .topbar::before, [data-theme='cyberpunk'] .topbar::before { animation: logos-beam 9.5s cubic-bezier(0.45, 0, 0.25, 1) 1.2s infinite; }
@@ -314,14 +316,14 @@ html[data-hidden] *, html[data-hidden] *::before, html[data-hidden] *::after { a
    desk's picked voices, the far end of a progress. Cyan keeps
    the Grid. Ares red is light only: a living dot, a seam under
    the stage. Error red stays flat ink beside its word. */
-[data-theme='tron'] .fav-btn.on { color: var(--amber); filter: drop-shadow(0 0 5px rgba(234, 158, 23, 0.4)); }
+[data-theme='tron'] .fav-btn.on { color: var(--amber); filter: drop-shadow(0 0 5px rgba(245, 194, 10, 0.4)); }
 [data-theme='tron'] .book-fav { color: var(--amber); }
 [data-theme='tron'] .desk-fav-star { color: var(--amber); }
 [data-theme='tron'] .player-progress > i, [data-theme='tron'] .bk-prog-track i, [data-theme='tron'] .desk-prog i, [data-theme='tron'] .meter i { background: linear-gradient(90deg, var(--accent), var(--amber)); }
-[data-theme='tron'] .desk-voices .chip.accent { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 35%, transparent); background: rgba(234, 158, 23, 0.1); }
-[data-theme='tron'] .bk-link.ext { color: var(--amber); text-decoration-color: rgba(234, 158, 23, 0.5); }
+[data-theme='tron'] .desk-voices .chip.accent { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 35%, transparent); background: rgba(245, 194, 10, 0.1); }
+[data-theme='tron'] .bk-link.ext { color: var(--amber); text-decoration-color: rgba(245, 194, 10, 0.5); }
 [data-theme='tron'] .lh-dot { background: var(--ares); box-shadow: 0 0 10px rgba(255, 30, 20, 0.55); }
-[data-theme='tron'] .player-card { box-shadow: inset 0 1px 0 rgba(0, 229, 255, 0.16), inset 0 -1px 0 rgba(255, 30, 20, 0.38), inset 1px 0 0 rgba(234, 158, 23, 0.55), 0 0 18px rgba(0, 229, 255, 0.045); }
+[data-theme='tron'] .player-card { box-shadow: inset 0 1px 0 rgba(0, 229, 255, 0.16), inset 0 -1px 0 rgba(255, 30, 20, 0.38), inset 1px 0 0 rgba(245, 194, 10, 0.55), 0 0 18px rgba(0, 229, 255, 0.045); }
 
 /* Cyberpunk: magenta is neon, and only there — a favorite, a mark.
    Yellow stays flat ink. Cyan is the instrument's data pip and
@@ -544,7 +546,7 @@ button.set-card-h { width: 100%; background: none; border: 0; padding: 0; cursor
    cyan, the glow contained in the edge. */
 [data-theme='tron'] .set-cluster {
   border-color: rgba(0, 229, 255, .30);
-  box-shadow: inset 2px 0 0 #ea9e17, inset 0 1px 0 rgba(0, 229, 255, .38), inset 0 0 24px rgba(0, 229, 255, .05), 0 1px 2px rgba(0, 0, 0, .4);
+  box-shadow: inset 2px 0 0 #f5c20a, inset 0 1px 0 rgba(0, 229, 255, .38), inset 0 0 24px rgba(0, 229, 255, .05), 0 1px 2px rgba(0, 0, 0, .4);
 }
 /* Cyberpunk prints flat: signal yellow only on the top fillet and
    the tray's name. Corners cut, never rounded into a glow. */
@@ -1067,12 +1069,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .sent.now .w { color: var(--text-2); }
 .sent.now .w.said { color: var(--text); }
 .sent.now .w.cur { color: var(--accent-ink); background: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-/* Tron: the word being spoken is the program's amber, not the Grid's
-   cyan. The chip is #ea9e17; the letters stay dark so they can be read. */
+/* Tron: the light behind the word that is being spoken is a soft
+   yellow amber, not a solid chip. The letters stay the sentence's
+   own ice, so the amber is only the wash behind them. */
 [data-theme='tron'] .sent.now .w.cur {
-  color: #1a1004;
-  background: #ea9e17;
-  box-shadow: 0 0 0 2px #ea9e17, 0 0 12px rgba(234, 158, 23, 0.4);
+  color: var(--text);
+  background: color-mix(in srgb, #f5c20a 32%, #071422);
+  box-shadow: none;
 }
 @media (prefers-reduced-motion: reduce) { .lh-dot { animation: none !important; } }
 .pb-icon { display: grid; place-items: center; animation: pbIn .38s var(--ease) both; }

@@ -2204,7 +2204,7 @@ class BubbleService : Service() {
      *  shade card's artwork, at bubble scale: a fine track, the
      *  theme's accent filling clockwise from the top, a bead at the
      *  frontier. Tron is the exception: the ring is the program's
-     *  amber (#ea9e17), the light cycle on the poster, and the λ stays
+     *  amber (#f5c20a), yellow not orange, and the λ stays
      *  cyan. It exists only while a session stands; with none,
      *  the bubble is exactly the jewel it always was. */
     private inner class RingView : View(this) {
@@ -2217,7 +2217,7 @@ class BubbleService : Service() {
             val f = frac
             if (f < 0f) return
             val fam = themeFam(this@BubbleService)
-            val accent = if (fam == "tron") Color.rgb(234, 158, 23) else facePaint().third
+            val accent = if (fam == "tron") Color.rgb(245, 194, 10) else facePaint().third
             val dens = resources.displayMetrics.density
             val cx = width / 2f; val cy = height / 2f
             val r = bubbleFace() / 2f + 3f * dens
@@ -4504,8 +4504,8 @@ class BubbleService : Service() {
         lastWordsKey = sentKey; lastWi = wi
         val c = pal()
         val ink = c["ink"]!!; val muted = c["muted"]!!; val goldC = c["gold"]!!
-        val wordBg = if (panelFam == "tron") Color.rgb(234, 158, 23) else goldC
-        val onGold = if (panelFam == "tron") Color.rgb(26, 16, 4) else Color.rgb(26, 20, 12)
+        val wordBg = if (panelFam == "tron") Color.argb(82, 245, 194, 10) else goldC
+        val onGold = if (panelFam == "tron") ink else Color.rgb(26, 20, 12)
         val sb = SpannableStringBuilder()
         var wordOff = -1
         if (isTablet() && tp.isNotEmpty()) { val st = sb.length; sb.append(tp).append(" "); sb.setSpan(ForegroundColorSpan(muted), st, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }

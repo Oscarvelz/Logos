@@ -28,12 +28,12 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     let t = 0
     const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e9bd72'
     const accent2 = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#f3d39c'
-    // --viz-edge exists only where a theme gives the waveform an
-    // undertow (Cyberpunk's magenta); elsewhere the edges fall
-    // back to the accent, exactly as before.
+    // --viz-edge is an undertow (Cyberpunk's magenta). --viz-core
+    // is a crest (Tron's yellow). Absent, the wave is the accent.
     const edge = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-edge').trim()
-    let colors = [accent(), accent2(), edge()]
-    const themeObs = new MutationObserver(() => { colors = [accent(), accent2(), edge()] })
+    const core = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-core').trim()
+    let colors = [accent(), accent2(), edge(), core()]
+    const themeObs = new MutationObserver(() => { colors = [accent(), accent2(), edge(), core()] })
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
     let last = 0
@@ -69,13 +69,22 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
       ctx.clearRect(0, 0, w, h)
       const gap = w / bars
       const bw = Math.max(2, gap * 0.52)
-      const key = `${w}|${colors[0]}|${colors[1]}|${colors[2]}`
+      const key = `${w}|${colors[0]}|${colors[1]}|${colors[2]}|${colors[3]}`
       if (!grad || key !== gradKey) {
         gradKey = key
         grad = ctx.createLinearGradient(0, 0, w, 0)
-        grad.addColorStop(0, (colors[2] || colors[0]) + '33')
-        grad.addColorStop(0.5, colors[1])
-        grad.addColorStop(1, (colors[2] || colors[0]) + '33')
+        const edgeCol = (colors[2] || colors[0]) + '33'
+        if (colors[3]) {
+          grad.addColorStop(0, edgeCol)
+          grad.addColorStop(0.34, colors[0])
+          grad.addColorStop(0.5, colors[3])
+          grad.addColorStop(0.66, colors[0])
+          grad.addColorStop(1, edgeCol)
+        } else {
+          grad.addColorStop(0, edgeCol)
+          grad.addColorStop(0.5, colors[1])
+          grad.addColorStop(1, edgeCol)
+        }
       }
       ctx.fillStyle = grad
       // ease toward target at the same speed whatever the frame rate; the centre bar is "now"

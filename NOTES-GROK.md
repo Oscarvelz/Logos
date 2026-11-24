@@ -64,24 +64,34 @@ segundo color de Tron Legacy.
   `#00e5ff`. Los otros temas no cambian.
 - El retiro del aro al terminar la lectura no se toca.
 
+## El ámbar, más amarillo y más suave
+
+Oscar, con el espectro y la palabra: el ámbar salió anaranjado,
+y el resalte detrás de la palabra es un chip sólido. Quiere
+amarillo, no naranja, y el fondo de la palabra más suave.
+
+- `#f5c20a` reemplaza a `#ea9e17` en el token, los circuitos,
+  la barra y el aro del widget.
+- La palabra que avanza, en la página: el fondo es un lavado
+  (`#f5c20a` al 32% sobre el negro de la Red). Las letras siguen
+  en el hielo de la frase. En el panel del widget, el mismo lavado.
+- El espectro, en Tron, lleva ese amarillo solo en el centro de
+  las barras. Los lados siguen en cian.
+
+Abierto: la palabra y el espectro se vieron en el banco. El aro
+y el panel, en el teléfono.
+
+
+
 ## El título, con los dos colores del cartel
 
-Oscar mandó el cartel. Dos medidas salen de él, no de memoria:
+Oscar mandó el cartel. El tubo del letrero es `#00f2ff`. El título
+de la app, solo en Tron, queda en mayúsculas huecas con ese trazo.
+La cara es Orbitron: la construcción del cartel, no su letra.
 
-- El tubo del letrero, `#00f2ff`.
-- El ciclo de luz, `#ea9e17`. El ámbar anterior (`#ff9d2a`) se retira.
+El ciclo se midió primero en `#ea9e17`. Oscar lo corrigió: más
+amarillo, menos naranja. El valor que queda es `#f5c20a`.
 
-El título de la app, solo en Tron (`.brand-name`): mayúsculas
-huecas, trazo cian `#00f2ff`, un bloom corto que respira. La cara
-es Orbitron, la que el tema ya tenía. No es la letra del cartel
-— esa es de Disney y no se copia. Se copia la construcción: tubo,
-sin relleno, cian, abierto. El ámbar no entra en el nombre.
-
-El mismo `#ea9e17` queda en el circuito, en la palabra que suena
-y en el aro del widget.
-
-Abierto: el título se vio en el banco. El aro y la palabra del
-panel se juzgan en el teléfono.
 
 
 
