@@ -28,11 +28,13 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     let t = 0
     const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e9bd72'
     const accent2 = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#f3d39c'
-    // --viz-edge is an undertow where a theme has one (Cyberpunk's
-    // magenta). Otherwise the edges are the accent, quieter.
+    // --viz-edge and --viz-center let a theme paint the wave in one
+    // hue that is not the accent. Tron's player is the cycle amber.
+    // Absent, the wave is the accent, quieter at the edges.
     const edge = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-edge').trim()
-    let colors = [accent(), accent2(), edge()]
-    const themeObs = new MutationObserver(() => { colors = [accent(), accent2(), edge()] })
+    const center = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-center').trim()
+    let colors = [accent(), accent2(), edge(), center()]
+    const themeObs = new MutationObserver(() => { colors = [accent(), accent2(), edge(), center()] })
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
     let last = 0
@@ -68,13 +70,13 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
       ctx.clearRect(0, 0, w, h)
       const gap = w / bars
       const bw = Math.max(2, gap * 0.52)
-      const key = `${w}|${colors[0]}|${colors[1]}|${colors[2]}`
+      const key = `${w}|${colors[0]}|${colors[1]}|${colors[2]}|${colors[3]}`
       if (!grad || key !== gradKey) {
         gradKey = key
         grad = ctx.createLinearGradient(0, 0, w, 0)
         const edgeCol = (colors[2] || colors[0]) + '33'
         grad.addColorStop(0, edgeCol)
-        grad.addColorStop(0.5, colors[1])
+        grad.addColorStop(0.5, colors[3] || colors[1])
         grad.addColorStop(1, edgeCol)
       }
       ctx.fillStyle = grad
