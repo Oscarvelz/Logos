@@ -64,5 +64,24 @@ segundo color de Tron Legacy.
   `#00e5ff`. Los otros temas no cambian.
 - El retiro del aro al terminar la lectura no se toca.
 
-Abierto: el shell no tiene banco. El teléfono de Oscar es el juez.
+## El título, con los dos colores del cartel
+
+Oscar mandó el cartel. Dos medidas salen de él, no de memoria:
+
+- El tubo del letrero, `#00f2ff`.
+- El ciclo de luz, `#ea9e17`. El ámbar anterior (`#ff9d2a`) se retira.
+
+El título de la app, solo en Tron (`.brand-name`): mayúsculas
+huecas, trazo cian `#00f2ff`, un bloom corto que respira. La cara
+es Orbitron, la que el tema ya tenía. No es la letra del cartel
+— esa es de Disney y no se copia. Se copia la construcción: tubo,
+sin relleno, cian, abierto. El ámbar no entra en el nombre.
+
+El mismo `#ea9e17` queda en el circuito, en la palabra que suena
+y en el aro del widget.
+
+Abierto: el título se vio en el banco. El aro y la palabra del
+panel se juzgan en el teléfono.
+
+
 
