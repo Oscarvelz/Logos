@@ -1,13 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { levels, listen } from '../player/listen.ts'
 
-function hexAlpha(hex: string, a: number) {
-  const h = hex.replace('#', '')
-  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16)
-  if (!Number.isFinite(n)) return hex
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
-}
-
 /**
  * Mirrored-bar visualizer. Reads the real loudness envelope of the sentence
  * being played (computed from the synthesized PCM, so it keeps working when the
@@ -35,13 +28,11 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     let t = 0
     const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e9bd72'
     const accent2 = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#f3d39c'
-    // --viz-edge is an undertow (Cyberpunk's magenta). --viz-core
-    // is Tron's amber. It is never blended with the cyan — that
-    // mix is green. The amber is a filament inside the tube.
+    // --viz-edge is an undertow where a theme has one (Cyberpunk's
+    // magenta). Otherwise the edges are the accent, quieter.
     const edge = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-edge').trim()
-    const core = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-core').trim()
-    let colors = [accent(), accent2(), edge(), core()]
-    const themeObs = new MutationObserver(() => { colors = [accent(), accent2(), edge(), core()] })
+    let colors = [accent(), accent2(), edge()]
+    const themeObs = new MutationObserver(() => { colors = [accent(), accent2(), edge()] })
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
     let last = 0
@@ -77,22 +68,19 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
       ctx.clearRect(0, 0, w, h)
       const gap = w / bars
       const bw = Math.max(2, gap * 0.52)
-      const crest = colors[3]
-      if (!crest) {
-        const key = `${w}|${colors[0]}|${colors[1]}|${colors[2]}`
-        if (!grad || key !== gradKey) {
-          gradKey = key
-          grad = ctx.createLinearGradient(0, 0, w, 0)
-          const edgeCol = (colors[2] || colors[0]) + '33'
-          grad.addColorStop(0, edgeCol)
-          grad.addColorStop(0.5, colors[1])
-          grad.addColorStop(1, edgeCol)
-        }
-        ctx.fillStyle = grad
+      const key = `${w}|${colors[0]}|${colors[1]}|${colors[2]}`
+      if (!grad || key !== gradKey) {
+        gradKey = key
+        grad = ctx.createLinearGradient(0, 0, w, 0)
+        const edgeCol = (colors[2] || colors[0]) + '33'
+        grad.addColorStop(0, edgeCol)
+        grad.addColorStop(0.5, colors[1])
+        grad.addColorStop(1, edgeCol)
       }
+      ctx.fillStyle = grad
       // ease toward target at the same speed whatever the frame rate; the centre bar is "now"
       const k = 1 - Math.pow(1 - (live ? 0.45 : 0.12), dt * 30)
-      if (!crest) ctx.beginPath()
+      ctx.beginPath()
       for (let i = 0; i < bars; i++) {
         shown[i] += (target[i] - shown[i]) * k
         const center = 1 - Math.abs(i - bars / 2) / (bars / 2)
@@ -100,29 +88,9 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
         const bh = Math.max(3, amp * (h - 6))
         const x = i * gap + (gap - bw) / 2
         const y = (h - bh) / 2
-        if (!crest) {
-          ctx.roundRect(x, y, bw, bh, bw / 2)
-          continue
-        }
-        // Cyan tube, quieter toward the edges. The amber is a
-        // filament inside it: same bar, both lights, hard edge,
-        // so the two never mix into green. Quiet ticks stay cyan.
-        const a = 0.42 + 0.58 * center
-        ctx.fillStyle = hexAlpha(colors[0], a)
-        ctx.beginPath()
         ctx.roundRect(x, y, bw, bh, bw / 2)
-        ctx.fill()
-        if (bh < h * 0.16) continue
-        const frameY = Math.max(1.6, bh * 0.16)
-        const fh = bh - frameY * 2
-        const fw = Math.max(1.4, bw * 0.42)
-        if (fh < 3) continue
-        ctx.fillStyle = crest
-        ctx.beginPath()
-        ctx.roundRect(x + (bw - fw) / 2, y + frameY, fw, fh, fw / 2)
-        ctx.fill()
       }
-      if (!crest) ctx.fill()
+      ctx.fill()
     }
     draw()
     return () => { cancelAnimationFrame(raf); themeObs.disconnect() }

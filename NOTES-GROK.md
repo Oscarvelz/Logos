@@ -64,15 +64,21 @@ segundo color de Tron Legacy.
   `#00e5ff`. Los otros temas no cambian.
 - El retiro del aro al terminar la lectura no se toca.
 
-## El filamento, y el fondo de la frase
+## Una sola luz en el reproductor
 
-Las tapas ámbar en la cresta se veían pobres. El ámbar ahora es
-un filamento dentro de cada tubo cian: los dos colores en la
-misma barra, sin mezclarse. Las barras bajas siguen solo en cian.
+Los otros temas integran un color: el espectro va del tono quieto
+en los bordes al tono vivo en el centro, y la barra es ese mismo
+color. Tron mezclaba cian y ámbar y salía verde.
 
-La frase que suena estaba premarcada en cian, y solo la palabra
-llevaba ámbar. El fondo de esa frase pasa a un ámbar más bajo,
-`#5c4a1a`, el mismo tono que la palabra `#9a7e28`, más suave.
+El espectro y la barra de Tron vuelven a esa integración, en cian
+hacia su hielo (`--accent` a `--accent-2`). El ámbar no entra en
+el instrumento. Sigue en el programa: un favorito, una costura,
+la palabra.
+
+La frase bajo la palabra es un ámbar transparente, al 12%. El
+título, en Tron, respira y una vez cada once segundos se parte
+un instante, como el letrero de la película. Con reducción de
+movimiento, quieto.
 
 ## El título, con los dos colores del cartel
 
