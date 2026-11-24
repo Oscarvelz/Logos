@@ -36,9 +36,8 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e9bd72'
     const accent2 = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#f3d39c'
     // --viz-edge is an undertow (Cyberpunk's magenta). --viz-core
-    // is Tron's amber. It is not mixed into the cyan: a blend of the
-    // two is green, which neither light is. The body stays cyan.
-    // The amber is a cap on the crest only.
+    // is Tron's amber. It is never blended with the cyan — that
+    // mix is green. The amber is a filament inside the tube.
     const edge = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-edge').trim()
     const core = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-core').trim()
     let colors = [accent(), accent2(), edge(), core()]
@@ -105,20 +104,22 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
           ctx.roundRect(x, y, bw, bh, bw / 2)
           continue
         }
-        // Cyan tube. Quieter toward the edges, so the wave has a
-        // body. No second hue in the shaft.
-        const a = 0.38 + 0.62 * center
+        // Cyan tube, quieter toward the edges. The amber is a
+        // filament inside it: same bar, both lights, hard edge,
+        // so the two never mix into green. Quiet ticks stay cyan.
+        const a = 0.42 + 0.58 * center
         ctx.fillStyle = hexAlpha(colors[0], a)
         ctx.beginPath()
         ctx.roundRect(x, y, bw, bh, bw / 2)
         ctx.fill()
-        // Amber only on the crest: a short cap, hard against the
-        // cyan, never blended. Quiet ticks stay cyan.
-        if (bh < h * 0.22) continue
-        const capH = Math.min(3, Math.max(1.75, bw * 0.55))
+        if (bh < h * 0.16) continue
+        const frameY = Math.max(1.6, bh * 0.16)
+        const fh = bh - frameY * 2
+        const fw = Math.max(1.4, bw * 0.42)
+        if (fh < 3) continue
         ctx.fillStyle = crest
         ctx.beginPath()
-        ctx.roundRect(x, y, bw, capH, Math.min(bw / 2, capH / 2))
+        ctx.roundRect(x + (bw - fw) / 2, y + frameY, fw, fh, fw / 2)
         ctx.fill()
       }
       if (!crest) ctx.fill()

@@ -64,20 +64,15 @@ segundo color de Tron Legacy.
   `#00e5ff`. Los otros temas no cambian.
 - El retiro del aro al terminar la lectura no se toca.
 
-## El espectro, sin verde
+## El filamento, y el fondo de la frase
 
-El ámbar pintado a lo ancho de las barras se mezclaba con el cian
-y salía verde. Eso se retira.
+Las tapas ámbar en la cresta se veían pobres. El ámbar ahora es
+un filamento dentro de cada tubo cian: los dos colores en la
+misma barra, sin mezclarse. Las barras bajas siguen solo en cian.
 
-El cuerpo de cada barra es cian, más quieto hacia los bordes. El
-ámbar `#f5c20a` es solo una tapa corta en las barras que superan
-la cresta. Las barras bajas siguen en cian. No hay mezcla de los
-dos colores.
-
-La palabra que avanza llevaba un lavado que, sobre el cian de la
-frase, se veía oliva. Ahora el fondo es un ámbar más bajo
-(`#9a7e28`, el amarillo al 22% no se leía). Filo fino `#f5c20a`.
-Las letras siguen en el hielo de la frase.
+La frase que suena estaba premarcada en cian, y solo la palabra
+llevaba ámbar. El fondo de esa frase pasa a un ámbar más bajo,
+`#5c4a1a`, el mismo tono que la palabra `#9a7e28`, más suave.
 
 ## El título, con los dos colores del cartel
 
