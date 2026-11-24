@@ -1,6 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { levels, listen } from '../player/listen.ts'
 
+function hexAlpha(hex: string, a: number) {
+  const h = hex.replace('#', '')
+  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16)
+  if (!Number.isFinite(n)) return hex
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
+}
+
 /**
  * Mirrored-bar visualizer. Reads the real loudness envelope of the sentence
  * being played (computed from the synthesized PCM, so it keeps working when the
@@ -29,7 +36,9 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e9bd72'
     const accent2 = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#f3d39c'
     // --viz-edge is an undertow (Cyberpunk's magenta). --viz-core
-    // is a crest (Tron's yellow). Absent, the wave is the accent.
+    // is Tron's amber. It is not mixed into the cyan: a blend of the
+    // two is green, which neither light is. The body stays cyan.
+    // The amber is a cap on the crest only.
     const edge = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-edge').trim()
     const core = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-core').trim()
     let colors = [accent(), accent2(), edge(), core()]
@@ -69,27 +78,22 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
       ctx.clearRect(0, 0, w, h)
       const gap = w / bars
       const bw = Math.max(2, gap * 0.52)
-      const key = `${w}|${colors[0]}|${colors[1]}|${colors[2]}|${colors[3]}`
-      if (!grad || key !== gradKey) {
-        gradKey = key
-        grad = ctx.createLinearGradient(0, 0, w, 0)
-        const edgeCol = (colors[2] || colors[0]) + '33'
-        if (colors[3]) {
-          grad.addColorStop(0, edgeCol)
-          grad.addColorStop(0.34, colors[0])
-          grad.addColorStop(0.5, colors[3])
-          grad.addColorStop(0.66, colors[0])
-          grad.addColorStop(1, edgeCol)
-        } else {
+      const crest = colors[3]
+      if (!crest) {
+        const key = `${w}|${colors[0]}|${colors[1]}|${colors[2]}`
+        if (!grad || key !== gradKey) {
+          gradKey = key
+          grad = ctx.createLinearGradient(0, 0, w, 0)
+          const edgeCol = (colors[2] || colors[0]) + '33'
           grad.addColorStop(0, edgeCol)
           grad.addColorStop(0.5, colors[1])
           grad.addColorStop(1, edgeCol)
         }
+        ctx.fillStyle = grad
       }
-      ctx.fillStyle = grad
       // ease toward target at the same speed whatever the frame rate; the centre bar is "now"
       const k = 1 - Math.pow(1 - (live ? 0.45 : 0.12), dt * 30)
-      ctx.beginPath()
+      if (!crest) ctx.beginPath()
       for (let i = 0; i < bars; i++) {
         shown[i] += (target[i] - shown[i]) * k
         const center = 1 - Math.abs(i - bars / 2) / (bars / 2)
@@ -97,9 +101,27 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
         const bh = Math.max(3, amp * (h - 6))
         const x = i * gap + (gap - bw) / 2
         const y = (h - bh) / 2
+        if (!crest) {
+          ctx.roundRect(x, y, bw, bh, bw / 2)
+          continue
+        }
+        // Cyan tube. Quieter toward the edges, so the wave has a
+        // body. No second hue in the shaft.
+        const a = 0.38 + 0.62 * center
+        ctx.fillStyle = hexAlpha(colors[0], a)
+        ctx.beginPath()
         ctx.roundRect(x, y, bw, bh, bw / 2)
+        ctx.fill()
+        // Amber only on the crest: a short cap, hard against the
+        // cyan, never blended. Quiet ticks stay cyan.
+        if (bh < h * 0.22) continue
+        const capH = Math.min(3, Math.max(1.75, bw * 0.55))
+        ctx.fillStyle = crest
+        ctx.beginPath()
+        ctx.roundRect(x, y, bw, capH, Math.min(bw / 2, capH / 2))
+        ctx.fill()
       }
-      ctx.fill()
+      if (!crest) ctx.fill()
     }
     draw()
     return () => { cancelAnimationFrame(raf); themeObs.disconnect() }

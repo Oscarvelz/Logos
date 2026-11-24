@@ -4504,7 +4504,7 @@ class BubbleService : Service() {
         lastWordsKey = sentKey; lastWi = wi
         val c = pal()
         val ink = c["ink"]!!; val muted = c["muted"]!!; val goldC = c["gold"]!!
-        val wordBg = if (panelFam == "tron") Color.argb(82, 245, 194, 10) else goldC
+        val wordBg = if (panelFam == "tron") Color.rgb(154, 126, 40) else goldC
         val onGold = if (panelFam == "tron") ink else Color.rgb(26, 20, 12)
         val sb = SpannableStringBuilder()
         var wordOff = -1

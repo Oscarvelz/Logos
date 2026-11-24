@@ -64,24 +64,20 @@ segundo color de Tron Legacy.
   `#00e5ff`. Los otros temas no cambian.
 - El retiro del aro al terminar la lectura no se toca.
 
-## El ámbar, más amarillo y más suave
+## El espectro, sin verde
 
-Oscar, con el espectro y la palabra: el ámbar salió anaranjado,
-y el resalte detrás de la palabra es un chip sólido. Quiere
-amarillo, no naranja, y el fondo de la palabra más suave.
+El ámbar pintado a lo ancho de las barras se mezclaba con el cian
+y salía verde. Eso se retira.
 
-- `#f5c20a` reemplaza a `#ea9e17` en el token, los circuitos,
-  la barra y el aro del widget.
-- La palabra que avanza, en la página: el fondo es un lavado
-  (`#f5c20a` al 32% sobre el negro de la Red). Las letras siguen
-  en el hielo de la frase. En el panel del widget, el mismo lavado.
-- El espectro, en Tron, lleva ese amarillo solo en el centro de
-  las barras. Los lados siguen en cian.
+El cuerpo de cada barra es cian, más quieto hacia los bordes. El
+ámbar `#f5c20a` es solo una tapa corta en las barras que superan
+la cresta. Las barras bajas siguen en cian. No hay mezcla de los
+dos colores.
 
-Abierto: la palabra y el espectro se vieron en el banco. El aro
-y el panel, en el teléfono.
-
-
+La palabra que avanza llevaba un lavado que, sobre el cian de la
+frase, se veía oliva. Ahora el fondo es un ámbar más bajo
+(`#9a7e28`, el amarillo al 22% no se leía). Filo fino `#f5c20a`.
+Las letras siguen en el hielo de la frase.
 
 ## El título, con los dos colores del cartel
 

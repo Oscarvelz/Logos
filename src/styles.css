@@ -1069,13 +1069,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .sent.now .w { color: var(--text-2); }
 .sent.now .w.said { color: var(--text); }
 .sent.now .w.cur { color: var(--accent-ink); background: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-/* Tron: the light behind the word that is being spoken is a soft
-   yellow amber, not a solid chip. The letters stay the sentence's
-   own ice, so the amber is only the wash behind them. */
+/* Tron: the wash behind the spoken word is a lower amber than
+   the cycle's hot yellow. Warm and opaque, so the cyan of the
+   sentence cannot turn it olive. Quieter than the solid chip.
+   The letters stay the ice of the line. */
 [data-theme='tron'] .sent.now .w.cur {
   color: var(--text);
-  background: color-mix(in srgb, #f5c20a 32%, #071422);
-  box-shadow: none;
+  background: #9a7e28;
+  box-shadow: inset 0 0 0 1px rgba(245, 194, 10, 0.45);
 }
 @media (prefers-reduced-motion: reduce) { .lh-dot { animation: none !important; } }
 .pb-icon { display: grid; place-items: center; animation: pbIn .38s var(--ease) both; }
