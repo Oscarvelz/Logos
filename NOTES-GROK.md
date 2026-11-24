@@ -52,7 +52,17 @@ magenta `#ff2a6d` solo como neón.
   fotogramas cada 9 segundos. El resto del tiempo la marca está
   limpia. Con reducción de movimiento, nada de eso corre.
 
-### Abierto
+## El aro del widget, en Tron
 
-No verificado en el teléfono de Oscar. El banco de aquí compiló
-el tipo; el dispositivo sigue siendo el juez.
+Oscar, con una foto del aro cian alrededor de la λ: el aro de
+progreso del widget flotante, en Tron, tiene que ser ámbar — el
+segundo color de Tron Legacy.
+
+- `android/.../BubbleService.kt`, `RingView`. La pista, el arco y
+  la cuenta del frente usan `#ff9d2a` (255, 157, 42) solo cuando
+  la familia es Tron. La λ y el filo de la esfera siguen en cian
+  `#00e5ff`. Los otros temas no cambian.
+- El retiro del aro al terminar la lectura no se toca.
+
+Abierto: el shell no tiene banco. El teléfono de Oscar es el juez.
+

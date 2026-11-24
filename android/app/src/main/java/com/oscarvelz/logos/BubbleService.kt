@@ -2203,7 +2203,9 @@ class BubbleService : Service() {
      *  progress around the λ's face — the same instrument as the
      *  shade card's artwork, at bubble scale: a fine track, the
      *  theme's accent filling clockwise from the top, a bead at the
-     *  frontier. It exists only while a session stands; with none,
+     *  frontier. Tron is the exception: the ring is the program's
+     *  amber (#ff9d2a), the Grid's second light, and the λ stays
+     *  cyan. It exists only while a session stands; with none,
      *  the bubble is exactly the jewel it always was. */
     private inner class RingView : View(this) {
         var frac = -1f
@@ -2214,7 +2216,8 @@ class BubbleService : Service() {
         override fun onDraw(c: Canvas) {
             val f = frac
             if (f < 0f) return
-            val accent = facePaint().third
+            val fam = themeFam(this@BubbleService)
+            val accent = if (fam == "tron") Color.rgb(255, 157, 42) else facePaint().third
             val dens = resources.displayMetrics.density
             val cx = width / 2f; val cy = height / 2f
             val r = bubbleFace() / 2f + 3f * dens
