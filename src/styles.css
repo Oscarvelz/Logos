@@ -111,7 +111,7 @@
   --accent-glow: rgba(0, 229, 255, 0.4);
   --amber: #f5c20a;
   --viz-edge: #f5c20a;
-  --viz-center: #ffe9a0;
+  --viz-center: #fff4c2;
   --violet: var(--amber);
   --ares: #ff1e14;
   --fav-first: var(--amber);
@@ -324,11 +324,17 @@
 }
 html[data-hidden] *, html[data-hidden] *::before, html[data-hidden] *::after { animation-play-state: paused !important; }
 
-/* Tron: the listening instrument is one amber, the cycle.
-   The room — grid, title, buttons — stays cyan. */
-[data-theme='tron'] .player-progress { background: #3a3416; }
-[data-theme='tron'] .player-progress > i { background: #f5c20a; }
-[data-theme='tron'] .scrub-thumb { background: #ffe9a0; box-shadow: 0 0 0 4px rgba(245, 194, 10, 0.35); }
+/* Tron: the listening instrument mixes the two lights. Cyan on
+   the left, amber on the right, and a bright meeting between
+   them so the blend does not turn green. */
+[data-theme='tron'] .player-progress { background: #102028; }
+[data-theme='tron'] .player-progress > i {
+  background: linear-gradient(90deg, #00e5ff 0%, #7aefff 30%, #ffffff 48%, #ffe7a0 64%, #f5c20a 100%);
+}
+[data-theme='tron'] .scrub-thumb {
+  background: #fff6d4;
+  box-shadow: 0 0 0 4px rgba(245, 194, 10, 0.28);
+}
 [data-theme='tron'] .fav-btn.on { color: var(--amber); filter: drop-shadow(0 0 5px rgba(245, 194, 10, 0.4)); }
 [data-theme='tron'] .book-fav { color: var(--amber); }
 [data-theme='tron'] .desk-fav-star { color: var(--amber); }

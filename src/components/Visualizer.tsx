@@ -28,9 +28,11 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
     let t = 0
     const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e9bd72'
     const accent2 = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#f3d39c'
-    // --viz-edge and --viz-center let a theme paint the wave in one
-    // hue that is not the accent. Tron's player is the cycle amber.
-    // Absent, the wave is the accent, quieter at the edges.
+    // --viz-edge and --viz-center together mean the wave is a mix of
+    // two lights (Tron: cyan into amber). The middle stop is the
+    // bright meeting, so the blend does not pass through green.
+    // An edge alone is an undertow (Cyberpunk). Otherwise the wave
+    // is the accent, quieter at the sides.
     const edge = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-edge').trim()
     const center = () => getComputedStyle(document.documentElement).getPropertyValue('--viz-center').trim()
     let colors = [accent(), accent2(), edge(), center()]
@@ -75,9 +77,17 @@ export function Visualizer({ bars = 48 }: { bars?: number }) {
         gradKey = key
         grad = ctx.createLinearGradient(0, 0, w, 0)
         const edgeCol = (colors[2] || colors[0]) + '33'
-        grad.addColorStop(0, edgeCol)
-        grad.addColorStop(0.5, colors[3] || colors[1])
-        grad.addColorStop(1, edgeCol)
+        if (colors[2] && colors[3]) {
+          grad.addColorStop(0, colors[0])
+          grad.addColorStop(0.3, '#7aefff')
+          grad.addColorStop(0.48, '#ffffff')
+          grad.addColorStop(0.64, '#ffe7a0')
+          grad.addColorStop(1, colors[2])
+        } else {
+          grad.addColorStop(0, edgeCol)
+          grad.addColorStop(0.5, colors[1])
+          grad.addColorStop(1, edgeCol)
+        }
       }
       ctx.fillStyle = grad
       // ease toward target at the same speed whatever the frame rate; the centre bar is "now"

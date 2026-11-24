@@ -64,17 +64,12 @@ segundo color de Tron Legacy.
   `#00e5ff`. Los otros temas no cambian.
 - El retiro del aro al terminar la lectura no se toca.
 
-## Un solo ámbar
+## Las dos luces, en degradado
 
-Oscar eligió el mockup. El reproductor de Tron es el ciclo, de
-punta a punta, como el oro en Legacy: una sola luz.
-
-- El espectro: ámbar quieto en los bordes, `#ffe9a0` en el centro.
-- La barra: fondo `#3a3416`, recorrido `#f5c20a`, cabeza `#ffe9a0`.
-- El cian se queda en la sala: grilla, título, botones.
-
-La frase sigue en ámbar transparente y la palabra en `#9a7e28`.
-El título sigue partiéndose un instante cada once segundos.
+El ámbar solo no le gustó. El espectro y la barra de audio
+vuelven a juntar el cian y el ámbar, pero el cruce es claro:
+cian, hielo, un blanco cálido, ámbar. El medio no pasa por el
+verde. La cabeza de la barra es ese blanco, `#fff6d4`.
 
 ## El título, con los dos colores del cartel
 
