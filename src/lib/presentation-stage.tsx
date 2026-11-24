@@ -1106,7 +1106,7 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
           <strong>Appearance</strong>
           <p className="pstage-note">The light of the room.</p>
           <div className="pstage-row"><span>Legacy</span><span className="pstage-grow" /><span className="pstage-note">Charcoal and gold — the original.</span></div>
-          <div className="pstage-row"><span>Tron</span><span className="pstage-grow" /><span className="pstage-note">Light lines on the deep black of the Grid.</span></div>
+          <div className="pstage-row"><span>Tron</span><span className="pstage-grow" /><span className="pstage-note">Cyan light and amber programs on the Grid.</span></div>
           <div className="pstage-row"><span>Cyberpunk</span><span className="pstage-grow" /><span className="pstage-note">Signal yellow print on warm black.</span></div>
           <div className="pstage-row"><span data-present="set-theme">Legacy mode</span><span className="pstage-grow" /><span>Dark</span></div>
         </div>

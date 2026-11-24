@@ -50,7 +50,7 @@ export const ES: Record<string, string> = {
   'Legacy': 'Legacy',
   'Legacy mode': 'Modo Legacy',
   'Charcoal and gold — the original.': 'Carbón y dorado — el original.',
-  'Light lines on the deep black of the Grid.': 'Líneas de luz sobre el negro profundo de la Red.',
+  'Cyan light and amber programs on the Grid.': 'Luz cian y programas ámbar sobre la Red.',
   'Signal yellow print on warm black.': 'Amarillo señal impreso sobre negro cálido.',
   'Lock slider': 'Bloquear la barra',
   'Unlock slider': 'Desbloquear la barra',

@@ -540,7 +540,7 @@ export function SettingsPage() {
       <div className="list">
         {([
           { id: 'legacy', name: t('Legacy'), desc: t('Charcoal and gold — the original.'), sw: ['#17130c', '#e9bd72'] },
-          { id: 'tron', name: 'Tron', desc: t('Light lines on the deep black of the Grid.'), sw: ['#02060c', '#00e5ff', '#ff1e14'] },
+          { id: 'tron', name: 'Tron', desc: t('Cyan light and amber programs on the Grid.'), sw: ['#02060c', '#00e5ff', '#ff9d2a'] },
           { id: 'cyberpunk', name: 'Cyberpunk', desc: t('Signal yellow print on warm black.'), sw: ['#0b0a08', '#fcee0a', '#ff2a6d'] },
         ] as const).map((th) => {
           const fam = st.theme === 'tron' ? 'tron' : st.theme === 'cyberpunk' ? 'cyberpunk' : 'legacy'
