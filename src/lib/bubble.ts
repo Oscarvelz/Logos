@@ -858,8 +858,20 @@ export function initBubble() {
     try {
       const raw = d.bubbleClip?.() ?? ''
       if (!raw) return
-      const { t } = JSON.parse(raw) as { t?: string }
-      if (t?.trim() && !judgeArrival(t)) playClipboardText(t)
+      const { t, m } = JSON.parse(raw) as { t?: string; m?: boolean }
+      const text = t?.trim()
+      if (!text) return
+      // A hand paste (m: the shell marks a delivery the finger asked
+      // for) with the queue OFF lands at once (1.4.248, from Grok's
+      // lane, commit 2a9c4ce0): the finger asked, so no arrival judge
+      // stands in its way — not even when the words are the same as
+      // the last catch's, which the shell's own dedupe may already
+      // have let through as a fresh delivery. With the queue ON the
+      // hand paste still lines up at the tail like every arrival
+      // (Oscar's law, 1.4.239): judgeArrival is its door, and the
+      // manual mark buys it nothing there.
+      if (m && !settings.get().copyQueue) { playClipboardText(text); return }
+      if (!judgeArrival(text)) playClipboardText(text)
     } catch { /* ignore */ }
   }
   addEventListener('logosandroid-clip', pullClip)
@@ -1038,8 +1050,13 @@ export function initBubble() {
     try {
       const raw = d.bubbleClip?.() ?? ''
       if (!raw) return
-      const { t } = JSON.parse(raw) as { t?: string }
-      if (t?.trim() && clipKey(t.trim()) !== lastClip && !judgeArrival(t)) playClipboardText(t)
+      const { t, m } = JSON.parse(raw) as { t?: string; m?: boolean }
+      const text = t?.trim()
+      // The hand paste that opened the app (1.4.248): its manual mark
+      // outranks the same-words gate below — the finger asked for
+      // these very words again. With the queue on it still lines up
+      // (1.4.239), so the mark only speaks when the queue is off.
+      if (text && ((m && !settings.get().copyQueue) || (clipKey(text) !== lastClip && !judgeArrival(text)))) playClipboardText(text)
     } catch { /* ignore */ }
   }, 1200)
 

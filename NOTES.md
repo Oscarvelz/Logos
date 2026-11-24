@@ -1,3 +1,13 @@
+## 1.4.248 — The hand paste lands at once (Grok's lane, integrated verified)
+
+The first change to arrive from Grok's lane (`grok-lane`, commit 2a9c4ce0, on a base of 1.4.247) — reviewed file by file against canon, corrected at one point, and integrated here; the lane's first attempt (a shortcut in the visibility handler, where a hand ask already landed at once) changed no behaviour and was not carried over, and the law comments it had trimmed stand restored.
+
+What was wrong, in Oscar's report of 2026-11-22: the panel's paste key could die in silence — no tray, no play. One of its silent deaths lived in the page: the shell has always marked a hand-asked delivery with a manual flag (`m`, written by takeClip in BubbleService) and the page never read it, so a stored hand paste was judged like any automatic arrival — and at the page's birth pull, a hand paste of the very words heard last was discarded by the same-words gate outright.
+
+The cure, as integrated: both stored-catch pulls (the clip pull and the birth pull) now read the manual mark. With the copy queue OFF, a hand paste plays at once, even when its words are identical to the last catch's — the finger asked. With the queue ON, the integration adds the guard the lane's patch lacked: the hand paste still lines up at the tail through the arrival judge, as Oscar's copy-order law (1.4.239) commands — the manual mark buys it nothing there, and nothing jumps the line. Automatic arrivals are judged exactly as before, and the replace question (1.4.192) is untouched.
+
+Web-only: the shell already writes the mark, so no Android change rides with this wave. The page roads are bridge-fed and cannot be exercised by the bench harness; the change is verified by construction, the full gates, and the judge test for the copy-order law — Oscar's phone is the final judge, with the test from his own report: copy a text, hear it, copy the same text again, tap the panel's paste key — it must play again at once.
+
 ## 1.4.247 — The stage's Settings learns the list-detail
 
 The Presentation stage's fiction is the app's true form or it teaches a Settings that no longer exists — so the fiction follows the app into list-detail (1.4.246), at the same tier and in the same shape. At 1200px and wider, the stage's Settings surface stands with the five trays as a list at the left and the seated tray's cards as the detail beside it; below the tier, the trays stack exactly as before, and on the phone nothing changes.
