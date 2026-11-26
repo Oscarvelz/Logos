@@ -13,16 +13,20 @@ import { createStore } from './store.ts'
 export const navPin = createStore<{ pinned: boolean }>({ pinned: false })
 
 /**
- * The lowered player (1.4.250, Oscar): the same left seat of the
- * transport, at the hours when nothing plays. The pin's deed
- * belongs to the playing hours; Oscar asked for the key to stand
- * in the quiet ones too — tapped there, it lowers the player:
- * the card folds its upper furniture away (chips, spectrum,
- * scrubber, notes) and the text window above takes the freed
- * room, which is what the key is FOR («para ensanchar la ventana
- * de arriba»). Tapped again, the player rises whole. It clears
- * itself when playback starts, the pin's own law mirrored: the
- * listening face is always the whole face, and lowering is a
- * writing-hours choice he makes again with one tap.
+ * The lowered player (1.4.250, Oscar; the deed corrected by his
+ * own word in 1.4.251): the same left seat of the transport, at
+ * the hours when nothing plays. The pin's deed belongs to the
+ * playing hours; Oscar asked for the key to stand in the quiet
+ * ones too — tapped there, it lowers the WHOLE player, intact:
+ * the desk below the player hides, the app goes immersive (the
+ * bottom bar slides away, as it does for a reading), and the
+ * player settles into the freed bottom while the text window
+ * above takes everything — «ensanchar la ventana de arriba».
+ * (250 first shipped a fold of the card's own furniture; Oscar
+ * corrected it the same night: not smaller — lower.) Tapped
+ * again, everything returns. It clears itself when playback
+ * starts, the pin's own law mirrored: the listening hours wear
+ * their own arrangement, and lowering is a writing-hours choice
+ * he makes again with one tap.
  */
 export const playerLow = createStore<{ lowered: boolean }>({ lowered: false })

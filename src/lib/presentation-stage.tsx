@@ -956,7 +956,7 @@ const STAGE_SETTING_INDEX: { anchor: string; title: string; sub: string; keys: s
   { anchor: 'set-card-language', title: 'Language', sub: 'The app’s own words — everything on screen.', keys: 'english español spanish idioma lenguaje inglés' },
   { anchor: 'set-presentations', title: 'Presentations', sub: 'Learn the whole app, guided, at your pace', keys: 'lessons tour guided learn presentaciones lecciones aprender guía' },
   { anchor: 'set-backup', title: 'Backup', sub: 'Your books, marks, dictionary and settings in one file', keys: 'export import file copy clips library copia respaldo exportar importar archivo biblioteca' },
-  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.250 · private, on-device text-to-speech', keys: 'version about acerca versión' },
+  { anchor: 'set-about', title: 'About Logos', sub: 'Version 1.4.251 · private, on-device text-to-speech', keys: 'version about acerca versión' },
 ]
 
 function StageSettings({ scenario }: { scenario: Scenario }) {
@@ -1152,8 +1152,8 @@ function StageSettings({ scenario }: { scenario: Scenario }) {
 
       <div className="pstage-card" data-present="set-about" data-tray="data">
         <strong>About Logos</strong>
-        <p className="pstage-note">Version 1.4.250 · private, on-device text-to-speech</p>
-        <p className="pstage-note" data-present="set-version">Version 1.4.250</p>
+        <p className="pstage-note">Version 1.4.251 · private, on-device text-to-speech</p>
+        <p className="pstage-note" data-present="set-version">Version 1.4.251</p>
       </div>
     </div>
   )

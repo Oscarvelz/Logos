@@ -6,7 +6,7 @@ import { t, applyUiLang } from './lib/i18n.ts'
 import { listen, installMediaSession } from './player/listen.ts'
 import { initBubble } from './lib/bubble.ts'
 import { initResumeTracking } from './lib/resume.ts'
-import { navPin } from './lib/navpin.ts'
+import { navPin, playerLow } from './lib/navpin.ts'
 import { isModelCached, ensureModel, lastLoadCrashed, removeLegacyEngine, removeKokoroCaches } from './engine/engine.ts'
 import { refreshLibrary } from './lib/library.ts'
 import { BottomNav, SideRail, StatusPill, MiniPlayer, BubbleMark } from './components/chrome.tsx'
@@ -68,10 +68,25 @@ export default function App() {
   // never starts an animation; showing is immediate. Ended, errors (playing goes
   // false) and leaving Listen all bring the nav back.
   const pin = useStore(navPin)
-  const immersive = route === 'listen' && s.playing && !s.error && !pin.pinned
+  const low = useStore(playerLow)
+  // 1.4.251 (Oscar): the lowered player borrows the same immersive
+  // house — with the player lowered in the quiet hours, the bottom
+  // bar slides away exactly as it does for a reading, and the
+  // player settles into its place. The pin still vetoes both.
+  const immersive = route === 'listen' && !pin.pinned && ((s.playing && !s.error) || low.lowered)
   // The pin (1.4.115) is a per-playing-session courtesy: when the audio
   // stops, it clears, so the next play starts immersive as designed.
   useEffect(() => { if (!s.playing && navPin.get().pinned) navPin.set({ pinned: false }) }, [s.playing])
+  // The lowered player's rail (1.4.251): the rail stands outside the
+  // page, so the lowered state is announced at the root, where the
+  // stylesheet can slide it away and let the page widen over its
+  // seat — the five seats (Listen, Voices, Create, Library,
+  // Settings) hide on the tablet too, not only the phone's bar.
+  useEffect(() => {
+    const root = document.documentElement
+    if (low.lowered && route === 'listen') root.dataset.playerLow = '1'
+    else delete root.dataset.playerLow
+  }, [low.lowered, route])
   useEffect(() => {
     const root = document.documentElement
     if (!immersive) { delete root.dataset.immersive; return }

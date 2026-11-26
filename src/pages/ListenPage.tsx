@@ -235,7 +235,7 @@ export function ListenPage() {
   const remaining = reading ? estimateSeconds(s.segments.slice(s.current).map((g) => g.text).join(' '), st.listenSpeed) : estimateSeconds(text, st.listenSpeed)
 
   return (
-    <div className="page wide listen-page">
+    <div className="page wide listen-page" data-player-low={low.lowered ? '1' : undefined}>
       <ListenHead text={reading ? s.text : text} lang={lang} playing={s.playing && reading} remaining={remaining} />
 
       {/* Phone: while anything sounds in the main listening area, the
@@ -289,7 +289,7 @@ export function ListenPage() {
         </div>
 
         <div className="listen-side">
-        <div className={`card player-card${low.lowered && !s.playing ? ' lowered' : ''}`}>
+        <div className="card player-card">
           {/* 1.4.59: back to one row (Oscar: two rows grew the player and shrank
               the text window) — the four chips fit by being smaller, not taller. */}
           <div className="player-top">
@@ -337,10 +337,13 @@ export function ListenPage() {
                 bar back (the player glides up) without stopping the
                 reading; tapped again, the bar slides away once more.
                 1.4.250 (Oscar): the seat stands in the quiet hours
-                too — with nothing playing, the same key lowers the
-                player (its card folds its upper furniture away) so
-                the text window above widens, and raises it back.
-                One seat, two hours, each hour's deed in its words. */}
+                too. 1.4.251 (his correction): the deed there is to
+                lower the WHOLE player, intact — the desk below it
+                hides, the app goes immersive (the bottom bar
+                slides away), and the player settles at the bottom
+                while the text window above widens; tapped again,
+                everything returns. One seat, two hours, each
+                hour's deed in its words. */}
             {s.playing
               ? <button className="icon-btn" data-present="listen-nav-pin" onClick={() => navPin.set({ pinned: !pin.pinned })} aria-label={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')} title={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')}>{pin.pinned ? <PanelBottomClose size={20} /> : <PanelBottomOpen size={20} />}</button>
               : <button className="icon-btn" data-present="listen-nav-pin" onClick={() => playerLow.set({ lowered: !low.lowered })} aria-label={t(low.lowered ? 'Raise the player' : 'Lower the player')} title={t(low.lowered ? 'Raise the player' : 'Lower the player')}>{low.lowered ? <PanelBottomOpen size={20} /> : <PanelBottomClose size={20} />}</button>}

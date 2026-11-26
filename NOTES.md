@@ -1,3 +1,34 @@
+## 1.4.251 — The lowered player, corrected: the whole player goes down, the desk and the bar hide
+
+Oscar's correction of 1.4.250, the same night: «No era reducir,
+prácticamente eliminar el espectro o la parte de arriba del
+reproductor. Era simplemente bajar todo el reproductor y
+esconder el escritorio de abajo.» 250 folded the player card's
+own furniture; that reading was mine, and it is reverted whole.
+
+- The quiet-hours key now lowers the WHOLE player, intact —
+  chips, spectrum, scrubber and all. The desk below the player
+  (the TabletDesk in the side column) hides, and the app goes
+  immersive exactly as it does for a reading: the bottom bar —
+  Listen, Voices, Create, Library, Settings — slides away and
+  the player settles into the freed bottom. In the wide side
+  column the player stack settles at the column's foot. The
+  text window above takes everything they leave: that widening
+  was the point of the key from the start.
+- The mechanism rides the house's own immersive law: App's
+  immersive condition gains the lowered state beside the
+  playing one, and the pin still vetoes both. The desk's
+  hiding and the side column's settling are two rules keyed to
+  the page's data-player-low seat. Nothing of the card itself
+  is folded, hidden or shrunk.
+- The key, its seat, its faces and its words are 250's,
+  unchanged; the fold clears itself when playback starts, as
+  before.
+
+Presentation impact: none beyond 250's relay — the
+listen-nav-pin contract (the seat stands always; a deed per
+hour) is unchanged; only the quiet-hours deed's mechanism was
+corrected, and the lane is told.
 ## 1.4.250 — The player's left key stands in the quiet hours too: lower the player, widen the text window
 
 Oscar's ask (2026-11-25, with photos): the transport's left key —
