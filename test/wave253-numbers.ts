@@ -43,8 +43,10 @@ eq(spanishDecimals('Trajo 1, 200 no; trajo todo.'), 'Trajo 1, 200 no; trajo todo
 // The clock in his message stands (colon time, untouched by every rule).
 eq(spanishDecimals('Cerró a las 09:11 en punto.'), 'Cerró a las 09:11 en punto.', '09:11 untouched')
 
-// The whole road, both languages.
-eq(speakable('Hay 1,200 piezas.', 'es'), 'Hay 1.200 piezas.', 'speakable es rewrites thousands')
+// The whole road, both languages. (The Spanish line is judged
+// again at 1.4.254: the format is first normalized — 1,200 →
+// 1.200 — and then spelled out in words with its gender kept.)
+eq(speakable('Hay 1,200 piezas.', 'es'), 'Hay mil doscientas piezas.', 'speakable es: thousands normalized, then words (254)')
 eq(speakable('There are 1,200 pieces.', 'en'), 'There are 1,200 pieces.', 'speakable en untouched')
 
 console.log(fails === 0 ? 'ALL PASS' : `${fails} FAILURES`)

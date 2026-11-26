@@ -633,6 +633,90 @@ export function spanishDecimals(text: string): string {
     .replace(/(?<![\d.,])(\d+)\.(\d{2})(?!\d|\.\d)/g, '$1,$2')
 }
 
+/**
+ * Spanish number words (1.4.254, Oscar): the engine reads a
+ * bare «590» as «cinco noventa» and «1.200 piezas» with the
+ * masculine «doscientos» — it neither composes the hundreds
+ * nor keeps the noun's gender. So a Spanish segment's integers
+ * (up to 999,999) are spelled out in words before the voice
+ * sees them, composed whole (590 → «quinientos noventa») and
+ * agreeing with what they count: the hundreds and a final
+ * «uno» take the feminine before a feminine noun («mil
+ * doscientas piezas», «veintiuna piezas»), the apocope before
+ * a masculine one («veintiún libros», «treinta y un días»).
+ * The gender is read from the article before the number when
+ * there is one, else from the noun after it — its ending, the
+ * feminine suffixes, and the common exceptions (día, problema
+ * are masculine; mano, noche, calle are feminine). With no
+ * sign either way the citation form stands, as Spanish itself
+ * defaults. Decimals keep their digit form (252's deed),
+ * times, dates, version chains, ranges and percents stand as
+ * written, and digit strings longer than six are left to be
+ * read as the codes they usually are.
+ */
+const ES_ONES = ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
+const ES_10_29 = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve', 'veinte', 'veintiuno', 'veintidós', 'veintitrés', 'veinticuatro', 'veinticinco', 'veintiséis', 'veintisiete', 'veintiocho', 'veintinueve']
+const ES_TENS = ['', '', '', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa']
+const ES_HUND = ['', 'cien', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos']
+const ES_FEM_ART = new Set(['la', 'las', 'una', 'unas', 'esta', 'estas', 'esa', 'esas', 'aquella', 'aquellas', 'nuestra', 'nuestras', 'vuestra', 'vuestras'])
+const ES_MASC_ART = new Set(['el', 'los', 'un', 'unos', 'este', 'estos', 'ese', 'esos', 'aquel', 'aquellos', 'nuestro', 'nuestros', 'vuestro', 'vuestros'])
+const ES_MASC_A = new Set(['día', 'días', 'mapa', 'mapas', 'problema', 'problemas', 'sistema', 'sistemas', 'tema', 'temas', 'programa', 'programas', 'idioma', 'idiomas', 'clima', 'climas', 'planeta', 'planetas', 'poeta', 'poetas', 'sofá', 'sofás', 'fantasma', 'fantasmas', 'diploma', 'diplomas', 'síntoma', 'síntomas', 'drama', 'dramas', 'esquema', 'esquemas'])
+const ES_FEM_WORDS = new Set(['mano', 'manos', 'foto', 'fotos', 'moto', 'motos', 'mujer', 'mujeres', 'noche', 'noches', 'calle', 'calles', 'clase', 'clases', 'parte', 'partes', 'tarde', 'tardes', 'vez', 'veces', 'gente', 'piel', 'sal', 'miel', 'flor', 'flores', 'labor', 'labores', 'cruz', 'cruces', 'sangre', 'leche', 'carne', 'suerte', 'muerte'])
+type EsCtx = 'cite' | 'm' | 'f'
+function esOne(u: number, ctx: EsCtx): string {
+  if (u !== 1) return ES_ONES[u]
+  return ctx === 'f' ? 'una' : ctx === 'm' ? 'un' : 'uno'
+}
+function esUnder100(n: number, ctx: EsCtx): string {
+  if (n < 10) return esOne(n, ctx)
+  if (n < 30) {
+    if (n === 21) return ctx === 'f' ? 'veintiuna' : ctx === 'm' ? 'veintiún' : 'veintiuno'
+    return ES_10_29[n - 10]
+  }
+  const t = Math.floor(n / 10), u = n % 10
+  return u === 0 ? ES_TENS[t] : `${ES_TENS[t]} y ${esOne(u, ctx)}`
+}
+function esUnder1000(n: number, ctx: EsCtx): string {
+  const h = Math.floor(n / 100), r = n % 100
+  if (h === 0) return esUnder100(n, ctx)
+  if (h === 1) return r === 0 ? 'cien' : `ciento ${esUnder100(r, ctx)}`
+  const hw = ctx === 'f' ? ES_HUND[h].replace(/os$/, 'as') : ES_HUND[h]
+  return r === 0 ? hw : `${hw} ${esUnder100(r, ctx)}`
+}
+function esWords(n: number, fem: boolean, beforeNoun: boolean): string {
+  if (n === 0) return 'cero'
+  const fin: EsCtx = fem ? 'f' : beforeNoun ? 'm' : 'cite'
+  const th = Math.floor(n / 1000), rest = n % 1000
+  const parts: string[] = []
+  if (th === 1) parts.push('mil')
+  else if (th > 1) parts.push(`${esUnder1000(th, fem ? 'f' : 'm')} mil`)
+  if (rest > 0) parts.push(esUnder1000(rest, fin))
+  return parts.join(' ')
+}
+function esFeminine(prev: string | undefined, next: string | undefined): boolean {
+  if (prev && ES_FEM_ART.has(prev)) return true
+  if (prev && ES_MASC_ART.has(prev)) return false
+  if (!next) return false
+  if (ES_FEM_WORDS.has(next)) return true
+  if (ES_MASC_A.has(next)) return false
+  if (/(?:ción|sión|dad|tad|tud|umbre|ez)$/.test(next)) return true
+  return /as?$/.test(next)
+}
+const ES_NOT_NOUN = new Set(['en', 'de', 'del', 'a', 'al', 'con', 'por', 'para', 'y', 'o', 'que', 'como', 'cuando', 'donde', 'entre', 'sobre', 'hasta', 'desde', 'sin', 'tras', 'más', 'muy', 'ya', 'no', 'se', 'lo', 'son', 'es', 'era', 'fue', 'han', 'hay', 'quedan', 'quedan', 'llegan', 'pesa', 'cuesta', 'cuestan', 'vale', 'valen', 'mide', 'miden'])
+export function spanishNumberWords(text: string): string {
+  return text.replace(/(?<![\d.,:\/-])(\d{1,3}(?:\.\d{3})+|\d+)(?!\d|\.\d|,\d|:\d|\/\d|-\d|%|°|º|ª)/g,
+    (m, tok: string, offset: number, whole: string) => {
+      const digits = tok.replace(/\./g, '')
+      if (digits.length > 6) return m
+      const prev = whole.slice(0, offset).match(/([\p{L}]+)\s*$/u)?.[1]?.toLowerCase()
+      const next = whole.slice(offset + m.length).match(/^\s+([\p{L}]+)/u)?.[1]?.toLowerCase()
+      // The apocope («veintiún») belongs only before a noun: a
+      // function word after the number leaves the citation form.
+      const beforeNoun = !!next && !ES_NOT_NOUN.has(next)
+      return esWords(parseInt(digits, 10), esFeminine(prev, next), beforeNoun)
+    })
+}
+
 export function speakable(text: string, lang?: Lang): string {
   // 1.4.57 pronunciation layer: a code the voice would spell out character by
   // character for ten seconds is named once ("code"), never read — and machine
@@ -642,7 +726,7 @@ export function speakable(text: string, lang?: Lang): string {
   // a Spanish reading announced "link" mid-sentence while the code
   // substitution right above it was already language-aware.
   const LINK = lang === 'es' ? 'enlace' : 'link'
-  const prepared = lang === 'es' ? spanishDecimals(expandAbbrev(text, lang)) : expandAbbrev(text, lang)
+  const prepared = lang === 'es' ? spanishNumberWords(spanishDecimals(expandAbbrev(text, lang))) : expandAbbrev(text, lang)
   const out = prepared
     .replace(/\*\*|__|~~|`+/g, '')
     .replace(/(^|\s)[*_](?=\S)|(?<=\S)[*_](?=\s|$|[.,;:!?])/g, '$1')

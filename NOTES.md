@@ -1,3 +1,40 @@
+## 1.4.254 — The numbers are read whole, with their gender kept
+
+Oscar's order (2026-11-26): the audio engine must read
+keeping the gender of the word, and must read the numbers
+below the thousands whole — «en lugar de decir cinco noventa,
+que lea quinientos noventa» — and his example: «1,200 piezas»
+is «mil doscientas piezas», with the feminine.
+
+The engine composes neither the hundreds nor the agreement
+on its own, so a Spanish segment's integers are spelled out
+in words before the voice sees them, in the same seat as
+252/253 (speakable(), Spanish segments only, after the format
+normalization): spanishNumberWords() composes 0–999,999 whole
+(590 → «quinientos noventa», 12,345 → «doce mil trescientos
+cuarenta y cinco») and agrees with what is counted — the
+hundreds and a final «uno» take the feminine before a
+feminine noun, the apocope before a masculine one. The
+gender is read from the article before the number when there
+is one, else from the noun after it (ending, feminine
+suffixes, the common exceptions: día/problema masculine,
+mano/noche/calle feminine). The apocope belongs only before
+a noun — «hay 21» stays «veintiuno».
+
+Fences: decimals keep their digit form (252's deed); times,
+dates, version chains, ranges and percents stand as written;
+digit strings longer than six stand (they are codes, not
+counts); with no gender sign either way the citation form
+stands, as Spanish itself defaults; English segments are
+never rewritten. The displayed text is untouched — only the
+spoken text is spelled out.
+
+Judged by test/wave254-numbers.ts (22/22, his specimens
+verbatim), with the 252 and 253 benches re-run green beside
+it (253's whole-road line re-judged to the new truth: the
+format is normalized first, then spelled out).
+
+Presentation impact: none.
 ## 1.4.253 — The mirror training: «1,200 piezas» stops reading as «1 coma doscientos»
 
 Oscar's report (2026-11-26, with his photo of a message of
