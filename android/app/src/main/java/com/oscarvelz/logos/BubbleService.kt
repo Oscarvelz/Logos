@@ -516,6 +516,22 @@ class BubbleService : Service() {
          *  restart — from prefs (T2-7). */
         fun committedClipKey(c: Context): String? =
             lastKey ?: prefs(c).getString("lastClipKey", null)?.also { lastKey = it }
+        /** Fresh, for the bubble's tap (1.4.255): the page has
+         *  never confirmed pulling this exact text, so the hand
+         *  has not heard it yet. A re-copy of the very same words
+         *  is indistinguishable from the copy already heard —
+         *  content is the only witness a background reader gets —
+         *  so it is NOT fresh, and the tap opens the panel, where
+         *  the paste key plays even the same words again (248). */
+        fun isFreshCatch(c: Context, text: String): Boolean = clipKey(text) != committedClipKey(c)
+        /** The tap's own catch (1.4.255): armed by a bubble tap
+         *  while the queue is off, for the blink that tap
+         *  launched. deliverFromClip spends it: a catch that is
+         *  empty or not fresh falls back to the panel instead of
+         *  playing. Zero when no tap catch is armed. */
+        @Volatile var tapCatchAt = 0L
+        /** Set by the service instance: a tap catch fell back. */
+        var onTapFallback: (() -> Unit)? = null
         /** A waiting catch died unconfirmed (its twenty seconds ran
          *  out at the Bridge): its uncommitted key dies with it, so
          *  the text can be copied and delivered fresh (T2-7/T2-13). */
@@ -1177,6 +1193,16 @@ class BubbleService : Service() {
             blinkInFlight = false
             val manual = pendingManual
             pendingManual = false
+            // The tap's own catch answers to the tap (1.4.255):
+            // the arm is spent here, once — an empty catch or one
+            // the page already pulled is not the fresh copy the
+            // tap promised to play, so the tap falls back to its
+            // old deed and opens the panel: no toast, no delivery.
+            if (tapCatchAt > 0L) {
+                val armed = System.currentTimeMillis() - tapCatchAt <= 5_000
+                tapCatchAt = 0L
+                if (armed && (text.isEmpty() || !isFreshCatch(c, text))) { onTapFallback?.invoke(); return }
+            }
             if (text.isEmpty()) {
                 noteTry(c, s("the blink found the clipboard empty", "el parpadeo vio el portapapeles vacío"))
                 if (manual) Toast.makeText(c, s("Clipboard is empty", "El portapapeles está vacío"), Toast.LENGTH_SHORT).show()
@@ -2065,6 +2091,7 @@ class BubbleService : Service() {
         }
         lookHook = { applyLook() }
         onDelivery = { armDeliveryWatch(); armNativeFallback() }
+        onTapFallback = { if (panel == null) togglePanel() }
         NativeSpeaker.listener = {
             refreshPanel()
             // The page half of H-12 (WR-1): every native transition
@@ -2492,7 +2519,7 @@ class BubbleService : Service() {
                     hideTargets()
                     when {
                         longHit -> { longHit = false }
-                        !moved -> togglePanel()
+                        !moved -> tapBubble()
                         target == 0 -> stopBubble()
                         target == 1 -> {
                             settleBubble(v, p)
@@ -2747,6 +2774,66 @@ class BubbleService : Service() {
     }
 
     private var outsideClosedAt = 0L
+
+    /** The tap's two deeds (1.4.255, Oscar): with the copy queue
+     *  OFF, a tap on the bubble plays the freshly copied text at
+     *  once — «copio, toco la burbuja y comienzo a darle play» —
+     *  with no paste key in between, as it worked before. Fresh
+     *  means the page has never pulled this exact text; a tap
+     *  with nothing fresh waiting keeps the tap's old deed and
+     *  opens the panel. With the queue ON the tap substitutes
+     *  nothing: it opens the panel, where the paste key asks
+     *  first (1.4.249). A tap while the panel stands closes it,
+     *  as always. If the shell's queue witness is stale the page
+     *  still judges the delivery by its own law — a manual catch
+     *  with the queue on lines up at the tail, never substitutes
+     *  (248/249) — so both stale directions land safe. */
+    private fun tapBubble() {
+        if (panel != null || queueModeSeen) { togglePanel(); return }
+        trySource = "the tap"
+        val direct = readClipboard(this)
+        if (direct.isNotEmpty()) {
+            if (isFreshCatch(this, direct)) deliver(this, direct, true) else togglePanel()
+            return
+        }
+        // The direct read saw nothing — a background service
+        // reads empty without focus — so the blink reads it
+        // under its brief focus, armed as the tap's own catch,
+        // with the panel as its fallback: deliverFromClip spends
+        // the arm, and if no catch lands within the beat the
+        // fallback below opens the panel. (readClip's own manual
+        // road is not reused: its floor opens the app itself,
+        // which is not the tap's deed.)
+        val now = System.currentTimeMillis()
+        if (blinkInFlight && now - blinkAt < 5_000) { togglePanel(); return }
+        lastTrampoline = now
+        blinkInFlight = true
+        blinkAt = now
+        pendingManual = true
+        tapCatchAt = now
+        val before = deliveries
+        handler.postDelayed({
+            if (tapCatchAt > 0L && deliveries == before) {
+                tapCatchAt = 0L
+                if (panel == null) togglePanel()
+            }
+        }, 1600)
+        runCatching {
+            val intent = Intent(this, ClipActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            val pi = if (android.os.Build.VERSION.SDK_INT >= 34) {
+                val opts = ActivityOptions.makeBasic()
+                    .setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+                    .toBundle()
+                PendingIntent.getActivity(this, 31, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT, opts)
+            } else {
+                PendingIntent.getActivity(this, 31, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            }
+            pi.send()
+        }.onFailure {
+            blinkInFlight = false
+            if (tapCatchAt > 0L) { tapCatchAt = 0L; if (panel == null) togglePanel() }
+        }
+    }
 
     private fun togglePanel() {
         if (panel != null) { collapsePanel(); return }

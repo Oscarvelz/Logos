@@ -1,3 +1,43 @@
+## 1.4.255 — The bubble's tap plays the fresh copy (queue off)
+
+Oscar's ask (2026-11-26): the floating button itself should
+play the freshly copied audio with just a tap, as before —
+no paste key in between — whenever the copy queue is OFF.
+With the queue ON, the tap substitutes nothing and the copy
+button keeps asking (1.4.249's deed, untouched).
+
+The tap's two deeds (BubbleService.tapBubble, the ACTION_UP
+tap branch now lands here instead of togglePanel):
+
+- Queue OFF, panel closed: the tap reads the clipboard (the
+  direct read, or the blink when the direct read sees nothing
+  without focus). A FRESH catch — one the page has never
+  confirmed pulling, judged against the committed key
+  (isFreshCatch) — is delivered as a manual catch at once:
+  the page's hand-paste road (248) plays it immediately,
+  replacing the stage, no card. A catch that is not fresh,
+  an empty clipboard, or a blink that never lands falls back
+  to the tap's old deed: the panel opens. The blink road is
+  the tap's own (tapCatchAt, spent by deliverFromClip): its
+  fallback is the panel, never readClip's app-opening floor.
+- Queue ON, or the panel already standing: the tap is
+  exactly what it was — it opens or closes the panel.
+
+The declared bound: freshness is judged by content, the
+only witness a background reader has — copying the very
+same words again is indistinguishable from the copy already
+heard, so that tap opens the panel, where the paste key
+plays even the same words again (248). And if the shell's
+queue witness (queueModeSeen) is stale, the page still
+judges the delivery by its own law: a manual catch with the
+queue on lines up at the tail and substitutes nothing, so
+both stale directions land safe.
+
+Shell only — no bench exists for the shell; CI's compile is
+the gate and Oscar's phone the judge, as with every shell
+wave.
+
+Presentation impact: none.
 ## 1.4.254 — The numbers are read whole, with their gender kept
 
 Oscar's order (2026-11-26): the audio engine must read
