@@ -1,3 +1,36 @@
+## 1.4.253 — The mirror training: «1,200 piezas» stops reading as «1 coma doscientos»
+
+Oscar's report (2026-11-26, with his photo of a message of
+mine): the Spanish voice interposes a comma in English-shaped
+thousands — «1,200» comes out «1 coma doscientos» instead of
+«mil doscientos», and «2,352» comes out «2 coma 352» instead
+of «dos mil trescientos cincuenta y dos». «Ese es un error de
+lectura.»
+
+The mirror of 1.4.252, in the same seat (speakable(), Spanish
+segments only): an English thousands group — a comma followed
+by exactly three digits, in chain — is rewritten with the
+Spanish thousands dot before the voice sees it.
+
+- 1,200 → 1.200; 2,352 → 2.352; 1,234,567 → 1.234.567.
+- The order inside the rule keeps the crossings apart: the
+  full English money shape first (1,234.56 → 1234,56, from
+  252), then the thousands commas, then the dot decimals
+  (2.00 → 2,00, from 252).
+- The Spanish forms are never touched: a comma with one or
+  two digits after it is a Spanish decimal (2,00 and 2,5
+  stand), 1.234,56 stands, 2.000 stands — and the decimal
+  rule cannot eat a thousands dot this rule just wrote.
+  Malformed groups (1,2000), comma-space lists and colon
+  times (09:11) stand as written. English segments are never
+  rewritten.
+
+Judged by test/wave253-numbers.ts (13/13, his specimens
+verbatim) with 252's bench re-run green beside it. The proof
+is the text the voice receives; the phone's ear is the final
+judge, as always.
+
+Presentation impact: none.
 ## 1.4.252 — The voice stops reading «2.00 dólares» as two thousand
 
 Oscar's report (2026-11-26, with his photo): «Esta cifra la lee

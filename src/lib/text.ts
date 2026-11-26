@@ -608,21 +608,28 @@ export function expandAbbrev(text: string, lang?: Lang): string {
 }
 
 /**
- * Spanish decimals (1.4.252, Oscar): in Spanish the dot is the
- * thousands separator and the comma the decimal one — but texts
- * pasted from English sources carry the English form, and the
- * voice reads «2.00 dólares» as two THOUSAND dollars. A Spanish
- * segment's English-shaped decimals are rewritten to the Spanish
- * form before the voice sees them: the full English money shape
- * first (1,234.56 → 1234,56), then the plain dot decimal with
+ * Spanish decimals (1.4.252, Oscar) and thousands (1.4.253,
+ * Oscar): in Spanish the dot is the thousands separator and the
+ * comma the decimal one — but texts pasted from English sources
+ * carry the English forms, and the voice misreads both ways:
+ * «2.00 dólares» comes out as two THOUSAND dollars, and «1,200
+ * piezas» comes out as «1 coma doscientos» instead of «mil
+ * doscientos». A Spanish segment's English-shaped numbers are
+ * rewritten to the Spanish form before the voice sees them, in
+ * this order: the full English money shape first (1,234.56 →
+ * 1234,56), then the English thousands commas (1,200 → 1.200;
+ * 1,234,567 → 1.234.567), then the plain dot decimal with
  * exactly two fraction digits (2.00 → 2,00). The Spanish forms
- * are never touched: 2.000 stays two thousand, 1.234,56 stays as
- * written, and a dot with one digit or three-plus is left alone —
- * only the shape that gets misread is rewritten.
+ * are never touched: 2.000 stays two thousand, 1.234,56 and
+ * 2,00 stay as written — a comma with one or two digits after
+ * it is a Spanish decimal, never a thousands group — and a dot
+ * with one digit or three-plus is left alone. Only the shapes
+ * that get misread are rewritten.
  */
 export function spanishDecimals(text: string): string {
   return text
     .replace(/(?<![\d.,])(\d{1,3}(?:,\d{3})+)\.(\d{1,2})(?!\d|\.\d)/g, (_m, int: string, frac: string) => `${int.replace(/,/g, '')},${frac}`)
+    .replace(/(?<![\d.,])(\d{1,3})((?:,\d{3})+)(?!\d)/g, (_m, head: string, groups: string) => head + groups.replace(/,/g, '.'))
     .replace(/(?<![\d.,])(\d+)\.(\d{2})(?!\d|\.\d)/g, '$1,$2')
 }
 
