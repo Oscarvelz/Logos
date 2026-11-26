@@ -1,3 +1,44 @@
+## 1.4.256 — A silent render no longer surrenders the voice on its own
+
+Oscar's report (2026-11-26): the white-noise sound is back,
+and the voice changes on its own — he is listening to a
+female voice, he stops, he copies another text to hear it,
+and a male voice has been selected, «sin que yo lo ordene».
+
+What the code says, read firsthand: the male voice is the
+device voice, and it takes the stage through the 1.4.122
+rescue — when the neural voice renders a sentence as digital
+silence, playIndex hands the whole session to the shell's
+device voice at once. That road fires on ONE silent render,
+with no retry. After a stop, with the page woken from the
+background, the first render of a new text is exactly where
+a still-frozen engine worker — or a model not yet re-seated
+— returns zeros of the right duration (122's own diagnosis).
+While the engine struggles, the background keep-alive plays,
+which is the noise that rides under a long preparation; the
+surrender then changes the voice for the whole text. The
+voice catalogue itself cannot be the source: every default
+the router may substitute is female (Zoey, Noa, Alba, Lola).
+
+The cure (player/listen.ts, the one door every sentence's
+start passes): a silent render now earns a revival before
+any surrender — reviveRender re-ensures the model, gives the
+worker a beat to thaw, and renders the sentence once more in
+his voice. Only a second silence hands the session over,
+because 122's law also stands: never leave him in silence.
+The shell's own takeover chain (for a page that is wholly
+dead, not merely wedged) is untouched, by design.
+
+Declared bounds: the keep-alive's level is unchanged — the
+noise he hears is the long struggle, and the revival is what
+shortens it; if a hiss still rides a healthy start, that is
+the next hunt and it will be aimed at the keep-alive itself.
+There is no bench that can freeze a real engine worker the
+way Android does; the battery and the typecheck are the
+gates here, and his phone is the judge, as with every
+playback wave.
+
+Presentation impact: none.
 ## 1.4.255 — The bubble's tap plays the fresh copy (queue off)
 
 Oscar's ask (2026-11-26): the floating button itself should

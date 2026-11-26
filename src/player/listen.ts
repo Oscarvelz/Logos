@@ -589,6 +589,20 @@ export async function play(from?: number) {
   await playIndex(idx, idx === s.current && seekFracFor === idx ? (s.seekFrac ?? 0) : 0)
 }
 
+/** The revival a silent render earns before any surrender
+ *  (1.4.256): re-ensure the model, give the engine's worker a
+ *  beat to thaw, and render the sentence once more. The failed
+ *  render cached nothing and its pending entry died with its
+ *  promise, so the retry is a fresh synthesis. Returns null
+ *  when the retry fails or the session has moved on — the
+ *  caller then surrenders as 1.4.122 prescribed. */
+async function reviveRender(i: number, my: number): Promise<Rendered | null> {
+  try { await ensureModel() } catch { /* the retry judges by its own result */ }
+  await new Promise((res) => setTimeout(res, 600))
+  if (my !== token || !listen.get().playing || listen.get().current !== i) return null
+  try { return await render(i, PLAYHEAD_PRIORITY) } catch { return null }
+}
+
 async function playIndex(i: number, startFrac = 0, startWord?: { w: number; words: string[] }) {
   cancelDevice()
   const s = listen.get()
@@ -616,19 +630,35 @@ async function playIndex(i: number, startFrac = 0, startWord?: { w: number; word
   } catch (err) {
     if (my !== token || (err as Error).name === 'AbortError') return
     if (!listen.get().playing) return
-    // A voice that renders silence (1.4.122) has failed as surely as
-    // one that throws — hand the session to the shell's real device
-    // voice, whatever the page-bridge toggle says.
-    if ((err as Error).message === 'the voice rendered silence' && handToShell(i)) return
-    // A wedged voice engine must never leave the listener in silence: the
-    // device voice reads this sentence while the engine heals itself.
-    if (settings.get().deviceFallback && deviceSpeechAvailable() && !fellBack.has(i)) {
+    if ((err as Error).message === 'the voice rendered silence') {
+      // One silent render is a wedged engine's word, not a verdict
+      // (1.4.256, Oscar): after a stop, with the page woken from the
+      // background, the first render can come back as zeros from an
+      // engine still frozen or a model not yet re-seated — and the
+      // 1.4.122 road surrendered the whole session to the device
+      // voice on that single word, uncommanded: «una voz masculina
+      // ha sido seleccionada». Now the engine is revived first —
+      // the model re-ensured, a beat for the worker to thaw — and
+      // the sentence is rendered once more in HIS voice. Only a
+      // second silence surrenders, because 122's law also stands:
+      // never leave him in silence.
+      const again = await reviveRender(i, my)
+      if (again) r = again
+      else if (handToShell(i)) return
+      else {
+        listen.set({ playing: false, buffering: false, error: (err as Error).message })
+        return
+      }
+    } else if (settings.get().deviceFallback && deviceSpeechAvailable() && !fellBack.has(i)) {
+      // A wedged voice engine must never leave the listener in silence: the
+      // device voice reads this sentence while the engine heals itself.
       fellBack.add(i)
       void playDevice(i)
       return
+    } else {
+      listen.set({ playing: false, buffering: false, error: (err as Error).message })
+      return
     }
-    listen.set({ playing: false, buffering: false, error: (err as Error).message })
-    return
   }
   if (my !== token || listen.get().current !== i || !listen.get().playing) return
   // We ran dry. If this phone renders slower than it speaks, build a head start
