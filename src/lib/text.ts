@@ -607,6 +607,25 @@ export function expandAbbrev(text: string, lang?: Lang): string {
   return text
 }
 
+/**
+ * Spanish decimals (1.4.252, Oscar): in Spanish the dot is the
+ * thousands separator and the comma the decimal one — but texts
+ * pasted from English sources carry the English form, and the
+ * voice reads «2.00 dólares» as two THOUSAND dollars. A Spanish
+ * segment's English-shaped decimals are rewritten to the Spanish
+ * form before the voice sees them: the full English money shape
+ * first (1,234.56 → 1234,56), then the plain dot decimal with
+ * exactly two fraction digits (2.00 → 2,00). The Spanish forms
+ * are never touched: 2.000 stays two thousand, 1.234,56 stays as
+ * written, and a dot with one digit or three-plus is left alone —
+ * only the shape that gets misread is rewritten.
+ */
+export function spanishDecimals(text: string): string {
+  return text
+    .replace(/(?<![\d.,])(\d{1,3}(?:,\d{3})+)\.(\d{1,2})(?!\d|\.\d)/g, (_m, int: string, frac: string) => `${int.replace(/,/g, '')},${frac}`)
+    .replace(/(?<![\d.,])(\d+)\.(\d{2})(?!\d|\.\d)/g, '$1,$2')
+}
+
 export function speakable(text: string, lang?: Lang): string {
   // 1.4.57 pronunciation layer: a code the voice would spell out character by
   // character for ten seconds is named once ("code"), never read — and machine
@@ -616,7 +635,8 @@ export function speakable(text: string, lang?: Lang): string {
   // a Spanish reading announced "link" mid-sentence while the code
   // substitution right above it was already language-aware.
   const LINK = lang === 'es' ? 'enlace' : 'link'
-  const out = expandAbbrev(text, lang)
+  const prepared = lang === 'es' ? spanishDecimals(expandAbbrev(text, lang)) : expandAbbrev(text, lang)
+  const out = prepared
     .replace(/\*\*|__|~~|`+/g, '')
     .replace(/(^|\s)[*_](?=\S)|(?<=\S)[*_](?=\s|$|[.,;:!?])/g, '$1')
     .replace(/(^|\s)#{1,6}\s+/g, '$1')

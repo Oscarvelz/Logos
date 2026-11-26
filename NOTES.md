@@ -1,3 +1,33 @@
+## 1.4.252 — The voice stops reading «2.00 dólares» as two thousand
+
+Oscar's report (2026-11-26, with his photo): «Esta cifra la lee
+como 2,000 dólares en lugar de 2 dólares. Entrena el motor de
+audio para que no las confunda.»
+
+The confusion is a format crossing: in Spanish the dot is the
+thousands separator and the comma the decimal one, but texts
+pasted from English sources carry the English decimal dot —
+and the voice, reading Spanish, takes «2.00» for a thousands
+group. The training lands in the one seat every speech road
+passes through, speakable(): a Spanish segment's English-shaped
+decimals are rewritten to the Spanish form before the voice
+sees them.
+
+- 2.00 → 2,00; 15.50 → 15,50; 3.75 → 3,75 — the plain dot
+  decimal with exactly two fraction digits.
+- 1,234.56 → 1234,56 — the full English money shape loses its
+  thousands commas and gains the decimal comma.
+- The Spanish forms are never touched: 2.000 stays two
+  thousand, 1.234,56 stays as written. A dot with one digit
+  (2.5) or three-plus (3.1416), and chained dots (1.4.250),
+  stand as they are — only the shape that gets misread is
+  rewritten. English segments are never rewritten.
+
+Judged by test/wave252-numbers.ts: his specimen and every
+fence pass (12/12). The proof is the text the voice receives;
+the phone's ear is the final judge, as always.
+
+Presentation impact: none.
 ## 1.4.251 — The lowered player, corrected: the whole player goes down, the desk and the bar hide
 
 Oscar's correction of 1.4.250, the same night: «No era reducir,
