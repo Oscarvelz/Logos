@@ -14,7 +14,7 @@ import { markAndToast, textKey } from '../lib/marks.ts'
 import { loadSessionResume } from '../lib/resume.ts'
 import { ContinueRow } from '../components/continue.tsx'
 import { clipPlayer } from '../player/clip.ts'
-import { navPin } from '../lib/navpin.ts'
+import { navPin, playerLow } from '../lib/navpin.ts'
 import { engine } from '../engine/engine.ts'
 import { aiDescribe, describeText } from '../lib/describe.ts'
 import { library, refreshLibrary, saveForLater } from '../lib/library.ts'
@@ -36,6 +36,7 @@ export function ListenPage() {
   const s = useStore(listen)
   const cp = useStore(clipPlayer)
   const pin = useStore(navPin)
+  const low = useStore(playerLow)
   const st = useStore(settings)
   const e = useStore(engine)
   const [editing, setEditing] = useState(() => !listen.get().active)
@@ -111,6 +112,11 @@ export function ListenPage() {
     addEventListener('logos-bubble-clip', h)
     return () => removeEventListener('logos-bubble-clip', h)
   }, [])
+
+  // The lowered player rises for the listening hours (1.4.250):
+  // playback starting clears the fold, the pin's self-clearing
+  // law mirrored — the listening face is always the whole face.
+  useEffect(() => { if (s.playing && playerLow.get().lowered) playerLow.set({ lowered: false }) }, [s.playing])
 
   const setText = (t: string) => { drafts.set({ listen: t }); saveLastText(t) }
   const detected = useMemo(() => detectLang(text.slice(0, 4000)), [text])
@@ -283,7 +289,7 @@ export function ListenPage() {
         </div>
 
         <div className="listen-side">
-        <div className="card player-card">
+        <div className={`card player-card${low.lowered && !s.playing ? ' lowered' : ''}`}>
           {/* 1.4.59: back to one row (Oscar: two rows grew the player and shrank
               the text window) — the four chips fit by being smaller, not taller. */}
           <div className="player-top">
@@ -329,10 +335,15 @@ export function ListenPage() {
                 bottom-bar key. While the audio plays, the app is
                 immersive and the bar below is gone — this key pins the
                 bar back (the player glides up) without stopping the
-                reading; tapped again, the bar slides away once more. */}
+                reading; tapped again, the bar slides away once more.
+                1.4.250 (Oscar): the seat stands in the quiet hours
+                too — with nothing playing, the same key lowers the
+                player (its card folds its upper furniture away) so
+                the text window above widens, and raises it back.
+                One seat, two hours, each hour's deed in its words. */}
             {s.playing
               ? <button className="icon-btn" data-present="listen-nav-pin" onClick={() => navPin.set({ pinned: !pin.pinned })} aria-label={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')} title={t(pin.pinned ? 'Hide the bottom bar' : 'Show the bottom bar')}>{pin.pinned ? <PanelBottomClose size={20} /> : <PanelBottomOpen size={20} />}</button>
-              : <span aria-hidden />}
+              : <button className="icon-btn" data-present="listen-nav-pin" onClick={() => playerLow.set({ lowered: !low.lowered })} aria-label={t(low.lowered ? 'Raise the player' : 'Lower the player')} title={t(low.lowered ? 'Raise the player' : 'Lower the player')}>{low.lowered ? <PanelBottomOpen size={20} /> : <PanelBottomClose size={20} />}</button>}
             {queueMode
               ? <button className="icon-btn jump-key filled" data-present="listen-prev" onClick={() => stepQueue(-1)} disabled={!queueLive} aria-label={t('Previous in the queue')} title={t('Previous in the queue')}><SkipBack size={25} fill="currentColor" /></button>
               : <JumpKey dir="back" size={25} disabled={!reading} present="listen-prev" />}

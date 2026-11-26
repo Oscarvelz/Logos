@@ -210,6 +210,8 @@ export const ES: Record<string, string> = {
   'Previous sentence': 'Oración anterior',
   'Show the bottom bar': 'Mostrar la barra inferior',
   'Hide the bottom bar': 'Ocultar la barra inferior',
+  'Lower the player': 'Bajar el reproductor',
+  'Raise the player': 'Subir el reproductor',
   'Next sentence': 'Oración siguiente',
   'Pause': 'Pausar',
   'Play': 'Reproducir',

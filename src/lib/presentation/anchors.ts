@@ -177,7 +177,7 @@ const A_LISTEN: AnchorRecord[] = [
   r('listen-keep-audio', 'web', 'MINT', ['A-47'], ['Q4'], DP, { file: LP, precondition: PC_SHEET }),
   r('listen-keep-later', 'web', 'MINT', ['A-48'], ['Q4'], DP, { file: LP, precondition: PC_SHEET }),
   r('listen-keep-note', 'web', 'MINT', ['A-49'], ['Q4'], DP, { file: LP, precondition: 'only when the exact text already exists in the Library' }),
-  r('listen-nav-pin', 'web', 'MINT', ['A-51', 'F-19'], ['AD3'], DP, { file: LP, precondition: 'exists only while playing and self-clears on stop — the scene starts the scenario session first; anchoring it in a paused stage is a fence error' }),
+  r('listen-nav-pin', 'web', 'MINT', ['A-51', 'F-19'], ['AD3'], DP, { file: LP, precondition: 'stands always in the transport left seat — while playing it is the bottom-bar pin (self-clears on stop; the scene starts the scenario session first to anchor that face), while nothing plays it is the player lower/raise key (self-clears on play)' }),
   r('listen-continue', 'web', 'CLASS', ['A-59'], ['Q4', 'AD9'], cls('.continue-card'), { file: CONT, probe: [pr(CONT, 'continue-card')] }),
   r('listen-continue-book', 'web', 'MINT', ['A-60'], ['AD9'], DP, { file: CONT }),
   r('listen-continue-clip', 'web', 'MINT', ['A-61'], ['AD9'], DP, { file: CONT }),

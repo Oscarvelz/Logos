@@ -11,3 +11,18 @@ import { createStore } from './store.ts'
  * play starts immersive as designed.
  */
 export const navPin = createStore<{ pinned: boolean }>({ pinned: false })
+
+/**
+ * The lowered player (1.4.250, Oscar): the same left seat of the
+ * transport, at the hours when nothing plays. The pin's deed
+ * belongs to the playing hours; Oscar asked for the key to stand
+ * in the quiet ones too — tapped there, it lowers the player:
+ * the card folds its upper furniture away (chips, spectrum,
+ * scrubber, notes) and the text window above takes the freed
+ * room, which is what the key is FOR («para ensanchar la ventana
+ * de arriba»). Tapped again, the player rises whole. It clears
+ * itself when playback starts, the pin's own law mirrored: the
+ * listening face is always the whole face, and lowering is a
+ * writing-hours choice he makes again with one tap.
+ */
+export const playerLow = createStore<{ lowered: boolean }>({ lowered: false })

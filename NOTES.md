@@ -1,3 +1,36 @@
+## 1.4.250 — The player's left key stands in the quiet hours too: lower the player, widen the text window
+
+Oscar's ask (2026-11-25, with photos): the transport's left key —
+the one that, while playing, pins the bottom bar back — should
+also serve when nothing is playing: there it should LOWER the
+player, so the text window above widens («para ensanchar la
+ventana de arriba»).
+
+- The seat now stands always. While playing it is unchanged in
+  deed and face (the bottom-bar pin, 1.4.115). While nothing
+  plays it is the player's lower/raise key: one tap folds the
+  player card's upper furniture away — the chips row, the
+  spectrum, the scrubber and the engine notes — leaving the meta
+  line and the whole transport standing; the next tap raises the
+  player whole. Its labels say the deed in both languages
+  («Lower the player» / «Raise the player»).
+- The widening needs no new geometry: on the phone and in the
+  landscape column the text card already flexes to fill what the
+  player leaves, so the freed room becomes the upper window's by
+  the house's own flex law. In the wide side column the same fold
+  hands its room to the desk below the player.
+- The fold clears itself when playback starts (a new store,
+  playerLow, beside navPin; the clearing mirrors the pin's own
+  self-clearing law): the listening face is always the whole
+  face, and lowering is a writing-hours choice, re-made with one
+  tap after the reading ends.
+
+Presentation impact: the listen-nav-pin anchor's contract
+widens — the seat stands always, with a deed per hour (pin while
+playing, lower/raise while quiet). The anchor record's
+precondition now says so; no anchor is minted or retired, and
+DOC_TOTALS are unchanged. Relayed to the Presentation lane with
+this wave.
 ## 1.4.249 — The paste key's card returns, and with it the confirmed front paste
 
 Oscar's report (2026-11-25): the panel's paste key had pasted in
