@@ -103,6 +103,26 @@ export function enqueueRef(kind: 'book' | 'audio', ref: string, title: string, s
 }
 
 /**
+ * The head of the line — one door only, and it is not an arrival
+ * door (1.4.249; the seat itself is 1.4.206's, retired in 1.4.239
+ * and reborn by Oscar's word on 2026-11-25). Arrivals only ever
+ * join the tail (the copy-order law stands untouched); this door
+ * exists solely for the paste key's CONFIRMED hand paste — Oscar
+ * asked, the card explained, he confirmed — and the page calls it
+ * only for a delivery carrying the shell's front stamp. A copy of
+ * a text already waiting in the line moves that text to the head:
+ * its order is now, by his hand.
+ */
+export function enqueueFront(text: string, title: string, secs: number): QueueItem {
+  const key = textKey(text)
+  const s = queue.get()
+  const rest = s.items.filter((i) => i.key !== key)
+  const item: QueueItem = { id: newId(), text, key, title, secs, at: Date.now(), kind: 'copy', ref: '' }
+  queue.set({ items: [item, ...rest] })
+  return item
+}
+
+/**
  * Re-note an item's key once its deed is known — a book's key is
  * its shelf identity until the staged text exists; from then on
  * the finish judge must recognise the item by the text it loaded.

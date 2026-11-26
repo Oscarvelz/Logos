@@ -1,3 +1,44 @@
+## 1.4.249 — The paste key's card returns, and with it the confirmed front paste
+
+Oscar's report (2026-11-25): the panel's paste key had pasted in
+silence since 239 — with the queue on, the text lined up at the
+tail and nothing said a word; the confirmation window he
+remembered («simplemente era para dejarle saber al usuario qué
+hacía ese botón y que reemplazaba al texto que estaba ahí») was
+206's card, retired in 239 by his copy-order law. His ruling: the
+law stands for everything that merely arrives; the paste key is
+the hand's one exception, confirmed every time, exactly as 206
+had it.
+
+- The paste key, when something stands to be displaced (a
+  session on the stage, or a line waiting), first shows its card
+  — «Hear the last copy now?» — worded by the mode: ahead of the
+  line when a line stands, replacing what plays when none does.
+  «Not now» spends nothing: no read is made. On an empty stage
+  the key is the key it has always been — no card, it pastes.
+- The confirmation ARMS the front stamp; the stamp itself is
+  laid by deliver() on the manual delivery the confirmation set
+  in motion (twenty-second arm, spent by any manual delivery,
+  stamped or not), so an empty or failed read can never leave a
+  live stamp standing for an unrelated catch to be misjudged by.
+  The 206 stamp plumbing — companion pasteFront/pasteFrontAt,
+  Bridge bubblePasteFront, inert since 239 — carries it again.
+- The page judges a stamped delivery by the front road before
+  any other (pullClip and the birth pull alike): with the queue
+  on, queueFrontArrival puts the copy at the head and plays it
+  now; the standing current leaves the line (its place is kept
+  as a replaced session's always is), and the line behind keeps
+  its order. With the queue off, the stamped paste lands at
+  once, replacing what plays.
+- queue.ts offers enqueueFront again — one door, not an arrival
+  door: a hand copy of a text already waiting moves that text to
+  the head instead of duplicating it. Arrivals still only ever
+  join the tail; test/wave206-front.ts now judges both halves of
+  the refined law and passes.
+
+Presentation impact: none — no anchor, surface or copy in the
+lesson system changes; the stage's version strings rise with
+the wave, as always.
 ## 1.4.248 — The hand paste lands at once (Grok's lane, integrated verified)
 
 The first change to arrive from Grok's lane (`grok-lane`, commit 2a9c4ce0, on a base of 1.4.247) — reviewed file by file against canon, corrected at one point, and integrated here; the lane's first attempt (a shortcut in the visibility handler, where a hand ask already landed at once) changed no behaviour and was not carried over, and the law comments it had trimmed stand restored.

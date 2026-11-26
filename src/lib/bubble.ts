@@ -7,7 +7,7 @@
 import { settings, saveLastText } from './settings.ts'
 import { drafts } from './drafts.ts'
 import { listen, loadText, play, pauseFromShell, endSession, stepRate, setRate, seek, seekFraction, seekToMs, refreshVoices, voiceFor, sentenceProgress, wordClock, levels, registerTrackSkip } from '../player/listen.ts'
-import { queue, queueItems, currentItem, currentIndex, enqueue, enqueueRef, noteStagedKey, setCurrent, removeItem as queueRemove, clearQueue, type QueueItem } from './queue.ts'
+import { queue, queueItems, currentItem, currentIndex, enqueue, enqueueRef, enqueueFront, noteStagedKey, setCurrent, removeItem as queueRemove, clearQueue, type QueueItem } from './queue.ts'
 import { alignWords, wordAtTime } from '../player/wordsync.ts'
 import { cancelDevice } from '../engine/device-voice.ts'
 import { readClipboard } from './clipboard.ts'
@@ -329,6 +329,34 @@ export function queueArrival(raw: string): boolean {
   const idle = !clipBusy && (!s.active || s.finished)
   if (!currentItem() && idle) playQueueItem(item)
   else toast(t('Added to the queue · {n} in line', { n: queueItems().length }), undefined, 2500)
+  return true
+}
+
+/** The confirmed hand paste takes the head and the stage
+ *  (1.4.249; the deed is 1.4.206's, reborn by Oscar's word on
+ *  2026-11-25). This is the ONE exception to the copy-order law,
+ *  and it is narrow by construction: the shell shows its card
+ *  first («Hear the last copy now?»), and only a delivery the
+ *  card's confirmation stamped reaches this door — every arrival
+ *  that merely happens still joins the tail through queueArrival.
+ *  The standing current leaves the line (its text keeps its place
+ *  in the Library or the draft, as a replaced session always has);
+ *  the line behind keeps its order untouched. A copy of what is
+ *  already sounding, or of the line's own current, changes
+ *  nothing — it is already where his hand wants it. */
+export function queueFrontArrival(raw: string): boolean {
+  if (!settings.get().copyQueue) return false
+  const text = raw.trim()
+  if (!text) return true
+  seenClip(text)
+  const key = textKey(text)
+  const s = listen.get()
+  if (s.active && textKey(s.text) === key) return true
+  const cur = currentItem()
+  if (cur && cur.key === key) return true
+  const item = enqueueFront(text, sessionTitle(text), estimateSeconds(text, 1))
+  if (cur) queueRemove(cur.id)
+  playQueueItem(item)
   return true
 }
 
@@ -841,13 +869,16 @@ export function initBubble() {
     }
   })
   // Every shell delivery is judged here (Oscar's law, 1.4.239):
-  // the line's order is the COPY order — every arrival, caught or
-  // hand-pasted, joins the tail in its turn, and nothing jumps
-  // the line. The front road that stood here (1.4.206's confirmed
-  // hand paste taking the head and the stage, ejecting the
-  // standing current) is retired by that law: «Lo que define el
-  // orden de los audios es el orden de los textos copiados… en
-  // lugar de ir montando de primero los últimos textos.»
+  // the line's order is the COPY order — every arrival joins the
+  // tail in its turn, and nothing that merely happens jumps the
+  // line: «Lo que define el orden de los audios es el orden de
+  // los textos copiados… en lugar de ir montando de primero los
+  // últimos textos.» The one exception is the hand's, and it is
+  // not an arrival: the paste key's CONFIRMED paste (1.4.249,
+  // Oscar's word on 2026-11-25 — the deed is 1.4.206's, which
+  // 239 swept away with the arrivals it was aimed at) carries
+  // the shell's front stamp, pulled and judged in pullClip below
+  // before this judge is ever consulted.
   const judgeArrival = (text: string): boolean => queueArrival(text)
   // A stored catch is pulled once (the shell clears it on the pull), so
   // pulling on every return is safe — and necessary: the 'clip' poke can
@@ -861,6 +892,20 @@ export function initBubble() {
       const { t, m } = JSON.parse(raw) as { t?: string; m?: boolean }
       const text = t?.trim()
       if (!text) return
+      // The confirmed front paste (1.4.249): the shell's stamp
+      // names THIS delivery as the one its card confirmed, so it
+      // is judged by the front road before any other — with the
+      // queue on it takes the head and the stage; with the queue
+      // off it simply lands, as a replacing hand paste does. The
+      // stamp is pulled (and thereby spent) only here, where a
+      // delivery actually stands in hand.
+      let front = false
+      try { front = d.bubblePasteFront?.() === '1' } catch { /* old shell */ }
+      if (front) {
+        if (settings.get().copyQueue && queueFrontArrival(text)) return
+        playClipboardText(text)
+        return
+      }
       // A hand paste (m: the shell marks a delivery the finger asked
       // for) with the queue OFF lands at once (1.4.248, from Grok's
       // lane, commit 2a9c4ce0): the finger asked, so no arrival judge
@@ -1052,11 +1097,21 @@ export function initBubble() {
       if (!raw) return
       const { t, m } = JSON.parse(raw) as { t?: string; m?: boolean }
       const text = t?.trim()
+      if (!text) return
+      // The confirmed front paste that opened the app (1.4.249):
+      // its stamp outranks every gate below — the card was
+      // confirmed by his hand before the visit was ever made.
+      let front = false
+      try { front = d.bubblePasteFront?.() === '1' } catch { /* old shell */ }
+      if (front) {
+        if (!(settings.get().copyQueue && queueFrontArrival(text))) playClipboardText(text)
+        return
+      }
       // The hand paste that opened the app (1.4.248): its manual mark
       // outranks the same-words gate below — the finger asked for
       // these very words again. With the queue on it still lines up
       // (1.4.239), so the mark only speaks when the queue is off.
-      if (text && ((m && !settings.get().copyQueue) || (clipKey(text) !== lastClip && !judgeArrival(text)))) playClipboardText(text)
+      if ((m && !settings.get().copyQueue) || (clipKey(text) !== lastClip && !judgeArrival(text))) playClipboardText(text)
     } catch { /* ignore */ }
   }, 1200)
 

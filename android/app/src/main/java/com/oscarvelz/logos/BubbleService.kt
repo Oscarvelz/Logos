@@ -714,6 +714,17 @@ class BubbleService : Service() {
                 field = value
                 if (value) pasteFrontAt = System.currentTimeMillis()
             }
+        /** The front stamp's arm (1.4.249): the paste key's card,
+         *  once Oscar confirms it, arms the stamp — but the stamp
+         *  itself is only laid by deliver(), on the manual delivery
+         *  the confirmation set in motion, so a read that finds the
+         *  clipboard empty or dies on its road can never leave a
+         *  live stamp standing for the next unrelated catch to be
+         *  misjudged by. The arm lives twenty seconds, the house's
+         *  law for a stored order, and any manual delivery spends
+         *  it, stamped or not. */
+        @Volatile var pasteFrontArmed = false
+        @Volatile var pasteFrontArmAt = 0L
         /** The media session's seek target (1.4.193): an absolute
          *  book-millisecond count, stamped by PlaybackService's
          *  onSeekTo exactly the way seekFrac is stamped — the same
@@ -1120,6 +1131,16 @@ class BubbleService : Service() {
                     expireClip()
                     noteTry(c, s("a stored catch went stale", "una captura guardada caducó"))
                 }
+            }
+            // A confirmed front paste is stamped as it lands
+            // (1.4.249): the arm the card's confirmation set is
+            // spent by this manual delivery — honoured as the
+            // front stamp while it is inside its twenty seconds,
+            // and spent either way, so it can never leak onto a
+            // later delivery.
+            if (manual) {
+                if (pasteFrontArmed && System.currentTimeMillis() - pasteFrontArmAt <= 20_000) pasteFront = true
+                pasteFrontArmed = false
             }
             // The catch's three facts land as ONE step (R3-T2-4):
             // its uncommitted key, its text and its manual flag are
@@ -3444,16 +3465,21 @@ class BubbleService : Service() {
             cv.drawRoundRect(front, rad, rad, fill)
             cv.drawRoundRect(front, rad, rad, p)
         }) {
-            // Paste now (Oscar's law, 1.4.239): the key reads the
-            // clipboard, with the queue on or off alike. The card
-            // that stood here (1.4.206 — «Put the last copy
-            // first?», the confirmed copy jumping the line and
-            // ejecting the standing current) is retired by his
-            // ruling that the line's order is the COPY order: with
-            // the mode on, the page lines the delivery up at the
-            // tail in its turn, like every arrival; with the mode
-            // off, the key is exactly the key it has always been.
-            readClip(true)
+            // Paste now (1.4.249): the key reads the clipboard —
+            // but when something stands to be displaced (a session
+            // on the stage, or a line waiting), the key first shows
+            // its card, the one Oscar asked back on 2026-11-25: it
+            // says what the key does and what it replaces, and only
+            // his confirmation arms the front stamp that lets this
+            // one delivery take the head and the stage. The
+            // copy-order law (1.4.239) is untouched for everything
+            // that merely arrives; this is the hand's one exception,
+            // and it is confirmed every time. On an empty stage
+            // there is nothing to explain and nothing to displace:
+            // the key is the key it has always been.
+            val stageBusy = panelQueueCount > 0 || NativeSpeaker.active ||
+                runCatching { JSONObject(nowJson).optBoolean("active") }.getOrDefault(false)
+            if (stageBusy) showPasteAsk() else readClip(true)
         }
         pasteB.layoutParams = LinearLayout.LayoutParams(dp(footDp), dp(footDp)).apply { leftMargin = dp(footM1) }
         clipRow.addView(pasteB)
@@ -4134,6 +4160,40 @@ class BubbleService : Service() {
         v.contentDescription = desc
         v.setOnClickListener { act() }
         return v
+    }
+
+    /** The paste key's card (1.4.249, reborn from 1.4.206 at
+     *  Oscar's word): it says what the key does and what it
+     *  replaces, in the mode's own terms — ahead of the line when
+     *  a line stands, replacing what plays when none does. The
+     *  confirmation arms the front stamp and makes the read; the
+     *  stamp itself is laid by deliver() when the read lands, so
+     *  an empty or failed read stamps nothing. «Not now» spends
+     *  nothing at all: no read is made, no stamp is armed. */
+    private fun showPasteAsk() {
+        if (panelQueueCount > 0) {
+            showHintCard(
+                s("Hear the last copy now?", "¿Oír la última copia ahora?"),
+                s("The last text you copied takes the stage now, ahead of the line. What is playing is set aside — the line behind keeps its order.", "El último texto que copiaste toma el escenario ahora, por delante de la fila. Lo que está sonando se aparta: la fila detrás conserva su orden."),
+                s("Hear it now", "Oírla ahora"),
+                s("Not now", "Ahora no"),
+            ) {
+                pasteFrontArmed = true
+                pasteFrontArmAt = System.currentTimeMillis()
+                readClip(true)
+            }
+        } else {
+            showHintCard(
+                s("Hear the last copy now?", "¿Oír la última copia ahora?"),
+                s("The last text you copied replaces what is playing and takes the stage now. What is set aside keeps its place — its card brings it back.", "El último texto que copiaste reemplaza lo que está sonando y toma el escenario ahora. Lo apartado conserva su lugar: su tarjeta lo trae de vuelta."),
+                s("Hear it now", "Oírla ahora"),
+                s("Not now", "Ahora no"),
+            ) {
+                pasteFrontArmed = true
+                pasteFrontArmAt = System.currentTimeMillis()
+                readClip(true)
+            }
+        }
     }
 
     private fun showHintCard(title: String, body: String, confirmLabel: String, cancelLabel: String, cancelAction: (() -> Unit)? = null, action: () -> Unit) {
