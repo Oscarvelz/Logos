@@ -888,8 +888,12 @@ class BubbleService : Service() {
          *  bubble is docked — never mixed with look_ba / look_pa. */
         fun lookDf(c: Context) = prefs(c).getBoolean("look_df", false)
         fun lookDa(c: Context) = prefs(c).getInt("look_da", 40).coerceIn(0, 100) / 100f
-        fun setDockLook(c: Context, on: Boolean, da: Int) {
-            prefs(c).edit().putBoolean("look_df", on).putInt("look_da", da).apply()
+        /** How much of the jewel shows while docked, percent
+         *  (1.4.267, Oscar): his own measure, set in Settings —
+         *  50 is the half he settled on 1.4.264. */
+        fun lookDs(c: Context) = prefs(c).getInt("look_ds", 50).coerceIn(10, 100)
+        fun setDockLook(c: Context, on: Boolean, da: Int, ds: Int) {
+            prefs(c).edit().putBoolean("look_df", on).putInt("look_da", da).putInt("look_ds", ds).apply()
             lookHook?.invoke()
         }
         fun lookSize(c: Context) = prefs(c).getString("look_size", "m") ?: "m"
@@ -1458,7 +1462,7 @@ class BubbleService : Service() {
         val h = halo ?: return
         rippleAnims.forEach { it.cancel() }
         stopBreath()
-        if (root.alpha < awakeAlpha()) root.animate().alpha(awakeAlpha()).setDuration(220).start()
+        if (root.alpha < stateAlpha()) root.animate().alpha(stateAlpha()).setDuration(220).start()
         h.visibility = View.VISIBLE
         val sx = ObjectAnimator.ofFloat(h, "scaleX", 1f, 1.55f).apply { duration = 780; repeatCount = times - 1 }
         val sy = ObjectAnimator.ofFloat(h, "scaleY", 1f, 1.55f).apply { duration = 780; repeatCount = times - 1 }
@@ -1486,7 +1490,7 @@ class BubbleService : Service() {
         rippleAnims.forEach { it.cancel() }
         haloAnim?.cancel(); haloAnim = null
         stopBreath()
-        if (root.alpha < awakeAlpha()) root.animate().alpha(awakeAlpha()).setDuration(200).start()
+        if (root.alpha < stateAlpha()) root.animate().alpha(stateAlpha()).setDuration(200).start()
         h.visibility = View.VISIBLE
         val sx = ObjectAnimator.ofFloat(h, "scaleX", 1f, 1.55f).apply { duration = 620; repeatCount = 1 }
         val sy = ObjectAnimator.ofFloat(h, "scaleY", 1f, 1.55f).apply { duration = 620; repeatCount = 1 }
@@ -1881,13 +1885,12 @@ class BubbleService : Service() {
     }
 
     private fun wakeBubble(schedule: Boolean = true) {
-        // While the bubble is hidden, a touch alone does not raise
-        // it (1.4.265): only an undock restores its standing
-        // opacity — otherwise a long-press on the sliver would
-        // leave it docked but lit at the wrong amount.
-        if (docked && panel == null) return
+        // The wake raises the bubble only to the amount its
+        // state commands (1.4.267's stateAlpha): while hidden,
+        // a touch alone never lights it back to solid — only
+        // an undock restores the standing opacity.
         val b = bubble ?: return
-        if (b.alpha < awakeAlpha()) b.animate().alpha(awakeAlpha()).setDuration(140).start()
+        if (b.alpha < stateAlpha()) b.animate().alpha(stateAlpha()).setDuration(140).start()
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
@@ -1946,6 +1949,17 @@ class BubbleService : Service() {
      *  off. It rules only the docked state — the moment the
      *  bubble comes out, awakeAlpha() rules again. */
     private fun dockAlpha() = if (lookDf(this)) lookDa(this) else awakeAlpha()
+
+    /** The opacity the bubble wears in the state it is in —
+     *  the one judge every hand must ask (1.4.267). invite()
+     *  and cheer() used to raise the root straight to the
+     *  standing amount, so every copy that landed while the
+     *  bubble was hidden lit it back to solid within a second
+     *  and the hidden translucency never survived a delivery:
+     *  Oscar's verdict — «los ajustes para la burbuja y su
+     *  transparencia no están funcionando cuando está oculta
+     *  detrás del borde». */
+    private fun stateAlpha() = if (panel != null) panelAlpha() else if (docked) dockAlpha() else awakeAlpha()
     private fun fadeBubbleTo(target: Float) {
         bubble?.animate()?.alpha(target)?.setDuration(220)?.start()
     }
@@ -1967,7 +1981,11 @@ class BubbleService : Service() {
                 repaintFace()
                 bubbleFaceV?.layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
                 bubbleLambdaV?.invalidate()
-                b.animate().cancel(); b.alpha = if (panel != null) panelAlpha() else if (docked) dockAlpha() else awakeAlpha()
+                b.animate().cancel(); b.alpha = stateAlpha()
+                // A look change lands on the hidden bubble too
+                // (1.4.267): a new depth or size re-seats it at
+                // its edge on the spot, not at the next dock.
+                if (docked && panel == null) seatBubbleInCorner(false)
             }
             panel?.let { it.alpha = panelAlpha() }
         }
@@ -2838,14 +2856,14 @@ class BubbleService : Service() {
         if (!docked && panel == null && !dockPending && bubble != null) armDockTimer()
     }
     private fun dockShift(): Int {
-        // Hidden to the half (Oscar, 2026-11-27: «Ahora que se
-        // oculte a la mitad»): exactly half the jewel stays in
-        // sight past the edge — half in, half out, at whatever
-        // size he chose. The seated jewel stands dp(4) off the
-        // edge, so the shift that leaves size/2 showing is
-        // size/2 + dp(4). (1.4.258–263 left a fixed 30dp sliver;
-        // the half is his settled measure.)
-        val over = bubbleSize() / 2 + dp(4)
+        // How much of the jewel stays in sight past the edge is
+        // Oscar's own measure (1.4.267): the Settings control
+        // look_ds, a percent of the jewel — 50, the half he
+        // settled on 1.4.264, is its default. The seated jewel
+        // stands dp(4) off the edge, so the shift that leaves
+        // size·ds% showing is size·(100−ds)% + dp(4).
+        // (1.4.258–263 left a fixed 30dp sliver.)
+        val over = bubbleSize() * (100 - lookDs(this)) / 100 + dp(4)
         return if (bubbleCorner() % 2 == 1) over else -over
     }
     private fun seatPosition(corner: Int): Pair<Int, Int> {

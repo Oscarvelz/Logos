@@ -42,6 +42,9 @@ export type Settings = {
   dockFade: boolean
   /** The docked bubble's opacity, percent, while dockFade is on. */
   dockAlpha: number
+  /** How much of the jewel shows while docked, percent of the
+   *  jewel (1.4.267, Oscar): his own measure — 50 is the half. */
+  dockShow: number
   /** The bubble's size: 's' | 'm' | 'l'. */
   bubbleSize: string
   highlight: boolean
@@ -85,6 +88,7 @@ const DEFAULTS: Settings = {
   panelAlpha: 100,
   dockFade: false,
   dockAlpha: 40,
+  dockShow: 50,
   bubbleSize: 'm',
   highlight: true,
   wordLeadMs: 90,
@@ -121,6 +125,7 @@ const NUMERIC_ENVELOPE: Partial<Record<keyof Settings, readonly [number, number]
   bubbleAlpha: [0, 100],
   panelAlpha: [0, 100],
   dockAlpha: [0, 100],
+  dockShow: [10, 100],
   wordLeadMs: [-150, 450],
   jumpBackSec: [0, 600],
   jumpFwdSec: [0, 600],
@@ -165,7 +170,7 @@ function load(): Settings {
     for (const k of ['autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'copyQueue', 'bubbleText', 'highlight', 'dockFade'] as const) {
       if (typeof out[k] !== 'boolean') out[k] = DEFAULTS[k]
     }
-    for (const k of ['listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'dockAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec'] as const) {
+    for (const k of ['listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'dockAlpha', 'dockShow', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec'] as const) {
       if (typeof out[k] !== 'number' || !Number.isFinite(out[k])) out[k] = DEFAULTS[k]
       else out[k] = clampSettingNumber(k, out[k]) // finite is not enough — inside the envelope (R2-T5-6)
     }

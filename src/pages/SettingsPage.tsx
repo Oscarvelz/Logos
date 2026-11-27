@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.266'
+const VERSION = '1.4.267'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -537,6 +537,10 @@ export function SettingsPage() {
             <Range guarded label={t('Hidden opacity')} min={10} max={100} step={5} value={st.dockAlpha} onChange={(v) => settings.set({ dockAlpha: v })} />
           </div>
         ) : null}
+        <div className="list-row col">
+          <div className="row between"><div className="t">{t('How much shows when hidden')}</div><span className="mono muted">{st.dockShow}%</span></div>
+          <Range guarded label={t('How much shows when hidden')} min={10} max={100} step={5} value={st.dockShow} onChange={(v) => settings.set({ dockShow: v })} />
+        </div>
         <div className="list-row col">
           <div className="t">{t('Bubble size')}</div>
           <Seg value={st.bubbleSize} onChange={(v) => settings.set({ bubbleSize: v })} label={t('Bubble size')} options={[{ value: 's', label: t('Small') }, { value: 'm', label: t('Standard') }, { value: 'l', label: t('Large') }]} />

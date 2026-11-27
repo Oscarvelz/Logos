@@ -577,7 +577,7 @@ export function initBubble() {
     const key = `${st.bubbleAlpha}|${st.panelAlpha}|${st.bubbleSize}|${st.jumpBackSec}|${st.jumpFwdSec}|${fam}`
     if (key === pushedLook) return
     pushedLook = key
-    try { d.bubbleLook?.(JSON.stringify({ ba: st.bubbleAlpha, pa: st.panelAlpha, size: st.bubbleSize, jb: st.jumpBackSec, jf: st.jumpFwdSec, th: fam, df: st.dockFade ? 1 : 0, da: st.dockAlpha })) } catch { /* ignore */ }
+    try { d.bubbleLook?.(JSON.stringify({ ba: st.bubbleAlpha, pa: st.panelAlpha, size: st.bubbleSize, jb: st.jumpBackSec, jf: st.jumpFwdSec, th: fam, df: st.dockFade ? 1 : 0, da: st.dockAlpha, ds: st.dockShow })) } catch { /* ignore */ }
   }
   pushLook()
   settings.subscribe(pushLook)

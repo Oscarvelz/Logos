@@ -202,6 +202,7 @@ export const ES: Record<string, string> = {
   'Translucent when hidden': 'Translúcida al esconderse',
   'When the bubble hides at the edge of the screen, it can turn translucent. Its own opacity, only while hidden — apart from the bubble and panel opacities above.': 'Cuando la burbuja se esconde en el borde de la pantalla, puede volverse translúcida. Su propia opacidad, solo mientras está escondida — aparte de las opacidades de la burbuja y del panel de arriba.',
   'Hidden opacity': 'Opacidad al esconderse',
+  'How much shows when hidden': 'Cuánto se muestra al esconderse',
   'Dim when idle': 'Atenuar en reposo',
   'Untouched for a few seconds, the bubble fades to a whisper so it never competes with what you are doing. Off: it keeps the transparency you set, always.': 'Sin tocarla por unos segundos, la burbuja se atenúa hasta un susurro para nunca competir con lo que estás haciendo. Apagado: mantiene siempre la transparencia que fijaste.',
   'Bubble size': 'Tamaño de la burbuja',

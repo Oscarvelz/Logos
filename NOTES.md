@@ -1,3 +1,35 @@
+## 1.4.267 — The hidden translucency survives; how much shows is his
+
+Two verdicts of Oscar's (2026-11-27): the bubble's
+transparency settings do not work while it is hidden
+behind the edge, and the option to change how much of
+the bubble shows at the edge was missing.
+
+THE TRANSPARENCY, CONVICTED. The 1.4.265 dock fade was
+applied at the dock and judged in applyLook — but two
+older hands raised the root straight back to the standing
+opacity with no state judgement: invite() and cheer(),
+the bubble's attention ripples. cheer() fires about a
+second after EVERY delivery, so any copy that landed
+while the bubble was hidden lit it back to solid within
+a second and the hidden translucency never survived.
+CURED by one law: stateAlpha() — the panel's amount
+while the panel stands, the hidden amount while docked,
+the standing amount otherwise — is now the only judge
+every raiser asks (invite, cheer, wakeBubble, applyLook).
+A look change also re-seats a docked bubble on the spot,
+so a new depth or size is visible at once.
+
+HOW MUCH SHOWS. A Settings slider of his own, «How much
+shows when hidden» (dockShow, 10–100% of the jewel,
+default 50 — the half of 1.4.264), riding the look push
+as ds and kept as look_ds; dockShift reads it, so the
+edge shows exactly the share he sets, at any bubble size.
+
+Presentation impact: Settings' Floating player card
+gains one slider row («How much shows when hidden»,
+after the hidden-opacity row, before Bubble size) —
+relayed to the Presentation lane with this wave.
 ## 1.4.266 — The tap on the hidden bubble starts the audio
 
 Oscar's order (2026-11-27): «que el audio comience a
