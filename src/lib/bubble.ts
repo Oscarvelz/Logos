@@ -1014,6 +1014,13 @@ export function initBubble() {
         err: 0,
         saved: true,
         active: true,
+        // The recording's end, honestly (1.4.263): the clip face
+        // carried no `fin` before — the shell's mid-audio guard
+        // (1.4.260) read a missing fin and a clock reset to 0 as a
+        // reading forever in course, and the bubble never docked
+        // again after any recording finished. The player's own
+        // ended witness now speaks here, as the listen face's does.
+        fin: cp.ended ? 1 : 0,
         frac: cp.duration > 0 ? Math.min(1, cp.time / cp.duration) : 0,
         ci: -1,
         ct: 0,

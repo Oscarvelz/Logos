@@ -1,7 +1,7 @@
 // One shared player for finished clips (Library, Create result, voice previews).
 import { createStore } from '../lib/store.ts'
 
-export const clipPlayer = createStore<{ key: string | null; playing: boolean; time: number; duration: number; title: string; artist: string }>({ key: null, playing: false, time: 0, duration: 0, title: '', artist: '' })
+export const clipPlayer = createStore<{ key: string | null; playing: boolean; time: number; duration: number; title: string; artist: string; ended: boolean }>({ key: null, playing: false, time: 0, duration: 0, title: '', artist: '', ended: false })
 
 let audio: HTMLAudioElement | null = null
 let url: string | null = null
@@ -40,9 +40,16 @@ function el() {
   audio = new Audio()
   audio.addEventListener('timeupdate', () => clipPlayer.set({ time: audio!.currentTime, duration: isFinite(audio!.duration) ? audio!.duration : 0 }))
   audio.addEventListener('loadedmetadata', () => { audio!.playbackRate = clipRate; clipPlayer.set({ duration: isFinite(audio!.duration) ? audio!.duration : 0 }) })
-  audio.addEventListener('play', () => { audio!.playbackRate = clipRate; clipPlayer.set({ playing: true }) })
+  audio.addEventListener('play', () => { audio!.playbackRate = clipRate; clipPlayer.set({ playing: true, ended: false }) })
   audio.addEventListener('pause', () => clipPlayer.set({ playing: false }))
-  audio.addEventListener('ended', () => { clipPlayer.set({ playing: false, time: 0 }); endHooks.forEach((f) => f(clipPlayer.get().key)) })
+  // The end, witnessed (1.4.263): `ended` stands from the natural
+  // end until the clip plays, is replaced or is sought back into
+  // its middle. The bubble's clip face reads it for its `fin` —
+  // before this flag the face carried no end at all, its clock
+  // reset to 0 read as a reading forever at its start, and the
+  // shell's mid-audio guard held the bubble out forever after any
+  // recording finished.
+  audio.addEventListener('ended', () => { clipPlayer.set({ playing: false, time: 0, ended: true }); endHooks.forEach((f) => f(clipPlayer.get().key)) })
   return audio
 }
 
@@ -70,7 +77,7 @@ export async function playClip(key: string, source: Blob | string, meta?: { titl
   url = typeof source === 'string' ? null : URL.createObjectURL(source)
   a.src = typeof source === 'string' ? source : url!
   const gen = ++clipGen
-  clipPlayer.set({ key, time: startAt, duration: 0, title: meta?.title ?? '', artist: meta?.artist ?? '' })
+  clipPlayer.set({ key, time: startAt, duration: 0, title: meta?.title ?? '', artist: meta?.artist ?? '', ended: false })
   // The startAt seek is armed for THIS clip only (cure R4-T1-4):
   // the listener is {once:true} on the singleton element, and if a
   // second clip took the element before the first clip's metadata
@@ -90,6 +97,7 @@ export async function playClip(key: string, source: Blob | string, meta?: { titl
 
 export function seekClip(fraction: number) {
   if (audio && isFinite(audio.duration)) audio.currentTime = fraction * audio.duration
+  if (fraction < 1) clipPlayer.set({ ended: false })
 }
 
 export function pauseClip() { audio?.pause() }

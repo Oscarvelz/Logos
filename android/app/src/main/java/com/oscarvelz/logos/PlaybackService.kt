@@ -870,7 +870,20 @@ class PlaybackService : Service() {
         // paused alike. The headphone button's replay of a finished
         // reading is the price, and it is named here so nobody reopens
         // the exception without knowing what it cost last time.
-        s.isActive = playing
+        //
+        // REOPENED BY HIS WORD (1.4.263, Oscar, 2026-11-27): «No
+        // reviertas nada a menos que mis botones vuelvan a servir» —
+        // the buttons must serve again. The finished reading parks
+        // AWAKE once more (the 160 shape): while its card stands
+        // finished, the router can hand the session his headphone
+        // PLAY, and the callback replays the reading from 0. The
+        // 173 risk returns with it, named again so it is never a
+        // surprise: a stray PLAY shaken loose while the finished
+        // card stands can restart the reading uninvited; the
+        // card's stop retires the park. A PAUSED reading still
+        // sleeps — the park is for the finished alone, the exact
+        // seat his button was missed at.
+        s.isActive = playing || finished
         val open = PendingIntent.getActivity(this, 9, Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CH)
             .setSmallIcon(R.drawable.ic_note)

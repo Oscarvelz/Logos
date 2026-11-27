@@ -1,3 +1,46 @@
+## 1.4.263 — The finished recording speaks its end; the headset button serves again
+
+Two verdicts of Oscar's (2026-11-27), both answered literally.
+
+THE BUBBLE THAT WOULD NOT HIDE. The reading HAD finished —
+his word — and the bubble sat out whole on 1.4.262. The
+seat, convicted in code: the bubble has two faces. The
+listen face carries `fin` (1.4.237) and the 1.4.260
+mid-audio guard reads it honestly. The RECORDING face
+(clip.ts: Library recordings, Create results) carried no
+`fin` at all, and at a clip's natural end its clock resets
+to 0 — so the shell read the standing face as a reading
+forever at its start (active, no fin, fraction 0) and the
+mid-audio guard held the bubble out PERMANENTLY after any
+recording finished, until another session displaced the
+face. The guard was doing its duty; the face was lying by
+omission. Cure: the clip player now witnesses its own end
+(`ended`, set at the natural end, cleared by play, by a
+new clip, and by a seek back into the middle), and the
+clip face speaks `fin` from it, exactly as the listen face
+does. The mid-audio norm itself is untouched: a recording
+paused mid-way still holds the bubble out; a finished one
+no longer does.
+
+THE HEADSET BUTTON. 1.4.173 closed the headphone replay
+of a finished reading by Oscar's dictation verdict (a
+parked-awake session caught a stray PLAY from a dictation
+stop and restarted a reading uninvited). His ruling now:
+«No reviertas nada a menos que mis botones vuelvan a
+servir» — the buttons must serve again. The finished
+reading parks AWAKE once more (the 1.4.160 shape): while
+its card stands finished, the media session stays active,
+the router hands it his headphone PLAY, and the reading
+replays from 0. The 173 risk returns with the deed and is
+named in the code and in the delivery: a stray PLAY while
+the finished card stands can restart the reading; the
+card's stop retires the park. A paused reading still
+sleeps (1.4.154 stands) — the park is for the finished
+alone.
+
+Shell + page wave: no bench exists for the media session
+or the overlay; the CI compile is the shell gate, the
+battery judges the page, and his phone is the judge.
 ## 1.4.262 — The dress watchdog: a visit never survives his gaze
 
 The black screen, diagnosed with Oscar's own sighting
