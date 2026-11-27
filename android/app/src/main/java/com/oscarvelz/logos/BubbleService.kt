@@ -2813,7 +2813,14 @@ class BubbleService : Service() {
         if (!docked && panel == null && !dockPending && bubble != null) armDockTimer()
     }
     private fun dockShift(): Int {
-        val over = bubbleSize() - dp(30) + dp(4)
+        // Hidden to the half (Oscar, 2026-11-27: «Ahora que se
+        // oculte a la mitad»): exactly half the jewel stays in
+        // sight past the edge — half in, half out, at whatever
+        // size he chose. The seated jewel stands dp(4) off the
+        // edge, so the shift that leaves size/2 showing is
+        // size/2 + dp(4). (1.4.258–263 left a fixed 30dp sliver;
+        // the half is his settled measure.)
+        val over = bubbleSize() / 2 + dp(4)
         return if (bubbleCorner() % 2 == 1) over else -over
     }
     private fun seatPosition(corner: Int): Pair<Int, Int> {

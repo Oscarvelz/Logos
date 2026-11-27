@@ -977,6 +977,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 16px; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 600; box-shadow: 0 14px 30px -12px rgba(0,0,0,.6); animation: toastIn .35s var(--ease) both; max-width: min(92vw, 480px); }
 .toast button { color: var(--accent); font-weight: 800; padding: 6px 10px; border-radius: 10px; }
 [data-theme='dark'] .toast button { color: #8a5a0e; }
+/* The toast pill is the inverted pair (the text colour as its
+   ground), so the action button cannot wear the theme's accent
+   raw: on the pale pill the electric accents wash out (Oscar's
+   Cyberpunk shot, 2026-11-27: the yellow Undo on white could
+   not be read), and on the light theme's dark pill the accent
+   sinks. Each theme's button wears a legible depth of its own
+   family instead — dark gold above, light gold here, a deep
+   cyan, a deep magenta print of the neon. */
+[data-theme='light'] .toast button { color: #e9bd72; }
+[data-theme='tron'] .toast button { color: #006a7a; }
+[data-theme='cyberpunk'] .toast button { color: #d10056; }
 @keyframes toastIn { from { transform: translateY(12px); opacity: 0; } }
 
 /* ── Settings extras ───────────────────────────────────── */

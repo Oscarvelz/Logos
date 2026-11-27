@@ -1,3 +1,38 @@
+## 1.4.264 — Hidden to the half; the toast's Undo can be read
+
+Built on Hark's shell cure (source 5bba6faf56, CI 166),
+which is now part of this tree: the bubble window carries
+FLAG_LAYOUT_NO_LIMITS — the root cause of the whole dock
+affair (the window manager clamped the overlay inside the
+screen, so the docked seat past the edge was always pulled
+back whole; five waves of state machinery were innocent),
+midAudio means real progress (frac strictly between
+0.0005 and 0.999), stale guards expire (a page "playing"
+unconfirmed for 15 s; a hand-down older than 8 s), and
+every held dock run writes its reason to the stage journal.
+
+Oscar's two orders on seeing it work (2026-11-27):
+
+THE HALF. «Ahora que se oculte a la mitad» — the docked
+bubble now hides to exactly half the jewel: dockShift is
+bubbleSize()/2 + dp(4), so half the jewel stays in sight
+past the edge at whatever size he chose, replacing the
+fixed 30dp sliver of 1.4.258–263.
+
+THE TOAST'S COLOURS. His Cyberpunk screenshot: the
+«Playing what you copied» toast is an inverted pill (the
+theme's text colour as its ground — near-white in
+Cyberpunk) and its Undo wore the raw signal yellow on
+that white: illegible. The button can never wear the raw
+accent on the inverted pill; each theme now gives it a
+legible depth of its own family, extending the dark
+theme's standing patch (#8a5a0e): light wears the light
+gold #e9bd72 (its pill is dark), Tron a deep cyan #006a7a,
+Cyberpunk a deep magenta print #d10056 of its neon.
+CSS only; the toast's shape and words are untouched.
+
+Presentation impact: none — no anchor, presence or text
+changed (pure CSS and shell geometry).
 ## Shell (Hark, 2026-11-27) — the edge dock, unblocked
 
 Taken over from Muse's report (1.4.258–263: the bubble never hid on Oscar's phone).
