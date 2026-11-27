@@ -335,6 +335,30 @@ class MainActivity : Activity() {
             window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
         }
         if (consumeWantReload()) web.reload()
+        // The dress watchdog (1.4.262): a visit is invisible work
+        // in the back — it must never survive his gaze. Every
+        // black screen in this house's history was the ghost
+        // clothes outliving their errand on an opaque window
+        // (1.4.204, 1.4.153, 1.4.236): web alpha 0 and transparent
+        // paint over a window whose own ground is near-black read
+        // as a full-screen black, Back left the task, and no
+        // splash ever showed because the page never died. The
+        // entry roads are many and fenced one by one over the
+        // waves; the SYMPTOM has one necessary condition — ghost
+        // still true while he looks. So a resume that still finds
+        // the dress on after a fair window (a healthy visit is
+        // retired by its pulse or is a backstage errand that
+        // never resumes at all) lifts it, and leaves its witness
+        // on the Settings line.
+        if (ghost) {
+            val began = ghostBegan
+            ghostHandler.postDelayed({
+                if (ghost && resumed && ghostBegan == began && !isFinishing) {
+                    runCatching { BubbleService.noteTry(this, BubbleService.s("a visit was lifted from the screen", "una visita fue levantada de la pantalla")) }
+                    exitGhost()
+                }
+            }, 4000)
+        }
         if (!ghost) arrivalCheck()
     }
 

@@ -1,3 +1,39 @@
+## 1.4.262 — The dress watchdog: a visit never survives his gaze
+
+The black screen, diagnosed with Oscar's own sighting
+answers (2026-11-27): it covers the whole screen; Back
+cures it; the gold λ never appears; it came back stronger
+in a morning of heavy bubble testing.
+
+The mechanism: a bubble errand that must wake the page
+runs as a ghost visit — the activity dressed invisible
+(web alpha 0, transparent paint, not touchable) so the
+work happens without flashing the app. But the activity's
+window is OPAQUE with a near-black ground (@color/bg), so
+clothes left standing read as a full-screen black. The
+page never died (hence no splash, and arrivalCheck's
+rescue never applied); Back left the task, and the next
+arrival's stay-conversion stripped the clothes (hence the
+cure). Every black screen in this house's history was
+this family (1.4.204's manufactured visit, 1.4.153's black
+pull-back, 1.4.236's corpse page) — each entry road fenced
+in its wave, and still the family returned.
+
+The cure aims at the symptom's one necessary condition:
+ghost still true while he looks. onResume now arms a
+watchdog (four seconds — a healthy visit is retired by
+its pulse long before, and a backstage errand never
+resumes at all): if the dress is still on and the activity
+is resumed, the visit is lifted on the spot (exitGhost)
+and the rescue leaves its witness on the Settings line
+("a visit was lifted from the screen"), so the next
+sighting carries evidence of which road was taken.
+Healthy visits are untouched: they run un-resumed and
+retire by pulse or failsafe as before.
+
+Shell wave: no bench exists for the overlay or the
+activity dress; the CI compile is the gate and his phone
+the judge.
 ## 1.4.261 — Voices completed: the reading voice can be crowned; the flags stop being cut; the 260 shell cure rides here
 
 Three deeds in one wave:
