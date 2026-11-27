@@ -2742,7 +2742,37 @@ class BubbleService : Service() {
         // never the raw snapshot, whose last push a frozen page
         // can leave standing at "playing" forever.
         if (playingNow || NativeSpeaker.playing) { armDockTimer(); return@Runnable }
+        // His old norm, restored (1.4.260, Oscar: «Lo que se
+        // oculta es el aro, no la burbuja. No ocultes el aro si
+        // hay audio a la mitad. Solo cuando el audio
+        // finaliza.»): a reading IN COURSE — even paused —
+        // keeps its bubble and its ring in sight; the ring
+        // retires only at the end (237), and the dock follows
+        // the same law. The first build counted a paused
+        // reading as free to hide; his screenshots corrected
+        // it. The dock therefore waits for the audio to
+        // FINALIZE. His hand stays sovereign: the outward
+        // slide hides it whenever HE orders it — this guard
+        // binds only the automatic wait.
+        if (midAudio()) { armDockTimer(); return@Runnable }
         dockBubble()
+    }
+    /** Whether an audio stands mid-way: a session in course
+     *  and not finished. The device voice answers through its
+     *  own panel word (done); the page road reads the push —
+     *  active, with the finished flag (fin, 237) unset and the
+     *  fraction short of the end (the recording's face carries
+     *  no fin; its fraction is its word). */
+    private fun midAudio(): Boolean {
+        if (NativeSpeaker.active) {
+            val done = runCatching { JSONObject(NativeSpeaker.panelJson()).optBoolean("done") }.getOrDefault(false)
+            return !done
+        }
+        val j = runCatching { JSONObject(nowJson) }.getOrNull() ?: return false
+        if (!j.optBoolean("active")) return false
+        if (j.optInt("fin", 0) == 1) return false
+        if (j.optDouble("frac", 0.0) >= 0.999) return false
+        return true
     }
     private fun armDockTimer(delayMs: Long = 3_000) {
         handler.removeCallbacks(dockRun)

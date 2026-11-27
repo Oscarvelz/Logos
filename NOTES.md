@@ -1,3 +1,37 @@
+## 1.4.260 — The dock obeys the old norm: never mid-audio
+
+Oscar's verdict on 259 (2026-11-27, three screenshots): the
+dock now works — his second screenshot shows the jewel
+hidden behind the phone's edge, the form of his third
+screenshot (another app's edge tab): «Se oculta detrás del
+borde del teléfono. Exactamente lo que quiero.» But the
+TIMING broke his old norm: «Lo que se oculta es el aro, no
+la burbuja! No ocultes el aro si hay audio a la mitad. Solo
+cuando el audio finaliza. Mi antigua norma.»
+
+The correction: what the dock takes away is the RING — the
+reading's progress — and a reading in course keeps its ring
+in sight even when paused (the ring retires only at the
+end, 1.4.237). The first build counted a paused reading as
+free to hide (declared as a builder's choice in 258's
+notes); his norm overrules it.
+
+The cure (BubbleService, the dock judge only): dockRun now
+also waits out midAudio() — a session in course and not
+finished. The device voice answers through its own panel
+word (done); the page road reads the push: active, the
+finished flag (fin) unset, and the fraction short of the
+end (the recording's face carries no fin; its fraction is
+its word). The dock proceeds only when nothing stands
+mid-way: no session, or the audio finalized. His hand
+stays sovereign — the outward slide hides the bubble
+whenever HE orders it; the guard binds only the automatic
+wait. Everything else from 258/259 stands: the three-second
+wait, the 30dp sliver behind the edge, the tap that only
+restores, play keeping the jewel out.
+
+Shell wave: no bench exists for the overlay; the CI
+compile is the gate and his phone the judge.
 ## 1.4.259 — The dock, cured: the slide is the gesture, and the wait cannot starve
 
 Oscar's verdict on 258 (2026-11-27): «No noto ningún
