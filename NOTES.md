@@ -1,3 +1,34 @@
+## 1.4.266 — The tap on the hidden bubble starts the audio
+
+Oscar's order (2026-11-27): «que el audio comience a
+reproducirse una vez el usuario toca la burbuja, incluso
+si está escondida en el borde. La burbuja sale para que
+el reproductor comience a reproducir automáticamente si
+las condiciones lo permiten y está activado el modo
+automático.» And his frame, restated the same minute:
+while it is playing the bubble does not hide; once the
+playback ends, it hides; his hand can always hide it —
+that norm stands untouched (260, Hark's guards).
+
+THE DEED. A tap on the docked bubble undocks it, and —
+when the automatic mode (the clipboard watch lever) is
+on — starts the audio: a fresh copy plays first, by the
+tap's own law (1.4.255, queue off); otherwise the shell
+speaks the play verb through pokeOrWake, the road every
+key already travels, and each driver answers by its own
+law — a paused reading resumes, a finished reading plays
+again from the start (the page's resume() at finished
+goes to play(0); an ended clip replays from its reset
+clock; the device voice speaks its standing sentence),
+and if nothing stands, the verb's own session recovery
+answers, exactly as a headset play press does today.
+With the automatic mode off, the tap only brings the
+bubble out, as it has since 1.4.258. If nothing can
+play, the bubble simply stays out and the dock wait
+runs again, as always.
+
+Shell only (BubbleService.tapBubble). Presentation
+impact: none — no surface, presence or text changed.
 ## 1.4.265 — The hidden bubble's own translucency
 
 Oscar's order (2026-11-27, on seeing Hark's cure work):

@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.265'
+const VERSION = '1.4.266'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)

@@ -3010,10 +3010,29 @@ class BubbleService : Service() {
      *  with the queue on lines up at the tail, never substitutes
      *  (248/249) — so both stale directions land safe. */
     private fun tapBubble() {
-        // A tap on the docked sliver only brings the jewel back
-        // out (1.4.258 — «para tocarlo y abrirlo rápidamente»);
-        // the next tap is the tap as always.
-        if (docked) { undockBubble(); return }
+        // A tap on the docked bubble brings the jewel back out
+        // (1.4.258 — «para tocarlo y abrirlo rápidamente»). Since
+        // 1.4.266 (Oscar) the tap is also a play order when the
+        // automatic mode is on: «que el audio comience a
+        // reproducirse una vez el usuario toca la burbuja,
+        // incluso si está escondida en el borde». A fresh copy
+        // plays first (the tap's own law, 255, queue off);
+        // otherwise the play verb every key already speaks
+        // starts the standing player — a paused reading resumes,
+        // a finished one plays again, and if nothing stands the
+        // verb's own recovery answers. With the automatic mode
+        // off, the tap only brings it out, as before.
+        if (docked) {
+            undockBubble()
+            if (!lever(this)) return
+            if (!queueModeSeen) {
+                trySource = "the tap"
+                val direct = readClipboard(this)
+                if (direct.isNotEmpty() && isFreshCatch(this, direct)) { deliver(this, direct, true); return }
+            }
+            pokeOrWake("play")
+            return
+        }
         if (panel != null || queueModeSeen) { togglePanel(); return }
         trySource = "the tap"
         val direct = readClipboard(this)
