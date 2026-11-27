@@ -3037,9 +3037,11 @@ class BubbleService : Service() {
         // plays first (the tap's own law, 255, queue off);
         // otherwise the play verb every key already speaks
         // starts the standing player — a paused reading resumes,
-        // a finished one plays again, and if nothing stands the
-        // verb's own recovery answers. With the automatic mode
-        // off, the tap only brings it out, as before.
+        // a finished one plays again. Since 1.4.268 the verb is
+        // spoken only when a player stands (see the branch):
+        // the tap starts what stands, it never summons what
+        // does not. With the automatic mode off, the tap only
+        // brings it out, as before.
         if (docked) {
             undockBubble()
             if (!lever(this)) return
@@ -3048,7 +3050,18 @@ class BubbleService : Service() {
                 val direct = readClipboard(this)
                 if (direct.isNotEmpty() && isFreshCatch(this, direct)) { deliver(this, direct, true); return }
             }
-            pokeOrWake("play")
+            // Only a player that STANDS may be started (1.4.268).
+            // The bare play verb, finding nothing standing,
+            // recovers a past session on the page's road — a
+            // session Oscar never asked for, which then stands
+            // paused mid-way and, by his own norma (no dock while
+            // audio stands mid-way), holds the bubble out
+            // forever: his verdict — «los cambios dejaron a la
+            // burbuja incapaz de esconderse». The tap starts what
+            // stands; it never summons what does not.
+            if (NativeSpeaker.active) { pokeOrWake("play"); return }
+            val j = runCatching { JSONObject(nowJson) }.getOrNull()
+            if (j != null && j.optBoolean("active")) pokeOrWake("play")
             return
         }
         if (panel != null || queueModeSeen) { togglePanel(); return }

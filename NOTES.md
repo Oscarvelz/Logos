@@ -1,3 +1,32 @@
+## 1.4.268 — The tap starts what stands; it never summons
+
+Oscar's verdict on the 266/267 stack (2026-11-27): the
+bubble no longer hides at all, and the settings seem to
+have no effect — «solo surgieron efectos para mal».
+
+THE CONVICTED ROAD. The 1.4.266 docked tap spoke the
+bare play verb. That verb's page road, finding no
+session standing, recovers a past session — one Oscar
+never asked for. A recovered session stands paused
+mid-way, and by his own norma (1.4.260: no dock while
+audio stands mid-way) the dock is then held forever:
+the bubble cannot hide again until that session ends
+or is dismissed. The two hidden-settings had no stage
+to show on while the bubble never hid, which is why
+every change looked effect-less.
+
+THE CURE. The docked tap now judges standing-ness in
+the shell before speaking: the device voice active, or
+the page's standing face (active) — only then is the
+play verb spoken (a paused reading resumes, a finished
+one plays again, through the same roads as before).
+With nothing standing, the tap only brings the bubble
+out. One tap on a bubble held out by a standing session
+still plays that session through to its end, after
+which the dock returns on its own.
+
+Shell only (BubbleService.tapBubble). Presentation
+impact: none.
 ## 1.4.267 — The hidden translucency survives; how much shows is his
 
 Two verdicts of Oscar's (2026-11-27): the bubble's
