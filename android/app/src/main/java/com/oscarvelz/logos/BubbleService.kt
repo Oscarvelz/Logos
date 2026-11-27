@@ -2472,6 +2472,7 @@ class BubbleService : Service() {
         root.alpha = 0f; root.scaleX = 0.5f; root.scaleY = 0.5f
         root.animate().alpha(awakeAlpha()).scaleX(1f).scaleY(1f).setDuration(240).setInterpolator(DecelerateInterpolator()).start()
         handler.postDelayed({ invite(2, force = true) }, 420)
+        armDockTimer()
     }
 
     private fun attachDrag(v: View, p: WindowManager.LayoutParams) {
@@ -2487,12 +2488,17 @@ class BubbleService : Service() {
         }
         v.setOnTouchListener { _, e ->
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> { wakeBubble(); longHit = false; handler.postDelayed(longRun, 500); downX = e.rawX; downY = e.rawY; startX = p.x; startY = p.y; moved = false; true }
+                MotionEvent.ACTION_DOWN -> { wakeBubble(); longHit = false; handOnBubble = true; handler.removeCallbacks(dockRun); handler.postDelayed(longRun, 500); downX = e.rawX; downY = e.rawY; startX = p.x; startY = p.y; moved = false; true }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = e.rawX - downX; val dy = e.rawY - downY
                     if (Math.abs(dx) + Math.abs(dy) > dp(9)) moved = true
                     if (moved) handler.removeCallbacks(longRun)
                     if (moved) {
+                        // A drag that takes hold of the docked
+                        // sliver carries the whole jewel again
+                        // (1.4.258): the dock is released by the
+                        // taking, before any seat is judged.
+                        if (docked) { docked = false; handler.removeCallbacks(dockRun) }
                         // Holding the bubble raises the two top gates (Oscar's other
                         // app does this, and now so does Logos): Remove, or Open.
                         if (dragTargets.isEmpty()) { collapsePanel(); showTargets() }
@@ -2504,6 +2510,7 @@ class BubbleService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     handler.removeCallbacks(longRun)
+                    handOnBubble = false
                     // THE SEPARATION (1.4.236, Oscar): the gates and
                     // the gesture are two different intentions, and
                     // only one may take the release. A gate takes it
@@ -2532,16 +2539,33 @@ class BubbleService : Service() {
                             val fdx = e.rawX - downX; val fdy = e.rawY - downY
                             val dist = Math.hypot(fdx.toDouble(), fdy.toDouble())
                             val dur = e.eventTime - e.downTime
-                            val flick = if (dist >= dp(24) && dur in 1..400 && dist / dur >= 0.45) flickTarget(fdx, fdy, far = dist >= dp(130)) else null
-                            if (flick != null) {
+                            val isFlick = dist >= dp(24) && dur in 1..400 && dist / dur >= 0.45
+                            // The outward slide (1.4.258): a quick
+                            // slide aimed mostly outward — toward
+                            // the edge of the side where the bubble
+                            // is released — is the hand's order to
+                            // hide it at that edge. It outranks the
+                            // seat gesture: the seat is re-judged to
+                            // the nearest place first, then one
+                            // glide carries the jewel out.
+                            val outwardSign = if (p.x + bubbleHalf() > resources.displayMetrics.widthPixels / 2) 1 else -1
+                            val outFlick = isFlick && fdx * outwardSign > 0 && Math.abs(fdx.toDouble()) >= 0.70 * dist
+                            val flick = if (isFlick && !outFlick) flickTarget(fdx, fdy, far = dist >= dp(130)) else null
+                            if (outFlick) {
+                                val hw2 = bubbleHalf()
+                                getSharedPreferences("bubble", MODE_PRIVATE).edit().putInt("corner", nearestSeat(p.x + hw2, p.y + hw2)).apply()
+                                docked = true
+                                seatBubbleInCorner(true)
+                            } else if (flick != null) {
                                 getSharedPreferences("bubble", MODE_PRIVATE).edit().putInt("corner", flick).apply()
                                 seatBubbleInCorner(true)
                             } else settleBubble(v, p)
                         }
                     }
+                    if (panel == null && !docked && bubble != null) armDockTimer()
                     true
                 }
-                MotionEvent.ACTION_CANCEL -> { handler.removeCallbacks(longRun); hideTargets(); if (moved) settleBubble(v, p); true }
+                MotionEvent.ACTION_CANCEL -> { handler.removeCallbacks(longRun); handOnBubble = false; hideTargets(); if (moved) settleBubble(v, p); if (panel == null && !docked && bubble != null) armDockTimer(); true }
                 else -> false
             }
         }
@@ -2652,6 +2676,61 @@ class BubbleService : Service() {
         return c
     }
 
+    // --- The edge dock (1.4.258, Oscar, 2026-11-27) ---
+    // «Haz que la burbuja se esconda automáticamente en el borde
+    // de donde esté. Que deje ver parte de su icono para tocarlo
+    // y abrirlo rápidamente. Entonces, si no se le da play,
+    // permanece un instante en la espera, y luego transiciona a
+    // su borde. Pero si se le da play, la espera queda vista,
+    // para dejar ver al aro. De todas formas, haz que la burbuja
+    // acepte el gesto de esconder en su borde. Un simple desliz
+    // hacia afuera, apuntando al borde, señala a la burbuja que
+    // el usuario quiere esconderla manualmente. Y el
+    // comportamiento se repite.»
+    // The bubble's home stays its seat; the dock is a veil over
+    // it. After a short wait (three seconds) with nothing
+    // playing and no panel standing, the bubble glides outward
+    // to its seat's own edge until only a sliver of the jewel
+    // (30dp) shows. Play undocks it at once and keeps it out
+    // while it plays, so the ring can be seen; when play stops
+    // the wait runs again — the cycle repeats. A tap on the
+    // sliver brings it back out and does nothing else; the next
+    // tap is the tap as always (255). A flick aimed outward
+    // docks it by hand. A hand resting on the bubble holds the
+    // wait off, and a drag that takes hold of the sliver
+    // carries it as always, undocked.
+    private var docked = false
+    private var handOnBubble = false
+    private val dockRun = Runnable {
+        if (bubble == null || panel != null || docked || handOnBubble) return@Runnable
+        if (livePlaying()) { armDockTimer(); return@Runnable }
+        dockBubble()
+    }
+    private fun armDockTimer() {
+        handler.removeCallbacks(dockRun)
+        handler.postDelayed(dockRun, 3_000)
+    }
+    private fun dockShift(): Int {
+        val over = bubbleSize() - dp(30) + dp(4)
+        return if (bubbleCorner() % 2 == 1) over else -over
+    }
+    private fun seatPosition(corner: Int): Pair<Int, Int> {
+        val (x, y) = cornerSeat(corner)
+        return if (docked && panel == null) Pair(x + dockShift(), y) else Pair(x, y)
+    }
+    private fun dockBubble() {
+        if (docked || panel != null || bubble == null) return
+        docked = true
+        seatBubbleInCorner(true)
+    }
+    private fun undockBubble() {
+        handler.removeCallbacks(dockRun)
+        if (!docked) return
+        docked = false
+        seatBubbleInCorner(true)
+        armDockTimer()
+    }
+
     private fun cornerSeat(corner: Int): Pair<Int, Int> {
         val sw2 = resources.displayMetrics.widthPixels
         val sh2 = resources.displayMetrics.heightPixels
@@ -2673,7 +2752,7 @@ class BubbleService : Service() {
     private fun seatBubbleInCorner(animate: Boolean) {
         val bp = bubbleParams ?: return
         val bv = bubble ?: return
-        val (tx, ty) = cornerSeat(bubbleCorner())
+        val (tx, ty) = seatPosition(bubbleCorner())
         if (bp.x == tx && bp.y == ty) { if (panel != null) positionPanel(); return }
         if (!animate) {
             bp.x = tx; bp.y = ty
@@ -2704,12 +2783,8 @@ class BubbleService : Service() {
         handler.postDelayed({ placeFromMemory() }, 300)
     }
 
-    private fun settleBubble(v: View, p: WindowManager.LayoutParams) {
-        // The hand may carry the bubble anywhere; where it RESTS is
-        // the nearest of the six predetermined places (Oscar,
-        // 2026-11-22), and that place is what the bubble remembers.
+    private fun nearestSeat(cx: Int, cy: Int): Int {
         val hw = bubbleHalf()
-        val cx = p.x + hw; val cy = p.y + hw
         var best = 3; var bestD = Long.MAX_VALUE
         for (s in 0..5) {
             val (sx, sy) = cornerSeat(s)
@@ -2717,6 +2792,15 @@ class BubbleService : Service() {
             val dd = dx * dx + dy * dy
             if (dd < bestD) { bestD = dd; best = s }
         }
+        return best
+    }
+
+    private fun settleBubble(v: View, p: WindowManager.LayoutParams) {
+        // The hand may carry the bubble anywhere; where it RESTS is
+        // the nearest of the six predetermined places (Oscar,
+        // 2026-11-22), and that place is what the bubble remembers.
+        val hw = bubbleHalf()
+        val best = nearestSeat(p.x + hw, p.y + hw)
         getSharedPreferences("bubble", MODE_PRIVATE).edit().putInt("corner", best).apply()
         seatBubbleInCorner(true)
     }
@@ -2789,6 +2873,10 @@ class BubbleService : Service() {
      *  with the queue on lines up at the tail, never substitutes
      *  (248/249) — so both stale directions land safe. */
     private fun tapBubble() {
+        // A tap on the docked sliver only brings the jewel back
+        // out (1.4.258 — «para tocarlo y abrirlo rápidamente»);
+        // the next tap is the tap as always.
+        if (docked) { undockBubble(); return }
         if (panel != null || queueModeSeen) { togglePanel(); return }
         trySource = "the tap"
         val direct = readClipboard(this)
@@ -2936,6 +3024,10 @@ class BubbleService : Service() {
 
     private fun openPanel() {
         val w = wm ?: return
+        // The panel needs the whole jewel: the dock is released
+        // before the seat is judged (1.4.258).
+        handler.removeCallbacks(dockRun)
+        docked = false
         // The bubble stands in its corner before the panel is born,
         // so the panel's seat is judged from the corner, always.
         seatBubbleInCorner(false)
@@ -4556,6 +4648,9 @@ class BubbleService : Service() {
         // the same event, so the drag never feels this.)
         applyLook()
         if (bubble != null) seatBubbleInCorner(false)
+        // The panel is gone: the dock's wait starts again
+        // (1.4.258 — the cycle repeats).
+        armDockTimer()
         if (!now && deliveries != lastDeliverySeen) {
             lastDeliverySeen = deliveries
             if (System.currentTimeMillis() - lastDeliveryAt < 20000) handler.postDelayed({ invite(2, force = true) }, 250)
@@ -4909,7 +5004,12 @@ class BubbleService : Service() {
                     toggleB?.setPadding(dp(6), 0, 0, 0)
                 }
             }
+            val wasPlaying = playingNow
             playingNow = playing
+            // The dock's edges (1.4.258): play brings the jewel
+            // out and keeps it out, so the ring can be seen; the
+            // stop starts the wait that ends at the edge.
+            if (playing != wasPlaying) { if (playing) undockBubble() else armDockTimer() }
             val prog = ((j?.optDouble("frac", 0.0) ?: 0.0) * 1000).toInt()
             if (!seekHeld && prog != shownSeek) seekBar?.let { it.progress = prog; shownSeek = prog }
             spectrum?.let { sp ->

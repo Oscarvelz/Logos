@@ -1,3 +1,40 @@
+## 1.4.258 — The bubble docks at its edge
+
+Oscar's order (2026-11-27): «Haz que la burbuja se esconda
+automáticamente en el borde de donde esté. Que deje ver parte
+de su icono para tocarlo y abrirlo rápidamente. Entonces, si
+no se le da play, permanece un instante en la espera, y luego
+transiciona a su borde. Pero si se le da play, la espera
+queda vista, para dejar ver al aro. De todas formas, haz que
+la burbuja acepte el gesto de esconder en su borde. Un simple
+desliz hacia afuera, apuntando al borde, señala a la burbuja
+que el usuario quiere esconderla manualmente. Y el
+comportamiento se repite.»
+
+The deed (BubbleService, shell wave): the bubble's home
+stays its seat — the dock is a veil over it. When nothing is
+playing and no panel stands, a three-second wait ends in a
+glide outward to the seat's own edge, until only a sliver of
+the jewel (30dp of it) shows. Play undocks it at once and
+keeps it out for as long as it plays, so the ring can be
+seen; when play stops, the wait runs again and the cycle
+repeats. A tap on the sliver brings it back out (that tap's
+only deed — the next tap is the tap as always). A quick
+slide aimed outward, toward the edge of the side where the
+bubble is released, docks it by hand at once: the seat is
+re-judged to the nearest place first, then the one glide
+carries it out. A drag that takes hold of the sliver
+carries it as always, undocked. Opening the panel undocks
+it; closing the panel starts the wait again. A hand resting
+on the bubble holds the wait off.
+
+Declared bounds: the wait is three seconds, chosen, and
+tunable by his word; the dwell is judged by the shell's own
+playing witness, so a reading the shell cannot see (none —
+both drivers report to it) is the only kind that could dock
+mid-sound, and the dock judge re-checks at the moment of
+gliding. Shell wave: no bench exists for the overlay; the
+CI compile is the gate and his phone the judge.
 ## 1.4.257 — Voices is the only center: Make default takes the stage
 
 Oscar's report (2026-11-27, with his photo): in Voices, Noa
