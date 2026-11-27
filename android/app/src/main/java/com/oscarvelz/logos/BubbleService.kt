@@ -2488,7 +2488,7 @@ class BubbleService : Service() {
         }
         v.setOnTouchListener { _, e ->
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> { wakeBubble(); longHit = false; handOnBubble = true; handler.removeCallbacks(dockRun); handler.postDelayed(longRun, 500); downX = e.rawX; downY = e.rawY; startX = p.x; startY = p.y; moved = false; true }
+                MotionEvent.ACTION_DOWN -> { wakeBubble(); longHit = false; handOnBubble = true; handler.removeCallbacks(dockRun); dockPending = false; handler.postDelayed(longRun, 500); downX = e.rawX; downY = e.rawY; startX = p.x; startY = p.y; moved = false; true }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = e.rawX - downX; val dy = e.rawY - downY
                     if (Math.abs(dx) + Math.abs(dy) > dp(9)) moved = true
@@ -2498,7 +2498,7 @@ class BubbleService : Service() {
                         // sliver carries the whole jewel again
                         // (1.4.258): the dock is released by the
                         // taking, before any seat is judged.
-                        if (docked) { docked = false; handler.removeCallbacks(dockRun) }
+                        if (docked) { docked = false; handler.removeCallbacks(dockRun); dockPending = false }
                         // Holding the bubble raises the two top gates (Oscar's other
                         // app does this, and now so does Logos): Remove, or Open.
                         if (dragTargets.isEmpty()) { collapsePanel(); showTargets() }
@@ -2540,24 +2540,48 @@ class BubbleService : Service() {
                             val dist = Math.hypot(fdx.toDouble(), fdy.toDouble())
                             val dur = e.eventTime - e.downTime
                             val isFlick = dist >= dp(24) && dur in 1..400 && dist / dur >= 0.45
-                            // The outward slide (1.4.258): a quick
-                            // slide aimed mostly outward — toward
-                            // the edge of the side where the bubble
-                            // is released — is the hand's order to
-                            // hide it at that edge. It outranks the
-                            // seat gesture: the seat is re-judged to
-                            // the nearest place first, then one
-                            // glide carries the jewel out.
-                            val outwardSign = if (p.x + bubbleHalf() > resources.displayMetrics.widthPixels / 2) 1 else -1
-                            val outFlick = isFlick && fdx * outwardSign > 0 && Math.abs(fdx.toDouble()) >= 0.70 * dist
-                            val flick = if (isFlick && !outFlick) flickTarget(fdx, fdy, far = dist >= dp(130)) else null
-                            if (outFlick) {
-                                val hw2 = bubbleHalf()
-                                getSharedPreferences("bubble", MODE_PRIVATE).edit().putInt("corner", nearestSeat(p.x + hw2, p.y + hw2)).apply()
-                                docked = true
-                                seatBubbleInCorner(true)
-                            } else if (flick != null) {
+                            // The outward slide (1.4.258; the
+                            // judge widened in 1.4.259): the hand's
+                            // order to hide the bubble at its edge
+                            // is a SLIDE aimed outward — «un simple
+                            // desliz hacia afuera» — at whatever
+                            // speed his hand chooses. The first
+                            // build demanded a fast flick (400 ms,
+                            // a speed floor), so his deliberate
+                            // slide was judged as a plain drag and
+                            // the bubble glided home: the gesture
+                            // was never registered. Now ANY moved
+                            // release is judged: the travel points
+                            // mostly outward, and the jewel is
+                            // released PAST its nearest home's
+                            // centre, toward the edge — pushed into
+                            // the border, not merely carried. The
+                            // fast flick satisfies the same shape
+                            // and keeps its road. The seat is
+                            // re-judged to the nearest place first,
+                            // then one glide carries the jewel out.
+                            val hw2 = bubbleHalf()
+                            val relCx = p.x + hw2
+                            val nearSeat = nearestSeat(relCx, p.y + hw2)
+                            val nearCx = cornerSeat(nearSeat).first + hw2
+                            val outwardSign = if (relCx > resources.displayMetrics.widthPixels / 2) 1 else -1
+                            val pastHome = (relCx - nearCx) * outwardSign >= dp(16)
+                            val outSlide = dist >= dp(30) && pastHome && fdx * outwardSign > 0 && Math.abs(fdx.toDouble()) >= 0.55 * dist
+                            // The seat gesture keeps its priority
+                            // (235/240): a fast flick that NAMES a
+                            // place — the down-left diagonal from
+                            // the middle seat still lands on the
+                            // bottom corner — is a seat order, not
+                            // a hiding. The slide docks only where
+                            // the gesture names no place, which is
+                            // every road that points past the edge.
+                            val flick = if (isFlick) flickTarget(fdx, fdy, far = dist >= dp(130)) else null
+                            if (flick != null) {
                                 getSharedPreferences("bubble", MODE_PRIVATE).edit().putInt("corner", flick).apply()
+                                seatBubbleInCorner(true)
+                            } else if (outSlide) {
+                                getSharedPreferences("bubble", MODE_PRIVATE).edit().putInt("corner", nearSeat).apply()
+                                docked = true
                                 seatBubbleInCorner(true)
                             } else settleBubble(v, p)
                         }
@@ -2701,14 +2725,32 @@ class BubbleService : Service() {
     // carries it as always, undocked.
     private var docked = false
     private var handOnBubble = false
+    private var dockPending = false
     private val dockRun = Runnable {
-        if (bubble == null || panel != null || docked || handOnBubble) return@Runnable
-        if (livePlaying()) { armDockTimer(); return@Runnable }
+        dockPending = false
+        if (bubble == null || docked) return@Runnable
+        // A transient guard (the panel standing, a hand resting
+        // on the jewel) must not kill the wait (1.4.259): the
+        // first build let the run die on the guard, and nothing
+        // re-armed it in the bubble's ordinary life — the dock
+        // silently never came. Blocked runs now re-arm short
+        // and judge again.
+        if (panel != null || handOnBubble) { armDockTimer(1_200); return@Runnable }
+        // The playing witness is the shell's OWN mirrors
+        // (1.4.259): playingNow, kept current by refreshPanel
+        // from both drivers, and the device voice's own flag —
+        // never the raw snapshot, whose last push a frozen page
+        // can leave standing at "playing" forever.
+        if (playingNow || NativeSpeaker.playing) { armDockTimer(); return@Runnable }
         dockBubble()
     }
-    private fun armDockTimer() {
+    private fun armDockTimer(delayMs: Long = 3_000) {
         handler.removeCallbacks(dockRun)
-        handler.postDelayed(dockRun, 3_000)
+        dockPending = true
+        handler.postDelayed(dockRun, delayMs)
+    }
+    private fun ensureDockTimer() {
+        if (!docked && panel == null && !dockPending && bubble != null) armDockTimer()
     }
     private fun dockShift(): Int {
         val over = bubbleSize() - dp(30) + dp(4)
@@ -2725,6 +2767,7 @@ class BubbleService : Service() {
     }
     private fun undockBubble() {
         handler.removeCallbacks(dockRun)
+        dockPending = false
         if (!docked) return
         docked = false
         seatBubbleInCorner(true)
@@ -3027,6 +3070,7 @@ class BubbleService : Service() {
         // The panel needs the whole jewel: the dock is released
         // before the seat is judged (1.4.258).
         handler.removeCallbacks(dockRun)
+        dockPending = false
         docked = false
         // The bubble stands in its corner before the panel is born,
         // so the panel's seat is judged from the corner, always.
@@ -5043,6 +5087,11 @@ class BubbleService : Service() {
                 startBreath()
             }
         }
+        // The dock's wait is kept alive by the app's ordinary
+        // life (1.4.259): every refresh that finds the bubble
+        // out, unplayed and unpaneled ensures a run is pending —
+        // idempotently, so the dwell is never reset by traffic.
+        ensureDockTimer()
     }
 
     /** The guaranteed floor of a hand ask (1.4.162): if neither the

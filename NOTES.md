@@ -1,3 +1,51 @@
+## 1.4.259 — The dock, cured: the slide is the gesture, and the wait cannot starve
+
+Oscar's verdict on 258 (2026-11-27): «No noto ningún
+comportamiento asociado a lo que te pedí de esconder en el
+borde. La burbuja no hace nada y no registra mis gestos para
+ocultarla manualmente.»
+
+Two defects, both in the first build's judges:
+
+1. THE GESTURE JUDGE DEMANDED A FLICK. The manual hide was
+   judged only inside the seat-gesture branch — a fast flick
+   (≥24dp in ≤400 ms, faster than 0.45 px/ms). His order was
+   «un simple desliz hacia afuera»: a deliberate slide at his
+   hand's own speed fell below the flick floor, was judged as
+   a plain drag, and the bubble glided home. The gesture was
+   never registered because the judge was listening for a
+   different gesture. Cured: ANY moved release is now judged
+   for the slide — the travel points mostly outward
+   (|dx| ≥ 0.55 of the travel, sign toward the edge of the
+   side where the jewel is released) and the jewel is
+   released PAST its nearest home's centre toward the edge
+   (≥16dp) — pushed into the border, not merely carried. The
+   seat gesture keeps its priority: a fast flick that names
+   a place (the down-left diagonal from the middle seat
+   still lands on the bottom corner, 240's law) seats; the
+   slide docks only where the gesture names no place, which
+   is every road that points past the edge.
+
+2. THE WAIT COULD STARVE SILENTLY. The dock run died on its
+   transient guards (panel standing, a hand resting) with
+   nothing in the bubble's ordinary life guaranteed to
+   re-arm it, and its playing witness was the raw push
+   snapshot, whose last word a frozen page can leave standing
+   at "playing" forever. Cured: a blocked run re-arms short
+   (1.2 s) and judges again; the witness is the shell's own
+   mirrors (playingNow, kept current by refreshPanel from
+   both drivers, and NativeSpeaker.playing); and every
+   refreshPanel that finds the bubble out, unplayed and
+   unpaneled ensures a run is pending, idempotently
+   (dockPending), so the dwell is never reset by traffic and
+   never lost by a missed arm.
+
+Declared bounds unchanged from 258: the wait is three
+seconds, the sliver 30dp, the seat system untouched, the
+gates sovereign over any release that rests on them.
+Shell wave: no bench exists for the overlay; the CI
+compile is the gate and his phone the judge. His check
+that the shell took: the Settings footer reads 1.4.259.
 ## 1.4.258 — The bubble docks at its edge
 
 Oscar's order (2026-11-27): «Haz que la burbuja se esconda
