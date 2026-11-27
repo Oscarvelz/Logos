@@ -1,3 +1,19 @@
+## Shell (Hark, 2026-11-27) — the edge dock, unblocked
+
+Taken over from Muse's report (1.4.258–263: the bubble never hid on Oscar's phone).
+- **Main cause:** the bubble window had no FLAG_LAYOUT_NO_LIMITS. The window manager
+  clamps overlays inside the screen, so the docked seat (past the edge) was pulled
+  back and the whole jewel stayed visible. The flag is now set on the bubble window.
+- **midAudio()** now means real progress: frac strictly between 0.0005 and 0.999, not
+  finished. A session parked at zero (loaded, never played, or a recording that reset
+  to zero) no longer holds the bubble out. Native voice is judged the same way.
+- **Stale guards cut:** a page "playing" that has not pushed in 15 s (it pushes every
+  120 ms while sounding) no longer holds the dock; a hand-down older than 8 s with no
+  release is dropped.
+- **Diagnostics:** every held run writes its reason once per change to the stage
+  journal (lastTry): "dock held: panel / hand / playing / audio paused mid-way".
+- Not tested on a device; compiled in CI.
+
 ## 1.4.263 — The finished recording speaks its end; the headset button serves again
 
 Two verdicts of Oscar's (2026-11-27), both answered literally.

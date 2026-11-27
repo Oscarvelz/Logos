@@ -2458,7 +2458,11 @@ class BubbleService : Service() {
         bubbleRingV = ringV
         val p = WindowManager.LayoutParams(
             size, size, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
+            // FLAG_LAYOUT_NO_LIMITS (Hark, 2026-11-27): without it the
+            // window manager clamps an overlay inside the screen, so the
+            // docked seat (past the edge) was pulled back and the whole
+            // jewel stayed in sight — the dock "never happened".
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             val seat = cornerSeat(bubbleCorner())
@@ -2488,7 +2492,7 @@ class BubbleService : Service() {
         }
         v.setOnTouchListener { _, e ->
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> { wakeBubble(); longHit = false; handOnBubble = true; handler.removeCallbacks(dockRun); dockPending = false; handler.postDelayed(longRun, 500); downX = e.rawX; downY = e.rawY; startX = p.x; startY = p.y; moved = false; true }
+                MotionEvent.ACTION_DOWN -> { wakeBubble(); longHit = false; handOnBubble = true; handDownAt = System.currentTimeMillis(); handler.removeCallbacks(dockRun); dockPending = false; handler.postDelayed(longRun, 500); downX = e.rawX; downY = e.rawY; startX = p.x; startY = p.y; moved = false; true }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = e.rawX - downX; val dy = e.rawY - downY
                     if (Math.abs(dx) + Math.abs(dy) > dp(9)) moved = true
@@ -2725,6 +2729,16 @@ class BubbleService : Service() {
     // carries it as always, undocked.
     private var docked = false
     private var handOnBubble = false
+    private var handDownAt = 0L
+    private var lastDockHold = ""
+    /** Every held run says why (Hark, 2026-11-27): the reason lands in
+     *  the stage journal (lastTry), once per change, so a bubble that
+     *  stays out can be read instead of guessed. */
+    private fun dockHold(why: String) {
+        if (why == lastDockHold) return
+        lastDockHold = why
+        noteTry(this, s("dock held: ", "escondido retenido: ") + why)
+    }
     private var dockPending = false
     private val dockRun = Runnable {
         dockPending = false
@@ -2735,13 +2749,21 @@ class BubbleService : Service() {
         // re-armed it in the bubble's ordinary life — the dock
         // silently never came. Blocked runs now re-arm short
         // and judge again.
-        if (panel != null || handOnBubble) { armDockTimer(1_200); return@Runnable }
+        // A hand that never sent its release (a drag ended over a
+        // gate, a cancelled touch) must not hold the dock forever.
+        if (handOnBubble && System.currentTimeMillis() - handDownAt > 8_000) handOnBubble = false
+        if (panel != null) { dockHold("panel"); armDockTimer(1_200); return@Runnable }
+        if (handOnBubble) { dockHold("hand"); armDockTimer(1_200); return@Runnable }
         // The playing witness is the shell's OWN mirrors
         // (1.4.259): playingNow, kept current by refreshPanel
         // from both drivers, and the device voice's own flag —
         // never the raw snapshot, whose last push a frozen page
         // can leave standing at "playing" forever.
-        if (playingNow || NativeSpeaker.playing) { armDockTimer(); return@Runnable }
+        // A "playing" the page stopped confirming is stale: a sounding
+        // page pushes every 120 ms, so 15 silent seconds mean it froze
+        // or died with its last word standing at "playing".
+        val pageSounding = playingNow && !NativeSpeaker.active && System.currentTimeMillis() - nowAt < 15_000
+        if (NativeSpeaker.playing || (playingNow && NativeSpeaker.active) || pageSounding) { dockHold("playing"); armDockTimer(); return@Runnable }
         // His old norm, restored (1.4.260, Oscar: «Lo que se
         // oculta es el aro, no la burbuja. No ocultes el aro si
         // hay audio a la mitad. Solo cuando el audio
@@ -2754,7 +2776,8 @@ class BubbleService : Service() {
         // FINALIZE. His hand stays sovereign: the outward
         // slide hides it whenever HE orders it — this guard
         // binds only the automatic wait.
-        if (midAudio()) { armDockTimer(); return@Runnable }
+        if (midAudio()) { dockHold("audio paused mid-way"); armDockTimer(); return@Runnable }
+        lastDockHold = ""
         dockBubble()
     }
     /** Whether an audio stands mid-way: a session in course
@@ -2765,14 +2788,21 @@ class BubbleService : Service() {
      *  no fin; its fraction is its word). */
     private fun midAudio(): Boolean {
         if (NativeSpeaker.active) {
-            val done = runCatching { NativeSpeaker.panelJson().optBoolean("done") }.getOrDefault(false)
-            return !done
+            val nj = runCatching { NativeSpeaker.panelJson() }.getOrNull() ?: return false
+            if (nj.optBoolean("done")) return false
+            val nf = nj.optDouble("frac", 0.0)
+            return nf > 0.0005 && nf < 0.999
         }
         val j = runCatching { JSONObject(nowJson) }.getOrNull() ?: return false
         if (!j.optBoolean("active")) return false
         if (j.optInt("fin", 0) == 1) return false
-        if (j.optDouble("frac", 0.0) >= 0.999) return false
-        return true
+        // «Audio a la mitad» is audio that has really advanced and not
+        // ended. A session parked at zero (loaded and never played, or a
+        // recording whose clock went back to zero at its end) is not
+        // mid-way, and holding the bubble out for it was the silent
+        // guard that kept the dock from ever coming.
+        val f = j.optDouble("frac", 0.0)
+        return f > 0.0005 && f < 0.999
     }
     private fun armDockTimer(delayMs: Long = 3_000) {
         handler.removeCallbacks(dockRun)
