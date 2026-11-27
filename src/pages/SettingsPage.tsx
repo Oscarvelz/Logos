@@ -15,7 +15,7 @@ import { PresentationSearch } from '../lib/presentation-search.tsx'
 import { launchPresentation } from '../lib/presentation-host.tsx'
 import { pronEntries, savePronEntries, type PronEntry } from '../lib/pronounce.ts'
 
-const VERSION = '1.4.264'
+const VERSION = '1.4.265'
 
 /** Running inside the Logos Android app (its WebView has no browser voices, and its storage is the app's own). */
 const IN_APP = /LogosAndroid/.test(navigator.userAgent)
@@ -524,6 +524,19 @@ export function SettingsPage() {
           <div className="row between"><div className="t">{t('Panel transparency')}</div><span className="mono muted">{st.panelAlpha}%</span></div>
           <Range guarded label={t('Panel transparency')} min={0} max={100} step={5} value={st.panelAlpha} onChange={(v) => settings.set({ panelAlpha: v })} />
         </div>
+        <div className="list-row">
+          <div className="grow">
+            <div className="t">{t('Translucent when hidden')}</div>
+            <div className="d">{t('When the bubble hides at the edge of the screen, it can turn translucent. Its own opacity, only while hidden — apart from the bubble and panel opacities above.')}</div>
+          </div>
+          <Switch label={t('Translucent when hidden')} on={st.dockFade} onChange={(v) => settings.set({ dockFade: v })} />
+        </div>
+        {st.dockFade ? (
+          <div className="list-row col">
+            <div className="row between"><div className="t">{t('Hidden opacity')}</div><span className="mono muted">{st.dockAlpha}%</span></div>
+            <Range guarded label={t('Hidden opacity')} min={10} max={100} step={5} value={st.dockAlpha} onChange={(v) => settings.set({ dockAlpha: v })} />
+          </div>
+        ) : null}
         <div className="list-row col">
           <div className="t">{t('Bubble size')}</div>
           <Seg value={st.bubbleSize} onChange={(v) => settings.set({ bubbleSize: v })} label={t('Bubble size')} options={[{ value: 's', label: t('Small') }, { value: 'm', label: t('Standard') }, { value: 'l', label: t('Large') }]} />

@@ -883,6 +883,15 @@ class BubbleService : Service() {
         @Volatile var lookHook: (() -> Unit)? = null
         fun lookBa(c: Context) = prefs(c).getInt("look_ba", 100).coerceIn(0, 100) / 100f
         fun lookPa(c: Context) = prefs(c).getInt("look_pa", 100).coerceIn(0, 100) / 100f
+        /** The hidden bubble's own translucency (1.4.265, Oscar):
+         *  a switch and an opacity of their own, only while the
+         *  bubble is docked — never mixed with look_ba / look_pa. */
+        fun lookDf(c: Context) = prefs(c).getBoolean("look_df", false)
+        fun lookDa(c: Context) = prefs(c).getInt("look_da", 40).coerceIn(0, 100) / 100f
+        fun setDockLook(c: Context, on: Boolean, da: Int) {
+            prefs(c).edit().putBoolean("look_df", on).putInt("look_da", da).apply()
+            lookHook?.invoke()
+        }
         fun lookSize(c: Context) = prefs(c).getString("look_size", "m") ?: "m"
         fun setLook(c: Context, ba: Int, pa: Int, size: String) {
             prefs(c).edit().putInt("look_ba", ba).putInt("look_pa", pa).putString("look_size", size).apply()
@@ -1872,6 +1881,11 @@ class BubbleService : Service() {
     }
 
     private fun wakeBubble(schedule: Boolean = true) {
+        // While the bubble is hidden, a touch alone does not raise
+        // it (1.4.265): only an undock restores its standing
+        // opacity — otherwise a long-press on the sliver would
+        // leave it docked but lit at the wrong amount.
+        if (docked && panel == null) return
         val b = bubble ?: return
         if (b.alpha < awakeAlpha()) b.animate().alpha(awakeAlpha()).setDuration(140).start()
     }
@@ -1926,6 +1940,16 @@ class BubbleService : Service() {
     private fun awakeAlpha() = lookBa(this)
     private fun panelAlpha() = lookPa(this)
 
+    /** The opacity the bubble wears WHILE HIDDEN (1.4.265,
+     *  Oscar): his translucency switch and its own amount when
+     *  the switch is on; the standing bubble opacity when it is
+     *  off. It rules only the docked state — the moment the
+     *  bubble comes out, awakeAlpha() rules again. */
+    private fun dockAlpha() = if (lookDf(this)) lookDa(this) else awakeAlpha()
+    private fun fadeBubbleTo(target: Float) {
+        bubble?.animate()?.alpha(target)?.setDuration(220)?.start()
+    }
+
     /** Repaint the floating window with the look as it now stands:
      *  sizes relaid out in place, alphas set, the fade re-armed. */
     private fun applyLook() {
@@ -1943,7 +1967,7 @@ class BubbleService : Service() {
                 repaintFace()
                 bubbleFaceV?.layoutParams = FrameLayout.LayoutParams(bubbleFace(), bubbleFace(), Gravity.CENTER)
                 bubbleLambdaV?.invalidate()
-                b.animate().cancel(); b.alpha = if (panel != null) panelAlpha() else awakeAlpha()
+                b.animate().cancel(); b.alpha = if (panel != null) panelAlpha() else if (docked) dockAlpha() else awakeAlpha()
             }
             panel?.let { it.alpha = panelAlpha() }
         }
@@ -2502,7 +2526,7 @@ class BubbleService : Service() {
                         // sliver carries the whole jewel again
                         // (1.4.258): the dock is released by the
                         // taking, before any seat is judged.
-                        if (docked) { docked = false; handler.removeCallbacks(dockRun); dockPending = false }
+                        if (docked) { docked = false; handler.removeCallbacks(dockRun); dockPending = false; fadeBubbleTo(awakeAlpha()) }
                         // Holding the bubble raises the two top gates (Oscar's other
                         // app does this, and now so does Logos): Remove, or Open.
                         if (dragTargets.isEmpty()) { collapsePanel(); showTargets() }
@@ -2587,6 +2611,7 @@ class BubbleService : Service() {
                                 getSharedPreferences("bubble", MODE_PRIVATE).edit().putInt("corner", nearSeat).apply()
                                 docked = true
                                 seatBubbleInCorner(true)
+                                fadeBubbleTo(dockAlpha())
                             } else settleBubble(v, p)
                         }
                     }
@@ -2831,6 +2856,7 @@ class BubbleService : Service() {
         if (docked || panel != null || bubble == null) return
         docked = true
         seatBubbleInCorner(true)
+        fadeBubbleTo(dockAlpha())
     }
     private fun undockBubble() {
         handler.removeCallbacks(dockRun)
@@ -2838,6 +2864,7 @@ class BubbleService : Service() {
         if (!docked) return
         docked = false
         seatBubbleInCorner(true)
+        fadeBubbleTo(awakeAlpha())
         armDockTimer()
     }
 

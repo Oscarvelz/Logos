@@ -36,6 +36,12 @@ export type Settings = {
   bubbleAlpha: number
   /** The panel card's opacity, percent. */
   panelAlpha: number
+  /** The hidden bubble turns translucent (1.4.265, Oscar): its
+   *  own switch and its own opacity, only while docked — apart
+   *  from the bubble and panel opacities above. */
+  dockFade: boolean
+  /** The docked bubble's opacity, percent, while dockFade is on. */
+  dockAlpha: number
   /** The bubble's size: 's' | 'm' | 'l'. */
   bubbleSize: string
   highlight: boolean
@@ -77,6 +83,8 @@ const DEFAULTS: Settings = {
   bubbleText: true,
   bubbleAlpha: 100,
   panelAlpha: 100,
+  dockFade: false,
+  dockAlpha: 40,
   bubbleSize: 'm',
   highlight: true,
   wordLeadMs: 90,
@@ -112,6 +120,7 @@ const NUMERIC_ENVELOPE: Partial<Record<keyof Settings, readonly [number, number]
   sentencePauseMs: [0, 800],
   bubbleAlpha: [0, 100],
   panelAlpha: [0, 100],
+  dockAlpha: [0, 100],
   wordLeadMs: [-150, 450],
   jumpBackSec: [0, 600],
   jumpFwdSec: [0, 600],
@@ -153,10 +162,10 @@ function load(): Settings {
     if (!['en', 'es', 'auto'].includes(out.langMode)) out.langMode = DEFAULTS.langMode
     if (!['mp3', 'wav'].includes(out.format)) out.format = DEFAULTS.format
     if (!['s', 'm', 'l'].includes(out.bubbleSize)) out.bubbleSize = DEFAULTS.bubbleSize
-    for (const k of ['autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'copyQueue', 'bubbleText', 'highlight'] as const) {
+    for (const k of ['autoDownload', 'deviceFallback', 'bubbleOn', 'bubbleAuto', 'copyQueue', 'bubbleText', 'highlight', 'dockFade'] as const) {
       if (typeof out[k] !== 'boolean') out[k] = DEFAULTS[k]
     }
-    for (const k of ['listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec'] as const) {
+    for (const k of ['listenSpeed', 'exportSpeed', 'sentencePauseMs', 'bubbleAlpha', 'panelAlpha', 'dockAlpha', 'wordLeadMs', 'readerScale', 'jumpBackSec', 'jumpFwdSec'] as const) {
       if (typeof out[k] !== 'number' || !Number.isFinite(out[k])) out[k] = DEFAULTS[k]
       else out[k] = clampSettingNumber(k, out[k]) // finite is not enough — inside the envelope (R2-T5-6)
     }

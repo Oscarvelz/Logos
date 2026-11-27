@@ -933,6 +933,7 @@ class MainActivity : Activity() {
             runCatching {
                 val j = JSONObject(json)
                 BubbleService.setLook(this@MainActivity, j.optInt("ba", 100), j.optInt("pa", 100), j.optString("size", "m"))
+                if (j.has("df") || j.has("da")) BubbleService.setDockLook(this@MainActivity, j.optInt("df", 0) == 1, j.optInt("da", 40))
                 if (j.has("jb") || j.has("jf")) BubbleService.setJump(this@MainActivity, j.optInt("jb", 15), j.optInt("jf", 30))
                 if (j.has("th")) BubbleService.setTheme(this@MainActivity, j.optString("th", "dark"))
             }

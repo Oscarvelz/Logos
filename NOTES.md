@@ -1,3 +1,38 @@
+## 1.4.265 — The hidden bubble's own translucency
+
+Oscar's order (2026-11-27, on seeing Hark's cure work):
+from Settings, change how visible the floating sphere is
+when it is hidden — with a switch of its own.
+
+THE DEED. In Settings, beside the bubble and panel
+transparency sliders, a new switch: «Translucent when
+hidden». When it is on, a «Hidden opacity» slider of its
+own appears (10–100%; the floor keeps the hidden jewel
+findable — his word can lift it). The docked bubble wears
+that opacity while it hides, and only while it hides: the
+moment it comes out — a tap, a drag, the panel, a reading
+starting — it returns to the standing bubble opacity.
+With the switch off, the hidden bubble keeps the standing
+opacity, exactly as before.
+
+KEPT APART, AS ORDERED. This opacity never mixes with
+the general playback opacities: settings carry dockFade /
+dockAlpha as their own fields (threaded through the load
+sanitizer, so they survive a reload), the look push
+carries them as df / da beside ba / pa, and the shell
+keeps them as look_df / look_da beside look_ba / look_pa.
+The shell applies the hidden amount at every dock
+(the automatic wait and the hand slide) and restores the
+standing amount at every undock (tap, drag-take, panel,
+play); applyLook judges by state — panel, docked, out —
+and wakeBubble no longer raises a docked bubble on a
+mere touch, so a long-press on the sliver cannot leave
+it hidden but lit at the wrong amount.
+
+Presentation impact: Settings gains a switch row and a
+conditional slider row in the bubble look section — a
+presence change on the Settings surface, relayed to the
+Presentation lane with this wave.
 ## 1.4.264 — Hidden to the half; the toast's Undo can be read
 
 Built on Hark's shell cure (source 5bba6faf56, CI 166),
