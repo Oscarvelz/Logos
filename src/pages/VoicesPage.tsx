@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, Loader2, Pause, Play, Search, Star } from 'lucide-react'
 import { useStore } from '../lib/store.ts'
 import { settings, toggleFavorite } from '../lib/settings.ts'
-import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, favoriteIds, voiceCardTruth, VoiceSearchGate, type Voice } from '../lib/voices.ts'
+import { VOICES, PREVIEW_TEXT, ACCENT_LABEL, favoriteIds, voiceCardTruth, governingOverride, VoiceSearchGate, type Voice } from '../lib/voices.ts'
 import { clipPlayer, playClip } from '../player/clip.ts'
 import { engine, engineCachedFor, synthesize } from '../engine/engine.ts'
 import { encodeWav, trimSilence, applyGain, levelGain } from '../lib/audio.ts'
@@ -114,12 +114,13 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
   const [loading, setLoading] = useState(false)
   const key = `preview:${v.id}`
   const playing = cp.key === key && cp.playing
-  // What this card may claim (M-43's resolution, R2-T7-4's words):
-  // the stored default wears "Default", a standing Listen override
-  // wears "Now reading" on its own card, and Make default is offered
-  // only where the card is not already the stored default — so the
-  // flag, the button and the toast can no longer contradict each
-  // other over a pick made in Listen. The decision lives in
+  // What this card may claim (M-43's resolution, R2-T7-4's words,
+  // 1.4.257's ruling): the stored default wears "Default", a
+  // standing Listen override wears "Now reading" on its own card,
+  // and Make default is offered on every card whose voice is not
+  // the resolved reader for its language — since 257 its tap also
+  // releases the standing pick, so the flag, the button and the
+  // toast cannot contradict each other. The decision lives in
   // voiceCardTruth (voices.ts); resolvedVoiceId still decides what
   // actually reads.
   const claim = voiceCardTruth(st, v)
@@ -179,17 +180,20 @@ function VoiceCard({ voice: v }: { voice: Voice }) {
         {claim.makeDefault && (
           <button className="btn sm ghost" data-present="voice-card:make-default" data-voice-id={v.id} style={{ height: 32, padding: '0 8px', marginLeft: -8, marginTop: 2, fontSize: 13, color: 'var(--text-2)' }}
             onClick={() => {
-              const ov = claim.toastOverride
-              settings.set((s) => ({ defaultVoice: { ...s.defaultVoice, [v.lang]: v.id } }))
+              // 1.4.257 — Oscar's consistency ruling: Voices is the
+              // only center for changing the reader's voice, so this
+              // tap predetermines AND takes the stage — it stores the
+              // default and releases a standing Listen pick that
+              // governs this language, in the same set. The R2-T7-4
+              // hedge (store only, and let the toast confess the pick
+              // still reads) left the default's own card with no deed
+              // that could make it read; his word retires it.
+              settings.set((s) => ({
+                defaultVoice: { ...s.defaultVoice, [v.lang]: v.id },
+                ...(governingOverride(s, v.lang) ? { voiceOverride: null } : {}),
+              }))
               refreshVoices()
-              // R2-T7-4: while a Listen pick governs this language, the
-              // tap changes the stored default only — the toast names
-              // the pick instead of claiming a crown it cannot hand
-              // over. With no pick standing, the old words are simply
-              // true and are kept.
-              toast(ov
-                ? t('{name} is your {lang} default — {other} still reads in Listen until you change it there', { name: v.name, lang: v.lang === 'en' ? t('English') : 'Español', other: ov.name })
-                : t('{name} is now your {lang} default', { name: v.name, lang: v.lang === 'en' ? t('English') : 'Español' }))
+              toast(t('{name} is now your {lang} default', { name: v.name, lang: v.lang === 'en' ? t('English') : 'Español' }))
             }}>
             <Check size={14} /> {t('Make default')}
           </button>

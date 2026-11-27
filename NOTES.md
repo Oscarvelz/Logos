@@ -1,3 +1,49 @@
+## 1.4.257 — Voices is the only center: Make default takes the stage
+
+Oscar's report (2026-11-27, with his photo): in Voices, Noa
+wears "Default · Español" and Marcos wears "Now reading ·
+Español" — and he cannot make Noa read: «No puedo elegir en
+voces la que quiero predeterminar. Antes había un botón para
+eso, pero lo quitamos por redundancia. La regla de
+consistencia dice que hay que dársela a Voices, el único
+centro para cambiar la voz del lector.»
+
+What the code said: the photo also settles yesterday's male
+voice — it is Marcos, a neural voice standing as a Listen
+pick (voiceOverride) over the default. The pick is set by
+the Listen-side doors (the picker, the desk chips, the
+panel's voice key, which cycles the favorites of the
+session's language — Noa and Marcos are both his Spanish
+favorites, in that order) and it never expires on its own.
+The R2-T7-4 design had deliberately weakened Voices to
+match: Make default stored the default only, its toast
+confessed the pick still read, and the stored default's own
+card offered no deed at all. So the center he names could
+show him the truth and could not act on it.
+
+The cure, by his consistency ruling: voiceCardTruth now
+offers Make default on every card whose voice is not the
+resolved reader for its language — the stored-but-outranked
+default included — and the tap stores the default AND
+releases the governing pick in the same set, so the chosen
+voice reads. The flags keep their offices (Default = the
+stored default; Now reading = the standing pick). Judged
+by test/wave257-voices-center.ts (16/16, his specimen
+verbatim) and proven on the bench at phone width: seeded
+with his exact state, Noa's card offers the deed; after the
+tap the pick is gone from the stored settings, Marcos's
+"Now reading" flag is retired, and Noa's card offers the
+deed no more. The Listen-side doors keep their pick — a
+pick is an order given there; what changed is that Voices,
+the center, can always reclaim the stage from it.
+
+Presentation impact: the `voice-card:{voiceId}:make-default`
+anchor's presence rule changes — the button is absent only
+on the card that is the resolved reader for its language
+(the registry's "a default card loses the button" now reads
+"a card that already reads for its language loses the
+button; a stored default outranked by a standing pick keeps
+it, and its tap releases the pick"). Relay sent.
 ## 1.4.256 — A silent render no longer surrenders the voice on its own
 
 Oscar's report (2026-11-26): the white-noise sound is back,

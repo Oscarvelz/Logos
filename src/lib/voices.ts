@@ -110,7 +110,23 @@ export function governingOverride(
  *  language, the toast must name it (toastOverride) instead of
  *  claiming a crown it cannot hand over. resolvedVoiceId above is
  *  untouched — what actually reads never changed; the page's words
- *  about it are what were lying. */
+ *  about it are what were lying.
+ *
+ *  1.4.257 — OSCAR'S CONSISTENCY RULING supersedes the hedge:
+ *  Voices is the ONLY center for changing the reader's voice, so
+ *  predetermining there must take the stage. Under the old rule
+ *  the stored default's card offered no deed at all while a
+ *  Listen pick governed its language — Noa wore "Default ·
+ *  Español", Marcos wore "Now reading", and no button in Voices
+ *  could make Noa read («No puedo elegir en voces la que quiero
+ *  predeterminar»). Now "Make default" is offered on every card
+ *  whose voice is not the resolved reader for its language —
+ *  the stored-but-outranked default included — and its tap
+ *  (VoicesPage) sets the stored default AND releases the
+ *  governing pick, so the toast's plain words are the whole
+ *  truth again. toastOverride survives in the shape for any
+ *  surface that still wants to name the pick; the Voices toast
+ *  no longer needs it. */
 export function voiceCardTruth(
   s: { defaultVoice: Record<Lang, string>; voiceOverride: string | null; langMode: Lang | 'auto' },
   v: Voice,
@@ -119,7 +135,7 @@ export function voiceCardTruth(
   const override = governingOverride(s, v.lang)
   return {
     flag: stored ? 'default' : override?.id === v.id ? 'reading' : null,
-    makeDefault: !stored,
+    makeDefault: resolvedVoiceId(s, v.lang) !== v.id,
     toastOverride: override && override.id !== v.id ? override : null,
   }
 }
