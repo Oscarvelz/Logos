@@ -31,7 +31,10 @@ check('Marcos is the resolved Spanish reader under the pick', resolvedVoiceId(hi
 check('Noa wears the Default flag', voiceCardTruth(his, noa).flag === 'default')
 check('Marcos wears the Now reading flag', voiceCardTruth(his, marcos).flag === 'reading')
 check('Noa — the outranked default — is offered Make default', voiceCardTruth(his, noa).makeDefault === true)
-check('Marcos — the resolved reader — is offered no Make default', voiceCardTruth(his, marcos).makeDefault === false)
+// 1.4.261 supersedes the next 257 leg: the resolved reader who
+// reads by a pick is not the stored default, so his card DOES
+// offer the deed — it converts the pick into the default.
+check('Marcos — the reading pick, not the default — is offered Make default (261)', voiceCardTruth(his, marcos).makeDefault === true)
 check('Zoey — the resolved English reader — is offered no Make default', voiceCardTruth(his, zoey).makeDefault === false)
 check('Lola — neither default nor reader — is offered Make default', voiceCardTruth(his, lola).makeDefault === true)
 
@@ -59,6 +62,21 @@ const manual = { defaultVoice: { en: ZOEY, es: NOA }, voiceOverride: MARCOS, lan
 check('Manual mode: Marcos resolves for English too', resolvedVoiceId(manual, 'en') === MARCOS)
 check('Manual mode: Zoey is offered Make default', voiceCardTruth(manual, zoey).makeDefault === true)
 check('Manual mode: the deed for English also releases the pick', governingOverride(manual, 'en')?.id === MARCOS)
+
+// 1.4.261 — the deed performed on the pick's own card: store
+// Marcos as the Spanish default and release the governing
+// pick (his own). The pick becomes the predetermination.
+const crowned = {
+  defaultVoice: { ...his.defaultVoice, es: MARCOS },
+  voiceOverride: governingOverride(his, 'es') ? null : his.voiceOverride,
+  langMode: his.langMode,
+}
+check('261: crowning the pick releases it', crowned.voiceOverride === null)
+check('261: after crowning, Marcos is the resolved Spanish reader', resolvedVoiceId(crowned, 'es') === MARCOS)
+check('261: after crowning, Marcos wears the Default flag', voiceCardTruth(crowned, marcos).flag === 'default')
+check('261: after crowning, Marcos is offered no Make default', voiceCardTruth(crowned, marcos).makeDefault === false)
+check('261: after crowning, Noa is offered Make default again', voiceCardTruth(crowned, noa).makeDefault === true)
+check('261: after crowning, Noa wears no flag', voiceCardTruth(crowned, noa).flag === null)
 
 if (fails) { console.log(`wave257: ${fails} FAILURES`); process.exit(1) }
 console.log('wave257: ALL PASS')

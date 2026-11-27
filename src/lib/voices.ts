@@ -126,7 +126,24 @@ export function governingOverride(
  *  governing pick, so the toast's plain words are the whole
  *  truth again. toastOverride survives in the shape for any
  *  surface that still wants to name the pick; the Voices toast
- *  no longer needs it. */
+ *  no longer needs it.
+ *
+ *  1.4.261 — THE READING VOICE'S OWN CARD GAINS THE DEED
+ *  (Oscar, 2026-11-27: «Continúa sin dejarme seleccionar la
+ *  voz que quiero»). The 257 rule withheld the button from
+ *  the resolved reader's card — but a reader who reads by a
+ *  Listen pick is NOT the stored default, so the voice Oscar
+ *  actually wanted to predetermine (the pick itself, Marcos)
+ *  offered no deed at all: there was no way in Voices to make
+ *  the standing pick permanent. The offer is now judged by
+ *  the two offices the one deed serves: a card offers "Make
+ *  default" when its voice is not the stored default (the
+ *  deed crowns it — the pick's card included, converting the
+ *  pick into the predetermination) OR when a pick governs
+ *  its language (the deed releases it — the outranked
+ *  default's card, the 257 case). The button is absent only
+ *  where the voice already IS the predetermined one and
+ *  nothing stands over her. */
 export function voiceCardTruth(
   s: { defaultVoice: Record<Lang, string>; voiceOverride: string | null; langMode: Lang | 'auto' },
   v: Voice,
@@ -135,7 +152,7 @@ export function voiceCardTruth(
   const override = governingOverride(s, v.lang)
   return {
     flag: stored ? 'default' : override?.id === v.id ? 'reading' : null,
-    makeDefault: resolvedVoiceId(s, v.lang) !== v.id,
+    makeDefault: !stored || override != null,
     toastOverride: override && override.id !== v.id ? override : null,
   }
 }

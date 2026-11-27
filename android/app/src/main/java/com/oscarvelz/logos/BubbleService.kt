@@ -2765,7 +2765,7 @@ class BubbleService : Service() {
      *  no fin; its fraction is its word). */
     private fun midAudio(): Boolean {
         if (NativeSpeaker.active) {
-            val done = runCatching { JSONObject(NativeSpeaker.panelJson()).optBoolean("done") }.getOrDefault(false)
+            val done = runCatching { NativeSpeaker.panelJson().optBoolean("done") }.getOrDefault(false)
             return !done
         }
         val j = runCatching { JSONObject(nowJson) }.getOrNull() ?: return false

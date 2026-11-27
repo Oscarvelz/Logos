@@ -1,3 +1,50 @@
+## 1.4.261 — Voices completed: the reading voice can be crowned; the flags stop being cut; the 260 shell cure rides here
+
+Three deeds in one wave:
+
+1. THE 260 SHELL CURE RIDES HERE. 1.4.260's web half is
+   live, but its Android build FAILED (CI 162): midAudio()
+   wrapped NativeSpeaker.panelJson() in JSONObject(...) —
+   panelJson already returns a JSONObject, so no such
+   constructor exists. The builder's error, named. Fixed
+   (the call now reads the object directly); the mid-audio
+   dock norm ships in this wave's APK.
+
+2. THE READING VOICE'S OWN CARD GAINS THE DEED (Oscar,
+   2026-11-27: «Continúa sin dejarme seleccionar la voz que
+   quiero»). 257 withheld "Make default" from the resolved
+   reader's card — but a reader who reads by a Listen pick
+   is not the stored default, so the pick's own card (Marcos)
+   offered no deed: the voice he wanted to predetermine
+   could not be made permanent anywhere in Voices. The
+   offer is now judged by the two offices the one deed
+   serves: a card offers the button when its voice is not
+   the stored default (the deed crowns it — the pick
+   converts into the predetermination) OR when a pick
+   governs its language (the deed releases it — the
+   outranked default's card, the 257 case). Absent only
+   where the voice already is the predetermined one and
+   nothing stands over her. Judged by the voices-center
+   bench: 22/22, his specimen verbatim, both deeds walked.
+
+3. THE FLAGS STOP BEING CUT (Oscar: «tarjetas cortadas por
+   borde. Contra la ley de envoltorio»). The card flag
+   (.default-flag) straddles the card's top edge by design
+   (top: -7px); the accordion's animated wrapper
+   (.vgroup-body > div, overflow: hidden) clips at the
+   grid's top edge, so the FIRST card of every open group
+   lost the top of its flag — measured on the bench (flag
+   top 68, wrapper top 74) and seen in his screenshot. The
+   grid now carries the flag's room as its own top padding
+   (.voice-grid padding-top: 8px): the straddle stands, the
+   clip is gone, on the Voices page and in the picker alike.
+   Bench-proven at phone width: the first card's flag
+   renders whole.
+
+Presentation: the make-default anchor's presence rule
+changes again — absent only on the stored default's card
+when no pick governs her language; the pick's own card now
+carries it. Relay owed to the Presentation lane.
 ## 1.4.260 — The dock obeys the old norm: never mid-audio
 
 Oscar's verdict on 259 (2026-11-27, three screenshots): the
