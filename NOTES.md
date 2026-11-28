@@ -1,3 +1,31 @@
+## 1.4.269 — Every pushed field enters the dedupe key
+
+Oscar's verdict (2026-11-27): the look changes work
+after closing and reopening the app, but not in the
+moment, and the transparency controls seem to interfere
+with each other — the panel wearing an amount that is
+not its own.
+
+CONVICTED in bubble.ts: pushLook dedupes by a key built
+from ba|pa|size|jb|jf|theme. The dock fields (df/da,
+1.4.265; ds, 1.4.267) were added to the pushed JSON but
+never to the key — so changing a dock setting alone was
+judged "nothing changed", the push never happened, and
+the shell kept its old hidden amounts until the page
+reloaded and the init push carried them down. That is
+why a change landed only after closing the app, and why
+the amounts on the surfaces stopped matching their own
+sliders while he tested: each surface wore the last
+amount its own key had let through.
+
+THE CURE: the key now names every field the push
+carries, with the law written at the key so the next
+field added to the JSON must enter the key too.
+pushPrefs (the lever push) was audited: it carries one
+value and its dedupe compares that same value — clean.
+
+Page only (src/lib/bubble.ts). Presentation impact:
+none — no surface, presence or text changed.
 ## 1.4.268 — The tap starts what stands; it never summons
 
 Oscar's verdict on the 266/267 stack (2026-11-27): the

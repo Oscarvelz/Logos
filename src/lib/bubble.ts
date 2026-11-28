@@ -574,7 +574,15 @@ export function initBubble() {
     const th = st.theme
     const light = th === 'light' || (th === 'system' && !window.matchMedia('(prefers-color-scheme: dark)').matches)
     const fam = th === 'tron' ? 'tron' : th === 'cyberpunk' ? 'cyberpunk' : light ? 'light' : 'dark'
-    const key = `${st.bubbleAlpha}|${st.panelAlpha}|${st.bubbleSize}|${st.jumpBackSec}|${st.jumpFwdSec}|${fam}`
+    // The dedupe key must name EVERY field the push carries
+    // (1.4.269): df/da/ds rode the JSON from 1.4.265/267 but
+    // never entered this key, so a change to a dock setting
+    // alone was judged "nothing changed" and never pushed —
+    // the shell kept its old hidden amounts until the page
+    // reloaded (closing and reopening the app), exactly as
+    // Oscar reported: «funciona después de que cerrara la
+    // aplicación, pero en el momento no».
+    const key = `${st.bubbleAlpha}|${st.panelAlpha}|${st.bubbleSize}|${st.jumpBackSec}|${st.jumpFwdSec}|${fam}|${st.dockFade ? 1 : 0}|${st.dockAlpha}|${st.dockShow}`
     if (key === pushedLook) return
     pushedLook = key
     try { d.bubbleLook?.(JSON.stringify({ ba: st.bubbleAlpha, pa: st.panelAlpha, size: st.bubbleSize, jb: st.jumpBackSec, jf: st.jumpFwdSec, th: fam, df: st.dockFade ? 1 : 0, da: st.dockAlpha, ds: st.dockShow })) } catch { /* ignore */ }
